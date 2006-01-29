@@ -1,0 +1,237 @@
+Help for Cisco 7200 simulator (dynamips-0.2.3)
+==============================================
+Authors: Fabien Devaux, Christophe Fillot, MtvE
+
+Emulated hardware
+*****************
+
+By default, a NPE-200 is emulated. You can choose the NPE type with the
+"-t" option. It is possible to select "npe-100", "npe-150", "npe-175", 
+"npe-200", "npe-225", "npe-300" and "npe-400". The "npe-g1" is not working.
+
+Please note that you must use the C7200-IO-FE PA driver as IO card if you
+want a FastEthernet interface in slot 0. For other slots, you must use
+the PA-FE-TX driver.
+
+The Serial driver (PA-4T+) is not working at all (the interfaces are only 
+"seen" by IOS).
+
+
+Command Line Options overview
+*****************************
+
+-r <ram_size>   : Set the virtual RAM size (default is 256 Mb)
+-o <rom_size>   : Set the virtual ROM size (default is 4 Mb)
+-n <nvram_size> : Set the NVRAM size (default is 128 Kb)
+-l <log_file>   : Set logging file (default is pred_log0.txt)
+-C <cfg_file>   : Import an IOS configuration file into NVRAM
+-R <rom_file>   : Load an alternate ROM (default is embedded)
+-s <sym_file>   : Load symbol file
+-c <conf_reg>   : Set the configuration register (default is 0x2102)
+-m <mac_addr>   : Set the MAC address of the chassis (IOS chooses default)
+-k <clock_div>  : Set the clock divisor (default is 2)
+-T <port>       : Console is on TCP <port> (default is on the terminal)
+-A <port>       : AUX is on TCP <port> (default is no AUX port)
+-i              : Instruction block trace, very slow
+-j              : Disable the JIT compiler, very slow
+-t <npe_type>   : Select NPE type
+-M <midplane>   : Select Midplane ("std" or "vxr")
+-p <pa_desc>    : Define a Port Adapter
+-a <cfg_file>   : Virtual ATM switch configuration file
+-b <cfg_file>   : Virtual bridge configuration file
+
+
+Command Line Options details
+****************************
+
+<clock_div> :
+
+   Specify the clock divider (integer) based on the host clock.
+   Alter the value to match the CISCO clock with the real time.
+   The command "show clock" at the IOS' CLI will help you set this value.
+
+<pa_desc> :
+
+   Format: slot:pa_driver:netio_type[:netio_parameters]
+
+   slot       : the number of the physical slot (starts from 0)
+
+   pa_driver  : the name of a port adapter driver in:
+        - C7200-IO-FE  (FastEthernet, slot 0 only)
+        - PA-FE-TX     (FastEthernet, slots 1 to 6) 
+        - PA-4T+       (Serial, NOT WORKING)
+        - PA-A1        (ATM)
+
+   netio_type : host interface for communication
+
+        unix:<local_sock>:<remote_sock>
+           Use unix sockets for local communication.
+           <local_sock> is created and represents the local NIC.
+           <remote_sock> is the file used by the other interface.
+           (ex. "/tmp/local:/tmp/remote")
+
+        tap:<tap_name>
+           Use a virtual ethernet device for communication.
+           <tap_name> is the name of the tap device (ex. "tap0")
+
+        linux_eth:<dev_name>
+           Use a real ethernet device for communication (Linux specific).
+           <dev_name> is the name of the Ethernet device (ex. "eth0")
+
+        udp:<local_port>:<remote_host>:<remote_port>
+           Use an UDP socket for connection between remote instances.
+           <local_port> is the port we listen to.
+           <remote_host> is the host listening the port you want to connect to.
+           <remote_port> is the port you want to connect to.
+	   (ex. "1000:somehost:2000" and "2000:otherhost:1000" on the other 
+           side)
+
+        tcp_cli:<host>:<port>
+           Client side of a tcp connection.
+           <host> is the ip address of the server.
+           <port> is the port to connect to.
+
+        tcp_ser:<port>
+           Server side of a tcp connection.
+           <port> is the port to listen to.
+
+        null
+           Dummy netio (used for testing/debugging), no parameters needed.
+
+
+Escape commands
+***************
+
+You can press ^] at any time, followed by one of the following letters:
+
+d : Show the device list
+r : Dump MIPS CPU registers
+t : Dump MIPS TLB entries
+m : Dump the latest memory accesses
+s : Suspend CPU emulation
+u : Resume CPU emulation
+q : Quit the emulator
+b : Dump the instruction block tree
+c : Write IOS configuration to disk (ios_cfg.txt)
+j : Non-JIT mode statistics
+x : Experimentations (can crash the box!)
+^]: Send ^]
+
+If you press an unrecognized key, help will be shown. 
+
+
+Virtual Bridge
+**************
+
+The virtual bridge is used to emulate a shared network between emulator
+instances.
+
+Any emulator instance can ast as a virtual bridge.
+
+The configuration file (specified by the "-b" option) contains a list of
+NetIO descriptors, which the following syntax: netio_type[:netio_parameters]
+
+Example:
+
+# Connection to instance "I0"
+udp:10000:127.0.0.1:10001
+
+# Connection to instance "I1"
+udp:10002:127.0.0.1:10003
+
+# Connection to instance "I2"
+udp:10004:127.0.0.1:10005
+
+The "I0" would be launched with the following parameters:
+
+   dynamips ios.bin -p 1:PA-FE-TX:udp:10001:127.0.0.1:10000
+
+
+Virtual ATM switch
+******************
+
+The virtual ATM switch fabric is used to emulate an ATM backbone between 
+emulator instances. The use of this virtual switch is not mandatory, you 
+can directly connect emulator instances for point-to-point ATM connections.
+Please note that only basic VP/VC switching is supported, there is no
+support for ILMI/QSAAL/... or other specific ATM protocols.
+
+Any emulator instance can act as a virtual ATM switch.
+
+Example of configuration file (specified by the "-a" option):
+
+# Virtual Interface List
+IF:A0:udp:10001:127.0.0.1:10000
+IF:A1:udp:10002:127.0.0.1:10003
+IF:A2:udp:10004:127.0.0.1:10005
+
+# VP connection between I0 and I1
+VP:A0:10:A1:20
+VP:A1:20:A0:10
+
+# VP connection between I0 and I2
+VP:A0:11:A2:30
+VP:A2:30:A0:11
+
+# VC connection between I1 and I2
+VC:A1:5:2:A2:7:3
+VC:A2:7:3:A1:5:2
+
+In this example, we have 3 virtual interfaces, A0, A1 and A2. The syntax
+for interface definition is similar to Port Adapters:
+
+   IF:interface_name:netio_type[:netio_parameters]
+
+You can do VP switching or VC switching:
+
+1) VP switching
+
+syntax: VP:input_if:input_vpi:output_if:output_vpi
+
+2) VC switching
+
+syntax: VC:input_if:input_vpi:input_vci:output_if:output_vpi:output_vci
+
+
+Testing the Virtual ATM switch with one dynamips instance
+*********************************************************
+(Contribution of Mtv Europe)
+
+Virtual ATM switch configuration file ("atm.cfg"):
+
+IF:A0:udp:10003:127.0.0.1:10001
+IF:A1:udp:10004:127.0.0.1:10002                                                
+# a0/vpi=1/vci=100 connects to a1/vpi=2/vci=200
+VC:A0:1:100:A1:2:200                                                           
+VC:A1:2:200:A0:1:100
+
+Invoking dynamips:
+
+./dynamips -p 1:PA-A1:udp:10001:127.0.0.1:10003 -p 2:PA-A1:udp:10002:127.0.0.1:10004 -a atm.cfg IOS.BIN
+
+(note input ports of IOS interfaces are output ports of ATM switch 
+interfaces, and vice versa).
+
+IOS configuration:
+
+ip cef
+ip vrf test
+ rd 1:1
+ route-target both 1:1
+int a1/0
+ no shut
+int a1/0.2 p
+ ip addr 1.1.1.1 255.255.255.0
+ pvc 1/100
+interface a2/0
+ no shut
+interface a2/0.2 p
+ ip vrf forwarding test
+ ip addr 1.1.1.2 255.255.255.0
+ pvc 2/200
+!
+
+# ping 1.1.1.2
+!!!!!
+
+== EOF ==

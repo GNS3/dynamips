@@ -1,0 +1,503 @@
+/*
+ * Cisco 7200 (Predator) simulation platform.
+ */
+
+15-Aug-2005, the project is starting.
+	
+18-Aug-2005
+-----------
+  - Added support for: sll, addu/subu.
+  - Fixed bugs with b... branch instructions (bad computation of new pc).
+  - Added patch recording for blocks.
+  - A sequence of MIPS instructions (without memory access instructions)
+    from IOS was successfully run ! (need to check correctness).
+
+22-Aug-2005
+-----------
+  - Implemented a basic memory subsystem with an mmaped file.
+  - Added memory access instructions (lb,lbu,lh,lhu,lw,lwu,ld,sb,sh,sw,sd).
+  - Added a cross-compiled test program.
+	
+23-Aug-2005
+-----------
+  - Fixed slti, sltiu, slt instructions.
+  - Fixed memory endianness.
+  - Fixed host memory addressing (bad haddr computation).
+
+24-Aug-2005
+-----------
+  - Added a generic memory address lookup function.
+  - Added a minimal ELF loader.
+
+28-Aug-2005
+-----------
+  - ELF loader now loads files page per page.
+  - Added device support (with RAM support).
+  - Added MTS32 support for mapping of 4 Kb pages.
+  - Added MTS32 support for device mapping in kernel mode and generic
+    virtual to physical mapping (preparation for TLB).
+  - Added a dummy console driver.
+  - Added mult,multu,div,divu instructions.
+	
+29-Aug-2005
+-----------
+  - Added a Red-Black trees module.
+  - Block locator uses RB tree module.
+  - It is now possible to run a program with multiple functions!
+  - ELF loader now support multiple program headers and entry point is
+    now used.
+  - Fixed x86 buffer adjustment.
+  - Modified console to be at the same address than c7200 DUART (to test
+    microcode).
+  - Memory access functions now update PC.
+  - Added sra, srl, sllv, srlv, srav instructions.
+
+30-Aug-2005
+-----------
+  - Added dsrl32, dsll32, dsra, dsrav, dsra32 instructions.
+  - Added bgtz, blez, bgez instructions.
+  - Fixed sltu instruction.
+  - ELF Entry point is now sign-extended.
+  - Added blezl, bgtzl instructions.
+  - Fixed the MIPS scanner to use unsigned 64-bits integers for addresses.
+  - Added unknown opcode management (basic, it just print the unhandled
+    opcode value and continues).
+  - Added cache instruction.
+  - Added bltzal, bltzall, bgezal, bgezall instructions.
+
+31-Aug-2005
+-----------
+  - Added System coprocessor (CP0) definitions.
+  - Added tlbr instruction.
+  - Added basic tlbwi instruction (doesn't change the MTS mappings now).
+  - Added dmfc0, dmtc0, mfc0, mtc0 instructions.
+  - Added TLB dump functions.
+  - Added dummy pref/prefi instructions.	
+  - Added basic exception trigger.
+  - Added syscall, break instructions.
+	
+01-Sep-2005
+-----------
+  - Fixed exception trigger.
+  - Added dmfc1, dmtc1, mfc1, mtc1, sdc1 instructions.
+  - Fixed the break instruction.
+  - Modified the memory handling to be more friendly with instructions
+    like sdc1 and for more safety in case of badly written device drivers.
+  - Added ldc1 instruction.
+
+02-Sep-2005
+-----------
+  - Fixed sltiu/sltu instructions that were doing signed comparisons
+    instead of unsigned comparisons (mis-use of jit).
+  - Added lwr/lwl, swr/swl, ldl/ldr, sdr/sdl, ll/sc instructions 
+    (not tested).	
+  - Added PCI bus management.
+  - Added GT64010 (PCI controller) device.
+  - Added DEC 21050 (PCI bridge) device.
+  - Added NVRAM.
+
+03-Sep-2005
+-----------
+  - Beginning of work on IRQs.
+
+04-Sep-2005
+-----------
+  - Timer IRQ should be OK.
+  - Added C7200 bay management and Midplane FPGA.
+  - Fixed the JR instruction which was broken in a case like that:
+	lwu k1,0(k1)
+	jr k1
+	move k1,zero
+
+05-Sep-2005
+-----------
+  - Fixed jalr (as jr) instruction.
+  - Added RAM "aliasing".
+  - Added SRAM management.
+  - Fixed NVRAM size.
+  - Fixed ldr, swl/swr instructions.
+  - Added c7200 IOcard.
+  - Count register is now properly handled.
+  - Added basic functions to set/clear interrupts.
+  - Modified the console driver to trigger DUART interrupt.
+  - IOS now starts!
+	
+06-Sep-2005
+-----------
+  - Added "move" virtual instruction. It correspond to "addu" with rt=0.
+    Here it avoids an useless add.
+  - Added b/bal virtual instructions.
+  - Packed NVRAM.
+
+08-Sep-2005
+-----------
+  - Added Dallas DS1620 temperature sensors.
+  - Added voltage sensors.
+  - Power supplies are now faked.
+  - IOS Environmental Monitor doesn't try to shutdown the router anymore!
+  - Device list is now displayed at startup.
+	
+18-Sep-2005
+-----------
+  - Added Address Error Load/Save, TLB Load/Save exceptions.
+    TODO: Branch Delay Slot management.
+  - Modified the default value in config register in CP0 to set appropriate
+    cache sizes. Now it is possible to boot compressed images directly!
+  - Added the teq/teqi instructions.
+  - Hmm, seen some IOS images (k9?) that seem to use the FPU (CP1). This
+    does not prevent the image to boot, but some features will probably
+    be not functional.
+	
+19-Sep-2005
+-----------
+  - Tweaked the console driver to generate a dummy interrupt. It avoids
+    the console problems.
+  - Fixed the serial driver mueslix PCI vendor/device code.
+  - The midplane FPGA now returns voltages based on virtual PA EEPROM
+    presence. Up to 6 PA-8T were successfully emulated!
+
+20-Sep-2005
+-----------
+  - Included amd64-codegen.h with a (near empty) translator.
+  - Some code factorization.
+	
+21-Sep-2005
+-----------
+  - Added CPU state save/restore on disk.
+  - Sending SIGQUIT to the process dumps the MIPS64 VM state on disk.
+    (only CPU state is saved for now).
+    Device state is not saved, so this does not work with booted IOS images
+    for now (it works for an IOS image being self-decompressing, though).
+  - Some code cleanups.
+
+23-Sep-2005
+-----------
+  - Fixed "Dirty" bit in TLB entries.
+  - Extended the number of TLB entries from 48 to 64.
+  - Added tlbp instruction.
+  - Modified the nmc93c46 eeprom driver to allow more than 32 bytes reading.
+
+24-Sep-2005
+-----------
+  - Added a symbol table loader.
+
+26-Sep-2005
+-----------
+  - Added support for writing in PCI registers
+  - Added a RAW file loader.
+  - Added "add" instruction (without exception support).
+
+07-Oct-2005
+-----------
+  - Continued work on SMP support.
+	
+08-Oct-2005
+-----------
+  - Replaced memory operations with fastcalls instead of asmlinkage functions.
+  - Continued work on SMP support. Now it should be complete, except for
+    LL/SC instructions.
+
+10-Oct-2005
+-----------
+  - A lot of work on amd64 jit compiler.
+  - The memory management should be 64-bit compliant now.
+	
+17-Oct-2005
+-----------
+  - Fixed a bug in SRA instruction in amd64 jit code. IOSEmu is now working
+    on amd64!
+
+26-Oct-2005
+-----------
+  - Created a virtual device giving the VM parameters.
+  - Added command line parsing (patch from Nicolas Szalay).
+  - Fixed ERET instruction (LLbit clearing was lacking).
+  - Fixed BREAK instruction (x86/amd64).
+  - Fixed 2 GB limit for log file.
+  - Fixed clobbered registers in x86 translation.
+	 
+28-Oct-2005
+-----------
+  - Added a non-JIT mode (not completely working now)
+  - Added "-j" flag on the command line to disable JIT.
+  - Fixed some stupid bugs in shift operations.
+
+31-Oct-2005
+-----------
+  - Thanks to the great help of mtve, we have a working DEC21140 Ethernet
+    driver and now the virtual C7200 can see the real world!!!
+
+01-Nov-2005
+-----------
+  - Beginning of a NETIO module to handle network I/O with external world.
+  - Studied (a bit) the PA-8T controller on a real router.
+  - It is now possible to set the base MAC address of the router
+    using the "-m" flag.
+  - Improved logging
+  - The dec21140 code is generalized and it is now possible to have a 
+    PA-FE-TX in any slot.
+	
+02-Nov-2005
+-----------
+  - Fixed some problems with the NVRAM when it is empty ;
+  - Added a "net_io.c" module that is an abstraction layer
+    for network communications (TAP, Unix sockets...)
+  - Added the "virtual" MIPS "li" instruction which
+    is in fact "addiu reg,zero,value". This permits to have
+    a more optimized JIT code.
+  - Code factorization in the DEC21140 module.
+  - mtve (aka "Mtv Europe") sent a patch for much better console handling,
+    merge is planned on 03-Nov.
+  - Added a "PA driver" framework.
+
+03-Nov-2005
+-----------
+  - The console is better handled: special keys are working, and there
+    is a FIFO buffer to avoid character loss (added a "dev_vtty.c" module).
+  - Merging with Mtve patch, that cleans NETIO module and adds features
+    to the console.
+  - Added a clock divisor hack, but it is not completely working.
+    todo: implement a command line option for this.	
+
+08-Nov-2005
+-----------
+  - Mtve added tcp client/server NETIO.
+  - The clock divisor is now working! It is set by the "-k" command line
+    option.
+  - Fixed the csr5 register handling in DEC21140 driver code.
+
+13-Nov-2005
+-----------
+  - A lot of cosmetic changes from Mtve.
+  - Modified the infrastructure to allow the use of CPU groups
+    that share a certain number of devices (per-CPU device array).
+    All device drivers have been modified to handle this.
+  - Took a look at LSI ATMizer II+, which is the circuit used on
+    PA-A3-OC3 boards. The ATMizer is based on a MIPS CPU, so it should
+    be possible to emulate it.
+  - Added a per-CPU dedicated thread.
+	
+23-Nov-2005
+-----------
+  - The PA-A1 ATM stuff is working!!!
+
+24-Nov-2005
+-----------
+  - Fixed a bug in the PA-A1 driver in TX buffer chaining.
+
+25-Nov-2005
+-----------
+  - Address bus masking, which clears bits 32 and 33 of physical addresses.
+    It avoids the use of device aliasing.
+  - Fixed the DEC21140 TX part which was incomplete.
+
+29-Nov-2005
+-----------
+  - There are still bugs in big packet forwarding. This is probably the ATM
+    driver (added more debugging info).
+  - Fabien Devaux wrote a README explaining the command line options.
+	
+30-Nov-2005
+-----------
+  - Code cleanup in the net_io module.
+  - Added the "ptask" (periodic tasks) module, this is mainly for TX ring
+    scanning of network devices.
+
+01-Dec-2005
+-----------
+  - Added a memory logger (FIFO of 10 accesses), this was useful to debug the
+    PA-A1 RX problem.
+  - Fixed a RX buffer chaining problem in PA-A1.
+
+02-Dec-2005
+-----------
+  - Added support for PA-A1 reset ("clear int", "shut/no shut").
+  - Optimized the IRQ handling (irq_pending flag in CPU structure
+    is used as a "cache").
+
+05-Dec-2005
+-----------
+  - Optimized the cp0 count/compare process for the x86_64 platform
+    (unfortunately, this doesn't work for the x86 platform).
+
+06-Dec-2005
+-----------
+  - Modified the NVRAM handling to allow calendar emulation ("sh calendar" is
+    now working).
+
+12-Dec-2005
+-----------
+  - Added support for the NPE-400.
+  - Playing with the PA-POS-2OC3 (called "Charlotte" by Cisco).
+
+15-Dec-2005
+-----------
+  - Added teq/teqi instructions to the x86_64 jit.
+
+20-Dec-2005
+-----------
+  - Added a Virtual ATM switch fabric to emulate an ATM backbone.
+
+22-Dec-2005
+-----------
+  - Final release for 0.2.2 train (0.2.2i).
+	
+23-Dec-2005
+-----------
+  - Starting 0.2.3 train (0.2.3a)
+  - Added proper NPE-150 support.
+  - Added bit-bucket support (zeroed memory zone).
+  - Added NPE type selection.
+
+24-Dec-2005
+-----------
+  - Added beginning of support for NPE-300 (endianness problems with PCI
+    controllers ?)
+
+28-Dec-2005
+-----------
+  - Fixed the endianness problem with the NPE-300.
+  - Added NPE300-IO-FE.
+
+31-Dec-2005
+-----------
+  - Added CLI option to load a symbol file.
+  - Moved JIT code from dynamips.c to mips64_jit.c
+  - Added support for NPE-100.
+  - Updated the README file for NPE type selection.
+  - Suppressed the annoying message "%%Error: Unrecognized I/O card in bay 0"
+
+03-Jan-2006
+-----------
+  - The bit clearing in physical addresses was done stupidly.
+    Only the bit 33 is used to bypass L2 caching. 
+    Re-introduced SRAM aliasing.
+    PHY address 0x100000000 is in fact for PCI I/O space.
+  - Began to play with the Cirrus Logic PD6729.
+  - Added Bootflash based on Intel 28F008SA chips (1 Mb)
+  - Fixed the alignment error occuring with "show version".
+
+04-Jan-2006
+-----------
+  - Better understanding of Flash SIMM register with bank number and bank
+    size: modified the Flash SIMM code to handle a 8 Mb flash in 1 bank
+    (emulation of Intel 28F016SA chip) which should be sufficient to store 
+    crashinfo files or misc files like configs,...
+  - Added ROM remote logging capabilities (with remote emulator control).
+
+05-Jan-2006
+-----------
+  - Integrated HEC and AAL5 field computation functions found at:
+    http://cell-relay.indiana.edu/cell-relay/publications/software/CRC/
+    (Author is Charles Michael Heard).
+  - Added HEC field management to the virtual ATM switch fabric.
+  - Added HEC and AAL5 CRC fields to the TX part of the TNETA1570 driver.
+
+06-Jan-2006
+-----------
+  - Added block timestamping, to evaluate use JIT of blocks and eventually
+    enhance algorithm of block classifying.
+  - Added a flag to the virtual devices to prevent use of MMAPed zones
+    by MTS (used by NVRAM driver).
+  - Added functions to extract IOS configuration from NVRAM.
+    Pressing "Ctrl-] + c" nows write configuration to disk at any time.
+	
+08-Jan-2006
+-----------
+  - Added support for PEM (NPE-B) EEPROM. It will probably allows support
+    of NPE-175/NPE-225.
+
+09-Jan-2006
+-----------
+  - Added support for NPE-175/NPE-225 and added NPEB-IO-FE.
+
+10-Jan-2006
+-----------
+  - Enhancements to the remote console over TCP port.
+  - Port to the Cygwin environment, allowing the emulator to run on Windows
+    machines!
+
+11-Jan-2006
+-----------
+  - Added a feature to push an IOS configuration into NVRAM ("-C" command line
+    option). 
+  - Added enhanced checks to the NVRAM config export.
+  - Added a variant of udp_connect() function for systems that do not support
+    RFC 2553.
+  - Added support for AUX port (TCP port).
+
+12-Jan-2006
+-----------
+  - Better memory logger.
+  - Added breakpoint capabilities.
+  - Fixed a segfault occuring on some IOS images with x86_64 JIT.
+    (modified the minimum remaining size in JIT buffer adjustment).
+
+13-Jan-2006
+-----------
+  - The ROM is now embedded in the source code (added an utility to convert
+    ELF file to C code). It is possible to use an alternate ROM using the
+    "-R" option.
+  - Enhanced the MTS lookups to allow use of embedded ROM for code execution.
+
+15-Jan-2006
+-----------
+  - Added PCI I/O space management.
+  - Added a fake Cirrus Logic PD6729 PCI-to-PCMCIA host adapter.
+  - Cleanups in NPE initialization code.
+  - Fixed some bridge problems with the NPE-300.
+  - Code factorization in the C7200 initialization module.
+  - Generalization of C7200-IO-FE driver for all NPE types.
+  - Added Fault History support.
+  - Added chassis selection (standard or VXR)
+  - Finally found the bug in the non-jit emulation code! It was a cast problem
+    in mult/multu instructions.
+
+16-Jan-2006
+-----------
+  - Added generic hash tables.
+  - Added "instruction lookup tables" (ILT), which greatly improve performance
+    of non-JIT mode.
+  - Added instruction statistics for the non-JIT mode ("Ctrl-] + j")
+
+17-Jan-2006
+-----------
+  - Added a port for non-x86 hosts. The emulator ran successfully on a
+    Tru64 Unix box (Alpha CPU)! It should also be able to compile and run
+    on MacOS X (PowerPC).
+
+24-Jan-2006
+-----------
+  - Added support for DMA channels on Galileo GT64k controllers since it seems
+    that they may be used by IOS (NPE-400 for sure, others NPE?).
+	
+25-Jan-2006
+-----------
+  - Added Linux Raw Ethernet driver to the NetIO infrastructure.
+  - Hmm, I'm probably missing something in the DMA/SRAM interaction and
+    endianness... 
+
+26-Jan-2006
+-----------
+  - The DMA problem is finally fixed, in fact the SRAM can be accessed with
+    byte-swapping.
+  - Added an unicast limiter to the DEC21140, to receive only trafic directed
+    to the virtual machine (+ multicast/broadcast). This is done by analyzing
+    the setup frames (MAC address filter).
+
+27-Jan-2006
+-----------
+  - The Linux Raw Ethernet driver needs promiscuous mode to be enabled to 
+    receive appropriate packets, added the required code.
+  - Added endianness definitions, and replaced hton[sl]/ntoh[sl] by the new
+    definitions (for exchanges between VM and host).
+
+28-Jan-2006
+-----------
+  - Added parser infrastructure.
+
+29-Jan-2006
+-----------
+  - Added a virtual bridge system.
+  - Release 0.2.3b
+
