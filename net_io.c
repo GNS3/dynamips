@@ -44,6 +44,9 @@ static char *netio_types[NETIO_TYPE_MAX] = {
 #ifdef LINUX_ETH
    "linux_eth",
 #endif
+#ifdef GEN_ETH
+   "gen_eth",
+#endif
    "null",
 };
 
@@ -540,14 +543,14 @@ static void netio_lnxeth_free(netio_lnxeth_desc_t *nled)
 static ssize_t netio_lnxeth_send(netio_lnxeth_desc_t *nled,
                                  void *pkt,size_t pkt_len)
 {
-   return(eth_send(nled->fd,nled->dev_id,pkt,pkt_len));
+   return(lnx_eth_send(nled->fd,nled->dev_id,pkt,pkt_len));
 }
 
 /* Receive a packet from an raw Ethernet socket */
 static ssize_t netio_lnxeth_recv(netio_lnxeth_desc_t *nled,
                                  void *pkt,size_t max_len)
 {
-   return(eth_recv(nled->fd,pkt,max_len));
+   return(lnx_eth_recv(nled->fd,pkt,max_len));
 }
 
 /* Create a new NetIO descriptor with raw Ethernet method */
@@ -563,15 +566,15 @@ netio_desc_t *netio_desc_create_lnxeth(char *dev_name)
 
    if (strlen(dev_name) >= NETIO_DEV_MAXLEN) {
       fprintf(stderr,"netio_desc_create_lnxeth: bad Ethernet device string "
-              "speecified.\n");
+              "specified.\n");
       free(desc);
       return NULL;
    }
 
    strcpy(nled->dev_name,dev_name);
 
-   nled->fd = eth_init_socket(dev_name);
-   nled->dev_id = eth_get_dev_index(dev_name);
+   nled->fd = lnx_eth_init_socket(dev_name);
+   nled->dev_id = lnx_eth_get_dev_index(dev_name);
 
    if (nled->fd < 0) {
       free(desc);
@@ -585,6 +588,65 @@ netio_desc_t *netio_desc_create_lnxeth(char *dev_name)
    return desc;
 }
 #endif /* LINUX_ETH */
+
+/*
+ * =========================================================================
+ * Generic RAW Ethernet driver
+ * =========================================================================
+ */
+#ifdef GEN_ETH
+/* Free a NetIO raw ethernet descriptor */
+static void netio_geneth_free(netio_geneth_desc_t *nged)
+{
+   gen_eth_close(nged->pcap_dev);
+}
+
+/* Write a packet to an Ethernet device */
+static ssize_t netio_geneth_send(netio_geneth_desc_t *nged,
+                                 void *pkt,size_t pkt_len)
+{
+   return(gen_eth_send(nged->pcap_dev,pkt,pkt_len));
+}
+
+/* Receive a packet from an Ethernet device */
+static ssize_t netio_geneth_recv(netio_geneth_desc_t *nged,
+                                 void *pkt,size_t max_len)
+{
+   return(gen_eth_recv(nged->pcap_dev,pkt,max_len));
+}
+
+/* Create a new NetIO descriptor with generic raw Ethernet method */
+netio_desc_t *netio_desc_create_geneth(char *dev_name)
+{
+   netio_geneth_desc_t *nged;
+   netio_desc_t *desc;
+   
+   if (!(desc = malloc(sizeof(*desc))))
+      return NULL;
+
+   nged = &desc->u.nged;
+
+   if (strlen(dev_name) >= NETIO_DEV_MAXLEN) {
+      fprintf(stderr,"netio_desc_create_geneth: bad Ethernet device string "
+              "specified.\n");
+      free(desc);
+      return NULL;
+   }
+
+   strcpy(nged->dev_name,dev_name);
+
+   if (!(nged->pcap_dev = gen_eth_init(dev_name))) {
+      free(desc);
+      return NULL;
+   }
+
+   desc->type = NETIO_TYPE_GEN_ETH;
+   desc->send = (void *)netio_geneth_send;
+   desc->recv = (void *)netio_geneth_recv;
+   desc->dptr = &desc->u.nged;
+   return desc;
+}
+#endif /* GEN_ETH */
 
 /*
  * =========================================================================
@@ -677,6 +739,11 @@ void netio_free(netio_desc_t *desc)
 #ifdef LINUX_ETH
          case NETIO_TYPE_LINUX_ETH:
             netio_lnxeth_free(&desc->u.nled);
+            break;
+#endif
+#ifdef GEN_ETH
+         case NETIO_TYPE_GEN_ETH:
+            netio_geneth_free(&desc->u.nged);
             break;
 #endif
          default:

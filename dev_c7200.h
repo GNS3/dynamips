@@ -45,7 +45,7 @@
 #define C7200_IOFPGA_ADDR    0x1e840000ULL
 
 /* Reserved space for ROM in NVRAM */
-#define C7200_NVRAM_ROM_RES_SIZE 2048
+#define C7200_NVRAM_ROM_RES_SIZE  2048
 
 /* C7200 physical address bus mask: keep only the lower 33 bits */
 #define C7200_ADDR_BUS_MASK  0x1ffffffffULL
@@ -71,6 +71,7 @@ typedef int (*c7200_pa_init_fn)(c7200_t *router,char *name,u_int pa_bay,
 /* C7200 Port Adapter Driver */
 struct c7200_pa_driver {
    char *dev_type;
+   int supported;
    c7200_pa_init_fn pa_init;
 };
 
@@ -82,6 +83,7 @@ typedef int (*c7200_npe_init_fn)(c7200_t *router,cpu_group_t *cpu_group,
 struct c7200_npe_driver {
    char *npe_type;
    c7200_npe_init_fn npe_init;
+   int supported;
    int clpd6729_pci_bus;
    int clpd6729_pci_dev;
    int dec21140_pci_bus;

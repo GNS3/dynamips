@@ -22,7 +22,7 @@
 #include "device.h"
 
 #define DEBUG_UNKNOWN  1
-#define DEBUG_DMA      1
+#define DEBUG_DMA      0
 
 #define PCI_VENDOR_GALILEO           0x11ab  /* Galileo Technology */
 #define PCI_PRODUCT_GALILEO_GT64010  0x0146  /* GT-64010 */
@@ -99,7 +99,7 @@ static void gt64k_dma_handle_ctrl(cpu_mips_t *cpu,struct gt64k_data *gt_data,
                                   int chan_id)
 {
    struct dma_channel *channel = &gt_data->dma[chan_id];
-   int done = TRUE;
+   int done;
 
    if (channel->ctrl & GT64K_DMA_FETCH_NEXT) {
       if (channel->nrptr == 0) {
@@ -113,6 +113,8 @@ static void gt64k_dma_handle_ctrl(cpu_mips_t *cpu,struct gt64k_data *gt_data,
    if (channel->ctrl & GT64K_DMA_CHAN_ENABLE) 
    {
       do {
+         done = TRUE;
+
 #if DEBUG_DMA
          m_log("GT64K_DMA",
                "starting transfer from 0x%x to 0x%x (size=%u bytes)\n",

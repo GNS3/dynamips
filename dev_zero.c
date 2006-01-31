@@ -25,6 +25,9 @@ void *dev_zero_access(cpu_mips_t *cpu,struct vdevice *dev,
                       m_uint32_t offset,u_int op_size,u_int op_type,
                       m_uint64_t *data)
 {
+   if (op_type == MTS_READ)
+      *data = 0;
+
    return NULL;
 }
 

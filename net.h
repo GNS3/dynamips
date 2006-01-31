@@ -168,16 +168,16 @@ static inline int ip_bits_mask(n_ip_addr_t mask)
 void ipv6_init_masks(void);
 
 /* Convert an IPv4 address into a string */
-char *ip_ntoa(char *buffer,n_ip_addr_t ip_addr);
+char *n_ip_ntoa(char *buffer,n_ip_addr_t ip_addr);
 
 /* Convert in IPv6 address into a string */
-char *ipv6_ntoa(char *buffer,n_ipv6_addr_t *ipv6_addr);
+char *n_ipv6_ntoa(char *buffer,n_ipv6_addr_t *ipv6_addr);
 
 /* Convert a string containing an IP address in binary */
-int ip_aton(n_ip_addr_t *ip_addr,char *ip_str);
+int n_ip_aton(n_ip_addr_t *ip_addr,char *ip_str);
 
 /* Convert an IPv6 address from string into binary */
-int ipv6_aton(n_ipv6_addr_t *ipv6_addr,char *ip_str);
+int n_ipv6_aton(n_ipv6_addr_t *ipv6_addr,char *ip_str);
 
 /* Parse an IPv4 CIDR prefix */
 int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask);

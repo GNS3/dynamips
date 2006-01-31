@@ -199,7 +199,7 @@ int parse_ipaddr(cfg_info_t *info,cfg_node_t *node,cfg_item_t *item)
 {
    n_ip_addr_t ip_addr;
 
-   if (ip_aton(&ip_addr,token_get_value()) == -1)
+   if (n_ip_aton(&ip_addr,token_get_value()) == -1)
       return(-1);
 
    CFG_NODE_IPADDR(node) = ip_addr;
@@ -209,8 +209,8 @@ int parse_ipaddr(cfg_info_t *info,cfg_node_t *node,cfg_item_t *item)
 /* Parse an IPv6 Address */
 int parse_ipv6addr(cfg_info_t *info,cfg_node_t *node,cfg_item_t *item)
 {
-   return((ipv6_aton(&CFG_NODE_IPV6ADDR(node),
-                     token_get_value()) <= 0)? -1 : 0);
+   return((n_ipv6_aton(&CFG_NODE_IPV6ADDR(node),
+                       token_get_value()) <= 0)? -1 : 0);
 }
 
 /* Parse an IPv4 CIDR prefix */
@@ -335,14 +335,14 @@ void parser_print_ip_protocol(cfg_node_t *node,cfg_type_t *type)
 void parser_print_ipaddr(cfg_node_t *node,cfg_type_t *type)
 {
    char buffer[32];
-   printf("%s",ip_ntoa(buffer,node->value.val_ipaddr));
+   printf("%s",n_ip_ntoa(buffer,node->value.val_ipaddr));
 }
 
 /* Print an IPv6 Address */
 void parser_print_ipv6addr(cfg_node_t *node,cfg_type_t *type)
 {
    char buffer[INET6_ADDRSTRLEN+1];
-   printf("%s",ipv6_ntoa(buffer,&CFG_NODE_IPV6ADDR(node)));
+   printf("%s",n_ipv6_ntoa(buffer,&CFG_NODE_IPV6ADDR(node)));
 }
 
 /* Print a CIDR prefix */
@@ -351,7 +351,7 @@ void parser_print_cidr(cfg_node_t *node,cfg_type_t *type)
    char buffer[32];
 
    printf("%s/%d",
-          ip_ntoa(buffer,node->value.val_cidr.net_addr),
+          n_ip_ntoa(buffer,node->value.val_cidr.net_addr),
           ip_bits_mask(node->value.val_cidr.net_mask));
 }
 
@@ -361,7 +361,7 @@ void parser_print_cidrv6(cfg_node_t *node,cfg_type_t *type)
    char buffer[INET6_ADDRSTRLEN+1];
    
    printf("%s/%d",
-          ipv6_ntoa(buffer,&(CFG_NODE_CIDRV6(node).net_addr)),
+          n_ipv6_ntoa(buffer,&(CFG_NODE_CIDRV6(node).net_addr)),
           CFG_NODE_CIDRV6(node).net_mask);
 }
 

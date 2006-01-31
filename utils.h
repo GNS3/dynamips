@@ -24,7 +24,7 @@
 #define ARCH_BIG_ENDIAN     0x4321
 #define ARCH_LITTLE_ENDIAN  0x1234
 
-#if defined(PPC) || defined(__powerpc__)
+#if defined(PPC) || defined(__powerpc__) || defined(__ppc__)
 #define ARCH_BYTE_ORDER ARCH_BIG_ENDIAN
 #elif defined(__sparc) || defined(__sparc__)
 #define ARCH_BYTE_ORDER ARCH_BIG_ENDIAN

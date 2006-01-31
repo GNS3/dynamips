@@ -1346,7 +1346,7 @@ static int mips64_emit_J(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 static int mips64_emit_JAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 {
    u_int instr_index = bits(insn,0,25);
-   m_uint64_t new_pc;
+   m_uint64_t new_pc,ret_pc;
 
    /* compute the new pc */
    new_pc = b->start_pc + (b->mips_trans_pos << 2);
@@ -1354,13 +1354,16 @@ static int mips64_emit_JAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    new_pc |= instr_index << 2;
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   ret_pc = b->start_pc + ((b->mips_trans_pos + 1) << 2);
+   mips64_set_ra(b,ret_pc);
 
    /* insert the instruction in the delay slot */
    insn_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(b,new_pc);
+
+   mips64_jit_add_hash_addr(cpu,ret_pc);
    return(0);
 }
 

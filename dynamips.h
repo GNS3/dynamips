@@ -186,6 +186,15 @@ extern void mips64_check_pending_irq(struct insn_block *b);
 /* Initialize instruction lookup table */
 void mips64_jit_create_ilt(void);
 
+/* Insert specified address in instruction block hash table */
+void mips64_jit_add_hash_addr(cpu_mips_t *cpu,m_uint64_t addr);
+
+/* Remove specified block from instruction block hash table */
+void mips64_jit_remove_hash_block(cpu_mips_t *cpu,struct insn_block *block);
+
+/* Dump instruction block hash table */
+void mips64_jit_dump_hash(cpu_mips_t *cpu);
+
 /* Find the JIT code emitter for the specified MIPS instruction */
 struct insn_tag *insn_tag_find(mips_insn_t ins);
 

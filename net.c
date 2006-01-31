@@ -70,7 +70,7 @@ void ipv6_init_masks(void)
 }
 
 /* Convert an IPv4 address into a string */
-char *ip_ntoa(char *buffer,n_ip_addr_t ip_addr)
+char *n_ip_ntoa(char *buffer,n_ip_addr_t ip_addr)
 {
    u_char *p = (u_char *)&ip_addr;
    sprintf(buffer,"%u.%u.%u.%u",p[0],p[1],p[2],p[3]);
@@ -78,13 +78,13 @@ char *ip_ntoa(char *buffer,n_ip_addr_t ip_addr)
 }
 
 /* Convert in IPv6 address into a string */
-char *ipv6_ntoa(char *buffer,n_ipv6_addr_t *ipv6_addr)
+char *n_ipv6_ntoa(char *buffer,n_ipv6_addr_t *ipv6_addr)
 {
    return((char *)inet_ntop(AF_INET6,ipv6_addr,buffer,INET6_ADDRSTRLEN));
 }
 
 /* Convert a string containing an IP address in binary */
-int ip_aton(n_ip_addr_t *ip_addr,char *ip_str)
+int n_ip_aton(n_ip_addr_t *ip_addr,char *ip_str)
 {
    struct in_addr addr;
 
@@ -96,7 +96,7 @@ int ip_aton(n_ip_addr_t *ip_addr,char *ip_str)
 }
 
 /* Convert an IPv6 address from string into binary */
-int ipv6_aton(n_ipv6_addr_t *ipv6_addr,char *ip_str)
+int n_ipv6_aton(n_ipv6_addr_t *ipv6_addr,char *ip_str)
 {
    return(inet_pton(AF_INET6,ip_str,ipv6_addr));
 }
@@ -127,7 +127,7 @@ int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask)
    *sl = 0;
 
    /* Parse IP Address */
-   if (ip_aton(net_addr,tmp) == -1) {
+   if (n_ip_aton(net_addr,tmp) == -1) {
       free(tmp);
       return(-1);
    }
@@ -165,7 +165,7 @@ int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask)
    *sl = 0;
 
    /* Parse IP Address */
-   if (ipv6_aton(net_addr,tmp) <= 0) {
+   if (n_ipv6_aton(net_addr,tmp) <= 0) {
       free(tmp);
       return(-1);
    }

@@ -39,6 +39,7 @@ Command Line Options overview
 -p <pa_desc>    : Define a Port Adapter
 -a <cfg_file>   : Virtual ATM switch configuration file
 -b <cfg_file>   : Virtual bridge configuration file
+-e              : Show network device list
 
 
 Command Line Options details
@@ -74,6 +75,14 @@ Command Line Options details
            Use a virtual ethernet device for communication.
            <tap_name> is the name of the tap device (ex. "tap0")
 
+        gen_eth:<dev_name>
+           Use a real ethernet device for communication, using libpcap 0.9
+           or WinPcap. Works on Windows and Unix systems.          
+
+           <dev_name> is the name of the Ethernet device (ex. "eth0")
+
+           The device list can be found using the "-e" option.
+
         linux_eth:<dev_name>
            Use a real ethernet device for communication (Linux specific).
            <dev_name> is the name of the Ethernet device (ex. "eth0")
@@ -102,7 +111,7 @@ Command Line Options details
 Escape commands
 ***************
 
-You can press ^] at any time, followed by one of the following letters:
+You can press ^] (Ctrl + ]) at any time, followed by one of these characters:
 
 d : Show the device list
 r : Dump MIPS CPU registers
@@ -118,6 +127,8 @@ x : Experimentations (can crash the box!)
 ^]: Send ^]
 
 If you press an unrecognized key, help will be shown. 
+
+Note: on Windows, it may be the "Ctrl + $" sequence.
 
 
 Virtual Bridge

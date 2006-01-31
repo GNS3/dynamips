@@ -2,12 +2,10 @@
  * Copyright (c) 2006 Christophe Fillot.
  * E-mail: cf@utc.fr
  *
- * linux-eth.c: module used to send/receive Ethernet packets.
+ * linux_eth.c: module used to send/receive Ethernet packets.
  *
  * Specific to the Linux operating system.
  */
-
-static const char rcsid[] = "$Id$";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +34,7 @@ static const char rcsid[] = "$Id$";
 #include "linux_eth.h"
 
 /* Get interface index of specified device */
-int eth_get_dev_index(char *name)
+int lnx_eth_get_dev_index(char *name)
 {
    struct ifreq if_req;
    int fd;
@@ -60,7 +58,7 @@ int eth_get_dev_index(char *name)
 }
 
 /* Initialize a new ethernet raw socket */
-int eth_init_socket(char *device)
+int lnx_eth_init_socket(char *device)
 {
    struct sockaddr_ll sa;
    struct packet_mreq mreq;
@@ -76,7 +74,7 @@ int eth_init_socket(char *device)
    sa.sll_protocol = htons(ETH_P_ALL);
    sa.sll_hatype = ARPHRD_ETHER;
    sa.sll_halen = ETH_ALEN;
-   sa.sll_ifindex = eth_get_dev_index(device);
+   sa.sll_ifindex = lnx_eth_get_dev_index(device);
 
    memset(&mreq,0,sizeof(mreq));
    mreq.mr_ifindex = sa.sll_ifindex;
@@ -98,7 +96,7 @@ int eth_init_socket(char *device)
 }
 
 /* Send an ethernet frame */
-ssize_t eth_send(int sck,int dev_id,char *buffer,size_t len)
+ssize_t lnx_eth_send(int sck,int dev_id,char *buffer,size_t len)
 {
    struct sockaddr_ll sa;
 
@@ -113,7 +111,7 @@ ssize_t eth_send(int sck,int dev_id,char *buffer,size_t len)
 }
 
 /* Receive an ethernet frame */
-ssize_t eth_recv(int sck,char *buffer,size_t len)
+ssize_t lnx_eth_recv(int sck,char *buffer,size_t len)
 {
    return(recv(sck,buffer,len,0));
 }

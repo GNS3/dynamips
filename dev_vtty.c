@@ -329,7 +329,15 @@ int vtty_read_and_store(vtty_t *vtty)
 
             /* Experimentations / Tests */
             case 'x':
-               if (cpu0) mips64_set_irq(cpu0,2);
+               if (cpu0) {
+                  printf("\nCPU0: hash_lookups: %llu, hash_misses: %llu, "
+                         "efficiency: %g%%\n",
+                         cpu0->hash_lookups, cpu0->hash_misses,
+                         100 - ((double)(cpu0->hash_misses*100)/
+                                (double)cpu0->hash_lookups));
+
+                  mips64_jit_dump_hash(cpu0);
+               }
 
             /* Twice Ctrl+] */
             case 29:

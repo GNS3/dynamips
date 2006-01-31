@@ -501,3 +501,18 @@
   - Added a virtual bridge system.
   - Release 0.2.3b
 
+31-Jan-2006
+-----------
+  - Fixed a stupid bug in DMA handling, which in certain conditions can
+    cause an infinite loop.
+
+01-Feb-2006
+-----------
+  - Added an "instruction block hash" which avoids lookups in the instruction
+    red-black tree. The IBH table takes only 16 Kb of memory.
+  - Added CRC-12 and CRC-16 functions for future use.
+  - Added a "gen_eth" NetIO driver, which allow to access ethernet interfaces
+    in a portable way (tested on Linux and Cygwin).
+  - Fixes to the PowerPC build on Darwin thanks to Olivier Cahagne.
+  - Minor cosmetic changes to display supported/unsupported PA and NPE.
+  - Release 0.2.3c

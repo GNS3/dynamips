@@ -16,6 +16,9 @@
 #ifdef LINUX_ETH
 #include "linux_eth.h"
 #endif
+#ifdef GEN_ETH
+#include "gen_eth.h"
+#endif
 
 #define NETIO_DEV_MAXLEN  64
 
@@ -27,6 +30,9 @@ enum {
    NETIO_TYPE_TCP_SER,
 #ifdef LINUX_ETH
    NETIO_TYPE_LINUX_ETH,
+#endif
+#ifdef GEN_ETH
+   NETIO_TYPE_GEN_ETH,
 #endif
    NETIO_TYPE_NULL,
    NETIO_TYPE_MAX,
@@ -54,12 +60,23 @@ struct netio_inet_desc {
    int fd;
 };
 
+#ifdef LINUX_ETH
 /* netio linux raw ethernet descriptor */
 typedef struct netio_lnxeth_desc netio_lnxeth_desc_t;
 struct netio_lnxeth_desc {
    char dev_name[NETIO_DEV_MAXLEN];
    int dev_id,fd;
 };
+#endif
+
+#ifdef GEN_ETH
+/* netio generic raw ethernet descriptor */
+typedef struct netio_geneth_desc netio_geneth_desc_t;
+struct netio_geneth_desc {
+   char dev_name[NETIO_DEV_MAXLEN];
+   pcap_t *pcap_dev;
+};
+#endif
 
 /* generic netio descriptor */
 typedef struct netio_desc netio_desc_t;
@@ -72,7 +89,12 @@ struct netio_desc {
       netio_unix_desc_t nud;
       netio_tap_desc_t ntd;
       netio_inet_desc_t nid;
+#ifdef LINUX_ETH
       netio_lnxeth_desc_t nled;
+#endif
+#ifdef GEN_ETH
+      netio_geneth_desc_t nged;
+#endif
    } u;
 
    /* send and receive prototypes */
@@ -106,6 +128,11 @@ netio_desc_t *netio_desc_create_udp(int local_port,
 #ifdef LINUX_ETH
 /* Create a new NetIO descriptor with raw Ethernet method */
 netio_desc_t *netio_desc_create_lnxeth(char *dev_name);
+#endif
+
+#ifdef GEN_ETH
+/* Create a new NetIO descriptor with generic raw Ethernet method */
+netio_desc_t *netio_desc_create_geneth(char *dev_name);
 #endif
 
 /* Create a new NetIO descriptor with NULL method */

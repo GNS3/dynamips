@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include "rbtree.h"
 #include "mips64.h"
@@ -44,6 +45,8 @@ int mips64_get_reg_index(char *name)
 /* Initialize a MIPS64 processor */
 void mips64_init(cpu_mips_t *cpu)
 {
+   size_t len;
+
    memset(cpu,0,sizeof(*cpu));
    cpu->addr_bus_mask = 0xFFFFFFFFFFFFFFFFULL;
    cpu->pc = MIPS_ROM_PC;
@@ -51,6 +54,12 @@ void mips64_init(cpu_mips_t *cpu)
    cpu->cp0.reg[MIPS_CP0_STATUS] = MIPS_CP0_STATUS_BEV;
 
    cpu->insn_block_tree = rbtree_create((tree_fcompare)insn_block_cmp,NULL);
+
+   /* allocate instruction block hash */
+   len = 4096 * sizeof(void *);
+   cpu->insn_block_hash = m_memalign(4096,len);
+   assert(cpu->insn_block_hash != NULL);
+   memset(cpu->insn_block_hash,0,len);
 }
 
 /* Update the IRQ flag (inline) */

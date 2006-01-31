@@ -28,7 +28,7 @@
 #define HEC_GENERATOR   0x107               /* x^8 + x^2 +  x  + 1  */
 #define COSET_LEADER    0x055               /* x^6 + x^4 + x^2 + 1  */
 
-static m_uint8_t syndrome_table[256];
+m_uint8_t hec_syndrome_table[256];
 
 /* generate a table of CRC-8 syndromes for all possible input bytes */
 static void gen_syndrome_table(void)
@@ -44,7 +44,7 @@ static void gen_syndrome_table(void)
          else
             syndrome = (syndrome << 1);
       }
-      syndrome_table[i] = (unsigned char)syndrome;
+      hec_syndrome_table[i] = (unsigned char)syndrome;
    }
 }
 
@@ -59,7 +59,7 @@ m_uint8_t atm_compute_hec(m_uint8_t *cell_header)
     * exclusive-or with coset leader & insert into fifth header byte.
     */
    for(i=0;i<4;i++)
-      hec_accum = syndrome_table[hec_accum ^ cell_header[i]];
+      hec_accum = hec_syndrome_table[hec_accum ^ cell_header[i]];
    
    return(hec_accum ^ COSET_LEADER);
 }

@@ -8,8 +8,12 @@ ARCH=x86
 # Change this to 0 if your system doesn't support RFC 2553 extensions
 HAS_RFC2553=1
 
+# Change this to 1 if your system has libpcap-0.9.4 or better 
+# (WinPcap is used for Cygwin)
+HAS_PCAP=1
+
 # Current dynamips release
-VERSION=0.2.3b
+VERSION=0.2.3c
 
 CC=gcc
 LD=ld
@@ -23,15 +27,23 @@ CFLAGS=-g -Wall -O3 -fomit-frame-pointer -DJIT_ARCH=\"$(ARCH)\" \
 	-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE \
 	-DHAS_RFC2553=$(HAS_RFC2553)
 
+PCAP_LIB=-lpcap
+
 ifeq ($(shell uname), FreeBSD)
    CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf
    LIBS=-L/usr/local/lib -L. -lelf -pthread
 else
+ifeq ($(shell uname -s), Darwin)
+   CFLAGS+=-I/usr/local/include
+   LIBS=-L/usr/local/lib -L. -lelf -lpthread
+else
 ifeq ($(shell uname -o), Cygwin)
    CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf
    LIBS=-L/usr/local/lib -L. -lelf -lpthread
+   PCAP_LIB=-lpacket -lwpcap
 else
    LIBS=-L. -lelf -lpthread
+endif
 endif
 endif
 
@@ -40,13 +52,13 @@ PACKAGE=$(PROG)-$(VERSION)
 ARCHIVE=$(PACKAGE).tar.gz
 
 # Header and source files
-HDR=mempool.h cfg_lexer.h cfg_parser.h rbtree.h hash.h utils.h \
+HDR=mempool.h cfg_lexer.h cfg_parser.h rbtree.h hash.h utils.h crc.h \
 	net.h net_io.h net_io_bridge.h atm.h \
 	ptask.h dynamips.h insn_lookup.h \
 	mips64.h mips64_exec.h cpu.h cp0.h memory.h device.h \
 	nmc93c46.h ds1620.h pci_dev.h pcireg.h \
 	dev_vtty.h dev_c7200.h dev_c7200_bay.h
-SOURCES=mempool.c cfg_lexer.c cfg_parser.c rbtree.c hash.c utils.c \
+SOURCES=mempool.c cfg_lexer.c cfg_parser.c rbtree.c hash.c utils.c crc.c \
 	net.c net_io.c net_io_bridge.c atm.c ptask.c \
 	dynamips.c insn_lookup.c mips64.c mips64_jit.c mips64_exec.c \
 	cpu.c cp0.c memory.c device.c nmc93c46.c pci_dev.c pci_io.c \
@@ -83,6 +95,15 @@ HDR += linux_eth.h
 SOURCES += linux_eth.c
 endif
 
+# Generic Ethernet support with libpcap (0.9+)
+ifeq ($(HAS_PCAP), 1)
+CFLAGS += -DGEN_ETH
+HDR += gen_eth.h
+SOURCES += gen_eth.c
+
+LIBS += $(PCAP_LIB)
+endif
+
 LEX_SOURCES=cfg_lexer.l
 
 OBJS=$(SOURCES:.c=.o)
@@ -92,7 +113,8 @@ SUPPL=Makefile ChangeLog README TODO microcode
 FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	x86-codegen.h x86_trans.c x86_trans.h \
 	amd64-codegen.h amd64_trans.c amd64_trans.h \
-	nojit_trans.c nojit_trans.h linux_eth.c linux_eth.h \
+	nojit_trans.c nojit_trans.h \
+	linux_eth.c linux_eth.h gen_eth.c gen_eth.h \
 	cfg_lexer.l profiler.c profiler_resolve.pl bin2c.c rom2c.c
 
 dynamips: microcode $(LEX_C) $(OBJS)

@@ -31,7 +31,13 @@
 #include "dev_vtty.h"
 #include "ptask.h"
 #include "atm.h"
+#include "crc.h"
+#include "net_io.h"
 #include "net_io_bridge.h"
+
+#ifdef GEN_ETH
+#include "gen_eth.h"
+#endif
 
 #ifdef PROFILE
 #include "profiler.h"
@@ -41,7 +47,7 @@
 #define LOGFILE_DEFAULT_NAME  "pred_log0.txt"
 
 /* Software version */
-static const char *sw_version = "0.2.3b-"JIT_ARCH;
+static const char *sw_version = "0.2.3c-"JIT_ARCH;
 
 /* Log file */
 FILE *log_file = NULL;
@@ -369,6 +375,7 @@ static void show_usage(int argc,char *argv[])
           "  -p <pa_desc>    : Define a Port Adapter\n"
           "  -a <cfg_file>   : Virtual ATM switch configuration file\n"
           "  -b <cfg_file>   : Virtual bridge configuration file\n"
+          "  -e              : Show network device list\n"
           "\n",
           ram_size,rom_size,nvram_size,LOGFILE_DEFAULT_NAME,
           conf_reg,clock_divisor);
@@ -389,7 +396,7 @@ static void show_usage(int argc,char *argv[])
 
 int main(int argc,char *argv[])
 {
-   char *options_list = "r:o:n:c:m:l:C:ijt:p:k:T:A:a:b:s:R:M:";
+   char *options_list = "r:o:n:c:m:l:C:ijt:p:k:T:A:a:b:s:R:M:e";
    char *log_file_name = NULL;
    char *ios_image_name;
    char *ios_cfg_file = NULL;
@@ -406,6 +413,9 @@ int main(int argc,char *argv[])
    printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
 
    memset(&c7200_router,0,sizeof(c7200_router));
+
+   /* Initialize CRC functions */
+   crc_init();
 
    /* Initialize ATM code */
    atm_init();
@@ -534,6 +544,13 @@ int main(int argc,char *argv[])
             if (netio_bridge_start(optarg) == -1)
                exit(EXIT_FAILURE);
             break;
+
+#ifdef GEN_ETH
+         /* Ethernet device list */
+         case 'e':
+            gen_eth_show_dev_list();
+            exit(EXIT_SUCCESS);           
+#endif            
 
          /* Oops ! */
          case '?':

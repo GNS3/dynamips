@@ -168,11 +168,11 @@ static struct c7200_eeprom c7200_pem_eeprom[] = {
 /* Port Adapter Drivers                                                     */
 /* ======================================================================== */
 static struct c7200_pa_driver pa_drivers[] = {
-   { "C7200-IO-FE"  , dev_c7200_iocard_init },
-   { "PA-FE-TX"     , dev_c7200_pa_fe_tx_init },
-   { "PA-4T+"       , dev_c7200_pa_4t_init },
-   { "PA-A1"        , dev_c7200_pa_a1_init },
-   { NULL           , NULL },
+   { "C7200-IO-FE"  , 1, dev_c7200_iocard_init },
+   { "PA-FE-TX"     , 1, dev_c7200_pa_fe_tx_init },
+   { "PA-4T+"       , 1, dev_c7200_pa_4t_init },
+   { "PA-A1"        , 0, dev_c7200_pa_a1_init },
+   { NULL           , 0, NULL },
 };
 
 /* ======================================================================== */
@@ -192,14 +192,14 @@ DECLARE_NPE(npe400);
 DECLARE_NPE(npeg1);
 
 static struct c7200_npe_driver npe_drivers[] = {
-   { "npe-100" , c7200_init_npe100, 0, 5,  0, 6 },
-   { "npe-150" , c7200_init_npe150, 0, 5,  0, 6 },
-   { "npe-175" , c7200_init_npe175, 2, 16, 1, 0 },
-   { "npe-200" , c7200_init_npe200, 0, 5,  0, 6 },
-   { "npe-225" , c7200_init_npe225, 2, 16, 1, 0 },
-   { "npe-300" , c7200_init_npe300, 2, 16, 1, 0 },
-   { "npe-400" , c7200_init_npe400, 2, 16, 1, 0 },
-   { "npe-g1"  , c7200_init_npeg1, -1, -1, -1, -1 },
+   { "npe-100" , c7200_init_npe100, 1, 0, 5,  0, 6 },
+   { "npe-150" , c7200_init_npe150, 1, 0, 5,  0, 6 },
+   { "npe-175" , c7200_init_npe175, 1, 2, 16, 1, 0 },
+   { "npe-200" , c7200_init_npe200, 1, 0, 5,  0, 6 },
+   { "npe-225" , c7200_init_npe225, 1, 2, 16, 1, 0 },
+   { "npe-300" , c7200_init_npe300, 1, 2, 16, 1, 0 },
+   { "npe-400" , c7200_init_npe400, 1, 2, 16, 1, 0 },
+   { "npe-g1"  , c7200_init_npeg1, 0, -1, -1, -1, -1 },
    { NULL      , NULL },
 };
 
@@ -370,6 +370,18 @@ int c7200_pa_create(c7200_t *router,char *str)
          break;
 #endif
 
+#ifdef GEN_ETH
+      case NETIO_TYPE_GEN_ETH:
+         if (count != 4) {
+            fprintf(stderr,"c7200_pa_create: invalid number of arguments "
+                    "for Generic Eth NIO '%s'\n",str);
+            goto done;
+         }
+         
+         nio = netio_desc_create_geneth(tokens[3]);
+         break;
+#endif
+
       default:
          fprintf(stderr,"c7200_pa_create: unknown NETIO type '%s'\n",
                  tokens[2]);
@@ -400,8 +412,11 @@ void c7200_pa_show_drivers(void)
 
    printf("Available Port Adapter drivers:\n");
 
-   for(i=0;pa_drivers[i].dev_type;i++)
-      printf("  * %s\n",pa_drivers[i].dev_type);
+   for(i=0;pa_drivers[i].dev_type;i++) {
+      printf("  * %s %s\n",
+             pa_drivers[i].dev_type,
+             !pa_drivers[i].supported ? "(NOT SUPPORTED)" : "");
+   }
    
    printf("\n");
 }
@@ -425,8 +440,11 @@ void c7200_npe_show_drivers(void)
 
    printf("Available NPE drivers:\n");
 
-   for(i=0;npe_drivers[i].npe_type;i++)
-      printf("  * %s\n",npe_drivers[i].npe_type);
+   for(i=0;npe_drivers[i].npe_type;i++) {
+      printf("  * %s %s\n",
+             npe_drivers[i].npe_type,
+             !npe_drivers[i].supported ? "(NOT SUPPORTED)" : "");
+   }
    
    printf("\n");
 }

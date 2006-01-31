@@ -327,6 +327,9 @@ struct cpu_mips {
    /* Red-Black tree to locate PC */
    rbtree_tree *insn_block_tree;
 
+   /* Instruction block hash table */
+   void **insn_block_hash;
+
    /* MTS 1st level array */
    void *mts_l1_ptr;
 
@@ -338,9 +341,6 @@ struct cpu_mips {
    
    /* Memory access functions */
    mips_memop_fn mem_op_fn[MIPS_MEMOP_MAX];
-
-   /* LL/SC information */
-   u_int ll_bit;
 
    /* Virtual version of CP0 Compare Register */
    m_uint32_t cp0_virt_cmp_reg;
@@ -355,12 +355,15 @@ struct cpu_mips {
    /* FPU (CP1) */
    mips_cp1_t fpu;
 
+   /* LL/SC information */
+   u_int ll_bit;
+
    /* CPU identifier for MP systems and CPU state */
    u_int id,state;
 
    /* Next CPU in group */
    cpu_mips_t *next;
-
+   
    /* Memory mapped devices */
    struct vdevice *dev_array[MIPS64_DEVICE_MAX];
 
@@ -377,6 +380,9 @@ struct cpu_mips {
 
    /* non-JIT mode instruction counter */
    m_uint64_t insn_exec_count;
+
+   /* Instruction block hash table statistics */
+   m_uint64_t hash_misses,hash_lookups;
 };
 
 /* Register names */

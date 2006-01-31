@@ -27,6 +27,8 @@
 #include "insn_lookup.h"
 #include "ptask.h"
 
+#define ibh_index(x) (((x) ^ ((x) >> 16)) & 0xfff)
+
 extern rbtree_tree *sym_tree;
 
 #if DEBUG_BLOCK_TIMESTAMP
@@ -87,6 +89,48 @@ void mips64_jit_create_ilt(void)
                     (ilt_get_insn_cbk_t)mips64_jit_get_insn,
                     (ilt_check_cbk_t)mips64_jit_chk_lo,
                     (ilt_check_cbk_t)mips64_jit_chk_hi);
+}
+
+/* Insert specified address in instruction block hash table */
+void mips64_jit_add_hash_addr(cpu_mips_t *cpu,m_uint64_t addr)
+{
+   struct insn_block *block;
+   m_uint16_t index;
+   
+   block = insn_block_locate_fast(cpu,addr);
+
+   if (likely(block != NULL)) {
+      index = ibh_index(addr >> 2);
+      cpu->insn_block_hash[index] = block;
+   }
+}
+
+/* Remove specified block from instruction block hash table */
+void mips64_jit_remove_hash_block(cpu_mips_t *cpu,struct insn_block *block)
+{
+   int index;
+
+   for(index=0;index<4096;index++) {
+      if (cpu->insn_block_hash[index] == block)
+         cpu->insn_block_hash[index] = NULL;
+   }
+}
+
+/* Dump instruction block hash table */
+void mips64_jit_dump_hash(cpu_mips_t *cpu)
+{
+   struct insn_block *block;
+   int i;
+
+   for(i=0;i<4096/*65536*/;i++) {
+      block = cpu->insn_block_hash[i];
+      if (!block)
+         m_log("IBHASH","Index %d: no block\n",i);
+      else {
+         m_log("IBHASH","Index %d: Block 0x%llx, count=%llu\n",
+               i,block->start_pc,block->acc_count);
+      }
+   }
 }
 
 /* Find the JIT code emitter for the specified MIPS instruction */
@@ -460,6 +504,7 @@ static insn_block_t *insn_block_scan_and_compile(cpu_mips_t *cpu,
                                                  m_uint64_t vaddr)
 {
    insn_block_t *block;
+   m_uint16_t index;
 
    if (!(block = insn_block_create(cpu,vaddr)))
       return NULL;
@@ -468,6 +513,9 @@ static insn_block_t *insn_block_scan_and_compile(cpu_mips_t *cpu,
       return NULL;
 
    rbtree_insert(cpu->insn_block_tree,block,block);
+   
+   index = ibh_index(vaddr >> 2);
+   cpu->insn_block_hash[index] = block;
    return block;
 }
 
@@ -561,20 +609,32 @@ int insn_block_local_addr(insn_block_t *block,m_uint64_t vaddr,
 void *insn_block_execute(cpu_mips_t *cpu)
 {
    insn_block_t *block;
+   m_uint32_t index;
 
  start_cpu:
    for(;;) {
       if (unlikely(!cpu->pc) || unlikely(cpu->state != MIPS_CPU_RUNNING))
          break;
 
-      block = insn_block_locate_fast(cpu,cpu->pc);
+      index = ibh_index(cpu->pc >> 2);
+      block = cpu->insn_block_hash[index];
+      cpu->hash_lookups++;
 
-      if (!block) {
-         block = insn_block_scan_and_compile(cpu,cpu->pc);
-         if (unlikely(!block)) {
-            cpu->pc = 0;
-            break;
+      if (unlikely(!block || (cpu->pc < block->start_pc) || 
+                   (cpu->pc >= block->end_pc)))
+      {
+         block = insn_block_locate_fast(cpu,cpu->pc);
+
+         if (!block) {
+            block = insn_block_scan_and_compile(cpu,cpu->pc);
+            if (unlikely(!block)) {
+               cpu->pc = 0;
+               break;
+            }
          }
+
+         cpu->insn_block_hash[index] = block;
+         cpu->hash_misses++;
       }
 
 #if DEBUG_BLOCK_TIMESTAMP

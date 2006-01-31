@@ -951,6 +951,7 @@ fastcall u_int mts32_cache(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
             "(end=0x%llx)\n",b->start_pc,b->end_pc);
 #endif
       rbtree_remove(cpu->insn_block_tree,&vaddr);
+      mips64_jit_remove_hash_block(cpu,b);
    }
 
    return(0);
