@@ -106,22 +106,21 @@ void *dev_nvram_access(cpu_mips_t *cpu,struct vdevice *dev,
 }
 
 /* Set appropriately the config register if the NVRAM is empty */
-static int set_config_register(struct vdevice *dev)
+static void set_config_register(struct vdevice *dev,u_int *conf_reg)
 {
    m_uint32_t *ptr;
    int i;
 
    ptr = (m_uint32_t *)dev->host_addr;
    for(i=0;i<(dev->phys_len/4);i++,ptr++)
-      if (*ptr) return(0);
+      if (*ptr) return;
 
    /* 
     * nvram is empty: tells IOS to ignore its contents.
     * http://www.cisco.com/en/US/products/hw/routers/ps274/products_installation_guide_chapter09186a008007de4c.html
     */
-   conf_reg |= 0x0040;
-   printf("NVRAM is empty, setting config register to 0x%x\n",conf_reg);
-   return(0);
+   *conf_reg |= 0x0040;
+   printf("NVRAM is empty, setting config register to 0x%x\n",*conf_reg);
 }
 
 /* Export configuration from NVRAM */
@@ -299,7 +298,8 @@ int dev_nvram_push_config(cpu_group_t *cpu_group,char *cfg_filename)
 }
 
 /* dev_nvram_init() */
-int dev_nvram_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename)
+int dev_nvram_init(cpu_group_t *cpu_group,char *filename,
+                   m_uint64_t paddr,m_uint32_t len,u_int *conf_reg)
 {
    struct vdevice *dev;
    struct nvram_data *d;
@@ -319,7 +319,7 @@ int dev_nvram_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename)
    memset(d,0,sizeof(*d));
 
    dev->phys_addr = paddr;
-   dev->phys_len  = nvram_size * 1024;
+   dev->phys_len  = len;
    dev->handler   = dev_nvram_access;
    dev->fd        = memzone_create_file(filename,dev->phys_len,&ptr);
    dev->host_addr = (m_iptr_t)ptr;
@@ -332,7 +332,7 @@ int dev_nvram_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename)
    }
 
    /* Modify the configuration register if NVRAM is empty */
-   set_config_register(dev);
+   set_config_register(dev,conf_reg);
 
    /* Map this device to all CPU */
    cpu_group_bind_device(cpu_group,dev);

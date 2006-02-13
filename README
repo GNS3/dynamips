@@ -1,4 +1,4 @@
-Help for Cisco 7200 simulator (dynamips-0.2.3)
+Help for Cisco 7200 simulator (dynamips-0.2.4)
 ==============================================
 Authors: Fabien Devaux, Christophe Fillot, MtvE
 
@@ -13,9 +13,6 @@ Please note that you must use the C7200-IO-FE PA driver as IO card if you
 want a FastEthernet interface in slot 0. For other slots, you must use
 the PA-FE-TX driver.
 
-The Serial driver (PA-4T+) is not working at all (the interfaces are only 
-"seen" by IOS).
-
 
 Command Line Options overview
 *****************************
@@ -25,8 +22,9 @@ Command Line Options overview
 -n <nvram_size> : Set the NVRAM size (default is 128 Kb)
 -l <log_file>   : Set logging file (default is pred_log0.txt)
 -C <cfg_file>   : Import an IOS configuration file into NVRAM
+-X              : Do not use a file to simulate RAM (faster)
 -R <rom_file>   : Load an alternate ROM (default is embedded)
--s <sym_file>   : Load symbol file
+-S <sym_file>   : Load a symbol file
 -c <conf_reg>   : Set the configuration register (default is 0x2102)
 -m <mac_addr>   : Set the MAC address of the chassis (IOS chooses default)
 -k <clock_div>  : Set the clock divisor (default is 2)
@@ -37,9 +35,11 @@ Command Line Options overview
 -t <npe_type>   : Select NPE type
 -M <midplane>   : Select Midplane ("std" or "vxr")
 -p <pa_desc>    : Define a Port Adapter
+-s <pa_nio>     : Bind a Network IO interface to a Port Adapter
 -a <cfg_file>   : Virtual ATM switch configuration file
+-f <cfg_file>   : Virtual Frame relay switch configuration file
 -b <cfg_file>   : Virtual bridge configuration file
--e              : Show network device list
+-e              : Show network device list of the host machine
 
 
 Command Line Options details
@@ -60,8 +60,16 @@ Command Line Options details
    pa_driver  : the name of a port adapter driver in:
         - C7200-IO-FE  (FastEthernet, slot 0 only)
         - PA-FE-TX     (FastEthernet, slots 1 to 6) 
-        - PA-4T+       (Serial, NOT WORKING)
+        - PA-4T+       (Serial, 4 ports)
+        - PA-8T        (Serial, 8 ports)
         - PA-A1        (ATM)
+
+<pa_nio> :
+
+   Format: slot:port:netio_type[:netio_parameters]
+
+   slot       : the number of the physical slot (starts from 0)
+   port       : the port in the specified slot (starts from 0)
 
    netio_type : host interface for communication
 
@@ -121,6 +129,7 @@ s : Suspend CPU emulation
 u : Resume CPU emulation
 q : Quit the emulator
 b : Dump the instruction block tree
+h : JIT hash table statistics
 c : Write IOS configuration to disk (ios_cfg.txt)
 j : Non-JIT mode statistics
 x : Experimentations (can crash the box!)
@@ -245,4 +254,43 @@ interface a2/0.2 p
 # ping 1.1.1.2
 !!!!!
 
+
+Virtual Frame-Relay switch
+**************************
+
+The virtual Frame-Relay switch fabric is used to emulate a Frame-Relay 
+backbone between emulator instances. The use of this virtual switch is not 
+mandatory, you can directly connect emulator instances with appropriate IOS
+configuration.
+
+Any emulator instance can act as a virtual Frame-Relay switch.
+
+There is only a basic implementation of the LMI protocol (ANSI Annex D), which
+is probably not conforming but works with Cisco IOS. Fortunately, Cisco IOS
+is able to detect automatically the LMI protocol.
+
+Example of configuration file (specified by the "-f" option):
+
+# Virtual Interface List
+IF:S0:udp:10001:127.0.0.1:10000
+IF:S1:udp:10002:127.0.0.1:10003
+
+# DLCI switching between S0 and S1
+VC:S0:200:S1:100
+VC:S1:100:S0:200
+
+In this example, we have 2 virtual interfaces, S0 and S1. The syntax
+for interface definition is similar to Port Adapters:
+
+   IF:interface_name:netio_type[:netio_parameters]
+
+DLCI switching syntax:
+
+   VC:input_if:input_dlci:output_if:output_dlci
+
+In the example above, the switch is configured to switch packets 
+received on interface S0 with DLCI 200 to interface S1 with DLCI 100,
+and vice-versa.
+
 == EOF ==
+

@@ -319,9 +319,12 @@ ssize_t atmsw_handle_cell(atm_sw_table_t *t,netio_desc_t *input,
 
    len = netio_send(output,cell,ATM_CELL_SIZE);
    
-   if (len != ATM_CELL_SIZE)
+   if (len != ATM_CELL_SIZE) {
       t->cell_drop++;
-   return(-1);
+      return(-1);
+   }
+
+   return(0);
 }
 
 /* Virtual ATM switch fabric */

@@ -516,3 +516,49 @@
   - Fixes to the PowerPC build on Darwin thanks to Olivier Cahagne.
   - Minor cosmetic changes to display supported/unsupported PA and NPE.
   - Release 0.2.3c
+
+06-Feb-2006
+-----------
+  - Added working Serial interfaces (PA-4T+) !
+  - Bug: CDP not working with serial interfaces ("debug cdp events" reports
+    a checksum problem).
+
+07-Feb-2006
+-----------
+  - Started the 0.2.4 release.
+  - Modified the command line parser to allow many NIO per PA (for example
+    for serials).
+  - A lot of code cleanups in the C7200 initialization.
+  - Added PA-8T support.
+  - To fix: CDP with Serial interfaces: using cp_len (instead of cp_len+4)
+    in packet rx fixes the problem but breaks IP. Probably something related
+    to padding, see how a CDP packet is sent (special flag in tx ring ?)
+  - Added virtual "beqz" instruction.
+  - Added the "-X" option, allowing to use host memory directly instead of
+    mapping a file to simulate RAM (faster).
+  - Beginning of code reorganization to allow multiple instance contexts.
+
+08-Feb-2006
+-----------
+  - Added a basic virtual Frame-Relay switch. Unfortunately, LMI must be
+    implemented to maintain links up.
+  - Finally found the problem related to CDP! It was simply a padding problem.
+
+09-Feb-2006
+-----------
+  - Add support of promiscuous mode for the DEC21140 "unicast limiter":
+    promiscuous mode is used in bridging configurations.
+  - Fixed another bug with the serial interfaces: it seems that there is
+    a "length substractor" for the txring.
+
+10-Feb-2006
+-----------
+  - Played a little with the PA-POS-OC3, without success.
+	
+14-Feb-2006
+-----------
+  - Finally implemented the basic LMI stuff (only ANSI Annex D). Fortunately,
+    IOS rocks and uses auto-detection, so no extra configuration is needed.
+  - Integrated a Makefile patch from Max Khon for FreeBSD.
+  - Updated documentation.
+  - Release 0.2.4.

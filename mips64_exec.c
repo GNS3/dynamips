@@ -355,6 +355,32 @@ static int mips64_exec_BEQL(cpu_mips_t *cpu,mips_insn_t instruction)
    return(1);
 }
 
+/* BEQZ (Branch On Equal Zero) */
+static int mips64_exec_BEQZ(cpu_mips_t *cpu,mips_insn_t instruction)
+{
+   int rs = bits(instruction,21,25);
+   int offset = bits(instruction,0,15);
+   m_uint64_t new_pc;
+   int res;
+
+   /* compute the new pc */
+   new_pc = (cpu->pc + 4) + sign_extend(offset << 2,18);
+
+   /* take the branch if gpr[rs] == 0 */
+   res = (cpu->gpr[rs] == 0);
+
+   /* exec the instruction in the delay slot */
+   mips64_exec_bdslot(cpu);
+
+   /* take the branch if the test result is true */
+   if (res) 
+      cpu->pc = new_pc;
+   else
+      cpu->pc += 8;
+
+   return(1);
+}
+
 /* BGEZ (Branch On Greater or Equal Than Zero) */
 static int mips64_exec_BGEZ(cpu_mips_t *cpu,mips_insn_t instruction)
 {
@@ -1654,6 +1680,7 @@ static struct insn_exec_tag mips64_exec_tags[] = {
    { "move"   , mips64_exec_MOVE    , 0xfc1f07ff , 0x00000021, 1, 0 },
    { "b"      , mips64_exec_B       , 0xffff0000 , 0x10000000, 0, 0 },
    { "bal"    , mips64_exec_BAL     , 0xffff0000 , 0x04110000, 0, 0 },
+   { "beqz"   , mips64_exec_BEQZ    , 0xfc1f0000 , 0x10000000, 0, 0 },
    { "add"    , mips64_exec_ADD     , 0xfc0007ff , 0x00000020, 1, 0 },
    { "addi"   , mips64_exec_ADDI    , 0xfc000000 , 0x20000000, 1, 0 },
    { "addiu"  , mips64_exec_ADDIU   , 0xfc000000 , 0x24000000, 1, 0 },

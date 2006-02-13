@@ -450,6 +450,44 @@ static int mips64_emit_BEQL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    return(0);
 }
 
+/* BEQZ (Branch On Equal Zero - optimization) */
+static int mips64_emit_BEQZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+{
+   int rs = bits(insn,21,25);
+   int offset = bits(insn,0,15);
+   u_char *test1,*test2;
+   m_uint64_t new_pc;
+
+   /* compute the new pc */
+   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc += sign_extend(offset << 2,18);
+   
+   /* 
+    * compare gpr[rs] with 0.
+    * compare the low 32 bits first (higher probability).
+    */
+   x86_alu_membase_imm(b->jit_ptr,X86_CMP,X86_EDI,REG_OFFSET(rs),0);
+   test1 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   x86_alu_membase_imm(b->jit_ptr,X86_CMP,X86_EDI,REG_OFFSET(rs)+4,0);
+   test2 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
+
+   /* insert the instruction in the delay slot */
+   insn_fetch_and_emit(cpu,b,2);
+
+   /* set the new pc in cpu structure */
+   mips64_set_jump(b,new_pc);
+
+   x86_patch(test1,b->jit_ptr);
+   x86_patch(test2,b->jit_ptr);
+
+   /* if the branch is not taken, we have to execute the delay slot too */
+   insn_fetch_and_emit(cpu,b,1);
+   return(0);
+}
+
 /* BGEZ (Branch On Greater or Equal Than Zero) */
 static int mips64_emit_BGEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 {
@@ -2404,6 +2442,7 @@ struct insn_tag mips64_insn_tags[] = {
    { mips64_emit_MOVE    , 0xfc1f07ff , 0x00000021, 1 },   /* virtual */
    { mips64_emit_B       , 0xffff0000 , 0x10000000, 0 },   /* virtual */
    { mips64_emit_BAL     , 0xffff0000 , 0x04110000, 0 },   /* virtual */
+   { mips64_emit_BEQZ    , 0xfc1f0000 , 0x10000000, 0 },   /* virtual */
    { mips64_emit_ADD     , 0xfc0007ff , 0x00000020, 1 },
    { mips64_emit_ADDI    , 0xfc000000 , 0x20000000, 1 },
    { mips64_emit_ADDIU   , 0xfc000000 , 0x24000000, 1 },

@@ -110,6 +110,13 @@ struct m_eth_addr {
    m_uint8_t octet[M_ETH_LEN];
 } __attribute__ ((__packed__));
 
+/* List item */
+typedef struct m_list m_list_t;
+struct m_list {
+   void *data;
+   m_list_t *next;
+};
+
 /* Sign-extension */
 static forced_inline m_int64_t sign_extend(m_int64_t x,int len)
 {
@@ -165,6 +172,9 @@ static inline m_tmcnt_t m_gettime(void)
    gettimeofday(&tvp,NULL);
    return(((m_tmcnt_t)tvp.tv_sec * 1000) + ((m_tmcnt_t)tvp.tv_usec / 1000));
 }
+
+/* Add an element to a list */
+m_list_t *m_list_add(m_list_t **head,void *data);
 
 /* Dynamic sprintf */
 char *dyn_sprintf(const char *fmt,...);

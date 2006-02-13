@@ -29,6 +29,20 @@
 
 extern FILE *log_file;
 
+/* Add an element to a list */
+m_list_t *m_list_add(m_list_t **head,void *data)
+{
+   m_list_t *item;
+
+   if ((item = malloc(sizeof(*item))) != NULL) {
+      item->data = data;
+      item->next = *head;
+      *head = item;
+   }
+
+   return item;
+}
+
 /* Dynamic sprintf */
 char *dyn_sprintf(const char *fmt,...)
 {

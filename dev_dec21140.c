@@ -28,6 +28,7 @@
 #include <time.h>
 #include <errno.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include "utils.h"
 #include "mips64.h"
@@ -73,6 +74,7 @@
 /* CSR6: Operating Mode Register */
 #define DEC21140_CSR6_START_RX    0x00000002
 #define DEC21140_CSR6_START_TX    0x00002000
+#define DEC21140_CSR6_PROMISC     0x00000040
 
 /* CSR9: Serial EEPROM and MII */
 #define DEC21140_CSR9_RX_BIT      0x00080000
@@ -144,6 +146,9 @@ struct dec21140_data {
    n_eth_addr_t mac_addr[16];
    u_int mac_addr_count;
 
+   /* Device information */
+   struct vdevice *dev;
+
    /* PCI device information */
    struct pci_device *pci_dev;
 
@@ -186,6 +191,9 @@ static inline int dec21140_handle_mac_addr(struct dec21140_data *d,
                                            n_eth_addr_t *addr)
 {
    int i;
+
+   if (d->csr[6] & DEC21140_CSR6_PROMISC)
+      return(TRUE);
    
    if (eth_addr_is_mcast(addr))
       return(TRUE);
@@ -266,6 +274,8 @@ static void mii_reg_write(struct dec21140_data *d)
    m_log(d->name,"mii phy write %d reg %d value %04x\n",
          d->mii_phy,d->mii_reg,d->mii_data);
 #endif
+   assert(d->mii_phy < 32);
+   assert(d->mii_reg < 32);
    d->mii_regs[d->mii_phy][d->mii_reg] = d->mii_data;
 }
 
@@ -858,15 +868,19 @@ static void pci_dec21140_write(struct pci_device *dev,int reg,m_uint32_t value)
  *
  * Generic DEC21140 initialization code.
  */
-struct vdevice *dev_dec21140_init(cpu_mips_t *cpu,char *name,
-                                  m_uint32_t phys_addr,m_uint32_t phys_len,
-                                  struct pci_data *pci_data,
-                                  int pci_bus,int pci_device,
-                                  int irq,netio_desc_t *nio)
+struct dec21140_data *dev_dec21140_init(cpu_group_t *cpu_group,char *name,
+                                        m_uint32_t phys_addr,
+                                        m_uint32_t phys_len,
+                                        struct pci_data *pci_data,
+                                        int pci_bus,int pci_device,int irq)
 {
    struct dec21140_data *d;
    struct pci_device *pci_dev;
    struct vdevice *dev;
+   cpu_mips_t *cpu0;
+
+   /* Device is managed by CPU0 */ 
+   cpu0 = cpu_group_find_id(cpu_group,0);
 
    /* Allocate the private data structure for DEC21140 */
    if (!(d = malloc(sizeof(*d)))) {
@@ -895,8 +909,7 @@ struct vdevice *dev_dec21140_init(cpu_mips_t *cpu,char *name,
 
    d->name     = name;
    d->bay_addr = phys_addr;
-   d->nio      = nio;
-   d->mgr_cpu  = cpu;
+   d->mgr_cpu  = cpu0;
    d->pci_dev  = pci_dev;
 
    d->csr[0]   = 0xfff80000;
@@ -905,12 +918,14 @@ struct vdevice *dev_dec21140_init(cpu_mips_t *cpu,char *name,
    dev->phys_addr = phys_addr;
    dev->phys_len  = phys_len;
    dev->handler   = dev_dec21140_access;
-   dev->priv_data = d;
 
-   /* create the receive/transmit threads */
-   pthread_create(&d->rx_thread,NULL,dev_dec21140_rxthread,d);
-   ptask_add((ptask_callback)dev_dec21140_handle_txring,d,NULL);
-   return dev;
+   /* store device info */
+   dev->priv_data = d;
+   d->dev = dev;
+
+   /* Map this device to all CPU */
+   cpu_group_bind_device(cpu_group,dev);
+   return(d);
 }
 
 /*
@@ -918,15 +933,10 @@ struct vdevice *dev_dec21140_init(cpu_mips_t *cpu,char *name,
  *
  * Add an IOcard into slot 0.
  */
-int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay,
-                          netio_desc_t *nio)
+int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay)
 {
-   struct vdevice *dev;
+   struct dec21140_data *data;
    m_uint64_t bay_addr;
-   cpu_mips_t *cpu0;
-  
-   /* Device is managed by CPU0 */ 
-   cpu0 = cpu_group_find_id(router->cpu_group,0);
    
    if (pa_bay != 0) {
       fprintf(stderr,"C7200: cannot put IOCARD in PA bay %u!\n",pa_bay);
@@ -940,15 +950,32 @@ int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay,
    c7200_get_mmio_addr(0,&bay_addr);
 
    /* Create the DEC21140 chip */
-   dev = dev_dec21140_init(cpu0,name,bay_addr,PCI_BAY_SPACE,
-                           router->pa_pci_map[pa_bay],
-                           router->npe_driver->dec21140_pci_bus,
-                           router->npe_driver->dec21140_pci_dev,
-                           C7200_NETIO_IRQ,nio);
-   if (!dev) return(-1);
+   data = dev_dec21140_init(router->cpu_group,name,bay_addr,PCI_BAY_SPACE,
+                            router->pa_bay[pa_bay].pci_map,
+                            router->npe_driver->dec21140_pci_bus,
+                            router->npe_driver->dec21140_pci_dev,
+                            C7200_NETIO_IRQ);
+   if (!data) return(-1);
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(router->cpu_group,dev);
+   /* Start the TX ring scanner */
+   ptask_add((ptask_callback)dev_dec21140_handle_txring,data,NULL);
+
+   /* Store device info into the router structure */
+   return(c7200_set_slot_drvinfo(router,pa_bay,data));
+}
+
+int dev_c7200_iocard_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
+                             netio_desc_t *nio)
+{
+   struct dec21140_data *data;
+
+   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+      return(-1);
+
+   data->nio = nio;
+
+   /* create the RX thread */
+   pthread_create(&data->rx_thread,NULL,dev_dec21140_rxthread,data);
    return(0);
 }
 
@@ -957,11 +984,10 @@ int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay,
  *
  * Add a PA-FE-TX port adapter into specified slot.
  */
-int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay,
-                            netio_desc_t *nio)
+int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
 {
    struct pa_bay_info *bay_info;
-   struct vdevice *dev;
+   struct dec21140_data *data;
    cpu_mips_t *cpu0;
 
    /* Device is managed by CPU0 */ 
@@ -977,13 +1003,32 @@ int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay,
    }
 
    /* Create the DEC21140 chip */
-   dev = dev_dec21140_init(cpu0,name,bay_info->phys_addr,PCI_BAY_SPACE,
-                           router->pa_pci_map[pa_bay],
-                           bay_info->pci_secondary_bus,0,
-                           C7200_NETIO_IRQ,nio);
-   if (!dev) return(-1);
+   data = dev_dec21140_init(router->cpu_group,name,
+                            bay_info->phys_addr,PCI_BAY_SPACE,
+                            router->pa_bay[pa_bay].pci_map,
+                            bay_info->pci_secondary_bus,0,
+                            C7200_NETIO_IRQ);
+   if (!data) return(-1);
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(router->cpu_group,dev);
+   /* Start the TX ring scanner */
+   ptask_add((ptask_callback)dev_dec21140_handle_txring,data,NULL);
+
+   /* Store device info into the router structure */
+   return(c7200_set_slot_drvinfo(router,pa_bay,data));
+}
+
+/* Bind a Network IO descriptor */
+int dev_c7200_pa_fe_tx_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
+                               netio_desc_t *nio)
+{
+   struct dec21140_data *data;
+
+   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+      return(-1);
+   
+   data->nio = nio;
+
+   /* create the RX thread */
+   pthread_create(&data->rx_thread,NULL,dev_dec21140_rxthread,data);
    return(0);
 }

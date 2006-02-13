@@ -152,7 +152,8 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
 }
 
 /* dev_bootflash_init() */
-int dev_bootflash_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename)
+int dev_bootflash_init(cpu_group_t *cpu_group,char *filename,
+                       m_uint64_t paddr,m_uint32_t len)
 {
    struct vdevice *dev;
    struct bootflash_data *d;

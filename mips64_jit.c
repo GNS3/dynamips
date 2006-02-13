@@ -203,15 +203,15 @@ struct insn_tag *insn_fetch_and_emit(cpu_mips_t *cpu,insn_block_t *block,
    if (delay_slot != 2)
       block->mips_trans_pos++;
 
-#if BREAKPOINT_ENABLE
-   if (cpu->breakpoints_enabled)
-      insn_emit_breakpoint(cpu,block);
-#endif
-
    mips64_inc_cp0_count_reg(block);
 
    if (!delay_slot)
       mips64_check_pending_irq(block);
+
+#if BREAKPOINT_ENABLE
+   if (cpu->breakpoints_enabled)
+      insn_emit_breakpoint(cpu,block);
+#endif
 
    tag->emit(cpu,block,code);
    return tag;
@@ -520,7 +520,7 @@ static insn_block_t *insn_block_scan_and_compile(cpu_mips_t *cpu,
 }
 
 /* Run a compiled MIPS instruction block */
-static inline void insn_block_run(cpu_mips_t *cpu,insn_block_t *block)
+static forced_inline void insn_block_run(cpu_mips_t *cpu,insn_block_t *block)
 {
 #if DEBUG_SYM_TREE
    struct symbol *sym = NULL;

@@ -218,6 +218,22 @@ void mips64_check_pending_irq(insn_block_t *b)
    amd64_patch(test1,b->jit_ptr);
 }
 
+/* ADD */
+static int mips64_emit_ADD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+{	
+   int rs = bits(insn,21,25);
+   int rt = bits(insn,16,20);
+   int rd = bits(insn,11,15);
+   
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
+   amd64_alu_reg_membase(b->jit_ptr,X86_ADD,AMD64_RAX,AMD64_R15,
+                         REG_OFFSET(rt));
+
+   amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RAX,X86_EAX);
+   amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,REG_OFFSET(rd),AMD64_RAX,8);
+   return(0);
+}
+
 /* ADDI */
 static int mips64_emit_ADDI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 {
@@ -406,6 +422,39 @@ static int mips64_emit_BEQL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    mips64_set_jump(b,new_pc);
 
    amd64_patch(test1,b->jit_ptr);
+   return(0);
+}
+
+/* BEQZ (Branch On Equal Zero) */
+static int mips64_emit_BEQZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+{
+   int rs = bits(insn,21,25);
+   int offset = bits(insn,0,15);
+   u_char *test1;
+   m_uint64_t new_pc;
+
+   /* compute the new pc */
+   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc += sign_extend(offset << 2,18);
+
+   /* 
+    * compare gpr[rs] with 0. 
+    */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
+   amd64_test_reg_reg(b->jit_ptr,AMD64_RAX,AMD64_RAX);
+   test1 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   /* insert the instruction in the delay slot */
+   insn_fetch_and_emit(cpu,b,2);
+
+   /* set the new pc in cpu structure */
+   mips64_set_jump(b,new_pc);
+
+   amd64_patch(test1,b->jit_ptr);
+
+   /* if the branch is not taken, we have to execute the delay slot too */
+   insn_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
@@ -2107,6 +2156,8 @@ struct insn_tag mips64_insn_tags[] = {
    { mips64_emit_MOVE    , 0xfc1f07ff , 0x00000021, 1 },   /* virtual */
    { mips64_emit_B       , 0xffff0000 , 0x10000000, 0 },   /* virtual */
    { mips64_emit_BAL     , 0xffff0000 , 0x04110000, 0 },   /* virtual */
+   { mips64_emit_BEQZ    , 0xfc1f0000 , 0x10000000, 0 },   /* virtual */
+   { mips64_emit_ADD     , 0xfc0007ff , 0x00000020, 1 },
    { mips64_emit_ADDI    , 0xfc000000 , 0x20000000, 1 },
    { mips64_emit_ADDIU   , 0xfc000000 , 0x24000000, 1 },
    { mips64_emit_ADDU    , 0xfc0007ff , 0x00000021, 1 },

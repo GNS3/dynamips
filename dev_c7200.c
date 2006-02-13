@@ -17,6 +17,7 @@
 #include "device.h"
 #include "dev_c7200.h"
 #include "dev_c7200_bay.h"
+#include "dev_vtty.h"
 
 /* ======================================================================== */
 /* CPU EEPROM definitions                                                   */
@@ -168,10 +169,12 @@ static struct c7200_eeprom c7200_pem_eeprom[] = {
 /* Port Adapter Drivers                                                     */
 /* ======================================================================== */
 static struct c7200_pa_driver pa_drivers[] = {
-   { "C7200-IO-FE"  , 1, dev_c7200_iocard_init },
-   { "PA-FE-TX"     , 1, dev_c7200_pa_fe_tx_init },
-   { "PA-4T+"       , 1, dev_c7200_pa_4t_init },
-   { "PA-A1"        , 0, dev_c7200_pa_a1_init },
+   { "C7200-IO-FE"  , 1, dev_c7200_iocard_init, dev_c7200_iocard_set_nio },
+   { "PA-FE-TX"     , 1, dev_c7200_pa_fe_tx_init, dev_c7200_pa_fe_tx_set_nio },
+   { "PA-4T+"       , 1, dev_c7200_pa_4t_init, dev_c7200_pa_4t_set_nio },
+   { "PA-8T"        , 1, dev_c7200_pa_8t_init, dev_c7200_pa_8t_set_nio },
+   { "PA-A1"        , 1, dev_c7200_pa_a1_init, dev_c7200_pa_a1_set_nio },
+   { "PA-POS-OC3"   , 0, dev_c7200_pa_pos_init, dev_c7200_pa_pos_set_nio },
    { NULL           , 0, NULL },
 };
 
@@ -179,8 +182,7 @@ static struct c7200_pa_driver pa_drivers[] = {
 /* NPE Drivers                                                              */
 /* ======================================================================== */
 #define DECLARE_NPE(type) \
-   int (c7200_init_##type)(c7200_t *router,cpu_group_t *cpu_group, \
-                           char **pa_desc,char *mac_addr)
+   int (c7200_init_##type)(c7200_t *router)
    
 DECLARE_NPE(npe100);
 DECLARE_NPE(npe150);
@@ -254,9 +256,27 @@ int c7200_set_mac_addr(struct c7200_eeprom *mp_eeprom,m_eth_addr_t *addr)
    return(0);
 }
 
+/* Get driver info about the specified slot */
+void *c7200_get_slot_drvinfo(c7200_t *router,u_int pa_bay)
+{
+   if (pa_bay >= MAX_PA_BAYS)
+      return NULL;
+
+   return(router->pa_bay[pa_bay].drv_info);
+}
+
+/* Set driver info for the specified slot */
+int c7200_set_slot_drvinfo(c7200_t *router,u_int pa_bay,void *drv_info)
+{
+   if (pa_bay >= MAX_PA_BAYS)
+      return(-1);
+   
+   router->pa_bay[pa_bay].drv_info = drv_info;
+   return(0);
+}
+
 /* Initialize a Port Adapter */
-int c7200_pa_init(c7200_t *router,char *dev_type,u_int pa_bay,
-                  netio_desc_t *nio)
+int c7200_pa_init(c7200_t *router,char *dev_type,u_int pa_bay)
 {
    char *dev_name;
    size_t len;
@@ -271,33 +291,78 @@ int c7200_pa_init(c7200_t *router,char *dev_type,u_int pa_bay,
    snprintf(dev_name,len,"%s(%u)",dev_type,pa_bay);
 
    for(i=0;pa_drivers[i].dev_type;i++)
-      if (!strcmp(pa_drivers[i].dev_type,dev_type))
-         return(pa_drivers[i].pa_init(router,dev_name,pa_bay,nio));
+      if (!strcmp(pa_drivers[i].dev_type,dev_type)) {
+         router->pa_bay[pa_bay].pa_driver = &pa_drivers[i];
+         return(pa_drivers[i].pa_init(router,dev_name,pa_bay));
+      }
 
    fprintf(stderr,"c7200_pa_init: unknown driver '%s'\n",dev_type);
    free(dev_name);
    return(-1);
 }
 
+/* Bind a Network IO descriptor to a Port Adapter */
+int c7200_pa_bind_nio(c7200_t *router,u_int pa_bay,u_int port_id,
+                      netio_desc_t *nio)
+{
+   struct c7200_pa_driver *pa_driver;
+
+   if ((pa_bay >= MAX_PA_BAYS) || !c7200_get_slot_drvinfo(router,pa_bay))
+      return(-1);
+
+   pa_driver = router->pa_bay[pa_bay].pa_driver;
+   return(pa_driver->pa_set_nio(router,pa_bay,port_id,nio));
+}
+
 /* Maximum number of tokens in a PA description */
 #define PA_DESC_MAX_TOKENS  8
 
-/* Create a Port Adapter and bind it to a Network IO descriptor */
+/* Create a Port Adapter */
 int c7200_pa_create(c7200_t *router,char *str)
 {
    char *tokens[PA_DESC_MAX_TOKENS];
-   int i,count,nio_type,res=-1;
-   netio_desc_t *nio;
+   int i,count,res;
    u_int pa_bay;
 
-   /* A port adapter description is like "1:PA-FE-TX:tap:tap0" */
-   if ((count = strsplit(str,':',tokens,PA_DESC_MAX_TOKENS)) < 3) {
+   /* A port adapter description is like "1:PA-FE-TX" */
+   if ((count = strsplit(str,':',tokens,PA_DESC_MAX_TOKENS)) != 2) {
       fprintf(stderr,"c7200_pa_create: unable to parse '%s'\n",str);
       return(-1);
    }
 
    /* Parse the PA bay id */
    pa_bay = atoi(tokens[0]);
+
+   /* Initialize the PA stuff */
+   res = c7200_pa_init(router,tokens[1],pa_bay);
+
+   /* The complete array was cleaned by strsplit */
+   for(i=0;i<PA_DESC_MAX_TOKENS;i++)
+      free(tokens[i]);
+
+   return(res);
+}
+
+/* Create a Port Adapter and bind it to a Network IO descriptor */
+int c7200_pa_create_nio(c7200_t *router,char *str)
+{
+   char *tokens[PA_DESC_MAX_TOKENS];
+   int i,count,nio_type,res=-1;
+   netio_desc_t *nio;
+   u_int pa_bay;
+   u_int port_id;
+
+   /* A port adapter description is like "1:3:tap:tap0" */
+   if ((count = strsplit(str,':',tokens,PA_DESC_MAX_TOKENS)) < 3) {
+      fprintf(stderr,"c7200_pa_create: unable to parse '%s'\n",str);
+      return(-1);
+   }
+
+   /* Parse the PA bay */
+   pa_bay = atoi(tokens[0]);
+
+   /* Parse the PA port id */
+   port_id = atoi(tokens[1]);
 
    /* Create the Network IO descriptor */
    nio_type = netio_get_type(tokens[2]);
@@ -395,7 +460,7 @@ int c7200_pa_create(c7200_t *router,char *str)
    }
 
    /* Initialize the PA stuff */
-   res = c7200_pa_init(router,tokens[1],pa_bay,nio);
+   res = c7200_pa_bind_nio(router,pa_bay,port_id,nio);
 
  done:
    /* The complete array was cleaned by strsplit */
@@ -415,7 +480,7 @@ void c7200_pa_show_drivers(void)
    for(i=0;pa_drivers[i].dev_type;i++) {
       printf("  * %s %s\n",
              pa_drivers[i].dev_type,
-             !pa_drivers[i].supported ? "(NOT SUPPORTED)" : "");
+             !pa_drivers[i].supported ? "(NOT WORKING)" : "");
    }
    
    printf("\n");
@@ -443,22 +508,21 @@ void c7200_npe_show_drivers(void)
    for(i=0;npe_drivers[i].npe_type;i++) {
       printf("  * %s %s\n",
              npe_drivers[i].npe_type,
-             !npe_drivers[i].supported ? "(NOT SUPPORTED)" : "");
+             !npe_drivers[i].supported ? "(NOT WORKING)" : "");
    }
    
    printf("\n");
 }
 
 /* Initialize an NPE-100 board */
-int c7200_init_npe100(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe100(c7200_t *router)
 {
    struct pa_bay_info *bay;
    int i;
 
    /* Initialize the Galileo GT-64010 PCI controller */
-   if (dev_gt64010_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64010_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridges (MB0/MB1, MB0/MB2) */
@@ -469,11 +533,12 @@ int c7200_init_npe100(c7200_t *router,cpu_group_t *cpu_group,
 
    /* PA bridges for Bays 1 to 6 */
    for(i=0;i<MAX_PA_BAYS;i++) {
-      router->pa_pci_map[i] = router->pci_mb[0];
+      router->pa_bay[i].pci_map = router->pci_mb[0];
       bay = c7200_get_pa_bay_info(i);
 
       if ((bay != NULL) && (bay->pci_device != -1))
-         dev_dec21050_init(router->pci_mb[0],bay->pci_primary_bus,
+         dev_dec21050_init(router->pci_mb[0],
+                           bay->pci_primary_bus,
                            bay->pci_device);
    }
 
@@ -481,15 +546,14 @@ int c7200_init_npe100(c7200_t *router,cpu_group_t *cpu_group,
 }
 
 /* Initialize an NPE-150 board */
-int c7200_init_npe150(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe150(c7200_t *router)
 {
    struct pa_bay_info *bay;
    int i;
 
    /* Initialize the Galileo GT-64010 PCI controller */
-   if (dev_gt64010_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64010_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridges (MB0/MB1, MB0/MB2) */
@@ -500,31 +564,31 @@ int c7200_init_npe150(c7200_t *router,cpu_group_t *cpu_group,
 
    /* PA bridges for Bays 1 to 6 */
    for(i=0;i<MAX_PA_BAYS;i++) {
-      router->pa_pci_map[i] = router->pci_mb[0];
+      router->pa_bay[i].pci_map = router->pci_mb[0];
       bay = c7200_get_pa_bay_info(i);
 
       if ((bay != NULL) && (bay->pci_device != -1))
-         dev_dec21050_init(router->pci_mb[0],bay->pci_primary_bus,
+         dev_dec21050_init(router->pci_mb[0],
+                           bay->pci_primary_bus,
                            bay->pci_device);
    }
 
    /* Packet SRAM: 1 Mb */
-   dev_c7200_sram_init(cpu_group,"sram0","pred_sram0",0x4b000000ULL,0x80000,
-                       router->pci_mb[0],4);
-   dev_c7200_sram_init(cpu_group,"sram1","pred_sram1",0x4b080000ULL,0x80000,
-                       router->pci_mb[0],10);
+   dev_c7200_sram_init(router->cpu_group,"sram0","pred_sram0",
+                       0x4b000000ULL,0x80000,router->pci_mb[0],4);
+   dev_c7200_sram_init(router->cpu_group,"sram1","pred_sram1",
+                       0x4b080000ULL,0x80000,router->pci_mb[0],10);
    return(0);
 }
 
 /* Initialize an NPE-175 board */
-int c7200_init_npe175(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe175(c7200_t *router)
 {
    int i;
 
    /* Initialize the Galileo GT-64120 PCI controller */
-   if (dev_gt64120_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64120_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridge for I/O card device on MB0 */
@@ -541,24 +605,23 @@ int c7200_init_npe175(c7200_t *router,cpu_group_t *cpu_group,
 
    for(i=0;i<MAX_PA_BAYS;i++) {
       if ((i == 0) || (i & 1))
-         router->pa_pci_map[i] = router->pci_mb[0];
+         router->pa_bay[i].pci_map = router->pci_mb[0];
       else
-         router->pa_pci_map[i] = router->pci_mb[1];
+         router->pa_bay[i].pci_map = router->pci_mb[1];
    }
 
    return(0);
 }
 
 /* Initialize an NPE-200 board */
-int c7200_init_npe200(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe200(c7200_t *router)
 {
    struct pa_bay_info *bay;
    int i;
 
    /* Initialize the Galileo GT-64010 PCI controller */
-   if (dev_gt64010_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64010_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridges (MB0/MB1, MB0/MB2) */
@@ -569,7 +632,7 @@ int c7200_init_npe200(c7200_t *router,cpu_group_t *cpu_group,
 
    /* PA bridges for Bays 1 to 6 */
    for(i=0;i<MAX_PA_BAYS;i++) {
-      router->pa_pci_map[i] = router->pci_mb[0];
+      router->pa_bay[i].pci_map = router->pci_mb[0];
       bay = c7200_get_pa_bay_info(i);
 
       if ((bay != NULL) && (bay->pci_device != -1))
@@ -578,22 +641,21 @@ int c7200_init_npe200(c7200_t *router,cpu_group_t *cpu_group,
    }
 
    /* Packet SRAM: 4 Mb */
-   dev_c7200_sram_init(cpu_group,"sram0","pred_sram0",0x4b000000ULL,0x200000,
-                       router->pci_mb[0],4);
-   dev_c7200_sram_init(cpu_group,"sram1","pred_sram1",0x4b200000ULL,0x200000,
-                       router->pci_mb[0],10);
+   dev_c7200_sram_init(router->cpu_group,"sram0","pred_sram0",
+                       0x4b000000ULL,0x200000,router->pci_mb[0],4);
+   dev_c7200_sram_init(router->cpu_group,"sram1","pred_sram1",
+                       0x4b200000ULL,0x200000,router->pci_mb[0],10);
    return(0);
 }
 
 /* Initialize an NPE-225 board */
-int c7200_init_npe225(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe225(c7200_t *router)
 {
    int i;
 
    /* Initialize the Galileo GT-64120 PCI controller */
-   if (dev_gt64120_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64120_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridge for I/O card device on MB0 */
@@ -610,17 +672,16 @@ int c7200_init_npe225(c7200_t *router,cpu_group_t *cpu_group,
 
    for(i=0;i<MAX_PA_BAYS;i++) {
       if ((i == 0) || (i & 1))
-         router->pa_pci_map[i] = router->pci_mb[0];
+         router->pa_bay[i].pci_map = router->pci_mb[0];
       else
-         router->pa_pci_map[i] = router->pci_mb[1];
+         router->pa_bay[i].pci_map = router->pci_mb[1];
    }
 
    return(0);
 }
 
 /* Initialize an NPE-300 board */
-int c7200_init_npe300(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe300(c7200_t *router)
 {
    struct pci_data *pci_data2[2];
    struct pa_bay_info *bay;
@@ -628,16 +689,18 @@ int c7200_init_npe300(c7200_t *router,cpu_group_t *cpu_group,
    int i;
 
    /* Initialize the first Galileo GT-64120A PCI controller */
-   if (dev_gt64120_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64120_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* Initialize the second Galileo GT-64120A PCI controller */
-   if (dev_gt64120_init(cpu_group,0x15000000ULL,0x1000,-1,pci_data2) == -1)
+   if (dev_gt64120_init(router->cpu_group,0x15000000ULL,0x1000,
+                        -1,pci_data2) == -1)
       return(-1);
 
    /* 32 Mb of I/O memory */
-   dev_create_ram(cpu_group,"iomem0","pred_iomem0",0x20000000ULL,32*1048576);
+   dev_create_ram(router->cpu_group,"iomem0","pred_iomem0",
+                  0x20000000ULL,32*1048576);
 
    /* PCI bridge for I/O card device on MB0 */
    dev_dec21150_init(router->pci_mb[0],0,1);
@@ -647,14 +710,15 @@ int c7200_init_npe300(c7200_t *router,cpu_group_t *cpu_group,
    /* PA bridges for Bays 1 to 6 */
    for(i=0;i<MAX_PA_BAYS;i++) {
       if ((i == 0) || (i & 1))
-         router->pa_pci_map[i] = router->pci_mb[0];
+         router->pa_bay[i].pci_map = router->pci_mb[0];
       else
-         router->pa_pci_map[i] = router->pci_mb[1];
+         router->pa_bay[i].pci_map = router->pci_mb[1];
 
       bay = c7200_get_pa_bay_info(i);
 
       if ((bay != NULL) && (bay->pci_device != -1)) {
-         dev_dec21150_init(router->pa_pci_map[i],bay->pci_primary_bus,
+         dev_dec21150_init(router->pa_bay[i].pci_map,
+                           bay->pci_primary_bus,
                            bay->pci_device);        
       }
    }
@@ -663,14 +727,13 @@ int c7200_init_npe300(c7200_t *router,cpu_group_t *cpu_group,
 }
 
 /* Initialize an NPE-400 board */
-int c7200_init_npe400(c7200_t *router,cpu_group_t *cpu_group,
-                      char **pa_desc,char *mac_addr)
+int c7200_init_npe400(c7200_t *router)
 {
    int i;
 
    /* Initialize the Galileo GT-64120A PCI controller */
-   if (dev_gt64120_init(cpu_group,0x14000000ULL,0x1000,C7200_GT64K_IRQ,
-                        router->pci_mb) == -1)
+   if (dev_gt64120_init(router->cpu_group,0x14000000ULL,0x1000,
+                        C7200_GT64K_IRQ,router->pci_mb) == -1)
       return(-1);
 
    /* PCI bridge for I/O card device on MB0 */
@@ -687,29 +750,45 @@ int c7200_init_npe400(c7200_t *router,cpu_group_t *cpu_group,
 
    for(i=0;i<MAX_PA_BAYS;i++) {
       if ((i == 0) || (i & 1))
-         router->pa_pci_map[i] = router->pci_mb[0];
+         router->pa_bay[i].pci_map = router->pci_mb[0];
       else
-         router->pa_pci_map[i] = router->pci_mb[1];
+         router->pa_bay[i].pci_map = router->pci_mb[1];
    }
 
    return(0);
 }
 
 /* Initialize an NPE-G1 board */
-int c7200_init_npeg1(c7200_t *router,cpu_group_t *cpu_group,
-                     char **pa_desc,char *mac_addr)
+int c7200_init_npeg1(c7200_t *router)
 {
    /* XXX TO BE DONE */
-   dev_sb1_duart_init(cpu_group,0x10060000,0x1000);
+   dev_sb1_duart_init(router->cpu_group,0x10060000,0x1000);
    return(0);
 }
 
+/* Initialize default parameters for a C7200 */
+void c7200_init_defaults(c7200_t *router)
+{
+   memset(router,0,sizeof(*router));
+   router->npe_type      = C7200_DEFAULT_NPE_TYPE;
+   router->midplane_type = C7200_DEFAULT_MIDPLANE;
+   router->ram_size      = C7200_DEFAULT_RAM_SIZE;
+   router->rom_size      = C7200_DEFAULT_ROM_SIZE;
+   router->nvram_size    = C7200_DEFAULT_NVRAM_SIZE;
+   router->conf_reg      = C7200_DEFAULT_CONF_REG;
+   router->clock_divisor = C7200_DEFAULT_CLOCK_DIV;
+   router->ram_mmap      = C7200_DEFAULT_RAM_MMAP;
+
+   router->vtty_con_type = VTTY_TYPE_TERM;
+   router->vtty_aux_type = VTTY_TYPE_NONE;
+}
+
 /* Initialize the C7200 Platform */
-int c7200_init_platform(c7200_t *router,char **pa_desc,char *mac_addr)
+int c7200_init_platform(c7200_t *router)
 {
    cpu_group_t *cpu_group = router->cpu_group;
    cpu_mips_t *cpu;
-   int i;
+   m_list_t *item;
 
    if (!router->npe_type)
       router->npe_type = C7200_DEFAULT_NPE_TYPE;
@@ -733,35 +812,44 @@ int c7200_init_platform(c7200_t *router,char **pa_desc,char *mac_addr)
 
    /* Basic memory mapping: RAM and ROM */
    mts32_init_kernel_mode(cpu);
-   dev_create_ram(cpu_group,"ram","pred_ram0",0x00000000ULL,ram_size*1048576);
 
-   if (!rom_filename) {
+   if (router->ram_mmap)
+      router->ram_filename = "pred_ram0";
+   else
+      router->ram_filename = NULL;
+
+   dev_create_ram(cpu_group,"ram",router->ram_filename,
+                  0x00000000ULL,router->ram_size*1048576);
+
+   if (!router->rom_filename) {
       /* use embedded ROM */
-      dev_rom_init(cpu_group,0x1fc00000ULL);
+      dev_rom_init(cpu_group,0x1fc00000ULL,router->rom_size*1048576);
    } else {
       /* use alternate ROM */
       dev_create_ram(cpu_group,"rom","pred_rom0",
-                     0x1fc00000ULL,rom_size*1048576);
+                     C7200_ROM_ADDR,router->rom_size*1048576);
    }
 
    /* Remote emulator control */
-   dev_create_remote_control(cpu_group,0x11000000,0x1000);
+   dev_create_remote_control(router,0x11000000,0x1000);
 
    /* Bootflash */
-   dev_bootflash_init(cpu_group,C7200_BOOTFLASH_ADDR,"pred_bootflash0");
+   dev_bootflash_init(cpu_group,"pred_bootflash0",
+                      C7200_BOOTFLASH_ADDR,(8 * 1048576));
 
    /* NVRAM and calendar */
-   dev_nvram_init(cpu_group,C7200_NVRAM_ADDR,"pred_nvram0");
+   dev_nvram_init(cpu_group,"pred_nvram0",
+                  C7200_NVRAM_ADDR,router->nvram_size*1024,
+                  &router->conf_reg);
 
    /* Bit-bucket zone */
-   dev_zero_init(cpu_group,"zero",0x1f000000,0xc00000);
+   dev_zero_init(cpu_group,"zero",C7200_BITBUCKET_ADDR,0xc00000);
 
    /* Midplane FPGA */
-   dev_mpfpga_init(cpu_group,C7200_MPFPGA_ADDR,0x40000);
+   dev_mpfpga_init(cpu_group,C7200_MPFPGA_ADDR,0x1000);
 
    /* IO FPGA */
-   if (dev_iofpga_init(cpu_group,C7200_IOFPGA_ADDR,0x1000,
-                       router->npe_type,router->midplane_type,mac_addr) == -1)
+   if (dev_iofpga_init(router,C7200_IOFPGA_ADDR,0x1000) == -1)
       return(-1);
 
    /* PCI IO space */
@@ -769,17 +857,27 @@ int c7200_init_platform(c7200_t *router,char **pa_desc,char *mac_addr)
       return(-1);
 
    /* Initialize the NPE board */
-   if (router->npe_driver->npe_init(router,cpu_group,pa_desc,mac_addr) == -1)
+   if (router->npe_driver->npe_init(router) == -1)
       return(-1);
 
    /* Initialize Port Adapters */
-   for(i=0;i<MAX_PA_BAYS;i++)
-      if (pa_desc[i]) {
-         if (c7200_pa_create(router,pa_desc[i]) == -1) {
-            fprintf(stderr,"C7200: Unable to create Port Adapter \"%s\"\n",
-                    pa_desc[i]);
-            return(-1);
-         }
+   for(item=router->pa_desc_list;item;item=item->next)
+      if (c7200_pa_create(router,(char *)item->data) == -1) {
+         fprintf(stderr,"C7200: Unable to create Port Adapter \"%s\"\n",
+                 (char *)item->data);
+         return(-1);
+      }
+
+   /* By default, initialize a C7200-IO-FE in slot 0 if nothing found */
+   if (!router->pa_bay[0].drv_info)
+      c7200_pa_init(router,"C7200-IO-FE",0);
+
+   /* Initialize NIO */
+   for(item=router->pa_nio_desc_list;item;item=item->next)
+      if (c7200_pa_create_nio(router,(char *)item->data) == -1) {
+         fprintf(stderr,"C7200: Unable to create NIO \"%s\"\n",
+                 (char *)item->data);
+         return(-1);
       }
 
    /* Cirrus Logic PD6729 (PCI-to-PCMCIA host adapter) */

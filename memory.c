@@ -391,7 +391,7 @@ void *mts32_raw_lookup(cpu_mips_t *cpu,mts32_l1_array_t *p1,m_uint64_t vaddr)
    if (unlikely(entry & MTS32_DEV_MASK)) {
       dev_id = (entry & MTS32_DEVID_MASK) >> MTS32_DEVID_SHIFT;
       haddr = (entry & MTS32_DEVOFF_MASK);
-      haddr |= (naddr & ((1 << shift) - 1));
+      haddr += (naddr & ((1 << shift) - 1));
       return(dev_access(cpu,dev_id,haddr,MTS_READ,4,&data));
    }
 
@@ -511,10 +511,11 @@ static forced_inline void *mts32_access(cpu_mips_t *cpu,m_uint64_t vaddr,
    if (unlikely(entry & MTS32_DEV_MASK)) {
       dev_id = (entry & MTS32_DEVID_MASK) >> MTS32_DEVID_SHIFT;
       haddr = (entry & MTS32_DEVOFF_MASK);
-      haddr |= (naddr & ((1 << shift) - 1));
+      haddr += (naddr & ((1 << shift) - 1));
 
 #if DEBUG_MTS_DEV
-      m_log("MTS32","device access: vaddr=0x%llx, pc=0x%llx\n",vaddr,cpu->pc);
+      m_log("MTS32","device access: vaddr=0x%llx, pc=0x%llx, "
+            "dev_offset=0x%x\n",vaddr,cpu->pc,haddr);
 #endif
       return(dev_access(cpu,dev_id,haddr,op_size,op_type,data));
    }

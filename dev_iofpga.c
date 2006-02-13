@@ -523,8 +523,7 @@ static int dev_iofpga_set_mac_addr(struct c7200_eeprom *mp_eeprom,
 /*
  * dev_iofpga_init()
  */
-int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
-                    char *npe,char *midplane,char *mac_addr)
+int dev_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
 {  
    struct c7200_eeprom *npe_eeprom,*mp_eeprom,*pem_eeprom;
    struct iofpga_data *d;
@@ -533,11 +532,11 @@ int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
    u_int i;
 
    /* Device is managed by CPU0 */
-   cpu0 = cpu_group_find_id(cpu_group,0);
+   cpu0 = cpu_group_find_id(router->cpu_group,0);
 
    /* Set the NPE EEPROM */
-   if (!(npe_eeprom = c7200_get_cpu_eeprom(npe))) {
-      fprintf(stderr,"C7200: unknown NPE \"%s\"!\n",npe);
+   if (!(npe_eeprom = c7200_get_cpu_eeprom(router->npe_type))) {
+      fprintf(stderr,"C7200: unknown NPE \"%s\"!\n",router->npe_type);
       return(-1);
    }
    
@@ -545,8 +544,9 @@ int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
    eeprom_cpu_def.data_len = npe_eeprom->len;
 
    /* Set the Midplane EEPROM */
-   if (!(mp_eeprom = c7200_get_midplane_eeprom(midplane))) {
-      fprintf(stderr,"C7200: unknown Midplane \"%s\"!\n",midplane);
+   if (!(mp_eeprom = c7200_get_midplane_eeprom(router->midplane_type))) {
+      fprintf(stderr,"C7200: unknown Midplane \"%s\"!\n",
+              router->midplane_type);
       return(-1);
    }
    
@@ -554,14 +554,14 @@ int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
    eeprom_midplane_def.data_len = mp_eeprom->len;
 
    /* Set the PEM EEPROM for NPE-175/NPE-225 */
-   if ((pem_eeprom = c7200_get_pem_eeprom(npe)) != NULL) {
+   if ((pem_eeprom = c7200_get_pem_eeprom(router->npe_type)) != NULL) {
       eeprom_pem_def.data = pem_eeprom->data;
       eeprom_pem_def.data_len = pem_eeprom->len;
    }
 
    /* Set the base MAC address */
-   if (mac_addr != NULL) {
-      dev_iofpga_set_mac_addr(mp_eeprom,mac_addr);
+   if (router->mac_addr != NULL) {
+      dev_iofpga_set_mac_addr(mp_eeprom,router->mac_addr);
    } else {
       printf("C7200: Warning, no MAC address set.\n");
    }
@@ -574,8 +574,10 @@ int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
 
    memset(d,0,sizeof(*d));
    d->mgr_cpu  = cpu0;
-   d->vtty_con = vtty_create("Console port",vtty_con_type,vtty_con_tcp_port);
-   d->vtty_aux = vtty_create("AUX port",vtty_aux_type,vtty_aux_tcp_port);
+   d->vtty_con = vtty_create("Console port",
+                             router->vtty_con_type,router->vtty_con_tcp_port);
+   d->vtty_aux = vtty_create("AUX port",
+                             router->vtty_aux_type,router->vtty_aux_tcp_port);
 
    for(i=0;i<C7200_TEMP_SENSORS;i++) {
       d->temp_cfg_reg[i] = DS1620_CONFIG_STATUS_CPU;
@@ -594,13 +596,13 @@ int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
    dev->priv_data = d;
 
    /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
+   cpu_group_bind_device(router->cpu_group,dev);
 
    /* Create console threads */
-   if (vtty_con_type != VTTY_TYPE_NONE)
+   if (router->vtty_con_type != VTTY_TYPE_NONE)
       pthread_create(&d->duart_con_thread,NULL,(void *)tty_con_input,d);
    
-   if (vtty_aux_type != VTTY_TYPE_NONE)
+   if (router->vtty_aux_type != VTTY_TYPE_NONE)
       pthread_create(&d->duart_aux_thread,NULL,(void *)tty_aux_input,d);
 
    ptask_add((ptask_callback)tty_trigger_dummy_irq,d,NULL);

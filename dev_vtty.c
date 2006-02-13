@@ -27,6 +27,7 @@
 #include "mips64_exec.h"
 #include "device.h"
 #include "memory.h"
+#include "dev_c7200.h"
 #include "dev_vtty.h"
 
 static struct termios tios,tios_orig;
@@ -314,7 +315,21 @@ int vtty_read_and_store(vtty_t *vtty)
 
             /* Dump the instruction block tree */
             case 'b':
-               if (cpu0) insn_block_dump_tree(cpu0);
+               if (cpu0) {
+                  insn_block_dump_tree(cpu0);
+                  mips64_jit_dump_hash(cpu0);
+               }
+               break;
+
+            /* IBH table statistics */
+            case 'h':
+               if (cpu0) {
+                  printf("\nCPU0: hash_lookups: %llu, hash_misses: %llu, "
+                         "efficiency: %g%%\n",
+                         cpu0->hash_lookups, cpu0->hash_misses,
+                         100 - ((double)(cpu0->hash_misses*100)/
+                                (double)cpu0->hash_lookups));
+               }
                break;
 
             /* Extract the configuration from the NVRAM */
@@ -330,13 +345,8 @@ int vtty_read_and_store(vtty_t *vtty)
             /* Experimentations / Tests */
             case 'x':
                if (cpu0) {
-                  printf("\nCPU0: hash_lookups: %llu, hash_misses: %llu, "
-                         "efficiency: %g%%\n",
-                         cpu0->hash_lookups, cpu0->hash_misses,
-                         100 - ((double)(cpu0->hash_misses*100)/
-                                (double)cpu0->hash_lookups));
-
-                  mips64_jit_dump_hash(cpu0);
+                  /* trigger net interrupt */
+                  mips64_set_irq(cpu0,C7200_NETIO_IRQ);
                }
 
             /* Twice Ctrl+] */
@@ -354,6 +364,7 @@ int vtty_read_and_store(vtty_t *vtty)
                       "u     - Resume CPU emulation\n"
                       "q     - Quit the emulator\n"
                       "b     - Dump the instruction block tree\n"
+                      "h     - JIT Hash table statistics\n"
                       "c     - Write IOS configuration to disk (ios_cfg.txt)\n"
                       "j     - Non-JIT mode statistics\n"
                       "x     - Experimentations (can crash the box!)\n"

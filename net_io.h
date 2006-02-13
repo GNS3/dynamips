@@ -84,6 +84,9 @@ struct netio_desc {
    u_int type;
    void *dptr;
    char *name;
+   
+   /* XXX Frame Relay LMI sequence number */
+   m_uint8_t fr_lmi_seq;
 
    union {
       netio_unix_desc_t nud;

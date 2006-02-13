@@ -311,6 +311,9 @@ struct pa_a1_data {
    /* RX Free-buffer ring pointer table */
    ti1570_rx_fbr_entry_t *rx_fbr_table;
 
+   /* Virtual device */
+   struct vdevice *dev;
+
    /* PCI device information */
    struct pci_device *pci_dev_ti,*pci_dev_plx;
 
@@ -1502,8 +1505,7 @@ static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem)
  *
  * Add a PA-A1 port adapter into specified slot.
  */
-int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay,
-                         netio_desc_t *nio)
+int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
 {
    struct pa_bay_info *bay_info;
    struct pci_device *pci_dev_ti, *pci_dev_plx;
@@ -1533,7 +1535,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay,
    }
 
    /* Add as PCI device TI1570 */
-   pci_dev_ti = pci_dev_add(router->pa_pci_map[pa_bay],name,
+   pci_dev_ti = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                             TI1570_PCI_VENDOR_ID,TI1570_PCI_PRODUCT_ID,
                             bay_info->pci_secondary_bus,0,0,C7200_NETIO_IRQ,d,
                             NULL,pci_ti1570_read,pci_ti1570_write);
@@ -1545,7 +1547,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay,
    }
 
    /* Add as PCI device PLX9060ES */
-   pci_dev_plx = pci_dev_add(router->pa_pci_map[pa_bay],name,
+   pci_dev_plx = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                              PLX_9060ES_PCI_VENDOR_ID,
                              PLX_9060ES_PCI_PRODUCT_ID,
                              bay_info->pci_secondary_bus,1,0,C7200_NETIO_IRQ,d,
@@ -1560,7 +1562,6 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay,
    /* Create the TI1570 structure */
    d->name        = name;
    d->bay_addr    = bay_info->phys_addr;
-   d->nio         = nio;
    d->mgr_cpu     = cpu0;
    d->pci_dev_ti  = pci_dev_ti;
    d->pci_dev_plx = pci_dev_plx;
@@ -1592,13 +1593,33 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay,
    dev->phys_addr = bay_info->phys_addr;
    dev->phys_len  = PCI_BAY_SPACE;
    dev->handler   = dev_pa_a1_access;
-   dev->priv_data = d;
 
+   /* Store device info */
+   dev->priv_data = d;
+   d->dev = dev;
+   
    /* Map this device to all CPU */
    cpu_group_bind_device(router->cpu_group,dev);
 
-   /* create the receive/transmit threads */
-   pthread_create(&d->rx_thread,NULL,dev_pa_a1_rxthread,d);
+   /* Start the TX ring scanner */
    ptask_add((ptask_callback)ti1570_scan_tx_sched_table,d,NULL);
+
+   /* Store device info into the router structure */
+   return(c7200_set_slot_drvinfo(router,pa_bay,d));
+}
+
+/* Bind a Network IO descriptor to a specific port */
+int dev_c7200_pa_a1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
+                            netio_desc_t *nio)
+{
+   struct pa_a1_data *data;
+
+   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+      return(-1);
+
+   data->nio = nio;
+
+   /* Create the RX thread */
+   pthread_create(&data->rx_thread,NULL,dev_pa_a1_rxthread,data);
    return(0);
 }

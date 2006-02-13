@@ -178,8 +178,13 @@ int dev_create_ram(cpu_group_t *cpu_group,char *name,char *filename,
 
    dev->phys_addr = paddr;
    dev->phys_len = len;
-   dev->fd = memzone_create_file(filename,dev->phys_len,&ram_ptr);
-   dev->host_addr = (m_iptr_t)ram_ptr;
+
+   if (filename) {
+      dev->fd = memzone_create_file(filename,dev->phys_len,&ram_ptr);
+      dev->host_addr = (m_iptr_t)ram_ptr;
+   } else {
+      dev->host_addr = (m_iptr_t)m_memalign(4096,dev->phys_len);
+   }
    
    cpu_group_bind_device(cpu_group,dev);
    return(0);
@@ -248,131 +253,6 @@ int dev_create_dummy_console(cpu_group_t *cpu_group)
    dev->phys_len  = 4096;
    dev->handler = dummy_console_handler;
 
-   cpu_group_bind_device(cpu_group,dev);
-   return(0);
-}
-
-/*
- * dev_remote_control_access()
- */
-void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
-                                m_uint32_t offset,u_int op_size,u_int op_type,
-                                m_uint64_t *data)
-{
-   static char buffer[512];
-   static u_int buf_pos = 0;
-   size_t len;
-
-   if (op_type == MTS_READ)
-      *data = 0;
-
-   switch(offset) {
-      /* IOSEMU ID */
-      case 0x000: 
-         if (op_type == MTS_READ)
-            *data = IOSEMU_ID;
-         break;
-
-      /* CPU ID */
-      case 0x004: 
-         if (op_type == MTS_READ)
-            *data = 0;   /* XXX */
-         break;
-
-      /* Display CPU registers */
-      case 0x008:
-         if (op_type == MTS_WRITE)
-            mips64_dump_regs(cpu);
-         break;
-
-      /* Display CPU TLB */
-      case 0x00c:
-         if (op_type == MTS_WRITE)
-            tlb_dump(cpu);
-         break;
-
-      /* Instruction trace */
-      case 0x010:
-         if (op_type == MTS_WRITE)
-            insn_itrace = *data;
-         else
-            *data = insn_itrace;
-         break;
-
-      /* RAM size */
-      case 0x014: 
-         if (op_type == MTS_READ)
-            *data = ram_size;
-         break;
-
-      /* ROM size */
-      case 0x018: 
-         if (op_type == MTS_READ)
-            *data = rom_size;
-         break;
-
-      /* NVRAM size */
-      case 0x01c: 
-         if (op_type == MTS_READ)
-            *data = nvram_size;
-         break;             
-
-      /* ELF entry point */
-      case 0x020: 
-         if (op_type == MTS_READ)
-            *data = ios_entry_point;
-         break;      
-
-      /* Config Register */
-      case 0x024:
-         if (op_type == MTS_READ)
-            *data = conf_reg;
-         break;
-
-      /* Debugging/Log message */
-      case 0x028:
-         if (op_type == MTS_WRITE) {
-            len = physmem_strlen(cpu,*data);
-            if (len < sizeof(buffer)) {
-               physmem_copy_from_vm(cpu,buffer,*data,len+1);
-               m_log("ROM",buffer);
-            }
-         }
-         break;
-
-      /* Buffering */
-      case 0x02c:
-         if (buf_pos < (sizeof(buffer)-1)) {
-            buffer[buf_pos++] = *data & 0xFF;
-            buffer[buf_pos] = 0;
-
-            if (buffer[buf_pos-1] == '\n') {
-               m_log("ROM",buffer);
-               buf_pos = 0;
-            }
-         } else
-            buf_pos = 0;
-         break;
-   }
-
-   return NULL;
-}
-
-/* remote control device */
-int dev_create_remote_control(cpu_group_t *cpu_group,
-                              m_uint64_t paddr,m_uint32_t len)
-{
-   struct vdevice *dev;
-
-   if (!(dev = dev_create("remote_ctrl"))) {
-      fprintf(stderr,"remote_ctrl: unable to create device.\n");
-      return(-1);
-   }
-
-   dev->phys_addr = paddr;
-   dev->phys_len  = len;
-   dev->handler   = dev_remote_control_access;
-   
    cpu_group_bind_device(cpu_group,dev);
    return(0);
 }

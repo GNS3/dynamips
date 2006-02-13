@@ -376,7 +376,7 @@ struct cpu_mips {
 
    /* Breakpoints */
    m_uint64_t breakpoints[MIPS64_MAX_BREAKPOINTS];
-   u_int breakpoint_enabled;
+   u_int breakpoints_enabled;
 
    /* non-JIT mode instruction counter */
    m_uint64_t insn_exec_count;

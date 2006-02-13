@@ -31,6 +31,7 @@
 #include "dev_vtty.h"
 #include "ptask.h"
 #include "atm.h"
+#include "frame_relay.h"
 #include "crc.h"
 #include "net_io.h"
 #include "net_io_bridge.h"
@@ -47,7 +48,7 @@
 #define LOGFILE_DEFAULT_NAME  "pred_log0.txt"
 
 /* Software version */
-static const char *sw_version = "0.2.3c-"JIT_ARCH;
+static const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Log file */
 FILE *log_file = NULL;
@@ -65,41 +66,11 @@ volatile int vm_running = 0;
 /* Cisco 7200 router instance */
 c7200_t c7200_router;
 
-/* By default, use embedded ROM */
-char *rom_filename = NULL;
-
-/* RAM size (in Mb, by default 256) */
-u_int ram_size = 256;
-
-/* ROM size (in Mb, by default 4) */
-u_int rom_size = 4;
-
-/* NVRAM size (in Kb, by default 128) */
-u_int nvram_size = 128;
-
-/* Config register */
-u_int conf_reg = 0x2102;
-
 /* Clock divisor (see cp0.c) */
 u_int clock_divisor = 2;
 
-/* Port Adapter descriptions */
-static char *pa_desc[MAX_PA_BAYS];
-static int pa_index = 0;
-
-/* Console port VTTY type and parameters */
-int vtty_con_type = VTTY_TYPE_TERM;
-int vtty_con_tcp_port;
-
-/* AUX port VTTY type and parameters */
-int vtty_aux_type = VTTY_TYPE_NONE;
-int vtty_aux_tcp_port;
-
 /* Symbols */
 rbtree_tree *sym_tree = NULL;
-
-/* ELF entry point */
-m_uint32_t ios_entry_point;
 
 /* Symbol lookup */
 struct symbol *sym_lookup(m_uint64_t addr)
@@ -358,8 +329,9 @@ static void show_usage(int argc,char *argv[])
           "  -n <nvram_size> : Set the NVRAM size (default is %d Kb)\n"
           "  -l <log_file>   : Set logging file (default is %s)\n"
           "  -C <cfg_file>   : Import an IOS configuration file into NVRAM\n"
+          "  -X              : Do not use a file to simulate RAM (faster)\n"
           "  -R <rom_file>   : Load an alternate ROM (default is embedded)\n"
-          "  -s <sym_file>   : Load symbol file\n"
+          "  -S <sym_file>   : Load a symbol file\n"
           "  -c <conf_reg>   : Set the configuration register "
           "(default is 0x%04x)\n"
           "  -m <mac_addr>   : Set the MAC address of the chassis "
@@ -373,15 +345,22 @@ static void show_usage(int argc,char *argv[])
           "  -t <npe_type>   : Select NPE type\n"
           "  -M <midplane>   : Select Midplane (\"std\" or \"vxr\")\n"
           "  -p <pa_desc>    : Define a Port Adapter\n"
+          "  -s <pa_nio>     : Bind a Network IO interface to a Port Adapter\n"
           "  -a <cfg_file>   : Virtual ATM switch configuration file\n"
+          "  -f <cfg_file>   : Virtual Frame relay switch configuration file\n"
           "  -b <cfg_file>   : Virtual bridge configuration file\n"
-          "  -e              : Show network device list\n"
+          "  -e              : Show network device list of the host machine\n"
           "\n",
-          ram_size,rom_size,nvram_size,LOGFILE_DEFAULT_NAME,
-          conf_reg,clock_divisor);
+          C7200_DEFAULT_RAM_SIZE,C7200_DEFAULT_ROM_SIZE,
+          C7200_DEFAULT_NVRAM_SIZE,LOGFILE_DEFAULT_NAME,
+          C7200_DEFAULT_CONF_REG,clock_divisor);
 
    printf("<pa_desc> format:\n"
-          "   \"slot:pa_driver:netio_type{:netio_parameters}\"\n"
+          "   \"slot:pa_driver\"\n"
+          "\n");
+
+   printf("<pa_nio> format:\n"
+          "   \"slot:port:netio_type{:netio_parameters}\"\n"
           "\n");
    
    /* Show the possible NPE drivers */
@@ -396,9 +375,8 @@ static void show_usage(int argc,char *argv[])
 
 int main(int argc,char *argv[])
 {
-   char *options_list = "r:o:n:c:m:l:C:ijt:p:k:T:A:a:b:s:R:M:e";
+   char *options_list = "r:o:n:c:m:l:C:ijt:p:s:k:T:A:a:f:b:S:R:M:eX";
    char *log_file_name = NULL;
-   char *ios_image_name;
    char *ios_cfg_file = NULL;
    char *mac_addr = NULL;
    int option;
@@ -412,7 +390,8 @@ int main(int argc,char *argv[])
    printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
    printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
 
-   memset(&c7200_router,0,sizeof(c7200_router));
+   /* Initialize router defaults */
+   c7200_init_defaults(&c7200_router);
 
    /* Initialize CRC functions */
    crc_init();
@@ -428,31 +407,31 @@ int main(int argc,char *argv[])
       {
          /* RAM size */
          case 'r':
-            ram_size = strtol(optarg, NULL, 10);
-            printf("Virtual RAM size set to %d MB.\n",ram_size);
+            c7200_router.ram_size = strtol(optarg, NULL, 10);
+            printf("Virtual RAM size set to %d MB.\n",c7200_router.ram_size);
             break;
 
          /* ROM size */
          case 'o':
-            rom_size = strtol(optarg, NULL, 10);
-            printf("Virtual ROM size set to %d MB.\n",rom_size);
+            c7200_router.rom_size = strtol(optarg, NULL, 10);
+            printf("Virtual ROM size set to %d MB.\n",c7200_router.rom_size);
             break;
 
          /* NVRAM size */
          case 'n':
-            nvram_size = strtol(optarg, NULL, 10);
-            printf("NVRAM size set to %d KB.\n", nvram_size);
+            c7200_router.nvram_size = strtol(optarg, NULL, 10);
+            printf("NVRAM size set to %d KB.\n",c7200_router.nvram_size);
             break;
 
          /* Config Register */
          case 'c':
-            conf_reg = strtol(optarg, NULL, 0);
-            printf("Config. Register set to 0x%x.\n",conf_reg);
+            c7200_router.conf_reg = strtol(optarg, NULL, 0);
+            printf("Config. Register set to 0x%x.\n",c7200_router.conf_reg);
             break;
 
          /* Set the base MAC address */
          case 'm':
-            mac_addr = optarg;
+            c7200_router.mac_addr = optarg;
             printf("MAC address set to '%s'.\n",mac_addr);
             break;
 
@@ -471,13 +450,18 @@ int main(int argc,char *argv[])
             ios_cfg_file = optarg;
             break;
 
+         /* Use physical memory to emulate RAM (no-mapped file) */
+         case 'X':
+            c7200_router.ram_mmap = 0;
+            break;
+
          /* Alternate ROM */
          case 'R':
-            rom_filename = optarg;
+            c7200_router.rom_filename = optarg;
             break;
 
          /* Symbol file */
-         case 's':
+         case 'S':
             load_sym_file(optarg);
             break;
             
@@ -503,10 +487,12 @@ int main(int argc,char *argv[])
             
          /* PA settings */
          case 'p':
-            if (pa_index == MAX_PA_BAYS)
-               fprintf(stderr,"All PA slots are filled.\n");               
-            else
-               pa_desc[pa_index++] = optarg;
+            m_list_add(&c7200_router.pa_desc_list,optarg);
+            break;
+
+         /* PA NIO settings */
+         case 's':
+            m_list_add(&c7200_router.pa_nio_desc_list,optarg);
             break;
 
          /* Clock divisor */
@@ -523,19 +509,25 @@ int main(int argc,char *argv[])
 
          /* TCP server for Console Port */
          case 'T':
-            vtty_con_type = VTTY_TYPE_TCP;
-            vtty_con_tcp_port = atoi(optarg);
+            c7200_router.vtty_con_type = VTTY_TYPE_TCP;
+            c7200_router.vtty_con_tcp_port = atoi(optarg);
             break;
 
          /* TCP server for AUX Port */
          case 'A':
-            vtty_aux_type = VTTY_TYPE_TCP;
-            vtty_aux_tcp_port = atoi(optarg);
+            c7200_router.vtty_aux_type = VTTY_TYPE_TCP;
+            c7200_router.vtty_aux_tcp_port = atoi(optarg);
             break;
 
          /* Virtual ATM switch */
          case 'a':
             if (atmsw_start(optarg) == -1)
+               exit(EXIT_FAILURE);
+            break;
+
+         /* Virtual Frame-Relay switch */
+         case 'f':
+            if (frsw_start(optarg) == -1)
                exit(EXIT_FAILURE);
             break;
 
@@ -562,8 +554,8 @@ int main(int argc,char *argv[])
    /* Last argument, this is the IOS filename */
    if (optind == (argc - 1)) {
       /* setting IOS image file	*/
-      ios_image_name = argv[optind];
-      printf("IOS image file: %s\n\n", ios_image_name);
+      c7200_router.ios_image_name = argv[optind];
+      printf("IOS image file: %s\n\n", c7200_router.ios_image_name);
    } else { 
       /* IOS missing */
       fprintf(stderr,"Please specify an IOS image filename\n");
@@ -594,7 +586,7 @@ int main(int argc,char *argv[])
    mips64_exec_create_ilt();
 
    /* Create a CPU group */
-   sys_cpu_group = cpu_group_create("System CPU Group");
+   sys_cpu_group = cpu_group_create("System CPU");
 
    /* Initialize the virtual MIPS processor */
    if (!(cpu0 = cpu_create(0))) {
@@ -607,7 +599,7 @@ int main(int argc,char *argv[])
    c7200_router.cpu_group = sys_cpu_group;
 
    /* Initialize the C7200 platform */
-   if (c7200_init_platform(&c7200_router,pa_desc,mac_addr) == -1) {
+   if (c7200_init_platform(&c7200_router) == -1) {
       fprintf(stderr,"Unable to initialize the C7200 platform hardware.\n");
       exit(EXIT_FAILURE);
    }
@@ -615,22 +607,24 @@ int main(int argc,char *argv[])
    /* Load IOS configuration file */
    if (ios_cfg_file != NULL) {
       dev_nvram_push_config(sys_cpu_group,ios_cfg_file);
-      conf_reg &= ~0x40;
+      c7200_router.conf_reg &= ~0x40;
    }
 
    /* Load ROM (ELF image or embedded) */
    rom_entry_point = 0xbfc00000;
 
-   if (rom_filename) {
-      if (load_elf_image(cpu0,rom_filename,&rom_entry_point) < 0) {
+   if (c7200_router.rom_filename) {
+      if (load_elf_image(cpu0,c7200_router.rom_filename,&rom_entry_point)<0) {
          fprintf(stderr,"Unable to load alternate ROM '%s', "
-                 "fallback to embedded ROM.\n\n",rom_filename);
-         rom_filename = NULL;
+                 "fallback to embedded ROM.\n\n",c7200_router.rom_filename);
+         c7200_router.rom_filename = NULL;
       }
    }
 
    /* Load IOS image */
-   if (load_elf_image(cpu0,ios_image_name,&ios_entry_point) < 0) {
+   if (load_elf_image(cpu0,c7200_router.ios_image_name,
+                      &c7200_router.ios_entry_point) < 0) 
+   {
       fprintf(stderr,"Cisco IOS load failed.\n");
       exit(EXIT_FAILURE);
    }

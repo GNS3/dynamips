@@ -77,10 +77,6 @@ int dev_create_ram_alias(cpu_group_t *cpu_group,char *name,char *orig_name,
 /* create a dummy console */
 int dev_create_dummy_console(cpu_group_t *cpu_group);
 
-/* remote control device */
-int dev_create_remote_control(cpu_group_t *cpu_group,
-                              m_uint64_t paddr,m_uint32_t len);
-
 /* dev_zero_init() */
 int dev_zero_init(cpu_group_t *cpu_group,char *name,
                   m_uint64_t paddr,m_uint32_t len);
@@ -95,17 +91,15 @@ int dev_nvram_extract_config(cpu_group_t *cpu_group,char *cfg_filename);
 int dev_nvram_push_config(cpu_group_t *cpu_group,char *cfg_filename);
 
 /* dev_nvram_init() */
-int dev_nvram_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename);
+int dev_nvram_init(cpu_group_t *cpu_group,char *filename,
+                   m_uint64_t paddr,m_uint32_t len,u_int *conf_reg);
 
 /* dev_rom_init() */
-int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr);
+int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len);
 
 /* dev_bootflash_init() */
-int dev_bootflash_init(cpu_group_t *cpu_group,m_uint64_t paddr,char *filename);
-
-/* dev_iofpga_init() */
-int dev_iofpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
-                    char *npe,char *midplane,char *mac_addr);
+int dev_bootflash_init(cpu_group_t *cpu_group,char *filename,
+                       m_uint64_t paddr,m_uint32_t len);
 
 /* dev_mpfpga_init() */
 int dev_mpfpga_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len);
@@ -132,13 +126,6 @@ int dev_clpd6729_init(cpu_group_t *cpu_group,struct pci_data *pci_data,
                       int pci_bus,int pci_device,
                       struct pci_io_data *pci_io_data,
                       m_uint32_t io_start,m_uint32_t io_end);
-
-/* dev_dec21140_init() */
-struct vdevice *dev_dec21140_init(cpu_mips_t *cpu,char *name,
-                                  m_uint32_t phys_addr,m_uint32_t phys_len,
-                                  struct pci_data *pci_data,
-                                  int pci_bus,int pci_device,
-                                  int irq,netio_desc_t *nio);
 
 /* dev_c7200_sram_init() */
 int dev_c7200_sram_init(cpu_group_t *cpu_group,char *name,char *filename,

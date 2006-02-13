@@ -41,7 +41,7 @@ void *dev_rom_access(cpu_mips_t *cpu,struct vdevice *dev,
 }
 
 /* dev_rom_init() */
-int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr)
+int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len)
 {
    struct vdevice *dev;
 
@@ -51,7 +51,7 @@ int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr)
    }
 
    dev->phys_addr = paddr;
-   dev->phys_len  = rom_size * 1048576;
+   dev->phys_len  = len;
    dev->handler   = dev_rom_access;
 
    /* Map this device to all CPU */
