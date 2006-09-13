@@ -16,7 +16,6 @@
 #define DEBUG_BLOCK_PATCH      0
 #define DEBUG_BLOCK_CHUNK      0
 #define DEBUG_BLOCK_TIMESTAMP  0   /* block timestamping (little overhead) */
-#define DEBUG_INSN_ITRACE      0
 #define DEBUG_SYM_TREE         0   /* use symbol tree (slow) */
 #define DEBUG_MTS_MAP_DEV      0
 #define DEBUG_MTS_MAP_VIRT     0
@@ -24,24 +23,31 @@
 #define DEBUG_MTS_ACC_T        1   /* tlb exception */
 #define DEBUG_MTS_ACC_AE       1   /* address error exception */
 #define DEBUG_MTS_DEV          0   /* debugging for device access */
+#define DEBUG_MTS_STATS        1   /* MTS64 cache performance */
+#define DEBUG_PERF_COUNTER     0   /* Performance counter */
 #define DEBUG_TLB_ACTIVITY     0 
 #define DEBUG_SYSCALL          0
 #define DEBUG_CACHE            0
-#define MEMLOG_ENABLE          0   /* Memlogger */
+#define DEBUG_JR0              0   /* Debug register jumps to 0 */
+
+/* Feature flags */
+#define MEMLOG_ENABLE          0   /* Memlogger (MTS ASM must be disabled) */
 #define BREAKPOINT_ENABLE      0   /* Virtual Breakpoints */
 #define NJM_STATS_ENABLE       1   /* Non-JIT mode stats (little overhead) */
+#define MTSASM_ENABLE          1   /* Optimized-assembly MTS */
 
-/* Maximum of 512 instructions per block */
-#define MIPS_MAX_BLOCK_INSN   512
+/* Size of executable page area (in Mb) */
+#ifndef __CYGWIN__
+#define MIPS_EXEC_AREA_SIZE  64
+#else
+#define MIPS_EXEC_AREA_SIZE  16
+#endif
 
 /* Buffer size for JIT code generation */
-#define MIPS_JIT_BUFSIZE  16384
+#define MIPS_JIT_BUFSIZE  32768
 
 /* Maximum number of X86 chunks */
 #define INSN_MAX_CHUNKS   32
-
-/* MIPS instruction */
-typedef m_uint32_t mips_insn_t;
 
 /* Translated block function pointer */
 typedef m_uint64_t (*insn_tblock_fptr)(void);
@@ -53,7 +59,7 @@ struct insn_patch {
 };
 
 /* Instruction patch table */
-#define INSN_PATCH_TABLE_SIZE  16
+#define INSN_PATCH_TABLE_SIZE  32
 
 struct insn_patch_table {
    struct insn_patch patches[INSN_PATCH_TABLE_SIZE];
@@ -61,20 +67,26 @@ struct insn_patch_table {
    struct insn_patch_table *next;
 };
 
+/* Exec page */
+struct insn_exec_page {
+   u_char *ptr;
+   insn_exec_page_t *next;
+};
+
 /* Instruction block */
-typedef struct insn_block insn_block_t;
 struct insn_block {
-   m_uint64_t start_pc,end_pc;
+   m_uint64_t start_pc;
+   u_char **jit_insn_ptr;
+   m_uint64_t acc_count;
+   m_uint32_t phys_page;
    mips_insn_t *mips_code;
-   u_int mips_code_len;
    u_int mips_trans_pos;
    u_int jit_chunk_pos;
-   u_char **jit_insn_ptr;
-   size_t jit_bufsize;
-   u_char *jit_buffer,*jit_ptr;
-   u_char *jit_chunks[INSN_MAX_CHUNKS];
+   u_char *jit_ptr;
+   insn_exec_page_t *jit_buffer;
+   insn_exec_page_t *jit_chunks[INSN_MAX_CHUNKS];
    struct insn_patch_table *patch_table;
-   m_uint64_t acc_count;
+   insn_block_t *prev,*next;
 #if DEBUG_BLOCK_TIMESTAMP
    m_uint64_t tm_first_use,tm_last_use;
 #endif
@@ -101,64 +113,14 @@ struct symbol {
    char name[0];
 };
 
-#define IOSEMU_ID  0x781a321f
+/* ROM identification tag */
+#define ROM_ID  0x1e94b3df
 
-/* RAM, ROM and NVRAM size, ELF entry point */
-extern char *rom_filename;
-extern u_int ram_size;
-extern u_int rom_size;
-extern u_int nvram_size;
-extern u_int conf_reg;
-extern u_int clock_divisor;
-extern m_uint32_t ios_entry_point;
-
-extern int insn_itrace;
-extern int jit_use;
+/* Global log file */
 extern FILE *log_file;
-extern volatile int vm_running;
 
-/* Console and AUX ports VTTY type and parameters */
-extern int vtty_con_type,vtty_aux_type;
-extern int vtty_con_tcp_port,vtty_aux_tcp_port;
-
-/* Locate an instruction block given a MIPS virtual address */
-static forced_inline 
-struct insn_block *insn_block_locate(cpu_mips_t *cpu,m_uint64_t vaddr)
-{
-   return(rbtree_lookup(cpu->insn_block_tree,&vaddr));
-}
-
-/* Locate an instruction block given a MIPS virtual address */
-static forced_inline 
-struct insn_block *insn_block_locate_fast(cpu_mips_t *cpu,m_uint64_t vaddr)
-{
-   rbtree_tree *tree;
-   register rbtree_node *node,*nil;
-   struct insn_block *b;
-
-   tree = cpu->insn_block_tree;
-   node = tree->root;
-   nil = &tree->nil;
-
-   while(node != nil)
-   {
-      b = (struct insn_block *)node->key;
-
-      if (vaddr < b->start_pc) {
-         node = node->left;
-         continue;
-      }
-
-      if (vaddr >= b->end_pc) {
-         node = node->right;
-         continue;
-      }
-
-      return b;
-   }
-
-   return(NULL);
-}
+/* Software version */
+extern const char *sw_version;
 
 /* Get the JIT instruction pointer in a compiled block */
 static forced_inline 
@@ -170,30 +132,20 @@ u_char *insn_block_get_jit_ptr(struct insn_block *block,m_uint64_t vaddr)
    return(block->jit_insn_ptr[offset]);
 }
 
-/* Get the JIT instruction ptr for a virtual address (NULL if not found) */
-static forced_inline u_char *insn_get_jit_ptr(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                              struct insn_block **block)
-{
-   if ((*block = insn_block_locate_fast(cpu,vaddr)) == NULL)
-      return NULL;
- 
-   return(insn_block_get_jit_ptr(*block,vaddr));
-}
-
 /* Check if there are pending IRQ */
 extern void mips64_check_pending_irq(struct insn_block *b);
 
 /* Initialize instruction lookup table */
 void mips64_jit_create_ilt(void);
 
-/* Insert specified address in instruction block hash table */
-void mips64_jit_add_hash_addr(cpu_mips_t *cpu,m_uint64_t addr);
+/* Initialize the JIT structure */
+int mips64_jit_init(cpu_mips_t *cpu);
 
-/* Remove specified block from instruction block hash table */
-void mips64_jit_remove_hash_block(cpu_mips_t *cpu,struct insn_block *block);
+/* Flush the JIT */
+u_int mips64_jit_flush(cpu_mips_t *cpu,u_int threshold);
 
-/* Dump instruction block hash table */
-void mips64_jit_dump_hash(cpu_mips_t *cpu);
+/* Shutdown the JIT */
+void mips64_jit_shutdown(cpu_mips_t *cpu);
 
 /* Find the JIT code emitter for the specified MIPS instruction */
 struct insn_tag *insn_tag_find(mips_insn_t ins);
@@ -205,12 +157,12 @@ struct insn_jump *insn_jump_find(mips_insn_t ins);
 struct insn_tag *insn_fetch_and_emit(cpu_mips_t *cpu,struct insn_block *block,
                                      int delay_slot);
 
-/* Create a instruction block */
-struct insn_block *insn_block_create(cpu_mips_t *cpu,m_uint64_t vaddr);
-
 /* Record a patch to apply in a compiled block */
 int insn_block_record_patch(struct insn_block *block,u_char *x86_ptr,
                             m_uint64_t vaddr);
+
+/* Free an instruction block */
+void insn_block_free(cpu_mips_t *cpu,insn_block_t *block,int list_removal);
 
 /* Tree comparison function */
 int insn_block_cmp(m_uint64_t *vaddr,struct insn_block *b);
@@ -224,5 +176,8 @@ void *insn_block_execute(cpu_mips_t *cpu);
 
 /* Dump the instruction block tree */
 void insn_block_dump_tree(cpu_mips_t *cpu);
+
+/* Delete all objects */
+void dynamips_reset(void);
 
 #endif

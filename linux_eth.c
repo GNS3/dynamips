@@ -50,6 +50,7 @@ int lnx_eth_get_dev_index(char *name)
 
    if (ioctl(fd,SIOCGIFINDEX,&if_req) < 0) {
       fprintf(stderr,"eth_get_dev_index: SIOCGIFINDEX: %s\n",strerror(errno));
+      close(fd);
       return(-1);
    }
 

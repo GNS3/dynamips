@@ -16,7 +16,7 @@
 /* Initialize a generic ethernet driver */
 pcap_t *gen_eth_init(char *device);
 
-/* Free ressources of a generic ethernet driver */
+/* Free resources of a generic ethernet driver */
 void gen_eth_close(pcap_t *p);
 
 /* Send an ethernet frame */

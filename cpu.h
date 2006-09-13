@@ -16,9 +16,6 @@ struct cpu_group {
    void *priv_data;
 };
 
-/* System CPU group */
-extern cpu_group_t *sys_cpu_group;
-
 /* Find a CPU in a group given its ID */
 cpu_mips_t *cpu_group_find_id(cpu_group_t *group,u_int id);
 
@@ -31,14 +28,20 @@ int cpu_group_add(cpu_group_t *group,cpu_mips_t *cpu);
 /* Create a new CPU group */
 cpu_group_t *cpu_group_create(char *name);
 
-/* Bind a device to a specific CPU */
-int cpu_bind_device(cpu_mips_t *cpu,struct vdevice *dev,u_int *dev_id);
+/* Delete a CPU group */
+void cpu_group_delete(cpu_group_t *group);
 
-/* Add a memory mapped device to all CPUs of a CPU group */
-int cpu_group_bind_device(cpu_group_t *group,struct vdevice *dev);
+/* Rebuild the MTS subsystem for a CPU group */
+int cpu_group_rebuild_mts(cpu_group_t *group);
+
+/* Log a message for a CPU */
+void cpu_log(cpu_mips_t *cpu,char *module,char *format,...);
 
 /* Create a new CPU */
-cpu_mips_t *cpu_create(u_int id);
+cpu_mips_t *cpu_create(vm_instance_t *vm,u_int id);
+
+/* Delete a CPU */
+void cpu_delete(cpu_mips_t *cpu);
 
 /* Start a CPU */
 void cpu_start(cpu_mips_t *cpu);
@@ -55,7 +58,13 @@ void cpu_group_stop_all_cpu(cpu_group_t *group);
 /* Set a state of all CPUs of a CPU group */
 void cpu_group_set_state(cpu_group_t *group,u_int state);
 
-/* Returns TRUE if all CPUs in a CPU group are in the specified state */
-int cpu_group_check_state(cpu_group_t *group,u_int state);
+/* Synchronize on CPUs (all CPUs must be inactive) */
+int cpu_group_sync_state(cpu_group_t *group);
+
+/* Save state of all CPUs */
+int cpu_group_save_state(cpu_group_t *group);
+
+/* Restore state of all CPUs */
+int cpu_group_restore_state(cpu_group_t *group);
 
 #endif

@@ -3,9 +3,12 @@
  * Copyright (C) 2005-2006 Christophe Fillot.  All rights reserved.
  *
  * EEPROM types:
+ *   - 0x95: PA-POS-OC3SMI
  *   - 0x96: PA-POS-OC3MM
  *
- * Not working at all, just an experimentation (I don't have any PA-POS-OC3)
+ * Just an experimentation (I don't have any PA-POS-OC3). It basically works,
+ * on NPE-400. There is something strange with the buffer addresses in TX ring,
+ * preventing this driver working with platforms using SRAM.
  */
 
 #include <stdio.h>
@@ -24,12 +27,12 @@
 #include "net_io.h"
 #include "ptask.h"
 #include "dev_c7200.h"
-#include "dev_c7200_bay.h"
 
 /* Debugging flags */
-#define DEBUG_ACCESS     1
-#define DEBUG_TRANSMIT   1
-#define DEBUG_RECEIVE    1
+#define DEBUG_ACCESS    0
+#define DEBUG_UNKNOWN   1
+#define DEBUG_TRANSMIT  0
+#define DEBUG_RECEIVE   0
 
 /* PCI vendor/product codes */
 #define POS_OC3_PCI_VENDOR_ID    0x10b5
@@ -40,17 +43,15 @@
 
 /* RX descriptors */
 #define POS_OC3_RXDESC_OWN        0x80000000  /* Ownership */
-#define POS_OC3_RXDESC_WRAP       0x40000000  /* Wrap ring (?) */
-#define POS_OC3_RXDESC_FS         0x02000000  /* First Segment (?) */
-#define POS_OC3_RXDESC_LS         0x01000000  /* Last Segment (?) */
-#define POS_OC3_RXDESC_LEN_MASK   0xfff
+#define POS_OC3_RXDESC_WRAP       0x40000000  /* Wrap ring */
+#define POS_OC3_RXDESC_CONT       0x08000000  /* Packet continues */
+#define POS_OC3_RXDESC_LEN_MASK   0x1fff
 
 /* TX descriptors */
 #define POS_OC3_TXDESC_OWN        0x80000000  /* Ownership */
-#define POS_OC3_TXDESC_WRAP       0x40000000  /* Wrap ring (?) */
-#define POS_OC3_TXDESC_LEN_MASK   0xfff
-#define POS_OC3_TXDESC_FS         0x80000000  /* First Segment (?) */
-#define POS_OC3_TXDESC_LS         0x40000000  /* Last Segment (?) */
+#define POS_OC3_TXDESC_WRAP       0x40000000  /* Wrap ring */
+#define POS_OC3_TXDESC_CONT       0x08000000  /* Packet continues */
+#define POS_OC3_TXDESC_LEN_MASK   0x1fff
 #define POS_OC3_TXDESC_ADDR_MASK  0x3fffffff  /* Buffer address (?) */
 
 /* RX Descriptor */
@@ -66,8 +67,6 @@ struct tx_desc {
 /* PA-POS-OC3 Data */
 struct pos_oc3_data {
    char *name;
-   m_uint32_t bay_addr;
-   m_uint32_t cbma_addr;
 
    /* physical addresses for start and end of RX/TX rings */
    m_uint32_t rx_start,rx_end,tx_start,tx_end;
@@ -75,37 +74,45 @@ struct pos_oc3_data {
    /* physical addresses of current RX and TX descriptors */
    m_uint32_t rx_current,tx_current;
 
-   /* "Managing" CPU */
-   cpu_mips_t *mgr_cpu;
+   /* Virtual machine */
+   vm_instance_t *vm;
 
-   /* Virtual device */
-   struct vdevice *dev;
+   /* Virtual devices */
+   char *rx_name,*tx_name,*cs_name;
+   vm_obj_t *rx_obj,*tx_obj,*cs_obj;
+   struct vdevice rx_dev,tx_dev,cs_dev;
 
    /* PCI device information */
+   struct vdevice dev;
    struct pci_device *pci_dev;
 
    /* NetIO descriptor */
    netio_desc_t *nio;
 
-   /* Thread used to walk through RX ring */
-   pthread_t rx_thread;
+   /* TX ring scanner task id */
+   ptask_id_t tx_tid;
 };
 
 /* EEPROM definition */
-static unsigned short eeprom_pos_oc3_data[64] = {
+static const m_uint16_t eeprom_pos_oc3_data[64] = {
    0x0196, 0x0202, 0xffff, 0xffff, 0x490C, 0x7806, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0208, 0x1900, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
-static struct c7200_eeprom eeprom_pos_oc3 = {
-   "PA-POS-OC3MM", eeprom_pos_oc3_data, sizeof(eeprom_pos_oc3_data)/2,
+static const struct c7200_eeprom eeprom_pos_oc3 = {
+   "PA-POS-OC3MM", (m_uint16_t *)eeprom_pos_oc3_data,
+   sizeof(eeprom_pos_oc3_data)/2,
 };
 
+/* Log a PA-POS-OC3 message */
+#define POS_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
+
 /*
- *  pos_oc3_access()
+ * pos_access()
  */
-void *pos_oc3_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
-                     u_int op_size,u_int op_type,m_uint64_t *data)
+static void *dev_pos_access(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
 {
    struct pos_oc3_data *d = dev->priv_data;
 
@@ -113,70 +120,202 @@ void *pos_oc3_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       *data = 0;
 
 #if DEBUG_ACCESS
-   if (op_type == MTS_READ)
-      m_log(d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-            offset,cpu->pc);
-   else
-      if (offset != 0x30404)
-         m_log(d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-               "val = 0x%llx\n",offset,cpu->pc,*data);
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
+              offset,cpu->pc);
+   } else {
+      if (offset != 0x404)
+         cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
+                 "val = 0x%llx\n",offset,cpu->pc,*data);
+   }
 #endif
 
-   /* Specific cases */
    switch(offset) {
-      case 0x30404:
+      case 0x404:
          if (op_type == MTS_READ)
             *data = 0xFFFFFFFF;
          break;
-      case 0x30406:
+      case 0x406:
          if (op_type == MTS_READ)
             *data = 0xFFFFFFFF;
          break;
-      case 0x30407:
+      case 0x407:
          if (op_type == MTS_READ)
             *data = 0xFFFFFFFF;
          break;
 
-      case 0x200004:
+#if DEBUG_UNKNOWN
+      default:
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,d->name,
+                    "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
+                    offset,cpu->pc,op_size);
+         } else {
+            cpu_log(cpu,d->name,
+                    "write to unknown addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+         }
+#endif
+   }
+
+   return NULL;
+}
+
+/*
+ * pos_rx_access()
+ */
+static void *dev_pos_rx_access(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
+{
+   struct pos_oc3_data *d = dev->priv_data;
+
+   if (op_type == MTS_READ)
+      *data = 0;
+
+#if DEBUG_ACCESS
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
+              offset,cpu->pc);
+   } else {
+      cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
+              "val = 0x%llx\n",offset,cpu->pc,*data);
+   }
+#endif
+
+   switch(offset) {
+      case 0x04:
          if (op_type == MTS_READ)
             *data = d->rx_start;
          else
             d->rx_start = *data;
          break;
 
-      case 0x200008:
+      case 0x08:
          if (op_type == MTS_READ)
             *data = d->rx_current;
          else
             d->rx_current = *data;
          break;
 
-      case 0x300004:
+#if DEBUG_UNKNOWN
+      default:
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,d->rx_name,
+                    "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
+                    offset,cpu->pc,op_size);
+         } else {
+            cpu_log(cpu,d->rx_name,
+                    "write to unknown addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+         }
+#endif
+   }
+
+   return NULL;
+}
+
+/*
+ * pos_tx_access()
+ */
+static void *dev_pos_tx_access(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
+{
+   struct pos_oc3_data *d = dev->priv_data;
+
+   if (op_type == MTS_READ)
+      *data = 0;
+
+#if DEBUG_ACCESS
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->tx_name,"read  access to offset = 0x%x, pc = 0x%llx\n",
+              offset,cpu->pc);
+   } else {
+      cpu_log(cpu,d->tx_name,"write access to vaddr = 0x%x, pc = 0x%llx, "
+              "val = 0x%llx\n",offset,cpu->pc,*data);
+   }
+#endif
+
+   switch(offset) {
+     case 0x04:
          if (op_type == MTS_READ)
             *data = d->tx_start;
          else
             d->tx_start = *data;
          break;
 
-      case 0x300008:
+      case 0x08:
          if (op_type == MTS_READ)
             *data = d->tx_current;
          else
             d->tx_current = *data;
          break;
 
-      case 0x700000:
-      case 0x700004:
-      case 0x70001c:
+#if DEBUG_UNKNOWN
+      default:
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,d->tx_name,
+                    "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
+                    offset,cpu->pc,op_size);
+         } else {
+            cpu_log(cpu,d->tx_name,
+                    "write to unknown addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+         }
+#endif
+   }
+
+   return NULL;
+}
+
+/*
+ * pos_cs_access()
+ */
+static void *dev_pos_cs_access(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
+{
+   struct pos_oc3_data *d = dev->priv_data;
+
+   if (op_type == MTS_READ)
+      *data = 0;
+
+#if DEBUG_ACCESS
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->cs_name,"read  access to offset = 0x%x, pc = 0x%llx\n",
+              offset,cpu->pc);
+   } else {
+      cpu_log(cpu,d->cs_name,"write access to vaddr = 0x%x, pc = 0x%llx, "
+              "val = 0x%llx\n",offset,cpu->pc,*data);
+   }
+#endif
+
+   switch(offset) {
+      case 0x300000:
+      case 0x300004:
+      case 0x30001c:
          if (op_type == MTS_READ)
             *data = 0x00000FFF;         
          break;
 
-      case 0x700008:
+      case 0x300008:
          if (op_type == MTS_READ)
             *data = 0x000007F;      
          break;
 
+#if DEBUG_UNKNOWN
+      default:
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,d->cs_name,
+                    "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
+                    offset,cpu->pc,op_size);
+         } else {
+            cpu_log(cpu,d->cs_name,
+                    "write to unknown addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+         }
+#endif
    }
 
    return NULL;
@@ -185,11 +324,12 @@ void *pos_oc3_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 /*
  * Get the address of the next RX descriptor.
  */
-static m_uint32_t rxdesc_get_next(struct pos_oc3_data *d,m_uint32_t rxd_addr)
+static m_uint32_t rxdesc_get_next(struct pos_oc3_data *d,m_uint32_t rxd_addr,
+                                  struct rx_desc *rxd)
 {
    m_uint32_t nrxd_addr;
 
-   if (rxd_addr == d->rx_end)
+   if (rxd->rdes[0] & POS_OC3_RXDESC_WRAP)
       nrxd_addr = d->rx_start;
    else
       nrxd_addr = rxd_addr + sizeof(struct rx_desc);
@@ -202,11 +342,11 @@ static void rxdesc_read(struct pos_oc3_data *d,m_uint32_t rxd_addr,
                         struct rx_desc *rxd)
 {
 #if DEBUG_RECEIVE
-   m_log(d->name,"reading RX descriptor at address 0x%x\n",rxd_addr);
+   POS_LOG(d,"reading RX descriptor at address 0x%x\n",rxd_addr);
 #endif
 
    /* get the next descriptor from VM physical RAM */
-   physmem_copy_from_vm(d->mgr_cpu,rxd,rxd_addr,sizeof(struct rx_desc));
+   physmem_copy_from_vm(d->vm,rxd,rxd_addr,sizeof(struct rx_desc));
 
    /* byte-swapping */
    rxd->rdes[0] = vmtoh32(rxd->rdes[0]);
@@ -234,11 +374,11 @@ static ssize_t rxdesc_put_pkt(struct pos_oc3_data *d,struct rx_desc *rxd,
    cp_len = m_min(len,*pkt_len);
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"copying %d bytes at 0x%x\n",cp_len,rxd->rdes[1]);
+   POS_LOG(d,"copying %d bytes at 0x%x\n",cp_len,rxd->rdes[1]);
 #endif
       
    /* copy packet data to the VM physical RAM */
-   physmem_copy_to_vm(d->mgr_cpu,*pkt,rxd->rdes[1],cp_len);
+   physmem_copy_to_vm(d->vm,*pkt,rxd->rdes[1],cp_len);
       
    *pkt += cp_len;
    *pkt_len -= cp_len;
@@ -279,42 +419,40 @@ static void dev_pos_oc3_receive_pkt(struct pos_oc3_data *d,
       cp_len = rxdesc_put_pkt(d,rxdc,&pkt_ptr,&tot_len);
 
       /* Get address of the next descriptor */
-      rxdn_addr = rxdesc_get_next(d,d->rx_current);
+      rxdn_addr = rxdesc_get_next(d,d->rx_current,rxdc);
 
       /* We have finished if the complete packet has been stored */
       if (tot_len == 0) {
-         rxdc->rdes[0] = POS_OC3_RXDESC_LS;
-         rxdc->rdes[0] |= cp_len;
+         rxdc->rdes[0] = cp_len + 4;
 
          if (i != 0)
-            physmem_copy_u32_to_vm(d->mgr_cpu,d->rx_current,rxdc->rdes[0]);
+            physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
 
          d->rx_current = rxdn_addr;
          break;
       }
 
 #if DEBUG_RECEIVE
-      m_log(d->name,"trying to acquire new descriptor at 0x%x\n",rxdn_addr);
+      POS_LOG(d,"trying to acquire new descriptor at 0x%x\n",rxdn_addr);
 #endif
-
       /* Get status of the next descriptor to see if we can acquire it */
-      rxdn_rdes0 = physmem_copy_u32_from_vm(d->mgr_cpu,rxdn_addr);
+      rxdn_rdes0 = physmem_copy_u32_from_vm(d->vm,rxdn_addr);
 
       if (!rxdesc_acquire(rxdn_rdes0))
-         rxdc->rdes[0] = POS_OC3_RXDESC_LS /*| POC_OC3_RXDESC_OVERRUN*/;
+         rxdc->rdes[0] = 0;  /* error, no buf available (special flag?) */
       else
-         rxdc->rdes[0] = 0x00000000;  /* ok, no special flag */
+         rxdc->rdes[0] = POS_OC3_RXDESC_CONT;  /* packet continues */
 
       rxdc->rdes[0] |= cp_len;
 
       /* Update the new status (only if we are not on the first desc) */
       if (i != 0)
-         physmem_copy_u32_to_vm(d->mgr_cpu,d->rx_current,rxdc->rdes[0]);
+         physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
 
       /* Update the RX pointer */
       d->rx_current = rxdn_addr;
 
-      if (rxdc->rdes[0] & POS_OC3_RXDESC_LS)
+      if (!(rxdc->rdes[0] & POS_OC3_RXDESC_CONT))
          break;
 
       /* Read the next descriptor from VM physical RAM */
@@ -323,35 +461,24 @@ static void dev_pos_oc3_receive_pkt(struct pos_oc3_data *d,
    }
 
    /* Update the first RX descriptor */
-   rxd0.rdes[0] |= POS_OC3_RXDESC_FS;
-   physmem_copy_u32_to_vm(d->mgr_cpu,rx_start,rxd0.rdes[0]);
-
-   /* Indicate that we have a frame ready */
-   //d->csr[5] |= DEC21140_CSR5_RI;
+   physmem_copy_u32_to_vm(d->vm,rx_start,rxd0.rdes[0]);
 
    /* Generate IRQ on CPU */
-   pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev);
+   pci_dev_trigger_irq(d->vm,d->pci_dev);
 }
 
 /* Handle the RX ring */
-static void dev_pos_oc3_handle_rxring(struct pos_oc3_data *d)
-{      
-   u_char pkt[POS_OC3_MAX_PKT_SIZE];
-   ssize_t pkt_len;
-
-   pkt_len = netio_recv(d->nio,pkt,POS_OC3_MAX_PKT_SIZE);
-
-   if (pkt_len < 0) {
-      m_log(d->name,"net_io RX failed %s\n",strerror(errno));
-      return;
-   }
-
+static int dev_pos_oc3_handle_rxring(netio_desc_t *nio,
+                                     u_char *pkt,ssize_t pkt_len,
+                                     struct pos_oc3_data *d)
+{
 #if DEBUG_RECEIVE
-   m_log(d->name,"receiving a packet of %d bytes\n",pkt_len);
+   POS_LOG(d,"receiving a packet of %d bytes\n",pkt_len);
    mem_dump(log_file,pkt,pkt_len);
 #endif
 
    dev_pos_oc3_receive_pkt(d,pkt,pkt_len);
+   return(TRUE);
 }
 
 /* Read a TX descriptor */
@@ -359,7 +486,7 @@ static void txdesc_read(struct pos_oc3_data *d,m_uint32_t txd_addr,
                         struct tx_desc *txd)
 {
    /* get the next descriptor from VM physical RAM */
-   physmem_copy_from_vm(d->mgr_cpu,txd,txd_addr,sizeof(struct tx_desc));
+   physmem_copy_from_vm(d->vm,txd,txd_addr,sizeof(struct tx_desc));
 
    /* byte-swapping */
    txd->tdes[0] = vmtoh32(txd->tdes[0]);
@@ -367,9 +494,9 @@ static void txdesc_read(struct pos_oc3_data *d,m_uint32_t txd_addr,
 }
 
 /* Set the address of the next TX descriptor */
-static void txdesc_set_next(struct pos_oc3_data *d)
+static void txdesc_set_next(struct pos_oc3_data *d,struct tx_desc *txd)
 {
-   if (d->tx_current == d->tx_end)
+   if (txd->tdes[0] & POS_OC3_TXDESC_WRAP)
       d->tx_current = d->tx_start;
    else
       d->tx_current += sizeof(struct tx_desc);
@@ -381,7 +508,7 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
    u_char pkt[POS_OC3_MAX_PKT_SIZE],*pkt_ptr;
    m_uint32_t tx_start,clen,tot_len,addr;
    struct tx_desc txd0,ctxd,*ptxd;
-   int done = FALSE;
+   int i,done = FALSE;
 
    if ((d->tx_start == 0) || (d->nio == NULL))
       return(FALSE);
@@ -391,26 +518,27 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
    ptxd = &txd0;
    txdesc_read(d,d->tx_current,ptxd);
 
-   /* If the we don't own the descriptor, we cannot transmit */
+   /* If we don't own the descriptor, we cannot transmit */
    if (!(txd0.tdes[0] & POS_OC3_TXDESC_OWN))
       return(FALSE);
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"pos_oc3_handle_txring: 1st desc: "
-         "tdes[0]=0x%x, tdes[1]=0x%x\n",ptxd->tdes[0],ptxd->tdes[1]);
+   POS_LOG(d,"pos_oc3_handle_txring: 1st desc: tdes[0]=0x%x, tdes[1]=0x%x\n",
+           ptxd->tdes[0],ptxd->tdes[1]);
 #endif
 
    pkt_ptr = pkt;
    tot_len = 0;
+   i = 0;
 
    do {
 #if DEBUG_TRANSMIT
-      m_log(d->name,"pos_oc3_handle_txring: loop: "
-            "tdes[0]=0x%x, tdes[1]=0x%x\n",ptxd->tdes[0],ptxd->tdes[1]);
+      POS_LOG(d,"pos_oc3_handle_txring: loop: tdes[0]=0x%x, tdes[1]=0x%x\n",
+              ptxd->tdes[0],ptxd->tdes[1]);
 #endif
 
       if (!(ptxd->tdes[0] & POS_OC3_TXDESC_OWN)) {
-         m_log(d->name,"pos_oc3_handle_txring: descriptor not owned!\n");
+         POS_LOG(d,"pos_oc3_handle_txring: descriptor not owned!\n");
          return(FALSE);
       }
 
@@ -418,85 +546,89 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
 
       /* Be sure that we have length not null */
       if (clen != 0) {
-         addr = ptxd->tdes[1] & POS_OC3_TXDESC_ADDR_MASK;
-         physmem_copy_from_vm(d->mgr_cpu,pkt_ptr,addr,clen);
+         addr = ptxd->tdes[1];
+
+         /* ugly hack, to allow this to work with SRAM platforms */
+         if ((addr & ~POS_OC3_TXDESC_ADDR_MASK) == 0xc0000000)
+            addr = ptxd->tdes[1] & POS_OC3_TXDESC_ADDR_MASK;
+
+         physmem_copy_from_vm(d->vm,pkt_ptr,addr,clen);
       }
 
       pkt_ptr += clen;
       tot_len += clen;
 
       /* Clear the OWN bit if this is not the first descriptor */
-      if (!(ptxd->tdes[1] & POS_OC3_TXDESC_FS))
-         physmem_copy_u32_to_vm(d->mgr_cpu,d->tx_current,0);
+      if (i != 0)
+         physmem_copy_u32_to_vm(d->vm,d->tx_current,0);
 
       /* Go to the next descriptor */
-      txdesc_set_next(d);
+      txdesc_set_next(d,ptxd);
 
       /* Copy the next txring descriptor */
-      if (!(ptxd->tdes[1] & POS_OC3_TXDESC_LS)) {
+      if (ptxd->tdes[0] & POS_OC3_TXDESC_CONT) {
          txdesc_read(d,d->tx_current,&ctxd);
          ptxd = &ctxd;
+         i++;
       } else
          done = TRUE;
    }while(!done);
 
    if (tot_len != 0) {
 #if DEBUG_TRANSMIT
-      m_log(d->name,"sending of packet of %u bytes (flags=0x%4.4x)\n",
-            tot_len,txd0.tdes[0]);
+      POS_LOG(d,"sending packet of %u bytes (flags=0x%4.4x)\n",
+              tot_len,txd0.tdes[0]);
       mem_dump(log_file,pkt,tot_len);
-#endif
+#endif   
       /* send it on wire */
       netio_send(d->nio,pkt,tot_len);
    }
 
    /* Clear the OWN flag of the first descriptor */
-   physmem_copy_u32_to_vm(d->mgr_cpu,tx_start,0);
+   txd0.tdes[0] &= ~POS_OC3_TXDESC_OWN;
+   physmem_copy_u32_to_vm(d->vm,tx_start,txd0.tdes[0]);
 
-   /* Interrupt on completion ? */
-   pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev);   
+   /* Interrupt on completion */
+   pci_dev_trigger_irq(d->vm,d->pci_dev);
    return(TRUE);
 }
 
-/* RX thread */
-static void *dev_pos_oc3_rxthread(void *arg)
-{
-   struct pos_oc3_data *d = arg;
-
-   for(;;)
-      dev_pos_oc3_handle_rxring(d);
-
-   return NULL;
-}
-
 /*
- * pos_oc3_read()
+ * pci_pos_read()
  */
-static m_uint32_t pos_oc3_read(struct pci_device *dev,int reg)
-{   
+static m_uint32_t pci_pos_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
+{
    struct pos_oc3_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
-   m_log(d->name,"read PCI register 0x%x\n",reg);
+   POS_LOG(d,"read PCI register 0x%x\n",reg);
 #endif
+
    switch(reg) {
+      case PCI_REG_BAR0:
+         return(d->dev.phys_addr);
       default:
          return(0);
    }
 }
 
 /*
- * pos_oc3_write()
+ * pci_pos_write()
  */
-static void pos_oc3_write(struct pci_device *dev,int reg,m_uint32_t value)
+static void pci_pos_write(cpu_mips_t *cpu,struct pci_device *dev,
+                          int reg,m_uint32_t value)
 {
    struct pos_oc3_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
-   m_log(d->name,"write 0x%x to PCI register 0x%x\n",reg,value);
+   POS_LOG(d,"write 0x%x to PCI register 0x%x\n",value,reg);
 #endif
 
    switch(reg) {
+      case PCI_REG_BAR0:
+         vm_map_device(cpu->vm,&d->dev,(m_uint64_t)value);
+         POS_LOG(d,"registers are mapped at 0x%x\n",value);
+         break;
    }
 }
 
@@ -507,14 +639,8 @@ static void pos_oc3_write(struct pci_device *dev,int reg,m_uint32_t value)
  */
 int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
 {
-   struct pa_bay_info *bay_info;
-   struct pci_device *pci_dev;
+   struct pci_bus *pci_bus;
    struct pos_oc3_data *d;
-   struct vdevice *dev;
-   cpu_mips_t *cpu0;
-
-   /* Device is managed by CPU0 */ 
-   cpu0 = cpu_group_find_id(router->cpu_group,0);
 
    /* Allocate the private data structure for PA-POS-OC3 chip */
    if (!(d = malloc(sizeof(*d)))) {
@@ -523,69 +649,133 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    }
 
    memset(d,0,sizeof(*d));
+   d->name = name;
+   d->vm   = router->vm;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(pa_bay,&eeprom_pos_oc3);
+   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pos_oc3);
 
-   /* Get PCI bus info about this bay */
-   if (!(bay_info = c7200_get_pa_bay_info(pa_bay))) {
-      fprintf(stderr,"%s: unable to get info for PA bay %u\n",name,pa_bay);
-      return(-1);
-   }
+   /* Get the appropriate PCI bus */
+   pci_bus = router->pa_bay[pa_bay].pci_map;
 
-   /* Add as PCI device PA-POS-OC3 */
-   pci_dev = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
-                         POS_OC3_PCI_VENDOR_ID,POS_OC3_PCI_PRODUCT_ID,
-                         bay_info->pci_secondary_bus,0,0,C7200_NETIO_IRQ,d,
-                         NULL,pos_oc3_read,pos_oc3_write);
+   /* Initialize RX device */
+   d->rx_name = dyn_sprintf("%s_RX",name);
+   dev_init(&d->rx_dev);
+   d->rx_dev.name      = d->rx_name;
+   d->rx_dev.priv_data = d;
+   d->rx_dev.handler   = dev_pos_rx_access;
+   vm_bind_device(d->vm,&d->rx_dev);
 
-   if (!pci_dev) {
-      fprintf(stderr,"%s (PA-POS-OC3): unable to create PCI device.\n",name);
-      return(-1);
-   }
+   /* Initialize TX device */
+   d->tx_name = dyn_sprintf("%s_TX",name);
+   dev_init(&d->tx_dev);
+   d->tx_dev.name      = d->tx_name;
+   d->tx_dev.priv_data = d;
+   d->tx_dev.handler   = dev_pos_tx_access;
+   vm_bind_device(d->vm,&d->tx_dev);
 
-   /* Create the PA-POS-OC3 structure */
-   d->name        = name;
-   d->bay_addr    = bay_info->phys_addr;
-   d->pci_dev     = pci_dev;
-   d->mgr_cpu     = cpu0;
+   /* Initialize CS device */
+   d->cs_name = dyn_sprintf("%s_CS",name);
+   dev_init(&d->cs_dev);
+   d->cs_dev.name      = d->cs_name;
+   d->cs_dev.priv_data = d;
+   d->cs_dev.handler   = dev_pos_cs_access;
+   vm_bind_device(d->vm,&d->cs_dev);
 
-   /* Create the device itself */
-   if (!(dev = dev_create(name))) {
-      fprintf(stderr,"%s (PA-POS-OC3): unable to create device.\n",name);
-      return(-1);
-   }
+   /* Initialize PLX9060 for RX part */
+   d->rx_obj = dev_plx9060_init(d->vm,d->rx_name,pci_bus,0,&d->rx_dev);
 
-   dev->phys_addr = bay_info->phys_addr;
-   dev->phys_len  = 0x800000;
-   dev->handler   = pos_oc3_access;
+   /* Initialize PLX9060 for TX part */
+   d->tx_obj = dev_plx9060_init(d->vm,d->tx_name,pci_bus,1,&d->tx_dev);
 
-   /* Store device info */
-   dev->priv_data = d;
-   d->dev = dev;
+   /* Initialize PLX9060 for CS part (CS=card status, chip status, ... ?) */
+   d->cs_obj = dev_plx9060_init(d->vm,d->cs_name,pci_bus,2,&d->cs_dev);
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(router->cpu_group,dev);
+   /* Unknown PCI device here (will be mapped at 0x30000) */
+   dev_init(&d->dev);
+   d->dev.name      = name;
+   d->dev.priv_data = d;
+   d->dev.phys_len  = 0x10000;
+   d->dev.handler   = dev_pos_access;
+   vm_bind_device(d->vm,&d->dev);
 
-   /* Start the TX ring scanner */
-   ptask_add((ptask_callback)dev_pos_oc3_handle_txring,d,NULL);
+   d->pci_dev = pci_dev_add(pci_bus,name,0,0,3,0,C7200_NETIO_IRQ,
+                            d,NULL,pci_pos_read,pci_pos_write);
 
    /* Store device info into the router structure */
-   return(c7200_set_slot_drvinfo(router,pa_bay,d));
+   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+}
+
+/* Remove a PA-POS-OC3 from the specified slot */
+int dev_c7200_pa_pos_shutdown(c7200_t *router,u_int pa_bay)
+{
+   struct c7200_pa_bay *bay;
+   struct pos_oc3_data *d;
+
+   if (!(bay = c7200_pa_get_info(router,pa_bay)))
+      return(-1);
+
+   d = bay->drv_info;
+
+   /* Remove the PA EEPROM */
+   c7200_pa_unset_eeprom(router,pa_bay);
+
+   /* Remove the PCI device */
+   pci_dev_remove(d->pci_dev);
+
+   /* Remove the PLX9060 chips */
+   vm_object_remove(d->vm,d->rx_obj);
+   vm_object_remove(d->vm,d->tx_obj);
+   vm_object_remove(d->vm,d->cs_obj);
+
+   /* Remove the device from the CPU address space */
+   vm_unbind_device(router->vm,&d->dev);
+   cpu_group_rebuild_mts(router->vm->cpu_group);
+
+   /* Free the device structure itself */
+   free(d);
+   return(0);
 }
 
 /* Bind a Network IO descriptor to a specific port */
 int dev_c7200_pa_pos_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
                              netio_desc_t *nio)
 {
-   struct pos_oc3_data *data;
+   struct pos_oc3_data *d;
 
-   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
       return(-1);
 
-   data->nio = nio;
+   if (d->nio != NULL)
+      return(-1);
 
-   /* create the RX thread */
-   pthread_create(&data->rx_thread,NULL,dev_pos_oc3_rxthread,data);
+   d->nio = nio;
+   d->tx_tid = ptask_add((ptask_callback)dev_pos_oc3_handle_txring,d,NULL);
+   netio_rxl_add(nio,(netio_rx_handler_t)dev_pos_oc3_handle_rxring,d,NULL);
    return(0);
 }
+
+/* Bind a Network IO descriptor to a specific port */
+int dev_c7200_pa_pos_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+{
+   struct pos_oc3_data *d;
+
+   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+      return(-1);
+
+   if (d->nio) {
+      ptask_remove(d->tx_tid);
+      netio_rxl_remove(d->nio);
+      d->nio = NULL;
+   }
+   return(0);
+}
+
+/* PA-POS-OC3 driver */
+struct c7200_pa_driver dev_c7200_pa_pos_oc3_driver = {
+   "PA-POS-OC3", 1, 
+   dev_c7200_pa_pos_init,
+   dev_c7200_pa_pos_shutdown,
+   dev_c7200_pa_pos_set_nio,
+   dev_c7200_pa_pos_unset_nio,
+};

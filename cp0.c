@@ -31,7 +31,7 @@ char *mips64_cp0_reg_names[MIPS64_CP0_REG_NR] = {
    "context", 
    "pagemask",
    "wired", 
-   "cp0_undef_7",
+   "info",
    "badvaddr", 
    "count", 
    "entry_hi", 
@@ -45,17 +45,17 @@ char *mips64_cp0_reg_names[MIPS64_CP0_REG_NR] = {
    "watch_lo", 
    "watch_hi", 
    "xcontext",
-   "cp0_undef_21",
-   "cp0_undef_22",
-   "cp0_undef_23",
-   "cp0_undef_24",
-   "cp0_undef_25",
+   "cp0_r21",
+   "cp0_r22",
+   "cp0_r23",
+   "cp0_r24",
+   "cp0_r25",
    "ecc", 
    "cache_err", 
    "tag_lo", 
    "tag_hi", 
    "err_epc",
-   "cp0_undef_31",
+   "cp0_r31",
 };
 
 /* Get cp0 register index given its name */
@@ -70,14 +70,29 @@ int cp0_get_reg_index(char *name)
    return(-1);
 }
 
-/* Check that we are running in kernel mode */
-int cp0_check_kernel_mode(cpu_mips_t *cpu)
-{
+/* Get the CPU operating mode (User,Supervisor or Kernel) - inline version */
+static forced_inline u_int cp0_get_mode_inline(cpu_mips_t *cpu)
+{  
    mips_cp0_t *cp0 = &cpu->cp0;
    u_int cpu_mode;
 
    cpu_mode = cp0->reg[MIPS_CP0_STATUS] >> MIPS_CP0_STATUS_KSU_SHIFT;
    cpu_mode &= MIPS_CP0_STATUS_KSU_MASK;
+   return(cpu_mode);
+}
+
+/* Get the CPU operating mode (User,Supervisor or Kernel) */
+u_int cp0_get_mode(cpu_mips_t *cpu)
+{  
+   return(cp0_get_mode_inline(cpu));
+}
+
+/* Check that we are running in kernel mode */
+int cp0_check_kernel_mode(cpu_mips_t *cpu)
+{
+   u_int cpu_mode;
+
+   cpu_mode = cp0_get_mode(cpu);
 
    if (cpu_mode != MIPS_CP0_STATUS_KM) {
       /* XXX Branch delay slot */
@@ -88,24 +103,55 @@ int cp0_check_kernel_mode(cpu_mips_t *cpu)
    return(0);
 }
 
-/* Get a cp0 register */
-static inline m_uint64_t cp0_get_reg(cpu_mips_t *cpu,u_int cp0_reg)
+/* Get value of random register */
+static inline u_int cp0_get_random_reg(cpu_mips_t *cpu)
+{
+   u_int wired;
+
+   /* We use the virtual count register as a basic "random" value */
+   wired = cpu->cp0.reg[MIPS_CP0_WIRED];
+   return(wired + (cpu->cp0_virt_cnt_reg % (cpu->cp0.tlb_entries - wired)));
+}
+
+/* Get a cp0 register (fast version) */
+static inline m_uint64_t cp0_get_reg_fast(cpu_mips_t *cpu,u_int cp0_reg)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
-   m_uint32_t delta;
+   m_uint32_t delta,res;
 
    switch(cp0_reg) {
       case MIPS_CP0_COUNT:
          delta = cpu->cp0_virt_cmp_reg - cpu->cp0_virt_cnt_reg;
-         return(cp0->reg[MIPS_CP0_COMPARE] - (clock_divisor * delta));
+         res = (m_uint32_t)cp0->reg[MIPS_CP0_COMPARE];
+         res -= cpu->vm->clock_divisor * delta;
+         return(sign_extend(res,32));
 
+#if 1
+      case MIPS_CP0_COMPARE:
+         return(sign_extend(cp0->reg[MIPS_CP0_COMPARE],32));
+#else
+      /* really useful and logical ? */
       case MIPS_CP0_COMPARE:
          delta = cpu->cp0_virt_cmp_reg - cpu->cp0_virt_cnt_reg;
-         return(cp0->reg[MIPS_CP0_COUNT] + (clock_divisor * delta));
+         res = (m_uint32_t)cp0->reg[MIPS_CP0_COUNT];
+         res += (cpu->vm->clock_divisor * delta);
+         return(res);
+#endif
+      case MIPS_CP0_INFO:
+         return(MIPS64_R7000_TLB64_ENABLE);
+
+      case MIPS_CP0_RANDOM:        
+         return(cp0_get_random_reg(cpu));
 
       default:
          return(cp0->reg[cp0_reg]);
    }
+}
+
+/* Get a cp0 register */
+m_uint64_t cp0_get_reg(cpu_mips_t *cpu,u_int cp0_reg)
+{
+   return(cp0_get_reg_fast(cpu,cp0_reg));
 }
 
 /* Set a cp0 register */
@@ -116,7 +162,7 @@ static inline void cp0_set_reg(cpu_mips_t *cpu,u_int cp0_reg,m_uint64_t val)
 
    switch(cp0_reg) {
       case MIPS_CP0_STATUS:
-      case MIPS_CP0_CAUSE:        
+      case MIPS_CP0_CAUSE:
          cp0->reg[cp0_reg] = val;
          mips64_update_irq_flag(cpu);
          break;
@@ -124,8 +170,26 @@ static inline void cp0_set_reg(cpu_mips_t *cpu,u_int cp0_reg,m_uint64_t val)
       case MIPS_CP0_PAGEMASK:
          cp0->reg[cp0_reg] = val & MIPS_TLB_PAGE_MASK;
          break;
+         
+      case MIPS_CP0_COMPARE:
+         mips64_clear_irq(cpu,7);
+         mips64_update_irq_flag(cpu);
+         cp0->reg[cp0_reg] = val;
 
-      case MIPS_CP0_TLB_HI:
+         delta = val - cp0->reg[MIPS_CP0_COUNT];
+         cpu->cp0_virt_cnt_reg = 0;
+         cpu->cp0_virt_cmp_reg = delta / cpu->vm->clock_divisor;
+         break;
+
+      case MIPS_CP0_COUNT:
+         cp0->reg[cp0_reg] = val;
+
+         delta = cp0->reg[MIPS_CP0_COMPARE] - val;
+         cpu->cp0_virt_cnt_reg = 0;
+         cpu->cp0_virt_cmp_reg = delta / cpu->vm->clock_divisor;
+         break;
+
+     case MIPS_CP0_TLB_HI:
          cp0->reg[cp0_reg] = val & MIPS_CP0_HI_SAFE_MASK;
          break;
 
@@ -137,29 +201,11 @@ static inline void cp0_set_reg(cpu_mips_t *cpu,u_int cp0_reg,m_uint64_t val)
       case MIPS_CP0_RANDOM:
       case MIPS_CP0_PRID:
       case MIPS_CP0_CONFIG:
-         /* read only register */
+         /* read only registers */
          break;
 
       case MIPS_CP0_WIRED:
          cp0->reg[cp0_reg] = val & MIPS64_TLB_IDX_MASK;
-         break;
-         
-      case MIPS_CP0_COMPARE:
-         cp0->reg[MIPS_CP0_CAUSE] &= ~MIPS_CP0_CAUSE_IBIT7;
-         mips64_update_irq_flag(cpu);
-         cp0->reg[cp0_reg] = val;
-
-         delta = val - cp0->reg[MIPS_CP0_COUNT];
-         cpu->cp0_virt_cnt_reg = 0;
-         cpu->cp0_virt_cmp_reg = delta / clock_divisor;
-         break;
-
-      case MIPS_CP0_COUNT:
-         cp0->reg[cp0_reg] = val;
-
-         delta = cp0->reg[MIPS_CP0_COMPARE] - val;
-         cpu->cp0_virt_cnt_reg = 0;
-         cpu->cp0_virt_cmp_reg = delta / clock_divisor;
          break;
 
       default:
@@ -167,10 +213,73 @@ static inline void cp0_set_reg(cpu_mips_t *cpu,u_int cp0_reg,m_uint64_t val)
    }
 }
 
+/* Get a cp0 "set 1" register (R7000) */
+m_uint64_t cp0_s1_get_reg(cpu_mips_t *cpu,u_int cp0_s1_reg)
+{
+   switch(cp0_s1_reg) {
+      case MIPS_CP0_S1_CONFIG:
+         return(0x7F << 25);
+
+      case MIPS_CP0_S1_IPLLO:
+         return(cpu->cp0.ipl_lo);
+
+      case MIPS_CP0_S1_IPLHI:
+         return(cpu->cp0.ipl_hi);
+
+      case MIPS_CP0_S1_INTCTL:
+         return(cpu->cp0.int_ctl);
+
+      case MIPS_CP0_S1_DERRADDR0:
+         return(cpu->cp0.derraddr0);
+
+      case MIPS_CP0_S1_DERRADDR1:
+         return(cpu->cp0.derraddr1);
+
+      default:
+         /* undefined register */
+         cpu_log(cpu,"CP0_S1","trying to read unknown register %u\n",
+                 cp0_s1_reg);
+         return(0);
+   }
+}
+
+/* Set a cp0 "set 1" register (R7000) */
+static inline void cp0_s1_set_reg(cpu_mips_t *cpu,u_int cp0_s1_reg,
+                                  m_uint64_t val)
+{
+   mips_cp0_t *cp0 = &cpu->cp0;
+
+   switch(cp0_s1_reg) {
+      case MIPS_CP0_S1_IPLLO:
+         cp0->ipl_lo = val;
+         break;
+
+      case MIPS_CP0_S1_IPLHI:
+         cp0->ipl_hi = val;
+         break;
+
+      case MIPS_CP0_S1_INTCTL:
+         cp0->int_ctl = val;
+         break;
+
+      case MIPS_CP0_S1_DERRADDR0:
+         cp0->derraddr0 = val;
+         break;
+         
+      case MIPS_CP0_S1_DERRADDR1:
+         cp0->derraddr1 = val;
+         break;
+
+      default:
+         cpu_log(cpu,"CP0_S1","trying to set unknown register %u (val=0x%x)\n",
+                 cp0_s1_reg,val);
+   }
+}
+
 /* DMFC0 */
 fastcall void cp0_exec_dmfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
-   cpu->gpr[gp_reg] = cp0_get_reg(cpu,cp0_reg);
+   cpu->gpr[gp_reg] = cp0_get_reg_fast(cpu,cp0_reg);
 }
 
 /* DMTC0 */
@@ -182,13 +291,25 @@ fastcall void cp0_exec_dmtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 /* MFC0 */
 fastcall void cp0_exec_mfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
-   cpu->gpr[gp_reg] = sign_extend(cp0_get_reg(cpu,cp0_reg),32);
+   cpu->gpr[gp_reg] = sign_extend(cp0_get_reg_fast(cpu,cp0_reg),32);
 }
 
 /* MTC0 */
 fastcall void cp0_exec_mtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    cp0_set_reg(cpu,cp0_reg,cpu->gpr[gp_reg] & 0xffffffff);
+}
+
+/* CFC0 */
+fastcall void cp0_exec_cfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+{
+   cpu->gpr[gp_reg] = sign_extend(cp0_s1_get_reg(cpu,cp0_reg),32);
+}
+
+/* CTC0 */
+fastcall void cp0_exec_ctc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+{
+   cp0_s1_set_reg(cpu,cp0_reg,cpu->gpr[gp_reg] & 0xffffffff);
 }
 
 /* Get the page size corresponding to a page mask */
@@ -213,14 +334,108 @@ static char *get_page_size_str(char *buffer,size_t len,m_uint32_t page_mask)
    return buffer;
 }
 
+/* TLB lookup */
+int cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
+{
+   mips_cp0_t *cp0 = &cpu->cp0;
+   m_uint64_t v0_addr,v1_addr;
+   m_uint32_t page_size,pca;
+   tlb_entry_t *entry;
+   int i;
+
+   for(i=0;i<cp0->tlb_entries;i++) {
+      entry = &cp0->tlb[i];
+
+      page_size = get_page_size(entry->mask);
+      v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
+      v1_addr = v0_addr + page_size;
+
+      /* virtual address in entry 0 ? */
+      if ((entry->lo0 & MIPS_TLB_V_MASK) && 
+          (vaddr >= v0_addr) && (vaddr < v1_addr)) 
+      {
+         res->vaddr = v0_addr;
+         res->paddr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
+         res->paddr &= cpu->addr_bus_mask;
+         res->len   = page_size;
+
+         pca = (entry->lo0 & MIPS_TLB_C_MASK);
+         pca >>= MIPS_TLB_C_SHIFT;
+         res->cached = mips64_cca_cached(pca);
+
+         res->tlb_index = i;
+         return(TRUE);
+      }
+
+      /* virtual address in entry 1 ? */
+      if ((entry->lo1 & MIPS_TLB_V_MASK) && 
+          (vaddr >= v1_addr) && ((vaddr - v1_addr) < page_size)) 
+      {
+         res->vaddr = v1_addr;
+         res->paddr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
+         res->paddr &= cpu->addr_bus_mask;
+         res->len   = page_size;
+
+         pca = (entry->lo1 & MIPS_TLB_C_MASK);
+         pca >>= MIPS_TLB_C_SHIFT;
+         res->cached = mips64_cca_cached(pca);
+
+         res->tlb_index = i;
+         return(TRUE);
+      }
+   }
+
+   return(FALSE);
+}
+
 /* 
  * Map a TLB entry into the MTS.
  *
  * We apply the physical address bus masking here.
+ *
+ * TODO: - Manage ASID
+ *       - Manage CPU Mode (user,supervisor or kernel)
  */
-void cp0_map_tlb_to_mts(cpu_mips_t *cpu,u_int index)
+void cp0_map_tlb_to_mts(cpu_mips_t *cpu,int index)
 {
    m_uint64_t v0_addr,v1_addr,p0_addr,p1_addr;
+   m_uint32_t page_size,pca;
+   tlb_entry_t *entry;
+   int cacheable;
+
+   entry = &cpu->cp0.tlb[index];
+
+   page_size = get_page_size(entry->mask);
+   v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
+   v1_addr = v0_addr + page_size;
+
+   if (entry->lo0 & MIPS_TLB_V_MASK) {
+      pca = (entry->lo0 & MIPS_TLB_C_MASK);
+      pca >>= MIPS_TLB_C_SHIFT;
+      cacheable = mips64_cca_cached(pca);
+       
+      p0_addr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
+      cpu->mts_map(cpu,v0_addr,p0_addr & cpu->addr_bus_mask,page_size,
+                   cacheable,index);
+   }
+
+   if (entry->lo1 & MIPS_TLB_V_MASK) {
+      pca = (entry->lo1 & MIPS_TLB_C_MASK);
+      pca >>= MIPS_TLB_C_SHIFT;
+      cacheable = mips64_cca_cached(pca);
+
+      p1_addr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
+      cpu->mts_map(cpu,v1_addr,p1_addr & cpu->addr_bus_mask,page_size,
+                   cacheable,index);
+   }
+}
+
+/*
+ * Unmap a TLB entry in the MTS.
+ */
+void cp0_unmap_tlb_to_mts(cpu_mips_t *cpu,int index)
+{
+   m_uint64_t v0_addr,v1_addr;
    m_uint32_t page_size;
    tlb_entry_t *entry;
 
@@ -230,23 +445,19 @@ void cp0_map_tlb_to_mts(cpu_mips_t *cpu,u_int index)
    v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
    v1_addr = v0_addr + page_size;
 
-   if (entry->lo0 & MIPS_TLB_V_MASK) {
-      p0_addr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
-      mts32_map_phys_addr(cpu,v0_addr,p0_addr & cpu->addr_bus_mask,page_size);
-   }
+   if (entry->lo0 & MIPS_TLB_V_MASK)
+      cpu->mts_unmap(cpu,v0_addr,page_size,MTS_ACC_T,index);
 
-   if (entry->lo1 & MIPS_TLB_V_MASK) {
-      p1_addr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
-      mts32_map_phys_addr(cpu,v1_addr,p1_addr & cpu->addr_bus_mask,page_size);
-   }
+   if (entry->lo1 & MIPS_TLB_V_MASK)
+      cpu->mts_unmap(cpu,v1_addr,page_size,MTS_ACC_T,index);
 }
 
 /* Map all TLB entries into the MTS */
 void cp0_map_all_tlb_to_mts(cpu_mips_t *cpu)
 {   
-   u_int i;
+   int i;
 
-   for(i=0;i<MIPS64_TLB_ENTRIES;i++)
+   for(i=0;i<cpu->cp0.tlb_entries;i++)
       cp0_map_tlb_to_mts(cpu,i);
 }
 
@@ -256,7 +467,7 @@ fastcall void cp0_exec_tlbp(cpu_mips_t *cpu)
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t hi_reg,asid,vpn2;
    tlb_entry_t *entry;
-   u_int i;
+   int i;
   
    hi_reg = cp0->reg[MIPS_CP0_TLB_HI];
    asid = hi_reg & MIPS_TLB_ASID_MASK;
@@ -264,7 +475,7 @@ fastcall void cp0_exec_tlbp(cpu_mips_t *cpu)
 
    cp0->reg[MIPS_CP0_INDEX] = 0xffffffff80000000ULL;
    
-   for(i=0;i<MIPS64_TLB_ENTRIES;i++) {
+   for(i=0;i<cp0->tlb_entries;i++) {
       entry = &cp0->tlb[i];
 
       if (((entry->hi & MIPS_TLB_VPN2_MASK) == vpn2) &&
@@ -272,7 +483,10 @@ fastcall void cp0_exec_tlbp(cpu_mips_t *cpu)
            ((entry->hi & MIPS_TLB_ASID_MASK) == asid)))
       {
          cp0->reg[MIPS_CP0_INDEX] = i;
+#if DEBUG_TLB_ACTIVITY
+         printf("CPU: CP0_TLBP returned %u\n",i);
          tlb_dump(cpu);
+#endif
       }
    }
 }
@@ -287,10 +501,10 @@ fastcall void cp0_exec_tlbr(cpu_mips_t *cpu)
    index = cp0->reg[MIPS_CP0_INDEX];
 
 #if DEBUG_TLB_ACTIVITY
-   printf("CP0_TLBR: reading entry %u.\n",index);
+   cpu_log(cpu,"TLB","CP0_TLBR: reading entry %u.\n",index);
 #endif
 
-   if (index < MIPS64_TLB_ENTRIES) 
+   if (index < cp0->tlb_entries)
    {
       entry = &cp0->tlb[index];
 
@@ -311,22 +525,25 @@ fastcall void cp0_exec_tlbr(cpu_mips_t *cpu)
    }
 }
 
-/* TLBWI: Write Indexed TLB entry */
-fastcall void cp0_exec_tlbwi(cpu_mips_t *cpu)
+/* TLBW: Write a TLB entry */
+static inline void cp0_exec_tlbw(cpu_mips_t *cpu,u_int index)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    tlb_entry_t *entry;
-   u_int index;
-
-   index = cp0->reg[MIPS_CP0_INDEX];
 
 #if DEBUG_TLB_ACTIVITY
-   printf("CP0_TLBWI: writing entry %u.\n",index);
+   cpu_log(cpu,"TLB","CP0_TLBWI: writing entry %u "
+           "[mask=0x%8.8llx,hi=0x%8.8llx,lo0=0x%8.8llx,lo1=0x%8.8llx]\n",
+           index,cp0->reg[MIPS_CP0_PAGEMASK],cp0->reg[MIPS_CP0_TLB_HI],
+           cp0->reg[MIPS_CP0_TLB_LO_0],cp0->reg[MIPS_CP0_TLB_LO_1]);
 #endif
 
-   if (index < MIPS64_TLB_ENTRIES) 
-   {     
+   if (index < cp0->tlb_entries)
+   {
       entry = &cp0->tlb[index];
+
+      /* Unmap the old entry if it was valid */
+      cp0_unmap_tlb_to_mts(cpu,index);
 
       entry->mask = cp0->reg[MIPS_CP0_PAGEMASK] & MIPS_TLB_PAGE_MASK;
       entry->hi   = cp0->reg[MIPS_CP0_TLB_HI] & ~entry->mask;
@@ -342,12 +559,25 @@ fastcall void cp0_exec_tlbwi(cpu_mips_t *cpu)
       entry->lo0 &= ~MIPS_CP0_LO_G_MASK;
       entry->lo1 &= ~MIPS_CP0_LO_G_MASK;
 
+      /* Inform the MTS subsystem */
       cp0_map_tlb_to_mts(cpu,index);
 
 #if DEBUG_TLB_ACTIVITY
       tlb_dump_entry(cpu,index);
 #endif
    }
+}
+
+/* TLBWI: Write Indexed TLB entry */
+fastcall void cp0_exec_tlbwi(cpu_mips_t *cpu)
+{
+   cp0_exec_tlbw(cpu,cpu->cp0.reg[MIPS_CP0_INDEX]);
+}
+
+/* TLBWR: Write Random TLB entry */
+fastcall void cp0_exec_tlbwr(cpu_mips_t *cpu)
+{
+   cp0_exec_tlbw(cpu,cp0_get_random_reg(cpu));
 }
 
 /* Raw dump of the TLB */
@@ -358,7 +588,7 @@ void tlb_raw_dump(cpu_mips_t *cpu)
 
    printf("TLB dump:\n");
 
-   for(i=0;i<MIPS64_TLB_ENTRIES;i++) {
+   for(i=0;i<cpu->cp0.tlb_entries;i++) {
       entry = &cpu->cp0.tlb[i];
       printf(" %2d: mask=0x%16.16llx hi=0x%16.16llx "
              "lo0=0x%16.16llx lo1=0x%16.16llx\n",
@@ -416,7 +646,7 @@ void tlb_dump(cpu_mips_t *cpu)
 
    printf("TLB dump:\n");
 
-   for(i=0;i<MIPS64_TLB_ENTRIES;i++) 
+   for(i=0;i<cpu->cp0.tlb_entries;i++) 
       tlb_dump_entry(cpu,i);
    
    printf("\n");

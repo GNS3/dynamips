@@ -48,10 +48,12 @@ char *dyn_sprintf(const char *fmt,...)
 {
    int n,size = 512;
    va_list ap;
-   char *p;
+   char *p,*p2;
 
-   if ((p = malloc(size)) == NULL)
+   if ((p = malloc(size)) == NULL) {
+      perror("dyn_sprintf: malloc");
       return NULL;
+   }
 
    for(;;)
    {
@@ -70,27 +72,18 @@ char *dyn_sprintf(const char *fmt,...)
       else
          size *= 2;
 
-      if ((p = realloc(p,size)) == NULL)
+      if ((p2 = realloc(p,size)) == NULL) {
+         perror("dyn_sprintf: realloc");
+         free(p);
          return NULL;
+      }
+
+      p = p2;
    }
 }
 
-/* Parse a MAC address */
-int parse_mac_addr(m_eth_addr_t *addr,char *str)
-{
-   u_int v[M_ETH_LEN];
-   int i,res;
-
-   res = sscanf(str,"%x:%x:%x:%x:%x:%x",&v[0],&v[1],&v[2],&v[3],&v[4],&v[5]);
-
-   for(i=0;i<M_ETH_LEN;i++)
-      addr->octet[i] = v[i];
-
-   return((res == 6) ? 0 : -1);
-}
-
 /* Split a string */
-int strsplit(char *str,char delim,char **array,int max_count)
+int m_strsplit(char *str,char delim,char **array,int max_count)
 {
    int i,pos = 0;
    size_t len;
@@ -125,6 +118,59 @@ int strsplit(char *str,char delim,char **array,int max_count)
    for(i=0;i<max_count;i++)
       free(array[i]);
    return(-1);
+}
+
+/* Tokenize a string */
+int m_strtok(char *str,char delim,char **array,int max_count)
+{
+   int i,pos = 0;
+   size_t len;
+   char *ptr;
+
+   for(i=0;i<max_count;i++)
+      array[i] = NULL;
+
+   do {
+      if (pos == max_count)
+         goto error;
+
+      ptr = strchr(str,delim);
+      if (!ptr)
+         ptr = str + strlen(str);
+
+      len = ptr - str;
+
+      if (!(array[pos] = malloc(len+1)))
+         goto error;
+
+      memcpy(array[pos],str,len);
+      array[pos][len] = 0;
+
+      while(*ptr == delim) 
+         ptr++;
+
+      str = ptr;
+      pos++;
+   }while(*ptr);
+   
+   return(pos);
+
+ error:
+   for(i=0;i<max_count;i++)
+      free(array[i]);
+   return(-1);
+}
+
+/* Quote a string */
+char *m_strquote(char *buffer,size_t buf_len,char *str)
+{
+   char *p;
+   
+   if (!(p = strpbrk(str," \t\"'")))
+      return str;
+
+   snprintf(buffer,buf_len,"\"%s\"",str);
+   return buffer;
 }
 
 /* Ugly function that dumps a structure in hexa and ascii. */
@@ -163,23 +209,84 @@ void mem_dump(FILE *f_output,u_char *pkt,u_int len)
 }
 
 /* Logging function */
-void m_log(char *module,char *fmt,...)
+void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
 {
    struct timeval now;
    static char buf[256];
    time_t ct;
-   va_list ap;
 
    gettimeofday(&now,0);
    ct = now.tv_sec;
    strftime(buf,sizeof(buf),"%b %d %H:%M:%S",localtime(&ct));
-   fprintf(log_file,"%s.%03ld %s: ",buf,now.tv_usec/1000,module);
+   if (fd) {
+      fprintf(fd,"%s.%03ld %s: ",buf,(long)now.tv_usec/1000,module);
+      vfprintf(fd,fmt,ap);
+      fflush(fd);
+   }
+}
+
+/* Logging function */
+void m_log(char *module,char *fmt,...)
+{
+   va_list ap;
 
    va_start(ap,fmt);
-   vfprintf(log_file,fmt,ap);
+   m_flog(log_file,module,fmt,ap);
    va_end(ap);
+}
 
-   fflush(log_file);
+/* Returns a line from specified file (remove trailing '\n') */
+char *m_fgets(char *buffer,int size,FILE *fd)
+{
+   int len;
+
+   buffer[0] = '\0';
+   fgets(buffer,size,fd);
+
+   if ((len = strlen(buffer)) == 0)
+      return NULL;
+
+   /* remove trailing '\n' */
+   if (buffer[len-1] == '\n')
+      buffer[len-1] = '\0';
+
+   return buffer;
+}
+
+/* Read a file and returns it in a buffer */
+ssize_t m_read_file(char *filename,char **buffer)
+{
+   char tmp[256],*ptr,*nptr;
+   size_t len,tot_len;
+   FILE *fd;
+
+   *buffer = ptr = NULL;
+   tot_len = 0;
+
+   /* Open file for reading */
+   if ((fd = fopen(filename,"r")) == NULL)
+      return(-1);
+
+   while((len = fread(tmp,1,sizeof(tmp),fd)) > 0)
+   {
+      /* Reallocate memory */
+      nptr = realloc(ptr,tot_len+len+1);
+      if (nptr == NULL) {
+         if (ptr) free(ptr);
+         fclose(fd);
+         return(-1);
+      }
+
+      ptr = nptr;
+
+      /* Ok, memory could be allocated */
+      memcpy(&ptr[tot_len],tmp,len);
+      tot_len += len;
+   }
+
+   fclose(fd);
+   *buffer = ptr;
+   return(tot_len);
 }
 
 /* Allocate aligned memory */

@@ -18,30 +18,62 @@
 
 #define PCI_VENDOR_DEC         0x1011
 #define PCI_PRODUCT_DEC_21050  0x0001
+#define PCI_PRODUCT_DEC_21052  0x0021
 #define PCI_PRODUCT_DEC_21150  0x0023
+#define PCI_PRODUCT_DEC_21152  0x0024
 
 /*
  * dev_dec21050_init()
  */
-int dev_dec21050_init(struct pci_data *pci_data,int pci_bus,int pci_device)
+int dev_dec21050_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus)
 {
    struct pci_device *dev;
    
-   dev = pci_dev_add_basic(pci_data,"dec21050",
-                           PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21050,
-                           pci_bus,pci_device,0);
+   dev = pci_bridge_create_dev(pci_bus,"dec21050",
+                               PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21050,
+                               pci_device,0,sec_bus,NULL,NULL);
+   return((dev != NULL) ? 0 : -1);
+}
+
+/*
+ * dev_dec21052_init()
+ */
+int dev_dec21052_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus)
+{
+   struct pci_device *dev;
+   
+   dev = pci_bridge_create_dev(pci_bus,"dec21052",
+                               PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21052,
+                               pci_device,0,sec_bus,NULL,NULL);
    return((dev != NULL) ? 0 : -1);
 }
 
 /*
  * dev_dec21150_init()
  */
-int dev_dec21150_init(struct pci_data *pci_data,int pci_bus,int pci_device)
+int dev_dec21150_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus)
 {
    struct pci_device *dev;
    
-   dev = pci_dev_add_basic(pci_data,"dec21150",
-                           PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21150,
-                           pci_bus,pci_device,0);
+   dev = pci_bridge_create_dev(pci_bus,"dec21150",
+                               PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21150,
+                               pci_device,0,sec_bus,NULL,NULL);
+   return((dev != NULL) ? 0 : -1);
+}
+
+/*
+ * dev_dec21152_init()
+ */
+int dev_dec21152_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus)
+{
+   struct pci_device *dev;
+   
+   dev = pci_bridge_create_dev(pci_bus,"dec21152",
+                               PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21152,
+                               pci_device,0,sec_bus,NULL,NULL);
    return((dev != NULL) ? 0 : -1);
 }

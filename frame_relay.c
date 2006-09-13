@@ -16,10 +16,12 @@
 #include <sys/types.h>
 
 #include "utils.h"
+#include "mempool.h"
+#include "registry.h"
 #include "net_io.h"
 #include "frame_relay.h"
 
-#define DEBUG_FRSW    0
+#define DEBUG_FRSW  0
 
 /* Number of LMI trailing bytes */
 #define LMI_TRAILING_SIZE  3
@@ -38,91 +40,26 @@ static inline u_int frsw_dlci_hash(u_int dlci)
 }
 
 /* DLCI lookup */
-fr_swconn_t *frsw_dlci_lookup(fr_sw_table_t *t,netio_desc_t *input,u_int dlci)
+frsw_conn_t *frsw_dlci_lookup(frsw_table_t *t,netio_desc_t *input,u_int dlci)
 {
-   fr_swconn_t *vc;
+   frsw_conn_t *vc;
    
-   for(vc=t->dlci_table[frsw_dlci_hash(dlci)];vc;vc=vc->next)
-      if (vc->dlci_in == dlci)
+   for(vc=t->dlci_table[frsw_dlci_hash(dlci)];vc;vc=vc->hash_next)
+      if ((vc->input == input) && (vc->dlci_in == dlci))
          return vc;
 
    return NULL;
 }
 
-/* Create a switch connection */
-int frsw_create_vc(fr_sw_table_t *t,netio_desc_t *input,u_int dlci_in,
-                   netio_desc_t *output,u_int dlci_out)
-{
-   fr_swconn_t *vc;
-   u_int hbucket;
-
-   if (!(vc = frsw_dlci_lookup(t,input,dlci_in))) {
-      if (!(vc = malloc(sizeof(*vc))))
-         return(-1);
-
-      memset(vc,0,sizeof(*vc));
-      hbucket = frsw_dlci_hash(dlci_in);
-      vc->next = t->dlci_table[hbucket];
-      t->dlci_table[hbucket] = vc;
-   }
-
-   vc->input    = input;
-   vc->output   = output;
-   vc->dlci_in  = dlci_in;
-   vc->dlci_out = dlci_out;
-   return(0);
-}
-
-/* Create a virtual switch table */
-fr_sw_table_t *frsw_create_table(void)
-{
-   fr_sw_table_t *t;
-
-   if (!(t = malloc(sizeof(*t))))
-      return NULL;
-
-   memset(t,0,sizeof(*t));
-   return t;
-}
-
-/* Add a NetIO descriptor to a Frame-Relay switch table */
-int frsw_add_netio(fr_sw_table_t *t,netio_desc_t *nio)
-{
-   int i;
-
-   /* try to find a free slot */
-   for(i=0;i<FRSW_NIO_MAX;i++)
-      if (t->nio[i] == NULL)
-         break;
-   
-   if (i == FRSW_NIO_MAX)
-      return(-1);
-
-   t->nio[i] = nio;
-   return(0);
-}
-
-/* Find a NetIO descriptor given its name */
-netio_desc_t *frsw_find_netio_by_name(fr_sw_table_t *t,char *name)
-{
-   int i;
-
-   for(i=0;i<FRSW_NIO_MAX;i++)
-      if ((t->nio[i] != NULL) && !strcmp(t->nio[i]->name,name))
-         return t->nio[i];
-
-   return NULL;
-}
-
 /* Handle a ANSI LMI packet */
-ssize_t frsw_handle_lmi_ansi_pkt(fr_sw_table_t *t,netio_desc_t *input,
+ssize_t frsw_handle_lmi_ansi_pkt(frsw_table_t *t,netio_desc_t *input,
                                  m_uint8_t *pkt,ssize_t len)
 {
    m_uint8_t resp[FR_MAX_PKT_SIZE],*pres,*preq;
    m_uint8_t itype,isize;
-   int i,msg_type,seq_ok;
+   int msg_type,seq_ok;
    ssize_t rlen;
-   fr_swconn_t *sc;
+   frsw_conn_t *sc;
    u_int dlci;
 
    if ((len <= (sizeof(lmi_ansi_hdr) + LMI_TRAILING_SIZE)) || 
@@ -185,9 +122,13 @@ ssize_t frsw_handle_lmi_ansi_pkt(fr_sw_table_t *t,netio_desc_t *input,
             pres[0] = 0x03;
             pres[1] = 0x02;
 
+            if (input->fr_lmi_seq != preq[3]) {
+               m_log(input->name,"resynchronization with LMI sequence...\n");
+               input->fr_lmi_seq = preq[3];
+            } 
+
             input->fr_lmi_seq++;
             if (!input->fr_lmi_seq) input->fr_lmi_seq++;
-
             pres[2] = input->fr_lmi_seq;
             pres[3] = preq[2];
 
@@ -219,22 +160,17 @@ ssize_t frsw_handle_lmi_ansi_pkt(fr_sw_table_t *t,netio_desc_t *input,
 #if DEBUG_FRSW
       m_log(input->name,"LMI full status, advertising DLCIs\n");
 #endif
-      for(i=0;i<FRSW_HASH_SIZE;i++) {
-         for(sc=t->dlci_table[i];sc;sc=sc->next) {
-            if (sc->input == input) {
-               dlci = sc->dlci_in;
-
+      for(sc=input->fr_conn_list;sc;sc=sc->next) {
+         dlci = sc->dlci_in;
 #if DEBUG_FRSW
-               m_log(input->name,"sending LMI adv for DLCI %u\n",dlci);
+         m_log(input->name,"sending LMI adv for DLCI %u\n",dlci);
 #endif
-               pres[0] = 0x07;
-               pres[1] = 0x03;
-               pres[2] = dlci >> 4;
-               pres[3] = 0x80 | (dlci & 0x0f) << 3;
-               pres[4] = 0x82;
-               pres += 5;
-            }
-         }
+         pres[0] = 0x07;
+         pres[1] = 0x03;
+         pres[2] = dlci >> 4;
+         pres[3] = 0x80 | ((dlci & 0x0f) << 3);
+         pres[4] = 0x82;
+         pres += 5;
       }
    }
 
@@ -253,7 +189,7 @@ ssize_t frsw_handle_lmi_ansi_pkt(fr_sw_table_t *t,netio_desc_t *input,
 }
 
 /* DLCI switching */
-void frsw_dlci_switch(fr_swconn_t *vc,m_uint8_t *pkt)
+void frsw_dlci_switch(frsw_conn_t *vc,m_uint8_t *pkt)
 {
    pkt[0] = (pkt[0] & 0x03) | ((vc->dlci_out >> 4) << 2);
    pkt[1] = (pkt[1] & 0x0f) | ((vc->dlci_out & 0x0f) << 4);
@@ -262,12 +198,12 @@ void frsw_dlci_switch(fr_swconn_t *vc,m_uint8_t *pkt)
    vc->count++;
 }
 
-/* Handle an Frame-Relay packet */
-ssize_t frsw_handle_pkt(fr_sw_table_t *t,netio_desc_t *input,
+/* Handle a Frame-Relay packet */
+ssize_t frsw_handle_pkt(frsw_table_t *t,netio_desc_t *input,
                         m_uint8_t *pkt,ssize_t len)
 {
    netio_desc_t *output = NULL;
-   fr_swconn_t *vc;
+   frsw_conn_t *vc;
    m_uint32_t dlci;
    ssize_t slen;
 
@@ -290,6 +226,15 @@ ssize_t frsw_handle_pkt(fr_sw_table_t *t,netio_desc_t *input,
       output = vc->output;
    } 
 
+#if DEBUG_FRSW
+   if (output) {
+      m_log(input->name,"Switching packet to interface %s.\n",output->name);
+   } else {
+      m_log(input->name,"Unable to switch packet.\n");
+   }
+#endif
+
+   /* Send the packet on output interface */
    slen = netio_send(output,pkt,len);
 
    if (len != slen) {
@@ -300,47 +245,252 @@ ssize_t frsw_handle_pkt(fr_sw_table_t *t,netio_desc_t *input,
    return(0);
 }
 
-/* Virtual Frame-Relay switch fabric */
-int frsw_fabric(fr_sw_table_t *t)
+/* Receive a Frame-Relay packet */
+static int frsw_recv_pkt(netio_desc_t *nio,u_char *pkt,ssize_t pkt_len,
+                         frsw_table_t *t)
 {
-   u_char pkt[FR_MAX_PKT_SIZE];
-   int i,res,fd,max_fd=-1;
-   ssize_t len;
-   fd_set rfds;
+   int res;
 
-   for(;;) {
-      FD_ZERO(&rfds);
-   
-      for(i=0;i<FRSW_NIO_MAX;i++)
-         if (t->nio[i] != NULL) {
-            fd = netio_get_fd(t->nio[i]);
-            if (fd != -1) {
-               if (fd > max_fd) max_fd = fd;
-               FD_SET(fd,&rfds);
-            }
-         }
+   FRSW_LOCK(t);
+   res = frsw_handle_pkt(t,nio,pkt,pkt_len);
+   FRSW_UNLOCK(t);
+   return(res);
+}
 
-      res = select(max_fd+1,&rfds,NULL,NULL,NULL);
-      
-      if (res == -1)
-         continue;
+/* Acquire a reference to a Frame-Relay switch (increment reference count) */
+frsw_table_t *frsw_acquire(char *name)
+{
+   return(registry_find(name,OBJ_TYPE_FRSW));
+}
 
-      for(i=0;i<FRSW_NIO_MAX;i++)
-         if (t->nio[i] != NULL) {
-            fd = netio_get_fd(t->nio[i]);
+/* Release a Frame-Relay switch (decrement reference count) */
+int frsw_release(char *name)
+{
+   return(registry_unref(name,OBJ_TYPE_FRSW));
+}
 
-            if ((fd != -1) && FD_ISSET(fd,&rfds)) {
-               len = netio_recv(t->nio[i],pkt,sizeof(pkt));
-               frsw_handle_pkt(t,t->nio[i],pkt,len);
-            }
-         }
+/* Create a virtual switch table */
+frsw_table_t *frsw_create_table(char *name)
+{
+   frsw_table_t *t;
+
+   /* Allocate a new switch structure */
+   if (!(t = malloc(sizeof(*t))))
+      return NULL;
+
+   memset(t,0,sizeof(*t));
+   pthread_mutex_init(&t->lock,NULL);
+   mp_create_fixed_pool(&t->mp,"Frame-Relay Switch");
+
+   if (!(t->name = mp_strdup(&t->mp,name)))
+      goto err_name;
+
+   /* Record this object in registry */
+   if (registry_add(t->name,OBJ_TYPE_FRSW,t) == -1) {
+      fprintf(stderr,"frsw_create_table: unable to create switch '%s'\n",name);
+      goto err_reg;
    }
 
+   return t;
+
+ err_reg:
+ err_name:
+   mp_free_pool(&t->mp);
+   free(t);
+   return NULL;
+}
+
+/* Unlink a VC */
+static void frsw_unlink_vc(frsw_conn_t *vc)
+{
+   if (vc) {
+      if (vc->next)
+         vc->next->pprev = vc->pprev;
+
+      if (vc->pprev)
+         *(vc->pprev) = vc->next;
+   }
+}
+
+/* Free resources used by a VC */
+static void frsw_release_vc(frsw_conn_t *vc)
+{
+   if (vc) {
+      /* release input NIO */
+      if (vc->input) {
+         netio_rxl_remove(vc->input);
+         netio_release(vc->input->name);
+      }
+
+      /* release output NIO */
+      if (vc->output) 
+         netio_release(vc->output->name);
+   }
+}
+
+/* Free resources used by a Frame-Relay switch */
+static int frsw_free(void *data,void *arg)
+{
+   frsw_table_t *t = data;
+   frsw_conn_t *vc;
+   int i;
+
+   for(i=0;i<FRSW_HASH_SIZE;i++)
+      for(vc=t->dlci_table[i];vc;vc=vc->hash_next)
+         frsw_release_vc(vc);
+
+   mp_free_pool(&t->mp);
+   free(t);
+   return(TRUE);
+}
+
+/* Delete a Frame-Relay switch */
+int frsw_delete(char *name)
+{
+   return(registry_delete_if_unused(name,OBJ_TYPE_FRSW,frsw_free,NULL));
+}
+
+/* Delete all Frame-Relay switches */
+int frsw_delete_all(void)
+{
+   return(registry_delete_type(OBJ_TYPE_FRSW,frsw_free,NULL));
+}
+
+/* Create a switch connection */
+int frsw_create_vc(frsw_table_t *t,char *nio_input,u_int dlci_in,
+                   char *nio_output,u_int dlci_out)
+{
+   frsw_conn_t *vc,**p;
+   u_int hbucket;
+
+   FRSW_LOCK(t);
+
+   /* Allocate a new VC */
+   if (!(vc = mp_alloc(&t->mp,sizeof(*vc)))) {
+      FRSW_UNLOCK(t);
+      return(-1);
+   }   
+
+   vc->input    = netio_acquire(nio_input);
+   vc->output   = netio_acquire(nio_output);
+   vc->dlci_in  = dlci_in;
+   vc->dlci_out = dlci_out;
+   
+   /* Check these NIOs are valid and the input VC does not exists */
+   if (!vc->input || !vc->output)
+      goto error;
+
+   if (frsw_dlci_lookup(t,vc->input,dlci_in)) {
+      fprintf(stderr,"FRSW %s: switching for VC %u on IF %s "
+              "already defined.\n",t->name,dlci_in,vc->input->name);
+      goto error;
+   }
+
+   /* Add as a RX listener */
+   if (netio_rxl_add(vc->input,(netio_rx_handler_t)frsw_recv_pkt,t,NULL) == -1)
+      goto error;
+
+   hbucket = frsw_dlci_hash(dlci_in);
+   vc->hash_next = t->dlci_table[hbucket];
+   t->dlci_table[hbucket] = vc;
+
+   for(p=(frsw_conn_t **)&vc->input->fr_conn_list;*p;p=&(*p)->next)
+      if ((*p)->dlci_in > dlci_in)
+         break;
+
+   vc->next = *p;
+   if (*p) (*p)->pprev = &vc->next;
+   vc->pprev = p;
+   *p = vc;
+
+   FRSW_UNLOCK(t);
    return(0);
+
+ error:
+   FRSW_UNLOCK(t);
+   frsw_release_vc(vc);
+   mp_free(vc);
+   return(-1);
+}
+
+/* Remove a switch connection */
+int frsw_delete_vc(frsw_table_t *t,char *nio_input,u_int dlci_in,
+                   char *nio_output,u_int dlci_out)
+{
+   netio_desc_t *input,*output;
+   frsw_conn_t **vc,*p;
+   u_int hbucket;
+
+   FRSW_LOCK(t);
+
+   input = registry_exists(nio_input,OBJ_TYPE_NIO);
+   output = registry_exists(nio_output,OBJ_TYPE_NIO);
+
+   if (!input || !output) {
+      FRSW_UNLOCK(t);
+      return(-1);
+   }
+
+   hbucket = frsw_dlci_hash(dlci_in);
+   for(vc=&t->dlci_table[hbucket];*vc;vc=&(*vc)->hash_next) 
+   {
+      p = *vc;
+
+      if ((p->input == input) && (p->output == output) &&
+          (p->dlci_in == dlci_in) && (p->dlci_out == dlci_out))
+      {
+         /* Found a matching VC, remove it */
+         *vc = (*vc)->hash_next;
+         frsw_unlink_vc(p);
+         FRSW_UNLOCK(t);
+
+         /* Release NIOs */
+         frsw_release_vc(p);
+         mp_free(vc);
+         return(0);
+      }
+   }
+
+   FRSW_UNLOCK(t);
+   return(-1);
+}
+
+/* Save the configuration of a Frame-Relay switch */
+void frsw_save_config(frsw_table_t *t,FILE *fd)
+{
+   frsw_conn_t *vc;
+   int i;
+
+   fprintf(fd,"frsw create %s\n",t->name);
+
+   FRSW_LOCK(t);
+
+   for(i=0;i<FRSW_HASH_SIZE;i++) {
+      for(vc=t->dlci_table[i];vc;vc=vc->next) {
+         fprintf(fd,"frsw create_vc %s %s %u %s %u\n",
+                 t->name,vc->input->name,vc->dlci_in,
+                 vc->output->name,vc->dlci_out);
+      }
+   }
+
+   FRSW_UNLOCK(t);
+
+   fprintf(fd,"\n");
+}
+
+/* Save configurations of all Frame-Relay switches */
+static void frsw_reg_save_config(registry_entry_t *entry,void *opt,int *err)
+{
+   frsw_save_config((frsw_table_t *)entry->data,(FILE *)opt);
+}
+
+void frsw_save_config_all(FILE *fd)
+{
+   registry_foreach_type(OBJ_TYPE_FRSW,frsw_reg_save_config,fd,NULL);
 }
 
 /* Create a new interface */
-int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
+int frsw_cfg_create_if(frsw_table_t *t,char **tokens,int count)
 {
    netio_desc_t *nio = NULL;
    int nio_type;
@@ -348,12 +498,6 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
    /* at least: IF, interface name, NetIO type */
    if (count < 3) {
       fprintf(stderr,"frsw_cfg_create_if: invalid interface description\n");
-      return(-1);
-   }
-   
-   /* check the interface name is not already taken */
-   if (frsw_find_netio_by_name(t,tokens[1]) != NULL) {
-      fprintf(stderr,"FRSW: interface %s already exists.\n",tokens[1]);
       return(-1);
    }
 
@@ -366,7 +510,7 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
             break;
          }
 
-         nio = netio_desc_create_unix(tokens[3],tokens[4]);
+         nio = netio_desc_create_unix(tokens[1],tokens[3],tokens[4]);
          break;
 
       case NETIO_TYPE_UDP:
@@ -376,8 +520,8 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
             break;
          }
 
-         nio = netio_desc_create_udp(atoi(tokens[3]),tokens[4],
-                                     atoi(tokens[5]));
+         nio = netio_desc_create_udp(tokens[1],atoi(tokens[3]),
+                                     tokens[4],atoi(tokens[5]));
          break;
 
       case NETIO_TYPE_TCP_CLI:
@@ -387,7 +531,7 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
             break;
          }
 
-         nio = netio_desc_create_tcp_cli(tokens[3],tokens[4]);
+         nio = netio_desc_create_tcp_cli(tokens[1],tokens[3],tokens[4]);
          break;
 
       case NETIO_TYPE_TCP_SER:
@@ -397,7 +541,7 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
             break;
          }
 
-         nio = netio_desc_create_tcp_ser(tokens[3]);
+         nio = netio_desc_create_tcp_ser(tokens[1],tokens[3]);
          break;
 
       default:
@@ -405,53 +549,38 @@ int frsw_cfg_create_if(fr_sw_table_t *t,char **tokens,int count)
                  tokens[2]);
    }
 
-   if (!nio || !(nio->name = strdup(tokens[1]))) {
+   if (!nio) {
       fprintf(stderr,"FRSW: unable to create NETIO descriptor of "
               "interface %s\n",tokens[1]);
       return(-1);
    }
 
-   if (frsw_add_netio(t,nio) == -1) {
-      fprintf(stderr,"FRSW: unable to add NETIO descriptor to SW table.\n");
-      return(-1);
-   }
-
+   netio_release(nio->name);
    return(0);
 }
 
 /* Create a new virtual circuit */
-int frsw_cfg_create_vc(fr_sw_table_t *t,char **tokens,int count)
+int frsw_cfg_create_vc(frsw_table_t *t,char **tokens,int count)
 {
-   netio_desc_t *input,*output;
-
    /* 5 parameters: "VC", InputIF, InDLCI, OutputIF, OutDLCI */
    if (count != 5) {
       fprintf(stderr,"FRSW: invalid VPC descriptor.\n");
       return(-1);
    }
 
-   if (!(input = frsw_find_netio_by_name(t,tokens[1]))) {
-      fprintf(stderr,"FRSW: unknown interface \"%s\"\n",tokens[1]);
-      return(-1);
-   }
-
-   if (!(output = frsw_find_netio_by_name(t,tokens[3]))) {
-      fprintf(stderr,"FRSW: unknown interface \"%s\"\n",tokens[1]);
-      return(-1);
-   }
-
-   return(frsw_create_vc(t,input,atoi(tokens[2]),output,atoi(tokens[4])));
+   return(frsw_create_vc(t,tokens[1],atoi(tokens[2]),
+                         tokens[3],atoi(tokens[4])));
 }
 
 #define FRSW_MAX_TOKENS  16
 
 /* Handle a FRSW configuration line */
-int frsw_handle_cfg_line(fr_sw_table_t *t,char *str)
+int frsw_handle_cfg_line(frsw_table_t *t,char *str)
 {  
    char *tokens[FRSW_MAX_TOKENS];
    int count;
 
-   if ((count = strsplit(str,':',tokens,FRSW_MAX_TOKENS)) <= 1)
+   if ((count = m_strsplit(str,':',tokens,FRSW_MAX_TOKENS)) <= 1)
       return(-1);
 
    if (!strcmp(tokens[0],"IF"))
@@ -465,7 +594,7 @@ int frsw_handle_cfg_line(fr_sw_table_t *t,char *str)
 }
 
 /* Read a FRSW configuration file */
-int frsw_read_cfg_file(fr_sw_table_t *t,char *filename)
+int frsw_read_cfg_file(frsw_table_t *t,char *filename)
 {
    char buffer[1024],*ptr;
    FILE *fd;
@@ -476,14 +605,11 @@ int frsw_read_cfg_file(fr_sw_table_t *t,char *filename)
    }
    
    while(!feof(fd)) {
-      fgets(buffer,sizeof(buffer),fd);
+      if (!fgets(buffer,sizeof(buffer),fd))
+         break;
       
-      /* skip comments */
-      if ((ptr = strchr(buffer,'#')) != NULL)
-         *ptr = 0;
-
-      /* skip end of line */
-      if ((ptr = strchr(buffer,'\n')) != NULL)
+      /* skip comments and end of line */
+      if ((ptr = strpbrk(buffer,"#\r\n")) != NULL)
          *ptr = 0;
 
       /* analyze non-empty lines */
@@ -495,22 +621,12 @@ int frsw_read_cfg_file(fr_sw_table_t *t,char *filename)
    return(0);
 }
 
-/* Virtual Frame-Relay switch thread */
-void *frsw_thread_main(void *arg)
-{
-   fr_sw_table_t *t = arg;
-
-   printf("Started Virtual Frame Relay switch fabric.\n");
-   frsw_fabric(t);
-   return NULL;
-}
-
 /* Start a virtual Frame-Relay switch */
 int frsw_start(char *filename)
 {
-   fr_sw_table_t *t;
+   frsw_table_t *t;
 
-   if (!(t = frsw_create_table())) {
+   if (!(t = frsw_create_table("default"))) {
       fprintf(stderr,"FRSW: unable to create virtual fabric table.\n");
       return(-1);
    }
@@ -519,11 +635,7 @@ int frsw_start(char *filename)
       fprintf(stderr,"FRSW: unable to parse configuration file.\n");
       return(-1);
    }
-
-   if (pthread_create(&t->thread,NULL,frsw_thread_main,t) != 0) {
-      fprintf(stderr,"FRSW: unable to create thread.\n");
-      return(-1);
-   }
    
+   frsw_release("default");
    return(0);
 }

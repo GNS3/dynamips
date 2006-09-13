@@ -102,7 +102,9 @@ static cbm_array_t *cbm_create(insn_lookup_t *ilt)
    size = CBM_CSIZE(ilt->cbm_size);
 
    /* CBM are simply bit arrays */
-   assert((array = malloc(size)) != NULL);
+   array = malloc(size);
+   assert(array);
+
    memset(array,0,size);
    array->nr_entries = ilt->cbm_size;
    return array;
@@ -114,7 +116,8 @@ static cbm_array_t *cbm_duplicate(cbm_array_t *cbm)
    int size = CBM_CSIZE(cbm->nr_entries);
    cbm_array_t *array;
 
-   assert((array = malloc(size)) != NULL);
+   array = malloc(size);
+   assert(array);
    memcpy(array,cbm,size);
    return array;
 }
@@ -132,10 +135,13 @@ static rfc_eqclass_t *cbm_get_eqclass(rfc_array_t *rfct,cbm_array_t *cbm)
    if ((eqcl = hash_table_lookup(rfct->cbm_hash,cbm)) == NULL)
    {
       /* Duplicate CBM */
-      assert((bmp = cbm_duplicate(cbm)) != NULL);
+      bmp = cbm_duplicate(cbm);
+      assert(bmp);
 
       /* CBM is not already known */
-      assert((eqcl = malloc(sizeof(rfc_eqclass_t))) != NULL);
+      eqcl = malloc(sizeof(rfc_eqclass_t));
+      assert(eqcl);
+
       assert(rfct->nr_eqid < rfct->nr_elements);
 
       /* Get a new equivalent ID */
@@ -144,7 +150,8 @@ static rfc_eqclass_t *cbm_get_eqclass(rfc_array_t *rfct,cbm_array_t *cbm)
       rfct->id2cbm[eqcl->eqID] = bmp;
 
       /* Insert it in hash table */
-      assert(hash_table_insert(rfct->cbm_hash,bmp,eqcl) == 0);
+      if (hash_table_insert(rfct->cbm_hash,bmp,eqcl) == -1)
+         return NULL;
    }
 
    return eqcl;
@@ -158,18 +165,18 @@ static rfc_array_t *rfc_alloc_array(int nr_elements)
 
    /* Compute size of memory chunk needed to store the array */
    total_size = (nr_elements * sizeof(int)) + sizeof(rfc_array_t);
-   assert((array = malloc(total_size)) != NULL);
-
+   array = malloc(total_size);
+   assert(array);
    memset(array,0,total_size);
    array->nr_elements = nr_elements;
    
    /* Initialize hash table for Class Bitmaps */
    array->cbm_hash = hash_table_create(cbm_hash_f,cbm_cmp_f,CBM_HASH_SIZE);
-   assert(array->cbm_hash != NULL);
+   assert(array->cbm_hash);
 
    /* Initialize table for converting ID to CBM */
    array->id2cbm = calloc(nr_elements,sizeof(cbm_array_t *));
-   assert(array->id2cbm != NULL);
+   assert(array->id2cbm);
 
    return(array);
 }
@@ -200,10 +207,12 @@ static rfc_array_t *rfc_phase_0(insn_lookup_t *ilt,ilt_check_cbk_t pcheck)
    int i;
 
    /* allocate a temporary class bitmap */
-   assert((bmp = cbm_create(ilt)) != NULL);
+   bmp = cbm_create(ilt);
+   assert(bmp);
 
    /* Allocate a new RFC array of 16-bits entries */
-   assert((rfct = rfc_alloc_array(RFC_ARRAY_MAXSIZE)) != NULL);
+   rfct = rfc_alloc_array(RFC_ARRAY_MAXSIZE);
+   assert(rfct);
 
    for(i=0;i<RFC_ARRAY_MAXSIZE;i++)
    {
@@ -211,7 +220,8 @@ static rfc_array_t *rfc_phase_0(insn_lookup_t *ilt,ilt_check_cbk_t pcheck)
       rfc_check_insn(ilt,bmp,pcheck,i);
 
       /* get equivalent class for this bitmap */
-      assert((eqcl = cbm_get_eqclass(rfct,bmp)) != NULL);
+      eqcl = cbm_get_eqclass(rfct,bmp);
+      assert(eqcl);
 
       /* fill the RFC table */
       rfct->eqID[i] = eqcl->eqID;
@@ -233,13 +243,15 @@ static rfc_array_t *rfc_phase_j(insn_lookup_t *ilt,rfc_array_t *p0,
    int i,j;
 
    /* allocate a temporary class bitmap */
-   assert((bmp = cbm_create(ilt)) != NULL);
+   bmp = cbm_create(ilt);
+   assert(bmp);
 
    /* compute number of elements */
    nr_elements = p0->nr_eqid * p1->nr_eqid;
 
    /* allocate a new RFC array */
-   assert((rfct = rfc_alloc_array(nr_elements)) != NULL);
+   rfct = rfc_alloc_array(nr_elements);
+   assert(rfct);
    rfct->parent0 = p0;
    rfct->parent1 = p1;
 
@@ -251,7 +263,8 @@ static rfc_array_t *rfc_phase_j(insn_lookup_t *ilt,rfc_array_t *p0,
          cbm_bitwise_and(bmp,p0->id2cbm[i],p1->id2cbm[j]);
 
          /* get equivalent class for this bitmap */
-         assert((eqcl = cbm_get_eqclass(rfct,bmp)) != NULL);
+         eqcl = cbm_get_eqclass(rfct,bmp);
+         assert(eqcl);
 
          /* fill RFC table */
          rfct->eqID[index++] = eqcl->eqID;
@@ -266,7 +279,8 @@ static void ilt_phase_0(insn_lookup_t *ilt,int idx,ilt_check_cbk_t pcheck)
 {
    rfc_array_t *rfct;
 
-   assert((rfct = rfc_phase_0(ilt,pcheck)) != NULL);
+   rfct = rfc_phase_0(ilt,pcheck);
+   assert(rfct);
    ilt->rfct[idx] = rfct;
 }
 
@@ -275,7 +289,8 @@ static void ilt_phase_j(insn_lookup_t *ilt,int p0,int p1,int res)
 {
    rfc_array_t *rfct;
 
-   assert((rfct = rfc_phase_j(ilt,ilt->rfct[p0],ilt->rfct[p1])) != NULL);
+   rfct = rfc_phase_j(ilt,ilt->rfct[p0],ilt->rfct[p1]);
+   assert(rfct);
    ilt->rfct[res] = rfct;
 }
 
@@ -304,7 +319,8 @@ insn_lookup_t *ilt_create(int nr_insn,ilt_get_insn_cbk_t get_insn,
 {
    insn_lookup_t *ilt;
    
-   assert((ilt = malloc(sizeof(*ilt))) != NULL);
+   ilt = malloc(sizeof(*ilt));
+   assert(ilt);
    memset(ilt,0,sizeof(*ilt));
 
    ilt->cbm_size = normalize_size(nr_insn,CBM_SIZE,CBM_SHIFT);

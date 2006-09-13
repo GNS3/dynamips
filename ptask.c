@@ -18,13 +18,15 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include "ptask.h"
 
 static pthread_t ptask_thread;
 static pthread_mutex_t ptask_mutex = PTHREAD_MUTEX_INITIALIZER;
 static ptask_t *ptask_list = NULL;
-static u_int ptask_sleep_time = 10;
+static u_int ptask_sleep_time = 20;
+static ptask_id_t ptask_current_id = 0;
 
 #define PTASK_LOCK() pthread_mutex_lock(&ptask_mutex)
 #define PTASK_UNLOCK() pthread_mutex_unlock(&ptask_mutex)
@@ -46,9 +48,10 @@ static void *ptask_run(void *arg)
 }
 
 /* Add a new task */
-int ptask_add(ptask_callback cbk,void *object,void *arg)
+ptask_id_t ptask_add(ptask_callback cbk,void *object,void *arg)
 {
    ptask_t *task;
+   ptask_id_t id;
 
    if (!(task = malloc(sizeof(*task)))) {
       fprintf(stderr,"ptask_add: unable to add new task.\n");
@@ -61,10 +64,34 @@ int ptask_add(ptask_callback cbk,void *object,void *arg)
    task->arg = arg;
 
    PTASK_LOCK();
+   id = ++ptask_current_id;
+   assert(id != 0);
+   task->id = id;
    task->next = ptask_list;
    ptask_list = task;
    PTASK_UNLOCK();
-   return(0);
+   return(id);
+}
+
+/* Remove a task */
+int ptask_remove(ptask_id_t id)
+{   
+   ptask_t **task,*p;
+   int res = -1;
+
+   PTASK_LOCK();
+
+   for(task=&ptask_list;*task;task=&(*task)->next)
+      if ((*task)->id == id) {
+         p = *task;
+         *task = (*task)->next;
+         free(p);
+         res = 0;
+         break;
+      }
+   
+   PTASK_UNLOCK();
+   return(res);
 }
 
 /* Initialize ptask module */

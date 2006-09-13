@@ -1,70 +1,154 @@
-Help for Cisco 7200 simulator (dynamips-0.2.4)
-==============================================
-Authors: Fabien Devaux, Christophe Fillot, MtvE
+Help for Cisco 7200/3600 simulator (dynamips-0.2.5)
+=====================================================
+Authors of this document: Fabien Devaux, Christophe Fillot, MtvE
 
 Emulated hardware
 *****************
 
-By default, a NPE-200 is emulated. You can choose the NPE type with the
-"-t" option. It is possible to select "npe-100", "npe-150", "npe-175", 
-"npe-200", "npe-225", "npe-300" and "npe-400". The "npe-g1" is not working.
+The emulator currently supports Cisco 7200 and Cisco 3600 series.
+By default, a Cisco 7206VXR with NPE-200 (256 Mb of DRAM) is emulated.
 
-Please note that you must use the C7200-IO-FE PA driver as IO card if you
-want a FastEthernet interface in slot 0. For other slots, you must use
-the PA-FE-TX driver.
+To emulate a Cisco 3600, use the "-P 3600" command line option.
+
+For the 7200, you can change the NPE type with the "-t" option. 
+It is possible to select "npe-100", "npe-150", "npe-175", "npe-200", 
+"npe-225", "npe-300" and "npe-400". The "npe-g1" is not working.
+
+For the 3600, a 3640 with 128 Mb is emulated by default. You can change this 
+with the "-t" option and by specifying "3620" or "3660". 
+Don't forget to set the chassis type depending on your IOS image, 
+a c3660 image will not run on c3640 hardware and vice-versa.
+
+Remark: PCMCIA card emulation is not supported yet with Cisco 3600.
 
 
 Command Line Options overview
 *****************************
 
--r <ram_size>   : Set the virtual RAM size (default is 256 Mb)
--o <rom_size>   : Set the virtual ROM size (default is 4 Mb)
--n <nvram_size> : Set the NVRAM size (default is 128 Kb)
--l <log_file>   : Set logging file (default is pred_log0.txt)
--C <cfg_file>   : Import an IOS configuration file into NVRAM
--X              : Do not use a file to simulate RAM (faster)
--R <rom_file>   : Load an alternate ROM (default is embedded)
--S <sym_file>   : Load a symbol file
--c <conf_reg>   : Set the configuration register (default is 0x2102)
--m <mac_addr>   : Set the MAC address of the chassis (IOS chooses default)
--k <clock_div>  : Set the clock divisor (default is 2)
--T <port>       : Console is on TCP <port> (default is on the terminal)
--A <port>       : AUX is on TCP <port> (default is no AUX port)
--i              : Instruction block trace, very slow
--j              : Disable the JIT compiler, very slow
--t <npe_type>   : Select NPE type
--M <midplane>   : Select Midplane ("std" or "vxr")
--p <pa_desc>    : Define a Port Adapter
--s <pa_nio>     : Bind a Network IO interface to a Port Adapter
--a <cfg_file>   : Virtual ATM switch configuration file
--f <cfg_file>   : Virtual Frame relay switch configuration file
--b <cfg_file>   : Virtual bridge configuration file
--e              : Show network device list of the host machine
+  -l <log_file>      : Set logging file (default is dynamips_log.txt)
+  -j                 : Disable the JIT compiler, very slow
+  --exec-area <size> : Set the exec area size (default: 64 Mb)
+  --idle-pc <pc>     : Set the idle PC (default: disabled)
+  --timer-itv <val>  : Timer IRQ interval check (default: 1000)
+
+  -i <instance>      : Set instance ID
+  -r <ram_size>      : Set the virtual RAM size
+  -o <rom_size>      : Set the virtual ROM size
+  -n <nvram_size>    : Set the NVRAM size
+  -c <conf_reg>      : Set the configuration register
+  -m <mac_addr>      : Set the MAC address of the chassis
+                       (default: automatically generated)
+  -C <cfg_file>      : Import an IOS configuration file into NVRAM
+  -X                 : Do not use a file to simulate RAM (faster)
+  -R <rom_file>      : Load an alternate ROM (default: embedded)
+  -k <clock_div>     : Set the clock divisor (default: 4)
+
+  -T <port>          : Console is on TCP <port>
+  -U <si_desc>       : Console in on serial interface <si_desc>
+                       (default is on the terminal)
+
+  -A <port>          : AUX is on TCP <port>
+  -B <si_desc>       : AUX is on serial interface <si_desc>
+                       (default is no AUX port)
+
+  --disk0 <size>     : Set PCMCIA ATA disk0: size
+  --disk1 <size>     : Set PCMCIA ATA disk1: size
+
+  -a <cfg_file>      : Virtual ATM switch configuration file
+  -f <cfg_file>      : Virtual Frame-Relay switch configuration file
+  -E <cfg_file>      : Virtual Ethernet switch configuration file
+  -b <cfg_file>      : Virtual bridge configuration file
+  -e                 : Show network device list of the host machine
+
+Options specific to the Cisco 7200 series:
+
+  -t <npe_type>      : Select NPE type (default: "npe-200")
+  -M <midplane>      : Select Midplane ("std" or "vxr")
+  -p <pa_desc>       : Define a Port Adapter
+  -s <pa_nio>        : Bind a Network IO interface to a Port Adapter
+
+Options specific to the Cisco 3600 series ("dynamips -P 3600 --help"):
+
+  -t <chassis_type>  : Select Chassis type (default: "3640")
+  -p <nm_desc>       : Define a Network Module
+  -s <nm_nio>        : Bind a Network IO interface to a Network Module
 
 
 Command Line Options details
 ****************************
 
-<clock_div> :
+-k <clock_div> :
 
    Specify the clock divider (integer) based on the host clock.
    Alter the value to match the CISCO clock with the real time.
    The command "show clock" at the IOS' CLI will help you set this value.
 
-<pa_desc> :
+--idle-pc <pc> :
 
-   Format: slot:pa_driver:netio_type[:netio_parameters]
+   The "idle PC" feature allows you to run a router instance without having
+   a 100% CPU load. This implies that you can run a larger number of instances
+   per real machine.
 
-   slot       : the number of the physical slot (starts from 0)
+   To determine the "idle PC", start normally the emulator with your Cisco IOS 
+   image, and a totally IOS empty configuration (although not mandatory, this
+   will give better results). When the image is fully booted, wait for the
+   "Press RETURN to get started!" message prompt, but do not press Enter key.
+   Wait about 5 seconds, then press "Ctrl-] + i". Some statistics will be 
+   gathered during 10 seconds. At the end, the emulator will display a list of 
+   possible values to pass to the "--idle-pc" option. You may have to try some 
+   values before finding the good one. To check if the idle PC value is good, 
+   just boot the Cisco IOS image, and check your CPU load when the console 
+   prompt is available. If it is low, you have found a good value, keep it 
+   preciously.
 
-   pa_driver  : the name of a port adapter driver in:
+   Important remarks:
+   ==================
+
+      * An "idle PC" value is *specific* to a Cisco IOS image. You cannot
+        boot a different IOS image without proceeding as described above.
+
+      * Do not run the process while having the "autoconfiguration" prompt.
+
+
+--exec_area <size> :
+
+   The exec area is a pool of host memory used to store pages translated by
+   the JIT (they contain the native code corresponding to MIPS code pages).
+
+
+
+Cisco 7200 Port Adapter Description "<pa_desc>":
+------------------------------------------------
+   Format: slot:pa_driver
+
+   slot: the number of the physical slot (starts from 0)
+
+   pa_driver: the name of a Port Adapter driver in:
         - C7200-IO-FE  (FastEthernet, slot 0 only)
-        - PA-FE-TX     (FastEthernet, slots 1 to 6) 
+        - PA-FE-TX     (FastEthernet, slots 1 to 6)
+        - PA-4E        (Ethernet, 4 ports)
+        - PA-8E        (Ethernet, 8 ports)
         - PA-4T+       (Serial, 4 ports)
         - PA-8T        (Serial, 8 ports)
         - PA-A1        (ATM)
 
-<pa_nio> :
+
+Cisco 3600 Network Module Description "<nm_desc>":
+--------------------------------------------------
+   Format: slot:nm_driver
+
+   slot: the number of the physical slot (starts from 0)
+
+   nm_driver: the name of a Network Module driver in:
+        - NM-1E        (Ethernet, 1 port)
+        - NM-4E        (Ethernet, 4 ports)
+        - NM-1FE-TX    (FastEthernet, 1 port)
+        - NM-4T        (Serial, 4 ports)
+        - Leopard-2FE  (Cisco 3660 FastEthernet in slot 0, automatically used)
+
+
+NIO binding to Port Adapter "<pa_nio>" and Network Modules "<nm_nio>":
+----------------------------------------------------------------------
 
    Format: slot:port:netio_type[:netio_parameters]
 
@@ -78,6 +162,11 @@ Command Line Options details
            <local_sock> is created and represents the local NIC.
            <remote_sock> is the file used by the other interface.
            (ex. "/tmp/local:/tmp/remote")
+
+        vde:<control_sock>:<local_sock>
+           For use with UML (User-Mode-Linux) or VDE switches.
+           VDE stands for "Virtual Distributed Ethernet".
+           Please refer to : http://sourceforge.net/projects/vde/
 
         tap:<tap_name>
            Use a virtual ethernet device for communication.
@@ -116,11 +205,33 @@ Command Line Options details
            Dummy netio (used for testing/debugging), no parameters needed.
 
 
+
+VTTY binding to real serial port device "<si_desc>":
+----------------------------------------------------
+
+   Format: <device>{:baudrate{:databits{:parity{:stopbits{:hwflow}}}}}}
+
+   device: character device name, e.g. /dev/ttyS0
+   baudrate: baudrate
+   databits: number of databits.
+   parity: data parity: N=none, O=odd, E=even, 
+   stopbits: number of stop bits
+   hwflow: hardware flow control (0=disable, 1=enable)
+
+   Note that the device field is mandatory, however other fields are optional. 
+   (dynamips will default to 9600, 8, N, 1, no hardware flow control)
+
+   Note that access to the escape commands (described below) through a serial
+   port are deliberately prevented, as the escape commands interfere with
+   serial encapsulation protocols.
+
+
 Escape commands
 ***************
 
 You can press ^] (Ctrl + ]) at any time, followed by one of these characters:
 
+o : Show the VM object list
 d : Show the device list
 r : Dump MIPS CPU registers
 t : Dump MIPS TLB entries
@@ -130,6 +241,7 @@ u : Resume CPU emulation
 q : Quit the emulator
 b : Dump the instruction block tree
 h : JIT hash table statistics
+l : MTS64 cache statistics
 c : Write IOS configuration to disk (ios_cfg.txt)
 j : Non-JIT mode statistics
 x : Experimentations (can crash the box!)
@@ -146,25 +258,66 @@ Virtual Bridge
 The virtual bridge is used to emulate a shared network between emulator
 instances.
 
-Any emulator instance can ast as a virtual bridge.
+Any emulator instance can act as a virtual bridge.
 
 The configuration file (specified by the "-b" option) contains a list of
-NetIO descriptors, which the following syntax: netio_type[:netio_parameters]
+NetIO descriptors, with the following syntax:
+ 
+   interface_name:netio_type[:netio_parameters]
 
 Example:
 
 # Connection to instance "I0"
-udp:10000:127.0.0.1:10001
+I0:udp:10000:127.0.0.1:10001
 
 # Connection to instance "I1"
-udp:10002:127.0.0.1:10003
+I1:udp:10002:127.0.0.1:10003
 
 # Connection to instance "I2"
-udp:10004:127.0.0.1:10005
+I2:udp:10004:127.0.0.1:10005
 
-The "I0" would be launched with the following parameters:
+The "I0" instance would be launched with the following parameters:
 
-   dynamips ios.bin -p 1:PA-FE-TX:udp:10001:127.0.0.1:10000
+   dynamips ios.bin -p 1:PA-FE-TX -s 1:0:udp:10001:127.0.0.1:10000
+
+
+Virtual Ethernet switch
+***********************
+
+The virtual ethernet switch is used to emulate an Ethernet network between
+emulator instances. This switch supports access and trunk ports (802.1Q).
+ISL will be available in a future release.
+
+Any emulator instance can act as a virtual ethernet switch.
+
+The configuration file (specified by the "-E" option) contains a list of
+NetIO descriptors (representing interfaces) and a list of interface properties
+(access/trunk port, VLAN info...)
+
+The interface definition is similar to Port Adapters:
+
+   IF:interface_name:netio_type[:netio_parameters]
+
+1) Configuring an Access Port
+
+syntax: ACCESS:interface_name:vlan_id
+
+2) Configuration a 802.1Q Trunk Port
+
+syntax: DOT1Q:interface_name:native_vlan
+
+The native VLAN is not tagged. On Cisco devices, by default the native VLAN
+is VLAN 1.
+
+Example of configuration file:
+
+IF:E0:udp:10000:127.0.0.1:10001
+IF:E1:udp:10002:127.0.0.1:10003
+IF:E2:gen_eth:eth0
+
+DOT1Q:E0:1
+ACCESS:E1:4
+DOT1Q:E2:1
 
 
 Virtual ATM switch
@@ -227,7 +380,9 @@ VC:A1:2:200:A0:1:100
 
 Invoking dynamips:
 
-./dynamips -p 1:PA-A1:udp:10001:127.0.0.1:10003 -p 2:PA-A1:udp:10002:127.0.0.1:10004 -a atm.cfg IOS.BIN
+./dynamips -p 1:PA-A1 -s 1:0:udp:10001:127.0.0.1:10003 \
+           -p 2:PA-A1 -s 2:0:udp:10002:127.0.0.1:10004 \
+           -a atm.cfg IOS.BIN
 
 (note input ports of IOS interfaces are output ports of ATM switch 
 interfaces, and vice versa).

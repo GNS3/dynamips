@@ -11,128 +11,91 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <getopt.h>
 
 #include ARCH_INC_FILE
 
 #include "rbtree.h"
-#include "cp0.h"
-#include "memory.h"
-#include "cpu.h"
-#include "device.h"
+#include "dynamips.h"
+#include "mips64.h"
 #include "mips64_exec.h"
 #include "dev_c7200.h"
-#include "dev_c7200_bay.h"
+#include "dev_c3600.h"
 #include "dev_vtty.h"
 #include "ptask.h"
-#include "atm.h"
-#include "frame_relay.h"
-#include "crc.h"
+#include "registry.h"
+#include "hypervisor.h"
 #include "net_io.h"
 #include "net_io_bridge.h"
-
+#include "net_io_filter.h"
+#include "crc.h"
+#include "atm.h"
+#include "frame_relay.h"
+#include "eth_switch.h"
 #ifdef GEN_ETH
 #include "gen_eth.h"
 #endif
-
 #ifdef PROFILE
 #include "profiler.h"
 #endif
 
 /* Default name for logfile */
-#define LOGFILE_DEFAULT_NAME  "pred_log0.txt"
+#define LOGFILE_DEFAULT_NAME  "dynamips_log.txt"
 
 /* Software version */
-static const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
+const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
+
+/* Hypervisor */
+int hypervisor_mode = 0;
+int hypervisor_tcp_port = 0;
 
 /* Log file */
+char *log_file_name = NULL;
 FILE *log_file = NULL;
-
-/* Instruction block trace (produces tons of logs!) */
-int insn_itrace = 0;
-
-/* JIT use */
-int jit_use = JIT_SUPPORT;
 
 /* VM flags */
 volatile int vm_save_state = 0;
-volatile int vm_running = 0;
-
-/* Cisco 7200 router instance */
-c7200_t c7200_router;
-
-/* Clock divisor (see cp0.c) */
-u_int clock_divisor = 2;
-
-/* Symbols */
-rbtree_tree *sym_tree = NULL;
-
-/* Symbol lookup */
-struct symbol *sym_lookup(m_uint64_t addr)
-{
-   return(rbtree_lookup(sym_tree,&addr));
-}
-
-/* Insert a new symbol */
-struct symbol *sym_insert(char *name,m_uint64_t addr)
-{
-   struct symbol *sym;
-   size_t len;
-
-   len = strlen(name);
-
-   if (!(sym = malloc(len + sizeof(*sym))))
-      return NULL;
-   
-   memcpy(sym->name,name,len+1);
-   sym->addr = addr;
-
-   if (rbtree_insert(sym_tree,sym,sym) == -1) {
-      free(sym);
-      return NULL;
-   }
-
-   return sym;
-}
-
-/* Symbol comparison function */
-static int sym_compare(m_uint64_t *a1,struct symbol *sym)
-{
-   if (*a1 > sym->addr)
-      return(1);
-
-   if (*a1 < sym->addr)
-      return(-1);
-
-   return(0);
-}
-
-/* Create the symbol tree */
-int sym_create_tree(void)
-{
-   sym_tree = rbtree_create((tree_fcompare)sym_compare,NULL);
-   return(sym_tree ? 0 : -1);
-}
 
 /* Generic signal handler */
 void signal_gen_handler(int sig)
 {
    switch(sig) {
       case SIGHUP:
-         insn_itrace = 1 - insn_itrace;
-         printf("Instruction block trace %sabled\n",
-                insn_itrace ? "en" : "dis");
+         /* For future use */
          break;
 
       case SIGQUIT:
          /* save VM context */
          vm_save_state = TRUE;
-         vm_running = FALSE;
+         break;
+
+      case SIGINT:
+         /* CTRL+C has been pressed */
+         if (hypervisor_mode)
+            hypervisor_stopsig();
+         else {
+            /* In theory, this shouldn't happen thanks to VTTY settings */
+            vm_instance_t *vm;
+
+            if ((vm = vm_acquire("default")) != NULL) {
+               /* Only forward ctrl-c if user has requested local terminal */
+               if (vm->vtty_con_type == VTTY_TYPE_TERM) {
+                  vtty_store_ctrlc(vm->vtty_con);
+               } else {
+                  vm_stop(vm);
+               }
+               vm_release(vm);
+            } else {
+               fprintf(stderr,"Error: Cannot acquire instance handle.\n");
+            }
+         }
          break;
 
       default:
@@ -150,373 +113,533 @@ static void setup_signals(void)
    act.sa_flags = SA_RESTART;
    sigaction(SIGHUP,&act,NULL);
    sigaction(SIGQUIT,&act,NULL);
+   sigaction(SIGINT,&act,NULL);
 }
 
-/* Load a raw image into the simulated memory */
-int load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
-{   
-   struct stat file_info;
-   size_t len,clen;
-   void *haddr;
-   FILE *bfd;
-
-   if (!(bfd = fopen(filename,"r"))) {
-      perror("fopen");
-      return(-1);
-   }
-
-   if (fstat(fileno(bfd),&file_info) == -1) {
-      perror("stat");
-      return(-1);
-   }
-
-   len = file_info.st_size;
-
-   printf("Loading RAW file '%s' at virtual address 0x%llx (size=%lu)\n",
-          filename,vaddr,(u_long)len);
-
-   while(len > 0)
-   {
-      haddr = cpu->mem_op_lookup(cpu,vaddr);
-   
-      if (!haddr) {
-         fprintf(stderr,"load_raw_image: invalid load address 0x%llx\n",
-                 vaddr);
-         return(-1);
-      }
-
-      if (len > MIPS_MIN_PAGE_SIZE)
-         clen = MIPS_MIN_PAGE_SIZE;
-      else
-         clen = len;
-
-      clen = fread((u_char *)haddr,clen,1,bfd);
-
-      if (clen != 1)
-         break;
-      
-      vaddr += MIPS_MIN_PAGE_SIZE;
-      len -= clen;
-   }
-   
-   fclose(bfd);
-   return(0);
-}
-
-/* Load an ELF image into the simulated memory */
-int load_elf_image(cpu_mips_t *cpu,char *filename,m_uint32_t *entry_point)
+/* Create general log file */
+static void create_log_file(void)
 {
-   m_uint64_t vaddr;
-   void *haddr;
-   Elf32_Ehdr *ehdr;
-   Elf32_Phdr *phdr;
-   Elf *img_elf;
-   size_t len,clen;
-   int i,fd;
-   FILE *bfd;
-   
-   if ((fd = open(filename,O_RDONLY)) == -1)
-      return(-1);
-
-   if (elf_version(EV_CURRENT) == EV_NONE) {
-      fprintf(stderr,"load_elf_image: library out of date\n");
-      return(-1);
-   }
-
-   if (!(img_elf = elf_begin(fd,ELF_C_READ,NULL))) {
-      fprintf(stderr,"load_elf_image: elf_begin: %s\n",
-              elf_errmsg(elf_errno()));
-      return(-1);
-   }
-
-   if (!(phdr = elf32_getphdr(img_elf))) {
-      fprintf(stderr,"load_elf_image: elf32_getphdr: %s\n",
-              elf_errmsg(elf_errno()));
-      return(-1);
-   }
-
-   ehdr = elf32_getehdr(img_elf);
-   phdr = elf32_getphdr(img_elf);
-
-   printf("Loading ELF file '%s'...\n",filename);
-   bfd = fdopen(fd,"rb");
-
-   if (!bfd) {
-      perror("load_elf_image: fdopen");
-      return(-1);
-   }
-
-   for(i=0;i<ehdr->e_phnum;i++,phdr++)
-   {
-      fseek(bfd,phdr->p_offset,SEEK_SET);
-
-      vaddr = (m_uint64_t)phdr->p_vaddr;
-      len = phdr->p_filesz;
-
-      printf("   * Adding section at virtual address 0x%llx\n",vaddr);
-
-      while(len > 0)
-      {
-         haddr = cpu->mem_op_lookup(cpu,vaddr);
-   
-         if (!haddr) {
-            fprintf(stderr,"load_elf_image: invalid load address 0x%llx\n",
-                    vaddr);
-            return(-1);
-         }
-
-         if (len > MIPS_MIN_PAGE_SIZE)
-            clen = MIPS_MIN_PAGE_SIZE;
-         else
-            clen = len;
-
-         clen = fread((u_char *)haddr,clen,1,bfd);
-
-         if (clen != 1)
-            break;
-
-         vaddr += MIPS_MIN_PAGE_SIZE;
-         len -= clen;
+   /* Set the default value of the log file name */
+   if (!log_file_name) {
+      if (!(log_file_name = strdup(LOGFILE_DEFAULT_NAME))) {
+         fprintf(stderr,"Unable to set log file name.\n");
+         exit(EXIT_FAILURE);
       }
    }
 
-   printf("ELF entry point: 0x%x\n",ehdr->e_entry);
-
-   if (entry_point)
-      *entry_point = ehdr->e_entry;
-
-   return(0);
+   if (!(log_file = fopen(log_file_name,"w"))) {
+      fprintf(stderr,"Unable to create log file (%s).\n",strerror(errno));
+      exit(EXIT_FAILURE);
+   }
 }
 
-/* Load a symbol file */
-int load_sym_file(char *filename)
+/* Close general log file */
+static void close_log_file(void)
 {
-   char buffer[4096],func_name[128];
-   m_uint64_t addr;
-   char sym_type;
-   FILE *fd;
+   if (log_file) fclose(log_file);
+   free(log_file_name);
 
-   if ((!sym_tree) && (sym_create_tree() == -1)) {
-      fprintf(stderr,"Unable to create symbol tree.\n");
-      return(-1);
-   }
-
-   if (!(fd = fopen(filename,"r"))) {
-      perror("load_sym_file: fopen");
-      return(-1);
-   }
-
-   while(!feof(fd)) {
-      fgets(buffer,sizeof(buffer),fd);
-
-      if (sscanf(buffer,"%llx %c %s",&addr,&sym_type,func_name) == 3) {
-         sym_insert(func_name,addr);
-      }
-   }
-
-   fclose(fd);
-   return(0);
+   log_file = NULL;
+   log_file_name = NULL;
 }
 
 /* Display the command line use */
-static void show_usage(int argc,char *argv[])
+static void show_usage(int argc,char *argv[],int platform)
 {
+   u_int def_ram_size,def_rom_size,def_nvram_size;
+   u_int def_conf_reg,def_clock_div;
+   u_int def_disk0_size,def_disk1_size;
+   u_int def_nm_iomem_size = 0;
+
+   switch(platform) {
+      case VM_TYPE_C7200:
+         def_ram_size   = C7200_DEFAULT_RAM_SIZE;
+         def_rom_size   = C7200_DEFAULT_ROM_SIZE;
+         def_nvram_size = C7200_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C7200_DEFAULT_CONF_REG;
+         def_clock_div  = C7200_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C7200_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C7200_DEFAULT_DISK1_SIZE;
+         break;
+      case VM_TYPE_C3600:
+         def_ram_size   = C3600_DEFAULT_RAM_SIZE;
+         def_rom_size   = C3600_DEFAULT_ROM_SIZE;
+         def_nvram_size = C3600_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C3600_DEFAULT_CONF_REG;
+         def_clock_div  = C3600_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C3600_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C3600_DEFAULT_DISK1_SIZE;
+         def_nm_iomem_size = C3600_DEFAULT_IOMEM_SIZE;
+         break;
+      default:
+         fprintf(stderr,"show_usage: invalid platform.\n");
+         return;
+   }
+
    printf("Usage: %s [options] <ios_image>\n\n",argv[0]);
    
    printf("Available options:\n"
-          "  -r <ram_size>   : Set the virtual RAM size (default is %d Mb)\n"
-          "  -o <rom_size>   : Set the virtual ROM size (default is %d Mb)\n"
-          "  -n <nvram_size> : Set the NVRAM size (default is %d Kb)\n"
-          "  -l <log_file>   : Set logging file (default is %s)\n"
-          "  -C <cfg_file>   : Import an IOS configuration file into NVRAM\n"
-          "  -X              : Do not use a file to simulate RAM (faster)\n"
-          "  -R <rom_file>   : Load an alternate ROM (default is embedded)\n"
-          "  -S <sym_file>   : Load a symbol file\n"
-          "  -c <conf_reg>   : Set the configuration register "
-          "(default is 0x%04x)\n"
-          "  -m <mac_addr>   : Set the MAC address of the chassis "
-          "(IOS chooses default)\n"
-          "  -k <clock_div>  : Set the clock divisor (default is %d)\n"
-          "  -T <port>       : Console is on TCP <port> "
-          "(default is on the terminal)\n"
-          "  -A <port>       : AUX is on TCP <port> (default is no AUX port)\n"
-          "  -i              : Instruction block trace, very slow\n"
-          "  -j              : Disable the JIT compiler, very slow\n"
-          "  -t <npe_type>   : Select NPE type\n"
-          "  -M <midplane>   : Select Midplane (\"std\" or \"vxr\")\n"
-          "  -p <pa_desc>    : Define a Port Adapter\n"
-          "  -s <pa_nio>     : Bind a Network IO interface to a Port Adapter\n"
-          "  -a <cfg_file>   : Virtual ATM switch configuration file\n"
-          "  -f <cfg_file>   : Virtual Frame relay switch configuration file\n"
-          "  -b <cfg_file>   : Virtual bridge configuration file\n"
-          "  -e              : Show network device list of the host machine\n"
+          "  -P <platform>      : Platform to emulate (7200 or 3600) "
+          "(default: 7200)\n\n"
+          "  -l <log_file>      : Set logging file (default is %s)\n"
+          "  -j                 : Disable the JIT compiler, very slow\n"
+          "  --exec-area <size> : Set the exec area size (default: %d Mb)\n"
+          "  --idle-pc <pc>     : Set the idle PC (default: disabled)\n"
+          "  --timer-itv <val>  : Timer IRQ interval check (default: %u)\n"
+          "\n"
+          "  -i <instance>      : Set instance ID\n"
+          "  -r <ram_size>      : Set the virtual RAM size (default: %u Mb)\n"
+          "  -o <rom_size>      : Set the virtual ROM size (default: %u Mb)\n"
+          "  -n <nvram_size>    : Set the NVRAM size (default: %d Kb)\n"
+          "  -c <conf_reg>      : Set the configuration register "
+          "(default: 0x%04x)\n"
+          "  -m <mac_addr>      : Set the MAC address of the chassis\n"
+          "                       (default: automatically generated)\n"
+          "  -C <cfg_file>      : Import an IOS configuration file "
+          "into NVRAM\n"
+          "  -X                 : Do not use a file to simulate RAM (faster)\n"
+          "  -R <rom_file>      : Load an alternate ROM (default: embedded)\n"
+          "  -k <clock_div>     : Set the clock divisor (default: %d)\n"
+          "\n"
+          "  -T <port>          : Console is on TCP <port>\n"
+          "  -U <si_desc>       : Console in on serial interface <si_desc>\n"
+          "                       (default is on the terminal)\n"
+          "\n"
+          "  -A <port>          : AUX is on TCP <port>\n"
+          "  -B <si_desc>       : AUX is on serial interface <si_desc>\n"
+          "                       (default is no AUX port)\n"
+          "\n"
+          "  --disk0 <size>     : Set PCMCIA ATA disk0: size "
+          "(default: %u Mb)\n"
+          "  --disk1 <size>     : Set PCMCIA ATA disk1: size "
+          "(default: %u Mb)\n"
           "\n",
-          C7200_DEFAULT_RAM_SIZE,C7200_DEFAULT_ROM_SIZE,
-          C7200_DEFAULT_NVRAM_SIZE,LOGFILE_DEFAULT_NAME,
-          C7200_DEFAULT_CONF_REG,clock_divisor);
+          LOGFILE_DEFAULT_NAME,MIPS_EXEC_AREA_SIZE,VM_TIMER_IRQ_CHECK_ITV,
+          def_ram_size,def_rom_size,def_nvram_size,def_conf_reg,
+          def_clock_div,def_disk0_size,def_disk1_size);
 
-   printf("<pa_desc> format:\n"
-          "   \"slot:pa_driver\"\n"
+   switch(platform) {
+      case VM_TYPE_C7200:
+         printf("  -t <npe_type>      : Select NPE type (default: \"%s\")\n"
+                "  -M <midplane>      : Select Midplane (\"std\" or \"vxr\")\n"
+                "  -p <pa_desc>       : Define a Port Adapter\n"
+                "  -s <pa_nio>        : Bind a Network IO interface to a "
+                "Port Adapter\n",
+                C7200_DEFAULT_NPE_TYPE);
+         break;
+
+      case VM_TYPE_C3600:
+         printf("  -t <chassis_type>  : Select Chassis type "
+                "(default: \"%s\")\n"
+                "  --iomem-size <val> : IO memory (in percents, default: %u)\n"
+                "  -p <nm_desc>       : Define a Network Module\n"
+                "  -s <nm_nio>        : Bind a Network IO interface to a "
+                "Network Module\n",
+                C3600_DEFAULT_CHASSIS,def_nm_iomem_size);
+         break;
+   }
+
+   printf("\n"
+#if DEBUG_SYM_TREE
+          "  -S <sym_file>      : Load a symbol file\n"
+#endif
+          "  -a <cfg_file>      : Virtual ATM switch configuration file\n"
+          "  -f <cfg_file>      : Virtual Frame-Relay switch configuration "
+          "file\n"
+          "  -E <cfg_file>      : Virtual Ethernet switch configuration file\n"
+          "  -b <cfg_file>      : Virtual bridge configuration file\n"
+          "  -e                 : Show network device list of the "
+          "host machine\n"
           "\n");
 
-   printf("<pa_nio> format:\n"
-          "   \"slot:port:netio_type{:netio_parameters}\"\n"
+   printf("<si_desc> format:\n"
+          "   \"device{:baudrate{:databits{:parity{:stopbits{:hwflow}}}}}}\"\n"
           "\n");
+
+   switch(platform) {
+      case VM_TYPE_C7200:
+         printf("<pa_desc> format:\n"
+                "   \"slot:pa_driver\"\n"
+                "\n");
+
+         printf("<pa_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible NPE drivers */
+         c7200_npe_show_drivers();
+
+         /* Show the possible PA drivers */
+         c7200_pa_show_drivers();
+         break;
+
+      case VM_TYPE_C3600:
+         printf("<nm_desc> format:\n"
+                "   \"slot:nm_driver\"\n"
+                "\n");
+
+         printf("<nm_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible chassis types for C3600 platform */
+         c3600_chassis_show_drivers();
+
+         /* Show the possible PA drivers */
+         c3600_nm_show_drivers();
+         break;
+   }
    
-   /* Show the possible NPE drivers */
-   c7200_npe_show_drivers();
-
-   /* Show the possible PA drivers */
-   c7200_pa_show_drivers();
-
    /* Show the possible NETIO types */
    netio_show_types();
 }
 
-int main(int argc,char *argv[])
+/* Find an option in the command line */
+static char *cli_find_option(int argc,char *argv[],char *opt)
 {
-   char *options_list = "r:o:n:c:m:l:C:ijt:p:s:k:T:A:a:f:b:S:R:M:eX";
-   char *log_file_name = NULL;
-   char *ios_cfg_file = NULL;
-   char *mac_addr = NULL;
-   int option;
-   cpu_mips_t *cpu0;
-   m_uint32_t rom_entry_point;
+   int i;
 
-#ifdef PROFILE
-   atexit(profiler_savestat);
-#endif
+   for(i=1;i<argc;i++) {
+      if (!strncmp(argv[i],opt,2)) {
+         if (argv[i][2] != 0)
+            return(&argv[i][2]);
+         else {
+            if (argv[i+1] != NULL)
+               return(argv[i+1]);
+            else {
+               fprintf(stderr,"Error: option '%s': no argument specified.\n",
+                       opt);
+               exit(EXIT_FAILURE);
+            }
+         }
+      }
+   }
 
-   printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
-   printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
+   return NULL;
+}
 
-   /* Initialize router defaults */
-   c7200_init_defaults(&c7200_router);
+/* Determine the platform (Cisco 3600, 7200). Default is Cisco 7200 */
+static int cli_get_platform_type(int argc,char *argv[])
+{
+   int vm_type = VM_TYPE_C7200;
+   char *str;
 
-   /* Initialize CRC functions */
-   crc_init();
+   if ((str = cli_find_option(argc,argv,"-P"))) {
+      if (!strcmp(str,"3600"))
+         vm_type = VM_TYPE_C3600;
+      else if (!strcmp(str,"7200"))
+         vm_type = VM_TYPE_C7200;
+      else
+         fprintf(stderr,"Invalid platform type '%s'\n",str);
+   }
 
-   /* Initialize ATM code */
-   atm_init();
+   return(vm_type);
+}
 
-   /* Command line arguments : early try */
+/* Command Line long options */
+#define OPT_DISK0_SIZE  0x100
+#define OPT_DISK1_SIZE  0x101
+#define OPT_EXEC_AREA   0x102
+#define OPT_IDLE_PC     0x103
+#define OPT_TIMER_ITV   0x104
+#define OPT_VM_DEBUG    0x105
+#define OPT_IOMEM_SIZE  0x106
+
+static struct option cmd_line_lopts[] = {
+   { "disk0"      , 1, NULL, OPT_DISK0_SIZE },
+   { "disk1"      , 1, NULL, OPT_DISK1_SIZE },
+   { "exec-area"  , 1, NULL, OPT_EXEC_AREA },
+   { "idle-pc"    , 1, NULL, OPT_IDLE_PC },
+   { "timer-itv"  , 1, NULL, OPT_TIMER_ITV },
+   { "vm-debug"   , 1, NULL, OPT_VM_DEBUG },
+   { "iomem-size" , 1, NULL, OPT_IOMEM_SIZE },
+   { NULL         , 0, NULL, 0 },
+};
+
+/* Parse specific options for the Cisco 7200 platform */
+static int cli_parse_c7200_options(vm_instance_t *vm,int option)
+{
+   c7200_t *router;
+
+   router = VM_C7200(vm);
+
+   switch(option) {
+      /* NPE type */
+      case 't':
+         c7200_npe_set_type(router,optarg);
+         break;
+
+      /* Midplane type */
+      case 'M':
+         c7200_midplane_set_type(router,optarg);
+         break;
+
+      /* Set the base MAC address */
+      case 'm':
+         if (!c7200_midplane_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+
+      /* PA settings */
+      case 'p':
+         return(c7200_cmd_pa_create(router,optarg));
+
+      /* PA NIO settings */
+      case 's':
+         return(c7200_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
+/* Parse specific options for the Cisco 3600 platform */
+static int cli_parse_c3600_options(vm_instance_t *vm,int option)
+{
+   c3600_t *router;
+
+   router = VM_C3600(vm);
+
+   switch(option) {
+      /* chassis type */
+      case 't':
+         c3600_chassis_set_type(router,optarg);
+         break;
+
+      /* IO memory reserved for NMs (in percents!) */
+      case OPT_IOMEM_SIZE:
+         router->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* NM settings */
+      case 'p':
+         return(c3600_cmd_nm_create(router,optarg));
+
+      /* NM NIO settings */
+      case 's':
+         return(c3600_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
+/* Create a router instance */
+static vm_instance_t *cli_create_instance(char *name,int platform_type,
+                                          int instance_id)
+{
+   c7200_t *c7200;
+   c3600_t *c3600;
+
+   switch(platform_type) {
+      case VM_TYPE_C7200:
+         if (!(c7200 = c7200_create_instance(name,instance_id))) {
+            fprintf(stderr,"C7200: unable to create instance!\n");
+            return NULL;
+         }
+         return(c7200->vm);
+
+      case VM_TYPE_C3600:
+         if (!(c3600 = c3600_create_instance(name,instance_id))) {
+            fprintf(stderr,"C3600: unable to create instance!\n");
+            return NULL;
+         }
+         return(c3600->vm);
+
+      default:
+         fprintf(stderr,"Unknown platform type '%d'!\n",platform_type);
+         return NULL;
+   }
+}
+
+/* Parse the command line */
+static int parse_std_cmd_line(int argc,char *argv[],int *platform)
+{
+   char *options_list = 
+      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:";
+   vm_instance_t *vm;
+   int instance_id;
+   int res,option;
+   char *str;
+
+   /* Get the instance ID */
+   instance_id = 0;
+
+   /* Use the old VM file naming type */
+   vm_file_naming_type = 1;
+
+   if ((str = cli_find_option(argc,argv,"-i"))) {
+      instance_id = atoi(str);
+      printf("Instance ID set to %d.\n",instance_id);
+   }
+
+   if ((str = cli_find_option(argc,argv,"-N")))
+      vm_file_naming_type = atoi(str);
+
+   /* Get the platform type */
+   *platform = cli_get_platform_type(argc,argv);
+
+   /* Create the default instance */
+   if (!(vm = cli_create_instance("default",*platform,instance_id)))
+      exit(EXIT_FAILURE);
+
    opterr = 0;
 
-   while((option = getopt(argc,argv,options_list)) != -1) {
+   while((option = getopt_long(argc,argv,options_list,
+                               cmd_line_lopts,NULL)) != -1) 
+   {
       switch(option)
       {
+         /* Instance ID (already managed) */
+         case 'i':
+            break;
+
+         /* Platform (already managed) */
+         case 'P':
+            break;
+
          /* RAM size */
          case 'r':
-            c7200_router.ram_size = strtol(optarg, NULL, 10);
-            printf("Virtual RAM size set to %d MB.\n",c7200_router.ram_size);
+            vm->ram_size = strtol(optarg, NULL, 10);
+            printf("Virtual RAM size set to %d MB.\n",vm->ram_size);
             break;
 
          /* ROM size */
          case 'o':
-            c7200_router.rom_size = strtol(optarg, NULL, 10);
-            printf("Virtual ROM size set to %d MB.\n",c7200_router.rom_size);
+            vm->rom_size = strtol(optarg, NULL, 10);
+            printf("Virtual ROM size set to %d MB.\n",vm->rom_size);
             break;
 
          /* NVRAM size */
          case 'n':
-            c7200_router.nvram_size = strtol(optarg, NULL, 10);
-            printf("NVRAM size set to %d KB.\n",c7200_router.nvram_size);
+            vm->nvram_size = strtol(optarg, NULL, 10);
+            printf("NVRAM size set to %d KB.\n",vm->nvram_size);
+            break;
+
+         /* Execution area size */
+         case OPT_EXEC_AREA:
+            vm->exec_area_size = atoi(optarg);
+            break;
+
+         /* PCMCIA disk0 size */
+         case OPT_DISK0_SIZE:
+            vm->pcmcia_disk_size[0] = atoi(optarg);
+            printf("PCMCIA ATA disk0 size set to %u MB.\n",
+                   vm->pcmcia_disk_size[0]);
+            break;
+
+         /* PCMCIA disk1 size */
+         case OPT_DISK1_SIZE:
+            vm->pcmcia_disk_size[1] = atoi(optarg);
+            printf("PCMCIA ATA disk1 size set to %u MB.\n",
+                   vm->pcmcia_disk_size[1]);
             break;
 
          /* Config Register */
          case 'c':
-            c7200_router.conf_reg = strtol(optarg, NULL, 0);
-            printf("Config. Register set to 0x%x.\n",c7200_router.conf_reg);
-            break;
-
-         /* Set the base MAC address */
-         case 'm':
-            c7200_router.mac_addr = optarg;
-            printf("MAC address set to '%s'.\n",mac_addr);
-            break;
-
-         /* Log file */
-         case 'l':
-            if (!(log_file_name = malloc(strlen(optarg)+1))) {
-               fprintf(stderr,"Unable to set log file name.\n");
-               exit(EXIT_FAILURE);
-            }
-            strcpy(log_file_name, optarg);
-            printf("Log file: writing to %s\n",log_file_name);
+            vm->conf_reg_setup = strtol(optarg, NULL, 0);
+            printf("Config. Register set to 0x%x.\n",vm->conf_reg_setup);
             break;
 
          /* IOS configuration file */
          case 'C':
-            ios_cfg_file = optarg;
+            vm_ios_set_config(vm,optarg);
             break;
 
          /* Use physical memory to emulate RAM (no-mapped file) */
          case 'X':
-            c7200_router.ram_mmap = 0;
+            vm->ram_mmap = 0;
             break;
 
          /* Alternate ROM */
          case 'R':
-            c7200_router.rom_filename = optarg;
+            vm->rom_filename = optarg;
             break;
 
-         /* Symbol file */
-         case 'S':
-            load_sym_file(optarg);
-            break;
-            
-         /* Instruction block trace */
-         case 'i':
-            insn_itrace = TRUE;
-            break;
-	  
-         /* Disable JIT */
-         case 'j':
-            jit_use = FALSE;
+         /* Idle PC */
+         case OPT_IDLE_PC:
+            vm->idle_pc = strtoull(optarg,NULL,0);
+            printf("Idle PC set to 0x%llx.\n",vm->idle_pc);
             break;
 
-         /* NPE type */
-         case 't':
-            c7200_router.npe_type = optarg;
-            break;
-
-         /* Midplane type */
-         case 'M':
-            c7200_router.midplane_type = optarg;
-            break;
-            
-         /* PA settings */
-         case 'p':
-            m_list_add(&c7200_router.pa_desc_list,optarg);
-            break;
-
-         /* PA NIO settings */
-         case 's':
-            m_list_add(&c7200_router.pa_nio_desc_list,optarg);
+         /* Timer IRQ check interval */
+         case OPT_TIMER_ITV:
+            vm->timer_irq_check_itv = atoi(optarg);
             break;
 
          /* Clock divisor */
          case 'k':
-            clock_divisor = atoi(optarg);
+            vm->clock_divisor = atoi(optarg);
 
-            if (!clock_divisor) {
+            if (!vm->clock_divisor) {
                fprintf(stderr,"Invalid Clock Divisor specified!\n");
                exit(EXIT_FAILURE);
             }
 
-            printf("Using a clock divisor of %d.\n",clock_divisor);
+            printf("Using a clock divisor of %d.\n",vm->clock_divisor);
             break;
+
+         /* Disable JIT */
+         case 'j':
+            vm->jit_use = FALSE;
+            break;
+
+         /* VM debug level */
+         case OPT_VM_DEBUG:
+            vm->debug_level = atoi(optarg);
+            break;
+
+         /* Log file */
+         case 'l':
+            if (!(log_file_name = strdup(optarg))) {
+               fprintf(stderr,"Unable to set log file name.\n");
+               exit(EXIT_FAILURE);
+            }
+            printf("Log file: writing to %s\n",log_file_name);
+            break;
+
+#if DEBUG_SYM_TREE
+         /* Symbol file */
+         case 'S':
+            vm->sym_filename = strdup(optarg);
+            break;
+#endif
 
          /* TCP server for Console Port */
          case 'T':
-            c7200_router.vtty_con_type = VTTY_TYPE_TCP;
-            c7200_router.vtty_con_tcp_port = atoi(optarg);
+            vm->vtty_con_type = VTTY_TYPE_TCP;
+            vm->vtty_con_tcp_port = atoi(optarg);
+            break;
+
+         /* Serial interface for Console port */
+         case 'U':
+            vm->vtty_con_type = VTTY_TYPE_SERIAL;
+            if (vtty_parse_serial_option(&vm->vtty_con_serial_option,optarg)) {
+               fprintf(stderr,
+                       "Invalid Console serial interface descriptor!\n");
+               exit(EXIT_FAILURE);
+            }
             break;
 
          /* TCP server for AUX Port */
          case 'A':
-            c7200_router.vtty_aux_type = VTTY_TYPE_TCP;
-            c7200_router.vtty_aux_tcp_port = atoi(optarg);
+            vm->vtty_aux_type = VTTY_TYPE_TCP;
+            vm->vtty_aux_tcp_port = atoi(optarg);
+            break;
+
+         /* Serial interface for AUX port */
+         case 'B':
+            vm->vtty_aux_type = VTTY_TYPE_SERIAL;
+            if (vtty_parse_serial_option(&vm->vtty_aux_serial_option,optarg)) {
+               fprintf(stderr,"Invalid AUX serial interface descriptor!\n");
+               exit(EXIT_FAILURE);
+            }
             break;
 
          /* Virtual ATM switch */
@@ -528,6 +651,12 @@ int main(int argc,char *argv[])
          /* Virtual Frame-Relay switch */
          case 'f':
             if (frsw_start(optarg) == -1)
+               exit(EXIT_FAILURE);
+            break;
+
+         /* Virtual Ethernet switch */
+         case 'E':
+            if (ethsw_start(optarg) == -1)
                exit(EXIT_FAILURE);
             break;
 
@@ -546,36 +675,156 @@ int main(int argc,char *argv[])
 
          /* Oops ! */
          case '?':
-            show_usage(argc,argv);
+            show_usage(argc,argv,*platform);
             exit(EXIT_FAILURE);
+
+         /* Parse options specific to the platform */
+         default:
+            res = 0;
+
+            switch(vm->type) {
+               case VM_TYPE_C7200:
+                  res = cli_parse_c7200_options(vm,option);
+                  break;
+               case VM_TYPE_C3600:
+                  res = cli_parse_c3600_options(vm,option);
+                  break;
+            }
+
+            if (res == -1)
+               exit(EXIT_FAILURE);
       }
    }
 
    /* Last argument, this is the IOS filename */
    if (optind == (argc - 1)) {
       /* setting IOS image file	*/
-      c7200_router.ios_image_name = argv[optind];
-      printf("IOS image file: %s\n\n", c7200_router.ios_image_name);
+      vm_ios_set_image(vm,argv[optind]);
+      printf("IOS image file: %s\n\n",vm->ios_image);
    } else { 
       /* IOS missing */
       fprintf(stderr,"Please specify an IOS image filename\n");
-      show_usage(argc,argv);
+      show_usage(argc,argv,*platform);
       exit(EXIT_FAILURE);
    }
 
-   /* Set the default value of the log file name */
-   if (!log_file_name) {
-      if (!(log_file_name = malloc(strlen(LOGFILE_DEFAULT_NAME)+1))) {
-         fprintf(stderr,"Unable to set log file name.\n");
-         exit(EXIT_FAILURE);
+   vm_release(vm);
+   return(0);
+}
+
+/* 
+ * Run in hypervisor mode with a config file if the "-H" option 
+ * is present in command line.
+ */
+static int run_hypervisor(int argc,char *argv[])
+{
+   char *options_list = "H:l:hN:";
+   int i,option;
+
+   for(i=1;i<argc;i++)
+      if (!strcmp(argv[i],"-H")) {
+         hypervisor_mode = 1;
+         break;
       }
-      strcpy(log_file_name,LOGFILE_DEFAULT_NAME);
+
+   /* standard mode with one instance */
+   if (!hypervisor_mode)
+      return(FALSE);
+
+   opterr = 0;
+   while((option = getopt(argc,argv,options_list)) != -1) {
+      switch(option)
+      {
+         /* Hypervisor TCP port */
+         case 'H':
+            hypervisor_tcp_port = atoi(optarg);
+            break;
+
+         /* Log file */
+         case 'l':
+            if (!(log_file_name = malloc(strlen(optarg)+1))) {
+               fprintf(stderr,"Unable to set log file name.\n");
+               exit(EXIT_FAILURE);
+            }
+            strcpy(log_file_name, optarg);
+            printf("Log file: writing to %s\n",log_file_name);
+            break;
+
+         /* VM file naming type */
+         case 'N':
+            vm_file_naming_type = atoi(optarg);
+            break;
+            
+         /* Oops ! */
+         case '?':
+            show_usage(argc,argv,VM_TYPE_C7200);
+            exit(EXIT_FAILURE);
+      }
    }
 
-   if (!(log_file = fopen(log_file_name,"w"))) {
-      fprintf(stderr,"Unable to create log file.\n");
-      exit(EXIT_FAILURE);
-   }
+   return(TRUE);
+}
+
+/* Delete all objects */
+void dynamips_reset(void)
+{
+   printf("Shutdown in progress...\n");
+
+   /* Delete all C7200 and C3600 instances */
+   c7200_delete_all_instances();
+   c3600_delete_all_instances();
+
+   /* Delete ATM and Frame-Relay switches + bridges */
+   netio_bridge_delete_all();
+   atmsw_delete_all();
+   frsw_delete_all();
+   ethsw_delete_all();
+
+   /* Delete all NIO descriptors */
+   netio_delete_all();
+
+   printf("Shutdown completed.\n");
+}
+
+int main(int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   int platform,res;
+
+   /* Default emulation: Cisco 7200 */
+   platform = VM_TYPE_C7200;
+
+#ifdef PROFILE
+   atexit(profiler_savestat);
+#endif
+
+   printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
+   printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
+
+   /* Initialize object registry */
+   registry_init();
+   
+   /* Initialize ATM module (for HEC checksums) */
+   atm_init();
+
+   /* Initialize CRC functions */
+   crc_init();
+
+   /* Initialize NetIO code */
+   netio_rxl_init();
+
+   /* Initialize NetIO packet filters */
+   netio_filter_load_all();
+
+   /* Initialize VTTY code */
+   vtty_init();
+   
+   /* Parse standard command line */
+   if (!run_hypervisor(argc,argv))
+      parse_std_cmd_line(argc,argv,&platform);
+
+   /* Create general log file */
+   create_log_file();
 
    /* Periodic tasks initialization */
    if (ptask_init(0) == -1)
@@ -585,66 +834,51 @@ int main(int argc,char *argv[])
    mips64_jit_create_ilt();
    mips64_exec_create_ilt();
 
-   /* Create a CPU group */
-   sys_cpu_group = cpu_group_create("System CPU");
-
-   /* Initialize the virtual MIPS processor */
-   if (!(cpu0 = cpu_create(0))) {
-      fprintf(stderr,"Unable to create CPU0!\n");
-      exit(EXIT_FAILURE);
-   }
-
-   /* Add this CPU to the system CPU group */
-   cpu_group_add(sys_cpu_group,cpu0);
-   c7200_router.cpu_group = sys_cpu_group;
-
-   /* Initialize the C7200 platform */
-   if (c7200_init_platform(&c7200_router) == -1) {
-      fprintf(stderr,"Unable to initialize the C7200 platform hardware.\n");
-      exit(EXIT_FAILURE);
-   }
-
-   /* Load IOS configuration file */
-   if (ios_cfg_file != NULL) {
-      dev_nvram_push_config(sys_cpu_group,ios_cfg_file);
-      c7200_router.conf_reg &= ~0x40;
-   }
-
-   /* Load ROM (ELF image or embedded) */
-   rom_entry_point = 0xbfc00000;
-
-   if (c7200_router.rom_filename) {
-      if (load_elf_image(cpu0,c7200_router.rom_filename,&rom_entry_point)<0) {
-         fprintf(stderr,"Unable to load alternate ROM '%s', "
-                 "fallback to embedded ROM.\n\n",c7200_router.rom_filename);
-         c7200_router.rom_filename = NULL;
-      }
-   }
-
-   /* Load IOS image */
-   if (load_elf_image(cpu0,c7200_router.ios_image_name,
-                      &c7200_router.ios_entry_point) < 0) 
-   {
-      fprintf(stderr,"Cisco IOS load failed.\n");
-      exit(EXIT_FAILURE);
-   }
-
-   cpu0->pc = sign_extend(rom_entry_point,32);
-   cpu0->cp0.reg[MIPS_CP0_PRID] = 0x2012ULL;
-   cpu0->cp0.reg[MIPS_CP0_CONFIG] = 0x00c08ff0ULL;
-
    setup_signals();
 
-   /* Launch the simulation */
-   printf("\nStarting simulation (CPU0 PC=0x%llx), JIT is %sabled.\n",
-          cpu0->pc,jit_use ? "en":"dis");
+   if (!hypervisor_mode) {
+      /* Initialize the default instance */
+      vm = vm_acquire("default");
+      assert(vm != NULL);
 
-   cpu_start(cpu0);
+      switch(platform) {
+         case VM_TYPE_C7200:
+            res = c7200_init_instance(VM_C7200(vm));
+            break;
+         case VM_TYPE_C3600:
+            res = c3600_init_instance(VM_C3600(vm));
+            break;
+         default:
+            res = -1;
+      }
 
-   /* Run until all CPU of the system CPU group are halted */
-   while(!cpu_group_check_state(sys_cpu_group,MIPS_CPU_HALTED))
-      usleep(200000);
+      if (res == -1) {
+         fprintf(stderr,"Unable to initialize router instance.\n");
+         exit(EXIT_FAILURE);
+      }
 
-   printf("\n\nSimulation halted (CPU0 PC=0x%llx).\n\n",cpu0->pc);
+#if DEBUG_PERF_COUNTER
+      {
+         m_uint64_t prev = 0,delta;
+         while(vm->status == VM_STATUS_RUNNING) {
+            delta = vm->boot_cpu->perf_counter - prev;
+            prev = vm->boot_cpu->perf_counter;
+            printf("delta = %llu\n",delta);
+            sleep(1);
+         }
+      }
+#else
+      /* Start instance monitoring */
+      vm_monitor(vm);
+#endif
+
+      /* Free resources used by instance */
+      vm_release(vm);
+   } else {
+      hypervisor_tcp_server(hypervisor_tcp_port);
+   }
+
+   dynamips_reset();
+   close_log_file();
    return(0);
 }

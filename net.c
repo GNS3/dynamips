@@ -77,11 +77,13 @@ char *n_ip_ntoa(char *buffer,n_ip_addr_t ip_addr)
    return(buffer);
 }
 
+#if HAS_RFC2553
 /* Convert in IPv6 address into a string */
 char *n_ipv6_ntoa(char *buffer,n_ipv6_addr_t *ipv6_addr)
 {
    return((char *)inet_ntop(AF_INET6,ipv6_addr,buffer,INET6_ADDRSTRLEN));
 }
+#endif
 
 /* Convert a string containing an IP address in binary */
 int n_ip_aton(n_ip_addr_t *ip_addr,char *ip_str)
@@ -95,11 +97,13 @@ int n_ip_aton(n_ip_addr_t *ip_addr,char *ip_str)
    return(0);
 }
 
+#if HAS_RFC2553
 /* Convert an IPv6 address from string into binary */
 int n_ipv6_aton(n_ipv6_addr_t *ipv6_addr,char *ip_str)
 {
    return(inet_pton(AF_INET6,ip_str,ipv6_addr));
 }
+#endif
 
 /* Parse an IPv4 CIDR prefix */
 int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask)
@@ -139,6 +143,7 @@ int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask)
    return(0);
 }
 
+#if HAS_RFC2553
 /* Parse an IPv6 CIDR prefix */
 int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask)
 {
@@ -176,6 +181,55 @@ int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask)
    free(tmp);
    return(0);
 }
+#endif
+
+/* Parse a MAC address */
+int parse_mac_addr(n_eth_addr_t *addr,char *str)
+{
+   u_int v[N_ETH_ALEN];
+   int i,res;
+
+   /* First try, standard format (00:01:02:03:04:05) */
+   res = sscanf(str,"%x:%x:%x:%x:%x:%x",&v[0],&v[1],&v[2],&v[3],&v[4],&v[5]);
+
+   if (res == 6) {
+      for(i=0;i<N_ETH_ALEN;i++)
+         addr->eth_addr_byte[i] = v[i];
+      return(0);
+   }
+
+   /* Second try, Cisco format (0001.0002.0003) */
+   res = sscanf(str,"%x.%x.%x",&v[0],&v[1],&v[2]);
+
+   if (res == 3) {
+      addr->eth_addr_byte[0] = (v[0] >> 8) & 0xFF;
+      addr->eth_addr_byte[1] = v[0] & 0xFF;
+      addr->eth_addr_byte[2] = (v[1] >> 8) & 0xFF;
+      addr->eth_addr_byte[3] = v[1] & 0xFF;
+      addr->eth_addr_byte[4] = (v[2] >> 8) & 0xFF;
+      addr->eth_addr_byte[5] = v[2] & 0xFF;
+   }
+
+   return(-1);
+}
+
+/* Convert an Ethernet address into a string */
+char *n_eth_ntoa(char *buffer,n_eth_addr_t *addr,int format)
+{
+   char *str_format;
+
+   if (format == 0) {
+      str_format = "%2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x";
+   } else {
+      str_format = "%2.2x%2.2x.%2.2x%2.2x.%2.2x%2.2x";
+   }
+
+   sprintf(buffer,str_format,
+           addr->eth_addr_byte[0],addr->eth_addr_byte[1],
+           addr->eth_addr_byte[2],addr->eth_addr_byte[3],
+           addr->eth_addr_byte[4],addr->eth_addr_byte[5]);
+   return(buffer);
+}
 
 #if HAS_RFC2553
 /* Create a new socket to connect to specified host */
@@ -204,7 +258,7 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
          continue;
 
       /* create new socket */
-      if (!(sck = socket(res->ai_family,SOCK_DGRAM,res->ai_protocol))) {
+      if ((sck = socket(res->ai_family,SOCK_DGRAM,res->ai_protocol)) < 0) {
          perror("udp_connect: socket");
          continue;
       }
@@ -231,18 +285,17 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
          }
 
          default:
-            /* cannot happen */
+            /* shouldn't happen */
+            close(sck);
+            sck = -1;
             continue;
       }
 
-      if (bind(sck,(struct sockaddr *)&st,res->ai_addrlen) == -1)
-         goto next;
-
       /* try to connect to remote host */
-      if (!connect(sck,res->ai_addr,res->ai_addrlen))
-         return(sck);
+      if (!bind(sck,(struct sockaddr *)&st,res->ai_addrlen) &&
+          !connect(sck,res->ai_addr,res->ai_addrlen))
+         break;
 
-   next:
       close(sck);
       sck = -1;
    }
@@ -297,3 +350,96 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    return(sck);
 }
 #endif /* HAS_RFC2553 */
+
+#if HAS_RFC2553
+/* Listen on the specified port */
+int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
+{
+   struct addrinfo hints,*res,*res0;
+   char port_str[20];
+   int nsock,error,i;
+   int reuse = 1;
+   
+   for(i=0;i<max_fd;i++)
+      fd_array[i] = -1;
+
+   memset(&hints,0,sizeof(hints));
+   hints.ai_family = PF_UNSPEC;
+   hints.ai_socktype = sock_type;
+   hints.ai_flags = AI_PASSIVE;
+
+   snprintf(port_str,sizeof(port_str),"%d",port);
+
+   if ((error = getaddrinfo(NULL,port_str,&hints,&res0)) != 0) {
+      fprintf(stderr,"ip_listen: %s", gai_strerror(error));
+      return(-1);
+   }
+
+   nsock = 0;
+   for(res=res0;(res && (nsock < max_fd));res=res->ai_next)
+   {
+      if ((res->ai_family != PF_INET) && (res->ai_family != PF_INET6))
+         continue;
+
+      fd_array[nsock] = socket(res->ai_family,res->ai_socktype,
+                               res->ai_protocol);
+
+      if (fd_array[nsock] < 0)
+         continue;      
+
+      setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+
+      if ((bind(fd_array[nsock],res->ai_addr,res->ai_addrlen) < 0) ||
+          (listen(fd_array[nsock],5) < 0))
+      {
+         close(fd_array[nsock]);
+         fd_array[nsock] = -1;
+         continue;
+      }
+
+      nsock++;
+   }
+
+   freeaddrinfo(res0);
+   return(nsock);
+}
+#else
+/* Listen on the specified port */
+int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
+{
+   struct sockaddr_in sin;
+   int i,sck,reuse=1;
+
+   for(i=0;i<max_fd;i++)
+      fd_array[i] = -1;
+
+   if ((sck = socket(AF_INET,sock_type,0)) < 0) {
+      perror("ip_listen: socket");
+      return(-1);
+   }
+
+   /* bind local port */
+   memset(&sin,0,sizeof(sin));
+   sin.sin_family = PF_INET;
+   sin.sin_port   = htons(port);
+
+   setsockopt(fd_array[0],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+
+   if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
+      perror("ip_listen: bind");
+      goto error;
+   }
+
+   if (listen(sck,5) < 0) {
+      perror("ip_listen: listen");
+      goto error;
+   }
+
+   fd_array[0] = sck;
+   return(1);
+
+ error:
+   close(sck);
+   return(-1);
+}
+#endif

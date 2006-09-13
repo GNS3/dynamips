@@ -11,68 +11,81 @@
 #include "utils.h" 
 #include "rbtree.h"
 
-/* MIPS General Purpose Registers */
-#define MIPS_GPR_ZERO           0               /*  zero  */
-#define MIPS_GPR_AT             1               /*  at  */
-#define MIPS_GPR_V0             2               /*  v0  */
-#define MIPS_GPR_V1             3               /*  v1  */
-#define MIPS_GPR_A0             4               /*  a0  */
-#define MIPS_GPR_A1             5               /*  a1  */
-#define MIPS_GPR_A2             6               /*  a2  */
-#define MIPS_GPR_A3             7               /*  a3  */
-#define MIPS_GPR_T0             8               /*  t0  */
-#define MIPS_GPR_T1             9               /*  t1  */
-#define MIPS_GPR_T2             10              /*  t2  */
-#define MIPS_GPR_T3             11              /*  t3  */
-#define MIPS_GPR_T4             12              /*  t4  */
-#define MIPS_GPR_T5             13              /*  t5  */
-#define MIPS_GPR_T6             14              /*  t6  */
-#define MIPS_GPR_T7             15              /*  t7  */
-#define MIPS_GPR_S0             16              /*  s0  */
-#define MIPS_GPR_S1             17              /*  s1  */
-#define MIPS_GPR_S2             18              /*  s2  */
-#define MIPS_GPR_S3             19              /*  s3  */
-#define MIPS_GPR_S4             20              /*  s4  */
-#define MIPS_GPR_S5             21              /*  s5  */
-#define MIPS_GPR_S6             22              /*  s6  */
-#define MIPS_GPR_S7             23              /*  s7  */
-#define MIPS_GPR_T8             24              /*  t8  */
-#define MIPS_GPR_T9             25              /*  t9  */
-#define MIPS_GPR_K0             26              /*  k0  */
-#define MIPS_GPR_K1             27              /*  k1  */
-#define MIPS_GPR_GP             28              /*  gp  */
-#define MIPS_GPR_SP             29              /*  sp  */
-#define MIPS_GPR_FP             30              /*  fp  */
-#define MIPS_GPR_RA             31              /*  ra  */
+/* 
+ * MIPS General Purpose Registers 
+ */
+#define MIPS_GPR_ZERO        0             /*  zero  */
+#define MIPS_GPR_AT          1             /*  at  */
+#define MIPS_GPR_V0          2             /*  v0  */
+#define MIPS_GPR_V1          3             /*  v1  */
+#define MIPS_GPR_A0          4             /*  a0  */
+#define MIPS_GPR_A1          5             /*  a1  */
+#define MIPS_GPR_A2          6             /*  a2  */
+#define MIPS_GPR_A3          7             /*  a3  */
+#define MIPS_GPR_T0          8             /*  t0  */
+#define MIPS_GPR_T1          9             /*  t1  */
+#define MIPS_GPR_T2          10            /*  t2  */
+#define MIPS_GPR_T3          11            /*  t3  */
+#define MIPS_GPR_T4          12            /*  t4  */
+#define MIPS_GPR_T5          13            /*  t5  */
+#define MIPS_GPR_T6          14            /*  t6  */
+#define MIPS_GPR_T7          15            /*  t7  */
+#define MIPS_GPR_S0          16            /*  s0  */
+#define MIPS_GPR_S1          17            /*  s1  */
+#define MIPS_GPR_S2          18            /*  s2  */
+#define MIPS_GPR_S3          19            /*  s3  */
+#define MIPS_GPR_S4          20            /*  s4  */
+#define MIPS_GPR_S5          21            /*  s5  */
+#define MIPS_GPR_S6          22            /*  s6  */
+#define MIPS_GPR_S7          23            /*  s7  */
+#define MIPS_GPR_T8          24            /*  t8  */
+#define MIPS_GPR_T9          25            /*  t9  */
+#define MIPS_GPR_K0          26            /*  k0  */
+#define MIPS_GPR_K1          27            /*  k1  */
+#define MIPS_GPR_GP          28            /*  gp  */
+#define MIPS_GPR_SP          29            /*  sp  */
+#define MIPS_GPR_FP          30            /*  fp  */
+#define MIPS_GPR_RA          31            /*  ra  */
 
 /*
  * Coprocessor 0 (System Coprocessor) Register definitions
  */
-#define MIPS_CP0_INDEX      0             /* TLB Index           */
-#define MIPS_CP0_RANDOM     1             /* TLB Random          */
-#define MIPS_CP0_TLB_LO_0   2             /* TLB Entry Lo0       */
-#define MIPS_CP0_TLB_LO_1   3             /* TLB Entry Lo1       */
-#define MIPS_CP0_CONTEXT    4             /* Kernel PTE pointer  */
-#define MIPS_CP0_PAGEMASK   5             /* TLB Page Mask       */
-#define MIPS_CP0_WIRED      6             /* TLB Wired           */
-#define MIPS_CP0_BADVADDR   8             /* Bad Virtual Address */
-#define MIPS_CP0_COUNT      9             /* Count               */
-#define MIPS_CP0_TLB_HI     10            /* TLB Entry Hi        */
-#define MIPS_CP0_COMPARE    11            /* Timer Compare       */
-#define MIPS_CP0_STATUS     12            /* Status              */
-#define MIPS_CP0_CAUSE      13            /* Cause               */
-#define MIPS_CP0_EPC        14            /* Exception PC        */
-#define MIPS_CP0_PRID       15            /* Proc Rev ID         */
-#define MIPS_CP0_CONFIG     16            /* Configuration       */
-#define MIPS_CP0_LLADDR     17            /* Load/Link address   */
-#define MIPS_CP0_WATCHLO    18            /* Low Watch address   */
-#define MIPS_CP0_WATCHHI    19            /* High Watch address  */
-#define MIPS_CP0_XCONTEXT   20            /* Extended context    */
-#define MIPS_CP0_ECC        26            /* ECC and parity      */
-#define MIPS_CP0_CACHERR    27            /* Cache Err/Status    */
-#define MIPS_CP0_TAGLO      28            /* Cache Tag Lo        */
-#define MIPS_CP0_TAGHI      29            /* Cache Tag Hi        */
-#define MIPS_CP0_ERR_EPC    30            /* Error exception PC  */
+#define MIPS_CP0_INDEX       0             /* TLB Index           */
+#define MIPS_CP0_RANDOM      1             /* TLB Random          */
+#define MIPS_CP0_TLB_LO_0    2             /* TLB Entry Lo0       */
+#define MIPS_CP0_TLB_LO_1    3             /* TLB Entry Lo1       */
+#define MIPS_CP0_CONTEXT     4             /* Kernel PTE pointer  */
+#define MIPS_CP0_PAGEMASK    5             /* TLB Page Mask       */
+#define MIPS_CP0_WIRED       6             /* TLB Wired           */
+#define MIPS_CP0_INFO        7             /* Info (RM7000)       */
+#define MIPS_CP0_BADVADDR    8             /* Bad Virtual Address */
+#define MIPS_CP0_COUNT       9             /* Count               */
+#define MIPS_CP0_TLB_HI      10            /* TLB Entry Hi        */
+#define MIPS_CP0_COMPARE     11            /* Timer Compare       */
+#define MIPS_CP0_STATUS      12            /* Status              */
+#define MIPS_CP0_CAUSE       13            /* Cause               */
+#define MIPS_CP0_EPC         14            /* Exception PC        */
+#define MIPS_CP0_PRID        15            /* Proc Rev ID         */
+#define MIPS_CP0_CONFIG      16            /* Configuration       */
+#define MIPS_CP0_LLADDR      17            /* Load/Link address   */
+#define MIPS_CP0_WATCHLO     18            /* Low Watch address   */
+#define MIPS_CP0_WATCHHI     19            /* High Watch address  */
+#define MIPS_CP0_XCONTEXT    20            /* Extended context    */
+#define MIPS_CP0_ECC         26            /* ECC and parity      */
+#define MIPS_CP0_CACHERR     27            /* Cache Err/Status    */
+#define MIPS_CP0_TAGLO       28            /* Cache Tag Lo        */
+#define MIPS_CP0_TAGHI       29            /* Cache Tag Hi        */
+#define MIPS_CP0_ERR_EPC     30            /* Error exception PC  */
+
+/*
+ * CP0 Set 1 Registers (R7000)
+ */
+#define MIPS_CP0_S1_CONFIG     16          /* Configuration Register */
+#define MIPS_CP0_S1_IPLLO      18          /* Priority level for IRQ [7:0] */
+#define MIPS_CP0_S1_IPLHI      19          /* Priority level for IRQ [15:8] */
+#define MIPS_CP0_S1_INTCTL     20          /* Interrupt Control */
+#define MIPS_CP0_S1_DERRADDR0  26          /* Imprecise Error Address */
+#define MIPS_CP0_S1_DERRADDR1  27          /* Imprecise Error Address */
 
 /*
  * CP0 Status Register
@@ -95,7 +108,6 @@
 #define MIPS_CP0_STATUS_ERL        0x00000004
 #define MIPS_CP0_STATUS_EXL        0x00000002
 #define MIPS_CP0_STATUS_IE         0x00000001
-#define MIPS_CP0_STATUS_IMASK8     0x00000000
 #define MIPS_CP0_STATUS_IMASK7     0x00008000
 #define MIPS_CP0_STATUS_IMASK6     0x00004000
 #define MIPS_CP0_STATUS_IMASK5     0x00002000
@@ -165,20 +177,24 @@
 #define MIPS_TLB_PAGE_SHIFT    13
 #define MIPS_TLB_VPN2_MASK     0xffffffffffffe000ULL
 #define MIPS_TLB_PFN_MASK      0x3fffffc0
-#define MIPS_TLB_ASID_MASK     0x000000ff       /* "asid" in EntryHi */
-#define MIPS_TLB_G_MASK        0x00001000       /* "Global" in EntryHi */
-#define MIPS_TLB_V_MASK        0x2              /* "Valid" in EntryLo */
-#define MIPS_TLB_D_MASK        0x4              /* "Dirty" in EntryLo */
+#define MIPS_TLB_ASID_MASK     0x000000ff     /* "asid" in EntryHi */
+#define MIPS_TLB_G_MASK        0x00001000     /* "Global" in EntryHi */
+#define MIPS_TLB_V_MASK        0x2            /* "Valid" in EntryLo */
+#define MIPS_TLB_D_MASK        0x4            /* "Dirty" in EntryLo */
+#define MIPS_TLB_C_MASK        0x38           /* Page Coherency Attribute */
+#define MIPS_TLB_C_SHIFT       3
 
 #define MIPS_CP0_LO_G_MASK     0x00000001     /* "Global" in Lo0/1 reg */
 #define MIPS_CP0_HI_SAFE_MASK  0xffffe0ff     /* Safety mask for Hi reg */
 #define MIPS_CP0_LO_SAFE_MASK  0x7fffffff     /* Safety mask for Lo reg */
 
 /* MIPS "jr ra" instruction */
-#define MIPS_INSN_JR_RA   0x03e00008
+#define MIPS_INSN_JR_RA        0x03e00008
 
 /* Minimum page size: 4 Kb */
-#define MIPS_MIN_PAGE_SIZE  (1 << 12)
+#define MIPS_MIN_PAGE_SHIFT    12
+#define MIPS_MIN_PAGE_SIZE     (1 << MIPS_MIN_PAGE_SHIFT)
+#define MIPS_MIN_PAGE_IMASK    (MIPS_MIN_PAGE_SIZE - 1)
 
 /* Addressing mode: Kernel, Supervisor and User */
 #define MIPS_MODE_KERNEL  00
@@ -209,6 +225,12 @@
 #define MIPS_KSEG3_BASE   0xe0000000
 #define MIPS_KSEG3_SIZE   0x20000000
 
+/* xkphys mask (36-bit physical address) */
+#define MIPS64_XKPHYS_ZONE_MASK    0xF800000000000000ULL
+#define MIPS64_XKPHYS_PHYS_SIZE    (1ULL << 36)
+#define MIPS64_XKPHYS_PHYS_MASK    (MIPS64_XKPHYS_PHYS_SIZE - 1)
+#define MIPS64_XKPHYS_CCA_SHIFT    59
+
 /* Macros for CPU structure access */
 #define REG_OFFSET(reg)       (OFFSET(cpu_mips_t,gpr[(reg)]))
 #define CP0_REG_OFFSET(c0reg) (OFFSET(cpu_mips_t,cp0.reg[(c0reg)]))
@@ -228,8 +250,20 @@
 #define MIPS64_CP1_REG_NR   32
 
 /* Number of TLB entries */
-#define MIPS64_TLB_ENTRIES    64
-#define MIPS64_TLB_IDX_MASK   0x3f   /* 6 bits */
+#define MIPS64_TLB_STD_ENTRIES  48
+#define MIPS64_TLB_MAX_ENTRIES  64
+#define MIPS64_TLB_IDX_MASK     0x3f   /* 6 bits */
+
+/* Enable the 64 TLB entries for R7000 CPU */
+#define MIPS64_R7000_TLB64_ENABLE   0x20000000
+
+/* MIPS CPU Identifiers */
+#define MIPS_PRID_R4600    0x00002012
+#define MIPS_PRID_R4700    0x00002112
+#define MIPS_PRID_R5000    0x00002312
+#define MIPS_PRID_R7000    0x00002721
+#define MIPS_PRID_R527x    0x00002812
+#define MIPS_PRID_BCM1250  0x00040102
 
 /* Virtual CPU states */
 enum {
@@ -240,7 +274,9 @@ enum {
 
 /* Memory operations */
 enum {
-   MIPS_MEMOP_LB = 0,
+   MIPS_MEMOP_LOOKUP = 0,
+
+   MIPS_MEMOP_LB,
    MIPS_MEMOP_LBU,
    MIPS_MEMOP_LH,
    MIPS_MEMOP_LHU,
@@ -309,7 +345,14 @@ typedef struct {
 /* System Coprocessor (CP0) definition */
 typedef struct {
    m_uint64_t reg[MIPS64_CP0_REG_NR];
-   tlb_entry_t tlb[MIPS64_TLB_ENTRIES];
+   tlb_entry_t tlb[MIPS64_TLB_MAX_ENTRIES];
+   
+   /* Number of TLB entries */
+   u_int tlb_entries;
+
+   /* Extensions for R7000 CP0 Set1 */
+   m_uint32_t ipl_lo,ipl_hi,int_ctl;
+   m_uint32_t derraddr0,derraddr1;
 }mips_cp0_t;
 
 /* FPU Coprocessor (CP1) definition */
@@ -317,37 +360,48 @@ typedef struct {
    m_uint64_t reg[MIPS64_CP1_REG_NR];
 }mips_cp1_t;
 
-/* CPU definition */
-struct cpu_mips {
-   m_uint64_t gpr[MIPS64_GPR_NR];
-   m_uint64_t pc;
-   m_uint64_t lo,hi;
-   m_uint32_t irq_pending;
+/* MTS64 entry */
+typedef struct mts64_entry mts64_entry_t;
+struct mts64_entry {
+   m_uint64_t start;
+   m_iptr_t   action;
+   m_uint32_t mask;
+   m_uint32_t phys_page;
+   mts64_entry_t **pself;
+   mts64_entry_t *next,**pprev;
+};
 
-   /* Red-Black tree to locate PC */
-   rbtree_tree *insn_block_tree;
+/* MTS64 chunk forward declaration */
+typedef struct mts64_chunk mts64_chunk_t;
 
-   /* Instruction block hash table */
-   void **insn_block_hash;
-
+/* MIPS CPU definition */
+struct cpu_mips {  
    /* MTS 1st level array */
    void *mts_l1_ptr;
 
-   /* MTS32 array free list */
-   void *mts32_l2_free_list;
+   /* MTS64 cache */
+   mts64_entry_t **mts64_cache;
+
+   /* Virtual version of CP0 Compare Register */
+   m_uint32_t cp0_virt_cnt_reg,cp0_virt_cmp_reg;
+
+   /* General Purpose Registers, Pointer Counter, LO/HI, IRQ */
+   m_uint32_t irq_pending,irq_cause,ll_bit;
+   m_uint64_t pc,gpr[MIPS64_GPR_NR];
+   m_uint64_t lo,hi,ret_pc;
    
-   /* Memory lookup function (to load ELF image,...) */
-   void *(*mem_op_lookup)(cpu_mips_t *cpu,m_uint64_t vaddr);
-   
+   /* Code page translation cache */
+   insn_block_t **exec_phys_map;
+
+   /* Virtual address to physical page translation */
+   fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+                             m_uint32_t *phys_page);
+
    /* Memory access functions */
    mips_memop_fn mem_op_fn[MIPS_MEMOP_MAX];
 
-   /* Virtual version of CP0 Compare Register */
-   m_uint32_t cp0_virt_cmp_reg;
-   m_uint32_t cp0_virt_cnt_reg;
-
-   /* Address bus mask */
-   m_uint64_t addr_bus_mask;
+   /* Memory lookup function (to load ELF image,...) */
+   void *(*mem_op_lookup)(cpu_mips_t *cpu,m_uint64_t vaddr);
 
    /* System coprocessor (CP0) */
    mips_cp0_t cp0;
@@ -355,20 +409,98 @@ struct cpu_mips {
    /* FPU (CP1) */
    mips_cp1_t fpu;
 
-   /* LL/SC information */
-   u_int ll_bit;
-
-   /* CPU identifier for MP systems and CPU state */
-   u_int id,state;
-
-   /* Next CPU in group */
-   cpu_mips_t *next;
+   /* MTS32 array free list */
+   void *mts32_l2_free_list;
    
-   /* Memory mapped devices */
-   struct vdevice *dev_array[MIPS64_DEVICE_MAX];
+   /* Address bus mask */
+   m_uint64_t addr_bus_mask;
+
+   /* IRQ counters and cause */
+   m_uint64_t irq_count,timer_irq_count,irq_fp_count;
+   pthread_mutex_t irq_lock;
+
+   /* Current and free lists of instruction blocks */
+   insn_block_t *insn_block_list,*insn_block_last;
+   insn_block_t *insn_block_free_list;
+
+   /* Executable page area */
+   void *exec_page_area;
+   size_t exec_page_area_size;
+   size_t exec_page_count,exec_page_alloc;
+   insn_exec_page_t *exec_page_free_list;
+   insn_exec_page_t *exec_page_array;
+
+   /* "Idle" loop management */
+   volatile m_uint64_t idle_pc;
+   u_int idle_max,idle_sleep_time;
+   pthread_mutex_t idle_mutex;
+   pthread_cond_t idle_cond;
+
+   /* IRQ disable flag */
+   volatile u_int irq_disable;
+
+   /* Timer IRQs */
+   volatile u_int timer_irq_pending;
+   u_int timer_irq_freq;
+   u_int timer_irq_check_itv;
+   u_int timer_drift;
+
+   /* IRQ idling preemption */
+   u_int irq_idle_preempt[8];
+
+   /* CPU identifier for MP systems */
+   u_int id;
+
+   /* CPU states */
+   volatile u_int state,prev_state;
+   volatile m_uint64_t seq_state;
 
    /* Thread running this CPU */
    pthread_t cpu_thread;
+   int cpu_thread_running;
+
+   /* VM instance */
+   vm_instance_t *vm;
+
+   /* non-JIT mode instruction counter */
+   m_uint64_t insn_exec_count;
+
+   /* MTS map/unmap/rebuild operations */
+   void (*mts_map)(cpu_mips_t *cpu,m_uint64_t vaddr,
+                   m_uint64_t paddr,m_uint32_t len,
+                   int cache_access,int tlb_index);
+
+   void (*mts_unmap)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
+                     m_uint32_t val,int tlb_index);
+
+   void (*mts_rebuild)(cpu_mips_t *cpu);
+
+   /* MTS64 chunk list */
+   mts64_chunk_t *mts64_chunk_list;
+   mts64_chunk_t *mts64_chunk_free_list;
+   mts64_entry_t *mts64_entry_free_list;
+
+   /* MTS64 cache statistics */
+   m_uint64_t mts64_misses,mts64_lookups;
+
+   /* Reverse map for MTS64 */
+   mts64_entry_t *mts64_rmap[MIPS64_TLB_MAX_ENTRIES];
+
+   /* JIT flush method */
+   u_int jit_flush_method;
+
+   /* Number of compiled pages */
+   u_int compiled_pages;
+
+   /* Fast memory operations use */
+   u_int fast_memop;
+
+   /* Current exec page (non-JIT) info */
+   m_uint64_t njm_exec_page;
+   mips_insn_t *njm_exec_ptr;
+
+   /* Performance counter (number of instructions executed by CPU) */
+   m_uint64_t perf_counter;
 
    /* Memory access log for fault debugging */
    u_int memlog_pos;
@@ -378,18 +510,46 @@ struct cpu_mips {
    m_uint64_t breakpoints[MIPS64_MAX_BREAKPOINTS];
    u_int breakpoints_enabled;
 
-   /* non-JIT mode instruction counter */
-   m_uint64_t insn_exec_count;
+   /* Symtrace */
+   int sym_trace;
+   rbtree_tree *sym_tree;
 
-   /* Instruction block hash table statistics */
-   m_uint64_t hash_misses,hash_lookups;
+   /* Next CPU in group */
+   cpu_mips_t *next;
 };
+
+#define MIPS64_IRQ_LOCK(cpu)   pthread_mutex_lock(&(cpu)->irq_lock)
+#define MIPS64_IRQ_UNLOCK(cpu) pthread_mutex_unlock(&(cpu)->irq_lock)
 
 /* Register names */
 extern char *mips64_gpr_reg_names[];
 
+/* Get cacheability info */
+int mips64_cca_cached(m_uint8_t val);
+
+/* Reset a MIPS64 CPU */
+int mips64_reset(cpu_mips_t *cpu);
+
 /* Initialize a MIPS64 processor */
-void mips64_init(cpu_mips_t *cpu);
+int mips64_init(cpu_mips_t *cpu);
+
+/* Delete a MIPS64 processor */
+void mips64_delete(cpu_mips_t *cpu);
+
+/* Set the CPU PRID register */
+void mips64_set_prid(cpu_mips_t *cpu,m_uint32_t prid);
+
+/* Virtual idle loop */
+void mips64_idle_loop(cpu_mips_t *cpu);
+
+/* Break idle wait state */
+void mips64_idle_break_wait(cpu_mips_t *cpu);
+
+/* Timer IRQ */
+void *mips64_timer_irq_run(cpu_mips_t *cpu);
+
+/* Determine an "idling" PC */
+int mips64_get_idling_pc(cpu_mips_t *cpu);
 
 /* Update the IRQ flag */
 void mips64_update_irq_flag(cpu_mips_t *cpu);
@@ -416,16 +576,16 @@ fastcall void mips64_exec_syscall(cpu_mips_t *cpu);
 fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code);
 
 /* Trigger a Trap Exception */
-asmlinkage void mips64_trigger_trap_exception(cpu_mips_t *cpu);
+fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu);
 
 /* Trigger IRQs */
 fastcall void mips64_trigger_irq(cpu_mips_t *cpu);
 
 /* Set an IRQ */
-void mips64_set_irq(cpu_mips_t *cpu,u_int irq);
+void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq);
 
 /* Clear an IRQ */
-void mips64_clear_irq(cpu_mips_t *cpu,u_int irq);
+void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq);
 
 /* DMFC1 */
 fastcall void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
@@ -442,6 +602,9 @@ fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 /* Virtual breakpoint */
 fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);
 
+/* Debugging for register-jump to address 0 */
+fastcall void mips64_debug_jr0(cpu_mips_t *cpu);
+
 /* Dump registers of a MIPS64 processor */
 void mips64_dump_regs(cpu_mips_t *cpu);
 
@@ -453,5 +616,24 @@ void mips64_dump_stack(cpu_mips_t *cpu,u_int count);
 
 /* Save the CPU state into a file */
 int mips64_save_state(cpu_mips_t *cpu,char *filename);
+
+/* Load a raw image into the simulated memory */
+int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr);
+
+/* Load an ELF image into the simulated memory */
+int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,
+                          m_uint32_t *entry_point);
+
+/* Symbol lookup */
+struct symbol *mips64_sym_lookup(cpu_mips_t *cpu,m_uint64_t addr);
+
+/* Insert a new symbol */
+struct symbol *mips64_sym_insert(cpu_mips_t *cpu,char *name,m_uint64_t addr);
+
+/* Create the symbol tree */
+int mips64_sym_create_tree(cpu_mips_t *cpu);
+
+/* Load a symbol file */
+int mips64_sym_load_file(cpu_mips_t *cpu,char *filename);
 
 #endif

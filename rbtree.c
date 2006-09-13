@@ -29,8 +29,7 @@ static rbtree_node *rbtree_node_alloc(rbtree_tree *tree,void *key,void *value)
 {
    rbtree_node *node;
 
-   /* Memory can be handled by memory pool or not */
-   if (!(node = malloc(sizeof(*node))))
+   if (!(node = mp_alloc_n0(&tree->mp,sizeof(*node))))
       return NULL;
 
    node->key = key;
@@ -45,7 +44,7 @@ static rbtree_node *rbtree_node_alloc(rbtree_tree *tree,void *key,void *value)
 /* Free memory used by a node */
 static inline void rbtree_node_free(rbtree_tree *tree,rbtree_node *node)
 {
-   free(node);
+   mp_free(node);
 }
 
 /* Returns the node which represents the minimum value */
@@ -445,7 +444,7 @@ int rbtree_node_count(rbtree_tree *tree)
 /* Purge all nodes */
 void rbtree_purge(rbtree_tree *tree)
 {
-   //mp_free_all_blocks(&tree->mp);
+   mp_free_all_blocks(&tree->mp);
    tree->node_count = 0;
 
    /* just in case */
@@ -496,6 +495,12 @@ rbtree_tree *rbtree_create(tree_fcompare key_cmp,void *opt_data)
 
    memset(tree,0,sizeof(*tree));
 
+   /* initialize the memory pool */
+   if (!mp_create_fixed_pool(&tree->mp,"Red-Black Tree")) {
+      free(tree);
+      return NULL;
+   }
+
    /* initialize the "nil" pointer */
    memset(rbtree_nil(tree),0,sizeof(rbtree_node));
    rbtree_nil(tree)->color = RBTREE_BLACK;
@@ -510,7 +515,7 @@ rbtree_tree *rbtree_create(tree_fcompare key_cmp,void *opt_data)
 void rbtree_delete(rbtree_tree *tree)
 {
    if (tree) {
-      //mp_free(&tree->mp);
+      mp_free_pool(&tree->mp);
       free(tree);
    }
 }

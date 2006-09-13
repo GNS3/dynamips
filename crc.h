@@ -12,6 +12,7 @@
 #include "utils.h"
 
 extern m_uint16_t crc12_array[],crc16_array[];
+extern m_uint32_t crc32_array[];
 
 /* Compute a CRC-12 hash on a 32-bit integer */
 static forced_inline m_uint32_t crc12_hash_u32(m_uint32_t val)
@@ -41,7 +42,22 @@ static forced_inline m_uint32_t crc16_hash_u32(m_uint32_t val)
    return(crc);
 }
 
-/* initialize crc algorithms */
+/* Compute a CRC-32 on the specified block */
+static forced_inline 
+m_uint32_t crc32_compute(m_uint32_t crc_accum,m_uint8_t *ptr,int len)
+{
+   unsigned long c = crc_accum;
+   int n;
+   
+   for (n = 0; n < len; n++) {
+      c = crc32_array[(c ^ ptr[n]) & 0xff] ^ (c >> 8);
+   }
+
+   return(~c);
+}
+
+
+/* Initialize CRC algorithms */
 void crc_init(void);
 
 #endif

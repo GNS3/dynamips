@@ -369,6 +369,12 @@ typedef union {
 
 #define x86_prefix(inst,p) do { *(inst)++ =(unsigned char) (p); } while (0)
 
+#define x86_bswap(inst,reg) \
+        do {    \
+                *(inst)++ = 0x0f;	\
+                *(inst)++ = (unsigned char)0xc8 + (reg); \
+        } while (0)
+
 #define x86_rdtsc(inst) \
 	do {	\
 		*(inst)++ = 0x0f;	\

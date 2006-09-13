@@ -17,14 +17,18 @@
 #include <assert.h>
 
 #include "utils.h"
+#include "crc.h"
 
-#define CRC12_POLY 0x0f01
-#define CRC16_POLY 0xa001
+#define CRC12_POLY  0x0f01
+#define CRC16_POLY  0xa001
+#define CRC32_POLY  0xedb88320L
 
-m_uint32_t crc12_array[256],crc16_array[256];
+/* CRC tables */
+m_uint16_t crc12_array[256],crc16_array[256];
+m_uint32_t crc32_array[256];
 
-/* initialize CRC-12 algorithm */
-void crc12_init(void)
+/* Initialize CRC-12 algorithm */
+static void crc12_init(void)
 {
    m_uint16_t crc,c;
    int i,j;
@@ -46,8 +50,8 @@ void crc12_init(void)
    }
 }
 
-/* initialize CRC-16 algorithm */
-void crc16_init(void)
+/* Initialize CRC-16 algorithm */
+static void crc16_init(void)
 {
    m_uint16_t crc,c;
    int i,j;
@@ -69,9 +73,28 @@ void crc16_init(void)
    }
 }
 
-/* initialize crc algorithms */
+/* Initialize CRC-32 algorithm */
+static void crc32_init(void)
+{
+   unsigned long c;
+   int n, k;
+   
+   for (n=0;n<256;n++) {
+      c = (unsigned long) n;
+      for (k = 0; k < 8; k++) {
+         if (c & 1)
+            c = CRC32_POLY ^ (c >> 1);
+         else
+            c = c >> 1;
+      }
+      crc32_array[n] = c;
+   }
+}
+
+/* Initialize CRC algorithms */
 void crc_init(void)
 {
    crc12_init();
    crc16_init();
+   crc32_init();
 }

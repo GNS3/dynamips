@@ -66,48 +66,62 @@ struct dma_channel {
 
 /* Galileo GT-64k system controller */
 struct gt64k_data {
-   struct pci_data *bus[2];
+   vm_obj_t vm_obj;
+   struct vdevice dev;
    struct pci_device *pci_dev;
+   vm_instance_t *vm;
+
+   struct pci_bus *bus[2];
    struct dma_channel dma[GT64K_DMA_CHANNELS];
-   cpu_mips_t *mgr_cpu;
    m_uint32_t int_cause_reg;
    m_uint32_t int_mask_reg;
 };
 
+/* Update the interrupt status */
+static void gt64k_update_irq_status(struct gt64k_data *gt_data)
+{
+   if (gt_data->pci_dev) {
+      if (gt_data->int_cause_reg & gt_data->int_mask_reg)
+         pci_dev_trigger_irq(gt_data->vm,gt_data->pci_dev);
+      else
+         pci_dev_clear_irq(gt_data->vm,gt_data->pci_dev);
+   }
+}
+
 /* Fetch a DMA record (chained mode) */
-static void gt64k_dma_fetch_rec(cpu_mips_t *cpu,struct dma_channel *channel)
+static void gt64k_dma_fetch_rec(vm_instance_t *vm,struct dma_channel *channel)
 {
    m_uint32_t ptr;
  
 #if DEBUG_DMA
-   m_log("GT64K_DMA","fetching record at address 0x%x\n",channel->nrptr);
+   cpu_log(cpu,"GT64K_DMA","fetching record at address 0x%x\n",channel->nrptr);
 #endif
 
    /* fetch the record from RAM */
    ptr = channel->nrptr;
-   channel->byte_count = swap32(physmem_copy_u32_from_vm(cpu,ptr));
-   channel->src_addr   = swap32(physmem_copy_u32_from_vm(cpu,ptr+0x04));
-   channel->dst_addr   = swap32(physmem_copy_u32_from_vm(cpu,ptr+0x08));
-   channel->nrptr      = swap32(physmem_copy_u32_from_vm(cpu,ptr+0x0c));
+   channel->byte_count = swap32(physmem_copy_u32_from_vm(vm,ptr));
+   channel->src_addr   = swap32(physmem_copy_u32_from_vm(vm,ptr+0x04));
+   channel->dst_addr   = swap32(physmem_copy_u32_from_vm(vm,ptr+0x08));
+   channel->nrptr      = swap32(physmem_copy_u32_from_vm(vm,ptr+0x0c));
    
    /* clear the "fetch next record bit" */
    channel->ctrl &= ~GT64K_DMA_FETCH_NEXT;
 }
 
 /* Handle control register of a DMA channel */
-static void gt64k_dma_handle_ctrl(cpu_mips_t *cpu,struct gt64k_data *gt_data,
-                                  int chan_id)
+static void gt64k_dma_handle_ctrl(struct gt64k_data *gt_data,int chan_id)
 {
    struct dma_channel *channel = &gt_data->dma[chan_id];
+   vm_instance_t *vm = gt_data->vm;
    int done;
 
    if (channel->ctrl & GT64K_DMA_FETCH_NEXT) {
       if (channel->nrptr == 0) {
-         m_log("GT64K_DMA","trying to load a NULL DMA record...\n");
+         vm_log(vm,"GT64K_DMA","trying to load a NULL DMA record...\n");
          return;
       }
 
-      gt64k_dma_fetch_rec(cpu,channel);
+      gt64k_dma_fetch_rec(vm,channel);
    }
 
    if (channel->ctrl & GT64K_DMA_CHAN_ENABLE) 
@@ -116,17 +130,18 @@ static void gt64k_dma_handle_ctrl(cpu_mips_t *cpu,struct gt64k_data *gt_data,
          done = TRUE;
 
 #if DEBUG_DMA
-         m_log("GT64K_DMA",
-               "starting transfer from 0x%x to 0x%x (size=%u bytes)\n",
-               channel->src_addr,channel->dst_addr,channel->byte_count&0xFFFF);
+         cpu_log(cpu,"GT64K_DMA",
+                 "starting transfer from 0x%x to 0x%x (size=%u bytes)\n",
+                 channel->src_addr,channel->dst_addr,
+                 channel->byte_count & 0xFFFF);
 #endif
-         physmem_dma_transfer(cpu,channel->src_addr,channel->dst_addr,
+         physmem_dma_transfer(vm,channel->src_addr,channel->dst_addr,
                               channel->byte_count & 0xFFFF);
 
          /* chained mode */
          if (!(channel->ctrl & GT64K_DMA_CHAIN_MODE)) {
             if (channel->nrptr) {
-               gt64k_dma_fetch_rec(cpu,channel);
+               gt64k_dma_fetch_rec(vm,channel);
                done = FALSE;
             }
          }
@@ -134,7 +149,7 @@ static void gt64k_dma_handle_ctrl(cpu_mips_t *cpu,struct gt64k_data *gt_data,
 
       /* Trigger DMA interrupt */
       gt_data->int_cause_reg |= 1 << (4 + chan_id);
-      pci_dev_trigger_irq(gt_data->mgr_cpu,gt_data->pci_dev);
+      gt64k_update_irq_status(gt_data);
    }
 }
 
@@ -189,25 +204,25 @@ static int gt64k_dma_access(cpu_mips_t *cpu,struct vdevice *dev,
       case 0x840:
          DMA_REG(0,ctrl);
          if (op_type == MTS_WRITE) 
-            gt64k_dma_handle_ctrl(cpu,gt_data,0);
+            gt64k_dma_handle_ctrl(gt_data,0);
          return(1);
 
       case 0x844:
          DMA_REG(1,ctrl);
          if (op_type == MTS_WRITE) 
-            gt64k_dma_handle_ctrl(cpu,gt_data,1);
+            gt64k_dma_handle_ctrl(gt_data,1);
          return(1);
 
       case 0x848:
          DMA_REG(2,ctrl);
          if (op_type == MTS_WRITE) 
-            gt64k_dma_handle_ctrl(cpu,gt_data,2);
+            gt64k_dma_handle_ctrl(gt_data,2);
          return(1);
 
       case 0x84c:
          DMA_REG(3,ctrl);
          if (op_type == MTS_WRITE) 
-            gt64k_dma_handle_ctrl(cpu,gt_data,3);
+            gt64k_dma_handle_ctrl(gt_data,3);
          return(1);
    }
 
@@ -232,51 +247,59 @@ void *dev_gt64010_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       /* ===== DRAM Settings (completely faked, 128 Mb) ===== */
       case 0x008:    /* ras10_low */
          if (op_type == MTS_READ)
-            *data = 0x00000000;
+            *data = swap32(0x000);
          break;
       case 0x010:    /* ras10_high */
          if (op_type == MTS_READ)
-            *data = 0x0000001F;
+            *data = swap32(0x7F);
          break;
       case 0x018:    /* ras32_low */
          if (op_type == MTS_READ)
-            *data = 0x00000020;
+            *data = swap32(0x080);
          break;
       case 0x020:    /* ras32_high */
          if (op_type == MTS_READ)
-            *data = 0x0000003F;
+            *data = swap32(0x7F);
          break;
       case 0x400:    /* ras0_low */
          if (op_type == MTS_READ)
-            *data = 0x00000000;
+            *data = swap32(0x00);
          break;
       case 0x404:    /* ras0_high */
          if (op_type == MTS_READ)
-            *data = 0x0000001F;
+            *data = swap32(0xFF);
          break;
       case 0x408:    /* ras1_low */
          if (op_type == MTS_READ)
-            *data = 0x00000020;
+            *data = swap32(0x7F);
          break;
       case 0x40c:    /* ras1_high */
          if (op_type == MTS_READ)
-            *data = 0x0000003F;
+            *data = swap32(0x00);
          break;
       case 0x410:    /* ras2_low */
          if (op_type == MTS_READ)
-            *data = 0x00000040;
+            *data = swap32(0x00);
          break;
       case 0x414:    /* ras2_high */
          if (op_type == MTS_READ)
-            *data = 0x0000005F;
+            *data = swap32(0xFF);
          break;
       case 0x418:    /* ras3_low */
          if (op_type == MTS_READ)
-            *data = 0x00000060;
+            *data = swap32(0x7F);
          break;
       case 0x41c:    /* ras3_high */
          if (op_type == MTS_READ)
-            *data = 0x0000007F;
+            *data = swap32(0x00);
+         break;
+      case 0xc08:    /* pci0_cs10 */
+         if (op_type == MTS_READ)
+            *data = swap32(0xFFF);
+         break;
+      case 0xc0c:    /* pci0_cs32 */
+         if (op_type == MTS_READ)
+            *data = swap32(0xFFF);
          break;
 
       case 0xc00:    /* pci_cmd */
@@ -286,36 +309,42 @@ void *dev_gt64010_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
       /* ===== Interrupt Cause Register ===== */
       case 0xc18:
-         if (op_type == MTS_READ)
+         if (op_type == MTS_READ) {
             *data = swap32(gt_data->int_cause_reg);
-         else
-            gt_data->int_cause_reg = swap32(*data);
+         } else {
+            gt_data->int_cause_reg &= swap32(*data);
+            gt64k_update_irq_status(gt_data);
+         }
          break;
 
       /* ===== Interrupt Mask Register ===== */
       case 0xc1c:
          if (op_type == MTS_READ)
             *data = swap32(gt_data->int_mask_reg);
-         else
+         else {
             gt_data->int_mask_reg = swap32(*data);
+            gt64k_update_irq_status(gt_data);
+         }
          break;
 
       /* ===== PCI Configuration ===== */
       case PCI_BUS_ADDR:    /* pci configuration address (0xcf8) */
-         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
          break;
 
       case PCI_BUS_DATA:    /* pci data address (0xcfc) */
-         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,data);
+         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
          break;
 
 #if DEBUG_UNKNOWN
       default:
-         if (op_type == MTS_READ)
-            m_log("GT64010","read from addr 0x%x, pc=0x%llx\n",offset,cpu->pc);
-         else
-            m_log("GT64010","write to addr 0x%x, value=0x%llx, pc=0x%llx\n",
-                  offset,*data,cpu->pc);
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,"GT64010","read from addr 0x%x, pc=0x%llx\n",
+                    offset,cpu->pc);
+         } else {
+            cpu_log(cpu,"GT64010","write to addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx\n",offset,*data,cpu->pc);
+         }
 #endif
    }
 
@@ -337,54 +366,61 @@ void *dev_gt64120_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       return NULL;
 
    switch(offset) {
-      /* ===== DRAM Settings (completely faked, 128 Mb) ===== */
       case 0x008:    /* ras10_low */
          if (op_type == MTS_READ)
-            *data = 0x00000000;
+            *data = swap32(0x000);
          break;
       case 0x010:    /* ras10_high */
          if (op_type == MTS_READ)
-            *data = 0x0000001F;
+            *data = swap32(0x7F);
          break;
       case 0x018:    /* ras32_low */
          if (op_type == MTS_READ)
-            *data = 0x00000020;
+            *data = swap32(0x100);
          break;
       case 0x020:    /* ras32_high */
          if (op_type == MTS_READ)
-            *data = 0x0000003F;
+            *data = swap32(0x7F);
          break;
       case 0x400:    /* ras0_low */
          if (op_type == MTS_READ)
-            *data = 0x00000000;
+            *data = swap32(0x00);
          break;
       case 0x404:    /* ras0_high */
          if (op_type == MTS_READ)
-            *data = 0x0000001F;
+            *data = swap32(0xFF);
          break;
       case 0x408:    /* ras1_low */
          if (op_type == MTS_READ)
-            *data = 0x00000020;
+            *data = swap32(0x7F);
          break;
       case 0x40c:    /* ras1_high */
          if (op_type == MTS_READ)
-            *data = 0x0000003F;
+            *data = swap32(0x00);
          break;
       case 0x410:    /* ras2_low */
          if (op_type == MTS_READ)
-            *data = 0x00000040;
+            *data = swap32(0x00);
          break;
       case 0x414:    /* ras2_high */
          if (op_type == MTS_READ)
-            *data = 0x0000005F;
+            *data = swap32(0xFF);
          break;
       case 0x418:    /* ras3_low */
          if (op_type == MTS_READ)
-            *data = 0x00000060;
+            *data = swap32(0x7F);
          break;
       case 0x41c:    /* ras3_high */
          if (op_type == MTS_READ)
-            *data = 0x0000007F;
+            *data = swap32(0x00);
+         break;
+      case 0xc08:    /* pci0_cs10 */
+         if (op_type == MTS_READ)
+            *data = swap32(0xFFF);
+         break;
+      case 0xc0c:    /* pci0_cs32 */
+         if (op_type == MTS_READ)
+            *data = swap32(0xFFF);
          break;
 
       case 0xc00:    /* pci_cmd */
@@ -396,151 +432,173 @@ void *dev_gt64120_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       case 0xc18:
          if (op_type == MTS_READ)
             *data = swap32(gt_data->int_cause_reg);
-         else
-            gt_data->int_cause_reg = swap32(*data);
+         else {
+            gt_data->int_cause_reg &= swap32(*data);
+            gt64k_update_irq_status(gt_data);
+         }
          break;
 
       /* ===== Interrupt Mask Register ===== */
       case 0xc1c:
-         if (op_type == MTS_READ)
+         if (op_type == MTS_READ) {
             *data = swap32(gt_data->int_mask_reg);
-         else
+         } else {
             gt_data->int_mask_reg = swap32(*data);
+            gt64k_update_irq_status(gt_data);
+         }
          break;
 
       /* ===== PCI Bus 1 ===== */
       case 0xcf0:
-         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
          break;
 
       case 0xcf4:
-         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,data);
+         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
          break;
          
       /* ===== PCI Bus 0 ===== */
       case PCI_BUS_ADDR:    /* pci configuration address (0xcf8) */
-         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
          break;
 
       case PCI_BUS_DATA:    /* pci data address (0xcfc) */
-         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,data);
+         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
          break;
 
 #if DEBUG_UNKNOWN
       default:
-         if (op_type == MTS_READ)
-            m_log("GT64120","read from addr 0x%x, pc=0x%llx\n",offset,cpu->pc);
-         else
-            m_log("GT64120","write to addr 0x%x, value=0x%llx, pc=0x%llx\n",
-                  offset,*data,cpu->pc);
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,"GT64120","read from addr 0x%x, pc=0x%llx\n",
+                    offset,cpu->pc);
+         } else {
+            cpu_log(cpu,"GT64120","write to addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx\n",offset,*data,cpu->pc);
+         }
 #endif
    }
 
    return NULL;
 }
 
-/* Create a new GT64010 controller */
-int dev_gt64010_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
-                     u_int irq,struct pci_data **pci_data)
+/* Shutdown a GT64k system controller */
+void dev_gt64k_shutdown(vm_instance_t *vm,struct gt64k_data *d)
 {
-   struct gt64k_data *gt_data;
-   struct vdevice *dev;
-   cpu_mips_t *cpu0;
+   if (d != NULL) {
+      /* Remove the device */
+      dev_remove(vm,&d->dev);
 
-   /* Device IRQ is managed by CPU0 */
-   cpu0 = cpu_group_find_id(cpu_group,0);
+      /* Remove the PCI device */
+      pci_dev_remove(d->pci_dev);
 
-   if (!(gt_data = malloc(sizeof(*gt_data)))) {
+      /* Free the structure itself */
+      free(d);
+   }
+}
+
+/* Create a new GT64010 controller */
+int dev_gt64010_init(vm_instance_t *vm,char *name,
+                     m_uint64_t paddr,m_uint32_t len,u_int irq)
+{
+   struct gt64k_data *d;
+
+   if (!(d = malloc(sizeof(*d)))) {
       fprintf(stderr,"gt64010: unable to create device data.\n");
       return(-1);
    }
 
-   /* Create a global PCI bus */
-   if (!(gt_data->bus[0] = pci_data_create("MB0/MB1/MB2"))) {
-      fprintf(stderr,"gt64010: unable to create PCI data.\n");
-      return(-1);
-   }
+   memset(d,0,sizeof(*d));
+   d->vm = vm;   
+   d->bus[0] = vm->pci_bus[0];
+
+   vm_object_init(&d->vm_obj);
+   d->vm_obj.name = name;
+   d->vm_obj.data = d;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_gt64k_shutdown;
+
+   dev_init(&d->dev);
+   d->dev.name      = name;
+   d->dev.priv_data = d;
+   d->dev.phys_addr = paddr;
+   d->dev.phys_len  = len;
+   d->dev.handler   = dev_gt64010_access;
 
    /* Add the controller as a PCI device */
-   gt_data->pci_dev = pci_dev_add(gt_data->bus[0],"gt64010",
-                                  PCI_VENDOR_GALILEO,
-                                  PCI_PRODUCT_GALILEO_GT64010,
-                                  0,0,0,irq,gt_data,NULL,NULL,NULL);
-   if (!gt_data->pci_dev) {
-      fprintf(stderr,"gt64010: unable to create PCI device.\n");
-      return(-1);
+   if (!pci_dev_lookup(d->bus[0],0,0,0)) {
+      d->pci_dev = pci_dev_add(d->bus[0],name,
+                               PCI_VENDOR_GALILEO,PCI_PRODUCT_GALILEO_GT64010,
+                               0,0,irq,d,NULL,NULL,NULL);
+
+      if (!d->pci_dev) {
+         fprintf(stderr,"gt64010: unable to create PCI device.\n");
+         return(-1);
+      }
    }
 
-   if (!(dev = dev_create("gt64010"))) {
-      fprintf(stderr,"gt64010: unable to create device.\n");
-      return(-1);
-   }
-
-   dev->phys_addr = paddr;
-   dev->phys_len  = len;
-   dev->handler   = dev_gt64010_access;
-   dev->priv_data = gt_data;
-   gt_data->mgr_cpu = cpu0;   
-
-   /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
-
-   pci_data[0] = gt_data->bus[0];
-   pci_data[1] = NULL;
+   /* Map this device to the VM */
+   vm_bind_device(vm,&d->dev);
+   vm_object_add(vm,&d->vm_obj);
    return(0);
 }
 
+/*
+ * pci_gt64120_read()
+ *
+ * Read a PCI register.
+ */
+static m_uint32_t pci_gt64120_read(cpu_mips_t *cpu,struct pci_device *dev,
+                                   int reg)
+{   
+   switch (reg) {
+      case 0x08:
+         return(0x03008005);
+      default:
+         return(0);
+   }
+}
+
 /* Create a new GT64120 controller */
-int dev_gt64120_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len,
-                     u_int irq,struct pci_data **pci_data)
+int dev_gt64120_init(vm_instance_t *vm,char *name,
+                     m_uint64_t paddr,m_uint32_t len,u_int irq)
 {
-   struct gt64k_data *gt_data;
-   struct vdevice *dev;
-   cpu_mips_t *cpu0;
+   struct gt64k_data *d;
 
-   /* Device IRQ is managed by CPU0 */
-   cpu0 = cpu_group_find_id(cpu_group,0);
-
-   if (!(gt_data = malloc(sizeof(*gt_data)))) {
-      fprintf(stderr,"gt64120: unable to create device.\n");
+   if (!(d = malloc(sizeof(*d)))) {
+      fprintf(stderr,"gt64120: unable to create device data.\n");
       return(-1);
    }
-   
-   /* Create two global PCI buses */
-   gt_data->bus[0] = pci_data_create("MB0/MB1");
-   gt_data->bus[1] = pci_data_create("MB2");
 
-   if (!gt_data->bus[0] || !gt_data->bus[1]) {
-      fprintf(stderr,"gt64120: unable to create PCI data.\n");
-      return(-1);
-   }
+   memset(d,0,sizeof(*d));
+   d->vm = vm;
+   d->bus[0] = vm->pci_bus[0];
+   d->bus[1] = vm->pci_bus[1];
+
+   vm_object_init(&d->vm_obj);
+   d->vm_obj.name = name;
+   d->vm_obj.data = d;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_gt64k_shutdown;
+
+   dev_init(&d->dev);
+   d->dev.name      = name;
+   d->dev.priv_data = d;
+   d->dev.phys_addr = paddr;
+   d->dev.phys_len  = len;
+   d->dev.handler   = dev_gt64120_access;
 
    /* Add the controller as a PCI device */
-   gt_data->pci_dev = pci_dev_add(gt_data->bus[0],"gt64120",
-                                  PCI_VENDOR_GALILEO,
-                                  PCI_PRODUCT_GALILEO_GT64120,
-                                  0,0,0,irq,gt_data,NULL,NULL,NULL);
-   if (!gt_data->pci_dev) {
-      fprintf(stderr,"gt64010: unable to create PCI device.\n");
-      return(-1);
+   if (!pci_dev_lookup(d->bus[0],0,0,0)) {
+      d->pci_dev = pci_dev_add(d->bus[0],name,
+                               PCI_VENDOR_GALILEO,PCI_PRODUCT_GALILEO_GT64120,
+                               0,0,irq,d,NULL,pci_gt64120_read,NULL);
+      if (!d->pci_dev) {
+         fprintf(stderr,"gt64120: unable to create PCI device.\n");
+         return(-1);
+      }
    }
 
-   if (!(dev = dev_create("gt64120"))) {
-      fprintf(stderr,"gt64120: unable to create device.\n");
-      return(-1);
-   }
-
-   dev->phys_addr = paddr;
-   dev->phys_len  = len;
-   dev->handler   = dev_gt64120_access;
-   dev->priv_data = gt_data;
-   gt_data->mgr_cpu = cpu0;   
-
-   /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
-
-   pci_data[0] = gt_data->bus[0];
-   pci_data[1] = gt_data->bus[1];
+   /* Map this device to the VM */
+   vm_bind_device(vm,&d->dev);
+   vm_object_add(vm,&d->vm_obj);
    return(0);
 }
 

@@ -33,12 +33,16 @@
 #define DEBUG_ACCESS  0
 #define DEBUG_WRITE   0
 
-/* bootflash private data */
+/* Bootflash private data */
 struct bootflash_data {
-   u_char *host_addr;
+   vm_obj_t vm_obj;
+   struct vdevice dev;
    m_uint32_t cui_cmd,blk_cmd;
    m_uint32_t status;
+   char *filename;
 };
+
+#define BPTR(d,offset) (((char *)d->dev.host_addr) + offset)
 
 /*
  * dev_bootflash_access()
@@ -51,18 +55,18 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ)
-      m_log(dev->name,"read  access to offset = 0x%x, pc = 0x%llx "
-            "(stat=%u,cui_cmd=0x%x)\n",
-            offset,cpu->pc,d->status,d->cui_cmd);
+      cpu_log(cpu,dev->name,"read  access to offset = 0x%x, pc = 0x%llx "
+              "(stat=%u,cui_cmd=0x%x)\n",
+              offset,cpu->pc,d->status,d->cui_cmd);
    else
-      m_log(dev->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-            "val = 0x%llx\n",offset,cpu->pc,*data);
+      cpu_log(cpu,dev->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
+              "val = 0x%llx\n",offset,cpu->pc,*data);
 #endif
 
    if (op_type == MTS_READ) {
       /* Read Array mode */
       if (d->status == 0)
-         return(d->host_addr + offset);
+         return(BPTR(d,offset));
 
       switch(d->cui_cmd) {
          /* Intelligent identifier */
@@ -75,9 +79,9 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
                   *data = 0xA0A0A0A0;   /* device code */
                   return NULL;
                default:
-                  m_log(dev->name,
-                        "Reading Intelligent ID Code at offset = 0x%x ?\n",
-                        offset);
+                  cpu_log(cpu,dev->name,
+                          "Reading Intelligent ID Code at offset = 0x%x ?\n",
+                          offset);
                   *data = 0x00000000;
                   return NULL;
             }
@@ -97,12 +101,12 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
    /* write mode */
    if (d->blk_cmd == 0x40404040) {
 #if DEBUG_WRITE
-      m_log(dev->name,"Writing 0x%llx at offset=0x%x\n",*data,offset);
+      cpu_log(cpu,dev->name,"Writing 0x%llx at offset=0x%x\n",*data,offset);
 #endif
       d->blk_cmd = 0;
       d->cui_cmd = 0;
       d->status = 1;
-      return(d->host_addr + offset);
+      return(BPTR(d,offset));
    }
 
    switch(*data) {
@@ -114,7 +118,7 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
       /* Erase Confirm */
       case 0xd0d0d0d0:
          if ((d->blk_cmd == 0x20202020) && !(offset & 0x3FFFF)) {
-            memset(d->host_addr+offset,0xFF,0x40000);
+            memset(BPTR(d,offset),0xFF,0x40000);
             d->blk_cmd = 0;
             d->cui_cmd = 0;
             d->status = 1;
@@ -145,44 +149,78 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
          break;
 
       default:
-         m_log(dev->name,"bootflash: default write case, val=0x%llx\n",*data);
+         cpu_log(cpu,dev->name,
+                 "default write case at offset=0x%7.7x, val=0x%llx\n",
+                 offset,*data);
    }
 
    return NULL;
 }
 
-/* dev_bootflash_init() */
-int dev_bootflash_init(cpu_group_t *cpu_group,char *filename,
-                       m_uint64_t paddr,m_uint32_t len)
+/* Shutdown a bootflash device */
+void dev_bootflash_shutdown(vm_instance_t *vm,struct bootflash_data *d)
 {
-   struct vdevice *dev;
-   struct bootflash_data *d;
+   if (d != NULL) {
+      /* Remove the device */
+      dev_remove(vm,&d->dev);
 
-   if (!(dev = dev_create("bootflash"))) {
-      fprintf(stderr,"bootflash: unable to create device.\n");
-      return(-1);
+      /* We don't remove the file, since it used as permanent storage */
+      if (d->filename)
+         free(d->filename);
+
+      /* Free the structure itself */
+      free(d);
    }
+}
 
-   /* allocate the private data structure */
+/* Create a 8 Mb bootflash */
+int dev_bootflash_init(vm_instance_t *vm,char *name,
+                       m_uint64_t paddr,m_uint32_t len)
+{  
+   struct bootflash_data *d;
+   u_char *ptr;
+
+   /* Allocate the private data structure */
    if (!(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"bootflash: out of memory\n");
+      fprintf(stderr,"Bootflash: unable to create device.\n");
       return(-1);
    }
 
    memset(d,0,sizeof(*d));
 
-   dev->phys_addr = paddr;
-   dev->phys_len  = 8 * 1048576;
-   dev->handler   = dev_bootflash_access;
-   dev->fd        = memzone_create_file(filename,dev->phys_len,&d->host_addr);
-   dev->priv_data = d;
+   vm_object_init(&d->vm_obj);
+   d->vm_obj.name = name;
+   d->vm_obj.data = d;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_bootflash_shutdown;
 
-   if (dev->fd == -1) {
-      fprintf(stderr,"bootflash: unable to map file '%s'\n",filename);
-      return(-1);
+   if (!(d->filename = vm_build_filename(vm,name))) {
+      fprintf(stderr,"Bootflash: unable to create filename.\n");
+      goto err_filename;
    }
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
+   dev_init(&d->dev);
+   d->dev.name      = name;
+   d->dev.priv_data = d;
+   d->dev.phys_addr = paddr;
+   d->dev.phys_len  = len;
+   d->dev.handler   = dev_bootflash_access;
+   d->dev.fd        = memzone_create_file(d->filename,d->dev.phys_len,&ptr);
+   d->dev.host_addr = (m_iptr_t)ptr;
+   d->dev.flags     = VDEVICE_FLAG_NO_MTS_MMAP;
+
+   if (d->dev.fd == -1) {
+      fprintf(stderr,"Bootflash: unable to map file '%s'\n",d->filename);
+      goto err_fd_create;
+   }
+
+   /* Map this device to the VM */
+   vm_bind_device(vm,&d->dev);
+   vm_object_add(vm,&d->vm_obj);
    return(0);
+
+ err_fd_create:
+   free(d->filename);
+ err_filename:
+   free(d);
+   return(-1);
 }

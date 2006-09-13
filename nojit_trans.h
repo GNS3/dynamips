@@ -37,10 +37,16 @@ void mips64_set_ra(insn_block_t *b,m_uint64_t ret_pc);
 /* Virtual Breakpoint */
 void mips64_emit_breakpoint(insn_block_t *b);
 
+/* Emit unhandled instruction code */
+int mips64_emit_invalid_delay_slot(insn_block_t *b);
+
 /* 
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
 void mips64_inc_cp0_count_reg(insn_block_t *b);
+
+/* Increment the number of executed instructions (performance debugging) */
+void mips64_inc_perf_counter(insn_block_t *b);
 
 #endif

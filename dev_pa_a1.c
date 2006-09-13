@@ -31,19 +31,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <errno.h>
 
+#include "crc.h"
 #include "atm.h"
 #include "mips64.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 #include "ptask.h"
-#include "dev_c7200_bay.h"
+#include "dev_c7200.h"
 
 /* Debugging flags */
 #define DEBUG_ACCESS     0
+#define DEBUG_UNKNOWN    0
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
 #define DEBUG_TX_DMA     0
@@ -54,6 +55,9 @@
 
 #define PLX_9060ES_PCI_VENDOR_ID   0x10b5
 #define PLX_9060ES_PCI_PRODUCT_ID  0x906e
+
+/* Number of buffers transmitted at each TX DMA ring scan pass */
+#define TI1570_TXDMA_PASS_COUNT  16
 
 /* TI1570 Internal Registers (p.58 of doc) */
 #define TI1570_REG_CONFIG          0x0000  /* Configuration registers */
@@ -279,8 +283,6 @@ struct ti1570_rcr_entry {
 /* TI1570 Data */
 struct pa_a1_data {
    char *name;
-   m_uint32_t bay_addr;
-   m_uint32_t cbma_addr;
 
    /* Control Memory pointer */
    m_uint32_t *ctrl_mem_ptr;
@@ -317,25 +319,28 @@ struct pa_a1_data {
    /* PCI device information */
    struct pci_device *pci_dev_ti,*pci_dev_plx;
 
-   /* "Managing" CPU */
-   cpu_mips_t *mgr_cpu;
+   /* Virtual machine */
+   vm_instance_t *vm;
 
    /* NetIO descriptor */
    netio_desc_t *nio;
 
-   /* RX Thread */
-   pthread_t rx_thread;
+   /* TX ring scanner task id */
+   ptask_id_t tx_tid;
 };
 
 /* EEPROM definition */
-static unsigned short eeprom_pa_a1_data[64] = {
+static const m_uint16_t eeprom_pa_a1_data[64] = {
    0x0117, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
-static struct c7200_eeprom eeprom_pa_a1 = {
-   "PA-A1-OC3MM", eeprom_pa_a1_data, sizeof(eeprom_pa_a1_data)/2,
+static const struct c7200_eeprom eeprom_pa_a1 = {
+   "PA-A1-OC3MM", (m_uint16_t *)eeprom_pa_a1_data, sizeof(eeprom_pa_a1_data)/2,
 };
+
+/* Log a TI1570 message */
+#define TI1570_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
 /* Reset the TI1570 (forward declaration) */
 static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem);
@@ -352,18 +357,19 @@ void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       *data = 0;
 
 #if DEBUG_ACCESS
-   if (op_type == MTS_READ)
-      m_log("TI1570","read  access to offset = 0x%x, pc = 0x%llx\n",
-             offset,cpu->pc);
-   else
-      m_log("TI1570","write access to vaddr = 0x%x, pc = 0x%llx, "
-             "val = 0x%llx\n",offset,cpu->pc,*data);
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,"TI1570","read  access to offset = 0x%x, pc = 0x%llx\n",
+              offset,cpu->pc);
+   } else {
+      cpu_log(cpu,"TI1570","write access to vaddr = 0x%x, pc = 0x%llx, "
+              "val = 0x%llx\n",offset,cpu->pc,*data);
+   }
 #endif   
 
    /* Specific cases */
    switch(offset) {
       case 0x3238:
-         m_log("TI1570","reset issued.\n");
+         TI1570_LOG(d,"reset issued.\n");
          ti1570_reset(d,FALSE);
          break;
 
@@ -381,8 +387,19 @@ void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          *data = d->ctrl_mem_ptr[offset >> 2];
       else
          d->ctrl_mem_ptr[offset >> 2] = *data;
+      return NULL;
    }
 
+   /* Unknown offset */
+#if DEBUG_UNKNOWN
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->name,"read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
+              offset,cpu->pc,op_size);
+   } else {
+      cpu_log(cpu,d->name,"write to unknown addr 0x%x, value=0x%llx, "
+              "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+   }
+#endif
    return NULL;
 }
 
@@ -390,7 +407,7 @@ void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 static void ti1570_read_tx_buffer(struct pa_a1_data *d,m_uint32_t addr,
                                   ti1570_tx_buffer_t *tx_buf)
 {
-   physmem_copy_from_vm(d->mgr_cpu,tx_buf,addr,sizeof(ti1570_tx_buffer_t));
+   physmem_copy_from_vm(d->vm,tx_buf,addr,sizeof(ti1570_tx_buffer_t));
 
    /* byte-swapping */
    tx_buf->ctrl_buf  = vmtoh32(tx_buf->ctrl_buf);
@@ -408,8 +425,8 @@ static int ti1570_acquire_tx_buffer(struct pa_a1_data *d,
    m_uint32_t buf_offset;
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"ti1570_acquire_tx_buffer: acquiring buffer at "
-         "address 0x%x\n",buf_addr);
+   TI1570_LOG(d,"ti1570_acquire_tx_buffer: acquiring buffer at address 0x%x\n",
+              buf_addr);
 #endif
 
    /* Read the TX buffer from host memory */
@@ -453,9 +470,9 @@ static inline int ti1570_is_tde_aal5(ti1570_tx_dma_entry_t *tde)
 static void ti1570_update_aal5_crc(struct pa_a1_data *d,
                                    ti1570_tx_dma_entry_t *tde)
 {
-   tde->aal5_crc = atm_update_crc(tde->aal5_crc,
-                                  &d->txfifo_cell[ATM_HDR_SIZE],
-                                  ATM_PAYLOAD_SIZE);
+   tde->aal5_crc = crc32_compute(tde->aal5_crc,
+                                 &d->txfifo_cell[ATM_HDR_SIZE],
+                                 ATM_PAYLOAD_SIZE);
 }
 
 /* 
@@ -503,7 +520,7 @@ static void ti1570_send_tx_fifo(struct pa_a1_data *d,
 {
    if (d->txfifo_avail == 0) {
 #if DEBUG_TRANSMIT
-      m_log(d->name,"ti1570_transmit_cell: transmitting to NETIO device\n");
+      TI1570_LOG(d,"ti1570_transmit_cell: transmitting to NETIO device\n");
       mem_dump(log_file,d->txfifo_cell,ATM_CELL_SIZE);
 #endif
       if (update_aal5_crc)
@@ -518,8 +535,8 @@ static void ti1570_send_tx_fifo(struct pa_a1_data *d,
 static void ti1570_add_tx_padding(struct pa_a1_data *d,m_uint32_t len)
 {
    if (len > d->txfifo_avail) {
-      m_log(d->name,"ti1570_add_tx_padding: trying to add too large "
-            "padding (avail: 0x%x, pad: 0x%x)\n",d->txfifo_avail,len);
+      TI1570_LOG(d,"ti1570_add_tx_padding: trying to add too large "
+                 "padding (avail: 0x%x, pad: 0x%x)\n",d->txfifo_avail,len);
       len = d->txfifo_avail;
    }
 
@@ -539,9 +556,9 @@ static m_uint32_t ti1570_init_tx_atm_cell(struct pa_a1_data *d,
    len = m_min(buf_size,d->txfifo_avail);
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"ti1570_init_tx_atm_cell: data ptr=0x%x, "
-         "buf_size=%u (0x%x), len=%u (0x%x), atm_hdr=0x%x\n",
-         tde->cb_addr,buf_size,buf_size,len,len,tde->atm_hdr);
+   TI1570_LOG(d,"ti1570_init_tx_atm_cell: data ptr=0x%x, "
+              "buf_size=%u (0x%x), len=%u (0x%x), atm_hdr=0x%x\n",
+              tde->cb_addr,buf_size,buf_size,len,len,tde->atm_hdr);
 #endif
 
    /* copy the ATM header */
@@ -559,7 +576,7 @@ static m_uint32_t ti1570_init_tx_atm_cell(struct pa_a1_data *d,
 
    /* copy the payload and try to transmit if the FIFO is full */
    if (len > 0) {
-      physmem_copy_from_vm(d->mgr_cpu,&d->txfifo_cell[d->txfifo_pos],
+      physmem_copy_from_vm(d->vm,&d->txfifo_cell[d->txfifo_pos],
                            tde->cb_addr,len);
       d->txfifo_pos += len;
       d->txfifo_avail -= len;
@@ -615,9 +632,9 @@ static void ti1570_add_aal5_trailer(struct pa_a1_data *d,
    *(m_uint32_t *)trailer = htonl(tde->aal5_ctrl);
 
    /* Final CRC-32 computation */
-   tde->aal5_crc = atm_update_crc(tde->aal5_crc,
-                                  &d->txfifo_cell[ATM_HDR_SIZE],
-                                  ATM_PAYLOAD_SIZE - 4);
+   tde->aal5_crc = crc32_compute(tde->aal5_crc,
+                                 &d->txfifo_cell[ATM_HDR_SIZE],
+                                 ATM_PAYLOAD_SIZE - 4);
 
    *(m_uint32_t *)(trailer+4) = htonl(~tde->aal5_crc);
 
@@ -641,8 +658,8 @@ static int ti1570_transmit_aal5_cell(struct pa_a1_data *d,
    buf_size = tde->ctrl_buf & TI1570_TX_DMA_DCOUNT_MASK;
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"ti1570_transmit_aal5_cell: data ptr=0x%x, "
-         "buf_size=0x%x (%u)\n",tde->cb_addr,buf_size,buf_size);
+   TI1570_LOG(d,"ti1570_transmit_aal5_cell: data ptr=0x%x, "
+              "buf_size=0x%x (%u)\n",tde->cb_addr,buf_size,buf_size);
 #endif
 
    /* If this is not the end of packet, transmit the cell normally */
@@ -698,14 +715,14 @@ static void ti1570_update_tx_cring(struct pa_a1_data *d,
    }
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"ti1570_update_tx_cring: posting 0x%x at address 0x%x\n",
-         tde->sb_addr,tcr_addr);
+   TI1570_LOG(d,"ti1570_update_tx_cring: posting 0x%x at address 0x%x\n",
+              tde->sb_addr,tcr_addr);
 
-   physmem_dump_vm(d->mgr_cpu,tde->sb_addr,sizeof(ti1570_tx_buffer_t) >> 2);
+   physmem_dump_vm(d->vm,tde->sb_addr,sizeof(ti1570_tx_buffer_t) >> 2);
 #endif
 
    /* we have a TX freeze if the buffer belongs to the host */
-   val = physmem_copy_u32_from_vm(d->mgr_cpu,tcr_addr);
+   val = physmem_copy_u32_from_vm(d->vm,tcr_addr);
    if (!(val & TI1570_TCR_OWN)) {
       d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_TX_FRZ;
       return;
@@ -717,7 +734,7 @@ static void ti1570_update_tx_cring(struct pa_a1_data *d,
    if (tde->ctrl_buf & TI1570_TX_DMA_ABORT)
       val |= TI1570_TCR_ABORT;
 
-   physmem_copy_u32_to_vm(d->mgr_cpu,tcr_addr,val);
+   physmem_copy_u32_to_vm(d->vm,tcr_addr,val);
 
    /* update the internal position pointer */
    if (tde->ctrl_buf & TI1570_TX_DMA_TCR_SELECT) {
@@ -735,7 +752,8 @@ static void ti1570_update_tx_cring(struct pa_a1_data *d,
 }
 
 /* Analyze a TX DMA state table entry */
-static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
+static int ti1570_scan_tx_dma_entry_single(struct pa_a1_data *d,
+                                           m_uint32_t index)
 {
    ti1570_tx_dma_entry_t *tde;
    m_uint32_t psr_base,psr_addr,psr_entry,psr_end;
@@ -748,20 +766,20 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
 
    /* The DMA channel state flag must be ON */
    if (!(tde->dma_state & TI1570_TX_DMA_ON))
-      return;
+      return(FALSE);
 
 #if DEBUG_TX_DMA
    /* We have a running DMA channel */
-   m_log(d->name,"ti1570_scan_tx_dma_entry: TX DMA entry %u is ON "
-         "(ctrl_buf = 0x%x)\n",index,tde->ctrl_buf);
+   TI1570_LOG(d,"ti1570_scan_tx_dma_entry: TX DMA entry %u is ON "
+              "(ctrl_buf = 0x%x)\n",index,tde->ctrl_buf);
 #endif
 
    /* Is this the start of a new packet ? */
    if (!(tde->ctrl_buf & TI1570_TX_DMA_ACT))
    {
 #if DEBUG_TX_DMA
-      m_log(d->name,"ti1570_scan_tx_dma_entry: TX DMA entry %u is not ACT\n",
-            index);
+      TI1570_LOG(d,"ti1570_scan_tx_dma_entry: TX DMA entry %u is not ACT\n",
+                 index);
 #endif
 
       /* No packet yet, fetch it from the packet-segmentation ring */
@@ -770,24 +788,24 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
 
       /* Compute address of the current packet segmentation ring entry */
       psr_addr = (psr_base + psr_index) << 2;
-      psr_entry = physmem_copy_u32_from_vm(d->mgr_cpu,psr_addr);
+      psr_entry = physmem_copy_u32_from_vm(d->vm,psr_addr);
 
 #if DEBUG_TX_DMA
-      m_log(d->name,"ti1570_scan_tx_dma_entry: psr_addr = 0x%x, "
-            "psr_entry = 0x%x\n",psr_addr,psr_entry);
+      TI1570_LOG(d,"ti1570_scan_tx_dma_entry: psr_addr = 0x%x, "
+                 "psr_entry = 0x%x\n",psr_addr,psr_entry);
 #endif
 
       /* The packet-segmentation-ring entry is owned by host, quit now */
       if (!(psr_entry & TI1570_TX_RING_OWN))
-         return;
+         return(FALSE);
 
       /* Acquire the first buffer (it MUST be in the ready state) */
       buf_addr = (psr_entry & TI1570_TX_RING_PTR_MASK) << 2;
 
       if (!ti1570_acquire_tx_buffer(d,tde,buf_addr)) {
-         m_log(d->name,"ti1570_scan_tx_dma_entry: PSR entry with OWN bit set "
-               "but buffer without RDY bit set.\n");
-         return;
+         TI1570_LOG(d,"ti1570_scan_tx_dma_entry: PSR entry with OWN bit set "
+                    "but buffer without RDY bit set.\n");
+         return(FALSE);
       }
 
       /* Set ACT bit for the DMA channel */
@@ -800,13 +818,13 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
    pkt_end  = tde->ctrl_buf & TI1570_TX_DMA_EOP;
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"ti1570_scan_tx_dma_entry: ctrl_buf=0x%8.8x, "
-         "cb_addr=0x%8.8x, atm_hdr=0x%8.8x, dma_state=0x%8.8x\n",
-         tde->ctrl_buf, tde->cb_addr, tde->atm_hdr, tde->dma_state);
+   TI1570_LOG(d,"ti1570_scan_tx_dma_entry: ctrl_buf=0x%8.8x, "
+              "cb_addr=0x%8.8x, atm_hdr=0x%8.8x, dma_state=0x%8.8x\n",
+              tde->ctrl_buf, tde->cb_addr, tde->atm_hdr, tde->dma_state);
 
-   m_log(d->name,"ti1570_scan_tx_dma_entry: nb_addr=0x%8.8x, "
-         "sb_addr=0x%8.8x, aal5_crc=0x%8.8x, aal5_ctrl=0x%8.8x\n",
-         tde->nb_addr, tde->sb_addr, tde->aal5_crc, tde->aal5_ctrl);
+   TI1570_LOG(d,"ti1570_scan_tx_dma_entry: nb_addr=0x%8.8x, "
+              "sb_addr=0x%8.8x, aal5_crc=0x%8.8x, aal5_ctrl=0x%8.8x\n",
+              tde->nb_addr, tde->sb_addr, tde->aal5_crc, tde->aal5_ctrl);
 #endif
 
    /* 
@@ -815,7 +833,7 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
     * If the next buffer is not yet ready, we have finished.
     */
    if (!buf_size && !pkt_end && !ti1570_acquire_tx_buffer(d,tde,tde->nb_addr))
-      return;
+      return(FALSE);
 
    switch(pkt_type) {
       case TI1570_TX_DMA_AAL_TRWPTI:
@@ -831,8 +849,8 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
          break;
 
       default:
-         m_log(d->name,"ti1570_scan_tx_dma_entry: invalid AAL-type\n");
-         return;
+         TI1570_LOG(d,"ti1570_scan_tx_dma_entry: invalid AAL-type\n");
+         return(FALSE);
    }
 
    /* Re-read the remaining buffer size */
@@ -854,9 +872,9 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
       psr_index = (tde->dma_state & TI1570_TX_DMA_RING_INDEX_MASK);
       psr_addr = (psr_base + psr_index) << 2;
 
-      psr_entry = physmem_copy_u32_from_vm(d->mgr_cpu,psr_addr);
+      psr_entry = physmem_copy_u32_from_vm(d->vm,psr_addr);
       psr_entry &= ~TI1570_TX_RING_OWN;
-      physmem_copy_u32_to_vm(d->mgr_cpu,psr_addr,psr_entry);
+      physmem_copy_u32_to_vm(d->vm,psr_addr,psr_entry);
       
       /* Increment the packet-segmentation ring index */
       psr_index++;
@@ -866,8 +884,8 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
       if (psr_index > psr_end) {
          psr_index = 0;
 #if DEBUG_TX_DMA
-         m_log(d->name,"ti1570_scan_tx_dma_entry: PSR ring rotation "
-               "(psr_end = %u)\n",psr_end);
+         TI1570_LOG(d,"ti1570_scan_tx_dma_entry: PSR ring rotation "
+                    "(psr_end = %u)\n",psr_end);
 #endif
       }
 
@@ -883,9 +901,21 @@ static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
           pkt_end)
       {
          d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_CP_TX;
-         pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev_ti);
+         pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
       }
    }
+
+   return(TRUE);
+}
+
+/* Analyze a TX DMA state table entry */
+static void ti1570_scan_tx_dma_entry(struct pa_a1_data *d,m_uint32_t index)
+{
+   int i;
+
+   for(i=0;i<TI1570_TXDMA_PASS_COUNT;i++)
+      if (!ti1570_scan_tx_dma_entry_single(d,index))
+         break;
 }
 
 /* Analyze the TX schedule table */
@@ -913,7 +943,7 @@ static void ti1570_scan_tx_sched_table(struct pa_a1_data *d)
 static void ti1570_read_rx_buffer(struct pa_a1_data *d,m_uint32_t addr,
                                   ti1570_rx_buffer_t *rx_buf)
 {
-   physmem_copy_from_vm(d->mgr_cpu,rx_buf,addr,sizeof(ti1570_rx_buffer_t));
+   physmem_copy_from_vm(d->vm,rx_buf,addr,sizeof(ti1570_rx_buffer_t));
 
    /* byte-swapping */
    rx_buf->reserved = vmtoh32(rx_buf->reserved);
@@ -944,18 +974,18 @@ static void ti1570_update_rx_cring(struct pa_a1_data *d,
    }
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_update_rx_cring: posting 0x%x at address 0x%x\n",
-         (rde->sp_ptr << 2),rcr_addr);
+   TI1570_LOG(d,"ti1570_update_rx_cring: posting 0x%x at address 0x%x\n",
+              (rde->sp_ptr << 2),rcr_addr);
 
-   physmem_dump_vm(d->mgr_cpu,rde->sp_ptr<<2,sizeof(ti1570_rx_buffer_t) >> 2);
+   physmem_dump_vm(d->vm,rde->sp_ptr<<2,sizeof(ti1570_rx_buffer_t) >> 2);
 #endif
 
    /* we have a RX freeze if the buffer belongs to the host */
    ptr = rcr_addr + OFFSET(ti1570_rcr_entry_t,fbr_entry);
-   val = physmem_copy_u32_from_vm(d->mgr_cpu,ptr);
+   val = physmem_copy_u32_from_vm(d->vm,ptr);
 
    if (!(val & TI1570_RCR_OWN)) {
-      m_log(d->name,"ti1570_update_rx_cring: RX freeze...\n");
+      TI1570_LOG(d,"ti1570_update_rx_cring: RX freeze...\n");
       d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_RX_FRZ;
       return;
    }
@@ -990,7 +1020,7 @@ static void ti1570_update_rx_cring(struct pa_a1_data *d,
    rcre.sp_addr      = htonl(rcre.sp_addr);
    rcre.aal5_trailer = htonl(rcre.aal5_trailer);
    rcre.fbr_entry    = htonl(rcre.fbr_entry);
-   physmem_copy_to_vm(d->mgr_cpu,&rcre,rcr_addr,sizeof(rcre));
+   physmem_copy_to_vm(d->vm,&rcre,rcr_addr,sizeof(rcre));
 
    /* clear the active bit of the RX DMA entry */
    rde->ctrl &= ~TI1570_RX_DMA_ACT;
@@ -1004,7 +1034,7 @@ static void ti1570_update_rx_cring(struct pa_a1_data *d,
 
       /* generate the appropriate IRQ */
       d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_CP_RX;
-      pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev_ti);
+      pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
    } else  {
       rcr_end = (d->iregs[TI1570_REG_RX_CRING_SIZE] >> 16);
       rcr_end &= TI1570_RCR_SIZE_MASK;
@@ -1036,12 +1066,12 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
 
    if (rde->ctrl & TI1570_RX_DMA_FIFO) { 
       bp_addr  = (rde->fbr_entry & TI1570_RX_DMA_FB_PTR_MASK) << 2;
-      buf_ptr  = physmem_copy_u32_from_vm(d->mgr_cpu,bp_addr);
+      buf_ptr  = physmem_copy_u32_from_vm(d->vm,bp_addr);
       buf_size = d->iregs[TI1570_REG_TX_PSR_SIZE] & 0xFFFF;
       fifo = TRUE;
 
 #if DEBUG_RECEIVE
-      m_log(d->name,"ti1570_acquire_rx_buffer: acquiring FIFO buffer\n");
+      TI1570_LOG(d,"ti1570_acquire_rx_buffer: acquiring FIFO buffer\n");
 #endif
    } 
    else 
@@ -1050,8 +1080,8 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
       fbr_entry = &d->rx_fbr_table[ring_index];
 
 #if DEBUG_RECEIVE
-      m_log(d->name,"ti1570_acquire_rx_buffer: acquiring non-FIFO buffer, "
-            "ring index=%u (0x%x)\n",ring_index,ring_index);
+      TI1570_LOG(d,"ti1570_acquire_rx_buffer: acquiring non-FIFO buffer, "
+                 "ring index=%u (0x%x)\n",ring_index,ring_index);
 #endif
 
       /* Compute the number of entries in ring */
@@ -1068,23 +1098,23 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
       bp_addr = fbr_entry->fbr_ptr + (buf_idx << 2);
 
 #if DEBUG_RECEIVE
-      m_log(d->name,"ti1570_acquire_rx_buffer: ring size=%u (0x%x), "
-            "buf size=%u ATM cells\n",ring_size,ring_size,buf_size);
+      TI1570_LOG(d,"ti1570_acquire_rx_buffer: ring size=%u (0x%x), "
+                 "buf size=%u ATM cells\n",ring_size,ring_size,buf_size);
 
-      m_log(d->name,"ti1570_acquire_rx_buffer: buffer index=%u (0x%x), "
-            "buffer ptr address = 0x%x\n",buf_idx,buf_idx,bp_addr);
+      TI1570_LOG(d,"ti1570_acquire_rx_buffer: buffer index=%u (0x%x), "
+                 "buffer ptr address = 0x%x\n",buf_idx,buf_idx,bp_addr);
 #endif
 
-      buf_ptr = physmem_copy_u32_from_vm(d->mgr_cpu,bp_addr);
+      buf_ptr = physmem_copy_u32_from_vm(d->vm,bp_addr);
    }
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_acquire_rx_buffer: buf_ptr = 0x%x\n",buf_ptr);
+   TI1570_LOG(d,"ti1570_acquire_rx_buffer: buf_ptr = 0x%x\n",buf_ptr);
 #endif
 
    /* The TI1570 must own the buffer */
    if (!(buf_ptr & TI1570_RX_BUFPTR_OWN)) {
-      m_log(d->name,"ti1570_acquire_rx_buffer: no free buffer available.\n");
+      TI1570_LOG(d,"ti1570_acquire_rx_buffer: no free buffer available.\n");
       return(FALSE);
    }
 
@@ -1094,13 +1124,13 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
     */
    if (!fifo) {
       buf_ptr &= ~TI1570_RX_BUFPTR_OWN;
-      physmem_copy_u32_to_vm(d->mgr_cpu,bp_addr,buf_ptr);
+      physmem_copy_u32_to_vm(d->vm,bp_addr,buf_ptr);
 
       if (++buf_idx == ring_size) {
 #if DEBUG_RECEIVE
-         m_log(d->name,"ti1570_acquire_rx_buffer: buf_idx=0x%x, "
-               "ring_size=0x%x -> resetting buf_idx\n",
-               buf_idx-1,ring_size);
+         TI1570_LOG(d,"ti1570_acquire_rx_buffer: buf_idx=0x%x, "
+                    "ring_size=0x%x -> resetting buf_idx\n",
+                    buf_idx-1,ring_size);
 #endif
          buf_idx = 0;
       }
@@ -1114,7 +1144,7 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
    buf_addr = (buf_ptr & TI1570_RX_BUFPTR_MASK) << 2;
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_acquire_rx_buffer: buf_addr = 0x%x\n",buf_addr);
+   TI1570_LOG(d,"ti1570_acquire_rx_buffer: buf_addr = 0x%x\n",buf_addr);
 #endif
 
    /* Read the buffer descriptor itself and store info for caller */
@@ -1123,13 +1153,10 @@ static int ti1570_acquire_rx_buffer(struct pa_a1_data *d,
    ti1570_read_rx_buffer(d,buf_addr,&rbh->rx_buf);
 
    /* Clear the control field */
-   physmem_copy_u32_to_vm(d->mgr_cpu,
-                          buf_addr+OFFSET(ti1570_rx_buffer_t,ctrl),
-                          0);
+   physmem_copy_u32_to_vm(d->vm,buf_addr+OFFSET(ti1570_rx_buffer_t,ctrl),0);
 
    /* Store the ATM header in data buffer */
-   physmem_copy_u32_to_vm(d->mgr_cpu,
-                          buf_addr+OFFSET(ti1570_rx_buffer_t,atm_hdr),
+   physmem_copy_u32_to_vm(d->vm,buf_addr+OFFSET(ti1570_rx_buffer_t,atm_hdr),
                           atm_hdr);
    return(TRUE);
 }
@@ -1177,8 +1204,7 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
       pti_eop = TRUE;
    
    if (rde->ctrl & TI1570_RX_DMA_WAIT_EOP) {
-      m_log(d->name,"ti1570_store_rx_cell: EOP processing, "
-            "not handled yet.\n");
+      TI1570_LOG(d,"ti1570_store_rx_cell: EOP processing, not handled yet.\n");
       return(FALSE);
    }
 
@@ -1215,9 +1241,9 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
       /* chain the buffers (keep SOP/EOP bits intact) */
       ptr = prev_buf_addr + OFFSET(ti1570_rx_buffer_t,ctrl);
 
-      val = physmem_copy_u32_from_vm(d->mgr_cpu,ptr);
+      val = physmem_copy_u32_from_vm(d->vm,ptr);
       val |= rde->sb_addr;
-      physmem_copy_u32_to_vm(d->mgr_cpu,ptr,val);
+      physmem_copy_u32_to_vm(d->vm,ptr,val);
 
       /* read the new buffer length */
       buf_len = rde->cb_len & TI1570_RX_DMA_CB_LEN_MASK;
@@ -1225,11 +1251,11 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
 
    /* copy the ATM payload */
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_store_rx_cell: storing cell payload at 0x%x "
-         "(buf_addr=0x%x)\n",rde->cb_addr,rde->sb_addr << 2);
+   TI1570_LOG(d,"ti1570_store_rx_cell: storing cell payload at 0x%x "
+              "(buf_addr=0x%x)\n",rde->cb_addr,rde->sb_addr << 2);
 #endif
 
-   physmem_copy_to_vm(d->mgr_cpu,&atm_cell[ATM_HDR_SIZE],
+   physmem_copy_to_vm(d->vm,&atm_cell[ATM_HDR_SIZE],
                       rde->cb_addr,ATM_PAYLOAD_SIZE);
    rde->cb_addr += ATM_PAYLOAD_SIZE;
 
@@ -1238,8 +1264,8 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
    rde->cb_len = val | (--buf_len);
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_store_rx_cell: new rde->cb_len = 0x%x, "
-         "buf_len=0x%x\n",rde->cb_len,buf_len);
+   TI1570_LOG(d,"ti1570_store_rx_cell: new rde->cb_len = 0x%x, "
+              "buf_len=0x%x\n",rde->cb_len,buf_len);
 #endif
 
    /* determine if this is the end of the packet (EOP) */
@@ -1265,9 +1291,9 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
    if (real_eop) {
       /* mark the buffer as EOP */
       ptr = (rde->sb_addr << 2) + OFFSET(ti1570_rx_buffer_t,ctrl);
-      val = physmem_copy_u32_from_vm(d->mgr_cpu,ptr);
+      val = physmem_copy_u32_from_vm(d->vm,ptr);
       val |= TI1570_RX_BUFFER_EOP;
-      physmem_copy_u32_to_vm(d->mgr_cpu,ptr,val);
+      physmem_copy_u32_to_vm(d->vm,ptr,val);
 
       /* get the aal5 trailer */
       aal5_trailer = ntohl(*(m_uint32_t *)&atm_cell[ATM_AAL5_TRAILER_POS]);
@@ -1280,20 +1306,17 @@ static int ti1570_store_rx_cell(struct pa_a1_data *d,
 }
 
 /* Handle a received ATM cell */
-static int ti1570_handle_rx_cell(struct pa_a1_data *d)
+static int ti1570_handle_rx_cell(netio_desc_t *nio,
+                                 u_char *atm_cell,ssize_t cell_len,
+                                 struct pa_a1_data *d)
 {
    m_uint32_t atm_hdr,vpi,vci,vci_idx,vci_mask;
    m_uint32_t vci_max,rvd_entry,bptr,pti,ptr;
    ti1570_rx_dma_entry_t *rde = NULL;
    ti1570_rx_buf_holder_t rbh;
-   m_uint8_t atm_cell[ATM_CELL_SIZE];
-   ssize_t cell_len;
 
-   /* Receive a cell through the NETIO infrastructure */
-   cell_len = netio_recv(d->nio,atm_cell,ATM_CELL_SIZE);
-
-   if (cell_len < 0) {
-      m_log(d->name,"net_io RX failed %s\n",strerror(errno));
+   if (cell_len != ATM_CELL_SIZE) {
+      TI1570_LOG(d,"invalid RX cell size (%ld)\n",(long)cell_len);
       return(FALSE);
    }
 
@@ -1304,16 +1327,16 @@ static int ti1570_handle_rx_cell(struct pa_a1_data *d)
    pti = (atm_hdr & ATM_HDR_PTI_MASK) >> ATM_HDR_PTI_SHIFT;
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"ti1570_handle_rx_cell: received cell with VPI/VCI=%u/%u\n",
-         vpi,vci);
+   TI1570_LOG(d,"ti1570_handle_rx_cell: received cell with VPI/VCI=%u/%u\n",
+              vpi,vci);
 #endif
 
    /* Get the entry corresponding to this VPI in RX VPI/VCI dma ptr table */
    rvd_entry = d->rx_vpi_vci_dma_table[vpi];
   
    if (!(rvd_entry & TI1570_RX_VPI_ENABLE)) {
-      m_log(d->name,"ti1570_handle_rx_cell: received cell with "
-            "unknown VPI %u (VCI=%u)\n",vpi,vci);
+      TI1570_LOG(d,"ti1570_handle_rx_cell: received cell with "
+                 "unknown VPI %u (VCI=%u)\n",vpi,vci);
       return(FALSE);
    }
 
@@ -1349,25 +1372,25 @@ static int ti1570_handle_rx_cell(struct pa_a1_data *d)
             vci_max = rvd_entry & TI1570_RX_VCI_RANGE_MASK;
 
             if (vci_idx > vci_max) {
-               m_log(d->name,"ti1570_handle_rx_cell: out-of-range VCI %u "
-                     "(VPI=%u,vci_mask=%u,vci_max=%u)\n",
-                     vci,vpi,vci_mask,vci_max);
+               TI1570_LOG(d,"ti1570_handle_rx_cell: out-of-range VCI %u "
+                          "(VPI=%u,vci_mask=%u,vci_max=%u)\n",
+                          vci,vpi,vci_mask,vci_max);
                return(FALSE);
             }
 
 #if DEBUG_RECEIVE
-            m_log(d->name,"ti1570_handle_rx_cell: VPI/VCI=%u/%u, "
-                  "vci_mask=0x%x, vci_idx=%u (0x%x), vci_max=%u (0x%x)\n",
-                  vpi,vci,vci_mask,vci_idx,vci_idx,vci_max,vci_max);
+            TI1570_LOG(d,"ti1570_handle_rx_cell: VPI/VCI=%u/%u, "
+                       "vci_mask=0x%x, vci_idx=%u (0x%x), vci_max=%u (0x%x)\n",
+                       vpi,vci,vci_mask,vci_idx,vci_idx,vci_max,vci_max);
 #endif
             bptr = (rvd_entry & TI1570_RX_BASE_PTR_MASK);
             bptr >>= TI1570_RX_BASE_PTR_SHIFT;
             bptr = (bptr + vci) * sizeof(ti1570_rx_dma_entry_t);
 
             if (bptr < TI1570_RX_DMA_TABLE_OFFSET) {
-               m_log(d->name,"ti1570_handle_rx_cell: inconsistency in "
-                     "RX VPI/VCI table, VPI/VCI=%u/u, bptr=0x%x\n",
-                     vpi,vci,bptr);
+               TI1570_LOG(d,"ti1570_handle_rx_cell: inconsistency in "
+                          "RX VPI/VCI table, VPI/VCI=%u/u, bptr=0x%x\n",
+                          vpi,vci,bptr);
                return(FALSE);
             }
 
@@ -1378,7 +1401,7 @@ static int ti1570_handle_rx_cell(struct pa_a1_data *d)
    }
 
    if (!rde) {
-      m_log(d->name,"ti1570_handle_rx_cell: no RX DMA table entry found!\n");
+      TI1570_LOG(d,"ti1570_handle_rx_cell: no RX DMA table entry found!\n");
       return(FALSE);
    }
 
@@ -1401,7 +1424,7 @@ static int ti1570_handle_rx_cell(struct pa_a1_data *d)
 
       /* Mark the RX buffer as the start of packet (SOP) */
       ptr = (rde->sb_addr << 2) + OFFSET(ti1570_rx_buffer_t,ctrl);
-      physmem_copy_u32_to_vm(d->mgr_cpu,ptr,TI1570_RX_BUFFER_SOP);
+      physmem_copy_u32_to_vm(d->vm,ptr,TI1570_RX_BUFFER_SOP);
 
       /* Set ACT bit for the DMA channel */
       rde->ctrl |= TI1570_RX_DMA_ACT;
@@ -1411,29 +1434,22 @@ static int ti1570_handle_rx_cell(struct pa_a1_data *d)
    ti1570_store_rx_cell(d,rde,atm_cell);
    return(TRUE);
 }
- 
-/* RX thread */
-static void *dev_pa_a1_rxthread(void *arg)
-{
-   struct pa_a1_data *d = arg;
-
-   for(;;)
-      ti1570_handle_rx_cell(d);
-
-   return NULL;
-}
 
 /*
  * pci_ti1570_read()
  */
-static m_uint32_t pci_ti1570_read(struct pci_device *dev,int reg)
+static m_uint32_t pci_ti1570_read(cpu_mips_t *cpu,struct pci_device *dev,
+                                  int reg)
 {
    struct pa_a1_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
-   m_log(d->name,"pci_ti1570_read: read reg 0x%x\n",reg);
+   TI1570_LOG(d,"pci_ti1570_read: read reg 0x%x\n",reg);
 #endif
+
    switch(reg) {
+      case PCI_REG_BAR0:
+         return(d->dev->phys_addr);
       default:
          return(0);
    }
@@ -1442,18 +1458,19 @@ static m_uint32_t pci_ti1570_read(struct pci_device *dev,int reg)
 /*
  * pci_ti1570_write()
  */
-static void pci_ti1570_write(struct pci_device *dev,int reg,m_uint32_t value)
+static void pci_ti1570_write(cpu_mips_t *cpu,struct pci_device *dev,
+                             int reg,m_uint32_t value)
 {
    struct pa_a1_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
-   m_log(d->name,"pci_ti1570_write: write reg 0x%x, value 0x%x\n",
-         reg,value);
+   TI1570_LOG(d,"pci_ti1570_write: write reg 0x%x, value 0x%x\n",reg,value);
 #endif
 
    switch(reg) {
-      case 16: /* base address 0 */
-         d->cbma_addr = value;
+      case PCI_REG_BAR0:
+         vm_map_device(cpu->vm,d->dev,(m_uint64_t)value);
+         TI1570_LOG(d,"registers are mapped at 0x%x\n",value);
          break;
    }
 }
@@ -1461,10 +1478,11 @@ static void pci_ti1570_write(struct pci_device *dev,int reg,m_uint32_t value)
 /*
  * pci_plx9060es_read()
  */
-static m_uint32_t pci_plx9060es_read(struct pci_device *dev,int reg)
+static m_uint32_t pci_plx9060es_read(cpu_mips_t *cpu,struct pci_device *dev,
+                                     int reg)
 {
 #if DEBUG_ACCESS
-   m_log("PLX9060ES","read reg 0x%x\n",reg);
+   TI1570_LOG(d,"PLX9060ES","read reg 0x%x\n",reg);
 #endif
    switch(reg) {
       default:
@@ -1475,13 +1493,11 @@ static m_uint32_t pci_plx9060es_read(struct pci_device *dev,int reg)
 /*
  * pci_plx9060es_write()
  */
-static void pci_plx9060es_write(struct pci_device *dev,int reg,
-                                m_uint32_t value)
+static void pci_plx9060es_write(cpu_mips_t *cpu,struct pci_device *dev,
+                                int reg,m_uint32_t value)
 {
-   struct pa_a1_data *d = dev->priv_data;
-
 #if DEBUG_ACCESS
-   m_log("PLX9060ES","write reg 0x%x, value 0x%x\n",reg,value);
+   TI1570_LOG(d,"PLX9060ES","write reg 0x%x, value 0x%x\n",reg,value);
 #endif
 
    switch(reg) {
@@ -1506,16 +1522,11 @@ static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem)
  * Add a PA-A1 port adapter into specified slot.
  */
 int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
-{
-   struct pa_bay_info *bay_info;
-   struct pci_device *pci_dev_ti, *pci_dev_plx;
+{   
+   struct pci_device *pci_dev_ti,*pci_dev_plx;
    struct pa_a1_data *d;
    struct vdevice *dev;
-   cpu_mips_t *cpu0;
    m_uint8_t *p;
-
-   /* Device is managed by CPU0 */ 
-   cpu0 = cpu_group_find_id(router->cpu_group,0);
 
    /* Allocate the private data structure for TI1570 chip */
    if (!(d = malloc(sizeof(*d)))) {
@@ -1526,18 +1537,12 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    memset(d,0,sizeof(*d));
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(pa_bay,&eeprom_pa_a1);
+   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pa_a1);
 
-   /* Get PCI bus info about this bay */
-   if (!(bay_info = c7200_get_pa_bay_info(pa_bay))) {
-      fprintf(stderr,"%s: unable to get info for PA bay %u\n",name,pa_bay);
-      return(-1);
-   }
-
-   /* Add as PCI device TI1570 */
+   /* Add PCI device TI1570 */
    pci_dev_ti = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                             TI1570_PCI_VENDOR_ID,TI1570_PCI_PRODUCT_ID,
-                            bay_info->pci_secondary_bus,0,0,C7200_NETIO_IRQ,d,
+                            0,0,C7200_NETIO_IRQ,d,
                             NULL,pci_ti1570_read,pci_ti1570_write);
 
    if (!pci_dev_ti) {
@@ -1546,11 +1551,11 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
       return(-1);
    }
 
-   /* Add as PCI device PLX9060ES */
+   /* Add PCI device PLX9060ES */
    pci_dev_plx = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                              PLX_9060ES_PCI_VENDOR_ID,
                              PLX_9060ES_PCI_PRODUCT_ID,
-                             bay_info->pci_secondary_bus,1,0,C7200_NETIO_IRQ,d,
+                             1,0,C7200_NETIO_IRQ,d,
                              NULL,pci_plx9060es_read,pci_plx9060es_write);
 
    if (!pci_dev_plx) {
@@ -1561,8 +1566,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
 
    /* Create the TI1570 structure */
    d->name        = name;
-   d->bay_addr    = bay_info->phys_addr;
-   d->mgr_cpu     = cpu0;
+   d->vm          = router->vm;
    d->pci_dev_ti  = pci_dev_ti;
    d->pci_dev_plx = pci_dev_plx;
 
@@ -1590,36 +1594,88 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
       return(-1);
    }
 
-   dev->phys_addr = bay_info->phys_addr;
-   dev->phys_len  = PCI_BAY_SPACE;
+   dev->phys_addr = 0;
+   dev->phys_len  = 0x200000;
    dev->handler   = dev_pa_a1_access;
 
    /* Store device info */
    dev->priv_data = d;
    d->dev = dev;
    
-   /* Map this device to all CPU */
-   cpu_group_bind_device(router->cpu_group,dev);
-
-   /* Start the TX ring scanner */
-   ptask_add((ptask_callback)ti1570_scan_tx_sched_table,d,NULL);
-
    /* Store device info into the router structure */
-   return(c7200_set_slot_drvinfo(router,pa_bay,d));
+   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+}
+
+/* Remove a PA-A1 from the specified slot */
+int dev_c7200_pa_a1_shutdown(c7200_t *router,u_int pa_bay) 
+{
+   struct c7200_pa_bay *bay;
+   struct pa_a1_data *d;
+
+   if (!(bay = c7200_pa_get_info(router,pa_bay)))
+      return(-1);
+
+   d = bay->drv_info;
+
+   /* Remove the PA EEPROM */
+   c7200_pa_unset_eeprom(router,pa_bay);
+
+   /* Remove the PCI devices */
+   pci_dev_remove(d->pci_dev_ti);
+   pci_dev_remove(d->pci_dev_plx);
+
+   /* Remove the device from the VM address space */
+   vm_unbind_device(router->vm,d->dev);
+   cpu_group_rebuild_mts(router->vm->cpu_group);
+
+   /* Free the control memory */
+   free(d->ctrl_mem_ptr);
+
+   /* Free the device structure itself */
+   free(d->dev);
+   free(d);
+   return(0);
 }
 
 /* Bind a Network IO descriptor to a specific port */
 int dev_c7200_pa_a1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
                             netio_desc_t *nio)
 {
-   struct pa_a1_data *data;
+   struct pa_a1_data *d;
 
-   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
       return(-1);
 
-   data->nio = nio;
+   if (d->nio != NULL)
+      return(-1);
 
-   /* Create the RX thread */
-   pthread_create(&data->rx_thread,NULL,dev_pa_a1_rxthread,data);
+   d->nio = nio;
+   d->tx_tid = ptask_add((ptask_callback)ti1570_scan_tx_sched_table,d,NULL);
+   netio_rxl_add(nio,(netio_rx_handler_t)ti1570_handle_rx_cell,d,NULL);
    return(0);
 }
+
+/* Unbind a Network IO descriptor to a specific port */
+int dev_c7200_pa_a1_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+{
+   struct pa_a1_data *d;
+
+   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+      return(-1);
+
+   if (d->nio) {
+      ptask_remove(d->tx_tid);
+      netio_rxl_remove(d->nio);
+      d->nio = NULL;
+   }
+   return(0);
+}
+
+/* PA-A1 driver */
+struct c7200_pa_driver dev_c7200_pa_a1_driver = {
+   "PA-A1", 1, 
+   dev_c7200_pa_a1_init,
+   dev_c7200_pa_a1_shutdown,
+   dev_c7200_pa_a1_set_nio,
+   dev_c7200_pa_a1_unset_nio,
+};

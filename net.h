@@ -117,10 +117,18 @@ typedef struct {
 
 /* Ethernet Header */
 typedef struct {
-   n_eth_addr_t daddr;   /* destination eth addr */
-   n_eth_addr_t saddr;   /* source ether addr    */
-   m_uint16_t  type;     /* packet type ID field */
+   n_eth_addr_t daddr;    /* destination eth addr */
+   n_eth_addr_t saddr;    /* source ether addr    */
+   m_uint16_t   type;     /* packet type ID field */
 } __attribute__ ((__packed__)) n_eth_hdr_t;
+
+/* 802.1Q Ethernet Header */
+typedef struct {
+   n_eth_addr_t daddr;    /* destination eth addr */
+   n_eth_addr_t saddr;    /* source ether addr    */
+   m_uint16_t   type;     /* packet type ID field (0x8100) */
+   m_uint16_t   vlan_id;  /* VLAN id + CoS */
+} __attribute__ ((__packed__)) n_eth_dot1q_hdr_t;
 
 /* LLC header */
 typedef struct {
@@ -150,6 +158,21 @@ typedef struct {
 static inline int eth_addr_is_mcast(n_eth_addr_t *addr)
 {
    return(addr->eth_addr_byte[0] & 1);
+}
+
+/* Check for Cisco ISL destination address */
+static inline int eth_addr_is_cisco_isl(n_eth_addr_t *addr)
+{
+   static const char *isl_addr = "\x01\x00\x0c\x00\x00";
+   return(!memcmp(addr,isl_addr,5));  /* only 40 bits to compare */
+}
+
+/* Check for a SNAP header */
+static inline int eth_llc_check_snap(n_eth_llc_hdr_t *llc_hdr)
+{
+   return((llc_hdr->dsap == 0xAA) &&
+          (llc_hdr->ssap == 0xAA) &&
+          (llc_hdr->ctrl == 0x03));
 }
 
 /* Number of bits in a contiguous netmask */
@@ -185,7 +208,16 @@ int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask);
 /* Parse an IPv6 CIDR prefix */
 int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask);
 
+/* Parse a MAC address */
+int parse_mac_addr(n_eth_addr_t *addr,char *str);
+
+/* Convert an Ethernet address into a string */
+char *n_eth_ntoa(char *buffer,n_eth_addr_t *addr,int format);
+
 /* Create a new socket to connect to specified host */
 int udp_connect(int local_port,char *remote_host,int remote_port);
+
+/* Listen on the specified port */
+int ip_listen(int port,int sock_type,int max_fd,int fd_array[]);
 
 #endif

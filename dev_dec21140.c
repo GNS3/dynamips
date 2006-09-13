@@ -27,9 +27,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <errno.h>
-#include <pthread.h>
 #include <assert.h>
 
+#include "crc.h"
 #include "utils.h"
 #include "mips64.h"
 #include "dynamips.h"
@@ -38,8 +38,7 @@
 #include "net.h"
 #include "net_io.h"
 #include "ptask.h"
-#include "dev_c7200.h"
-#include "dev_c7200_bay.h"
+#include "dev_dec21140.h"
 
 /* Debugging flags */
 #define DEBUG_MII_REGS   0
@@ -87,6 +86,9 @@
 /* Maximum packet size */
 #define DEC21140_MAX_PKT_SIZE     2048
 
+/* Send up to 16 packets in a TX ring scan pass */
+#define DEC21140_TXRING_PASS_COUNT  16
+
 /* Setup frame size */
 #define DEC21140_SETUP_FRAME_SIZE 192
 
@@ -94,6 +96,7 @@
 #define DEC21140_RXDESC_OWN       0x80000000  /* Ownership */
 #define DEC21140_RXDESC_LS        0x00000100  /* Last Segment */
 #define DEC21140_RXDESC_FS        0x00000200  /* First Segment */
+#define DEC21140_RXDESC_MF        0x00000400  /* Multicast Frame */
 #define DEC21140_RXDESC_DE        0x00004000  /* Descriptor Error */
 #define DEC21140_RXDESC_RCH       0x01000000  /* Sec. Addr. Chained */
 #define DEC21140_RXDESC_RER       0x02000000  /* Receive End of Ring */
@@ -124,10 +127,8 @@ struct tx_desc {
 /* DEC21140 Data */
 struct dec21140_data {
    char *name;
-   m_uint32_t bay_addr;
-   m_uint32_t cbma_addr;
    
-   /* physical addresses of current RX and TX descriptors */
+   /* Physical addresses of current RX and TX descriptors */
    m_uint32_t rx_current;
    m_uint32_t tx_current;
 
@@ -152,54 +153,75 @@ struct dec21140_data {
    /* PCI device information */
    struct pci_device *pci_dev;
 
-   /* "Managing" CPU */
-   cpu_mips_t *mgr_cpu;
+   /* Virtual machine */
+   vm_instance_t *vm;
 
    /* NetIO descriptor */
    netio_desc_t *nio;
 
-   /* RX Thread */
-   pthread_t rx_thread;
+   /* TX ring scanner task id */
+   ptask_id_t tx_tid;
 };
 
-/* FastEthernet Port Adapter (PA-FE-TX) EEPROM */
-static unsigned short eeprom_c7200_pa_fe_tx_data[16] = {
-   0x0111, 0x0102, 0xffff, 0xffff, 0x4906, 0x9804, 0x0000, 0x0000,
-   0x6000, 0x0000, 0x9812, 0x1700, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
+/* Log a dec21140 message */
+#define DEC21140_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
-static struct c7200_eeprom eeprom_c7200_pa_fe_tx = {
-   "PA-FE-TX", 
-   eeprom_c7200_pa_fe_tx_data, 
-   sizeof(eeprom_c7200_pa_fe_tx_data)/2,
-};
-
-/* C7200 IOCard with one FastEthernet port (C7200-IO-FE) EEPROM */
-static unsigned short eeprom_c7200_io_fe_data[16] = {
-   0x0183, 0x0102, 0xffff, 0xffff, 0x490B, 0x8C02, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x9812, 0x2800, 0x00FF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static struct c7200_eeprom eeprom_c7200_io_fe = {
-   "C7200-IO-FE", 
-   eeprom_c7200_io_fe_data,
-   sizeof(eeprom_c7200_io_fe_data)/2,
-};
-
-/* Check if a MAC address must be delivered to the emulated chip */
-static inline int dec21140_handle_mac_addr(struct dec21140_data *d,
-                                           n_eth_addr_t *addr)
+/* 
+ * ISL rewrite.
+ *
+ * See: http://www.cisco.com/en/US/tech/tk389/tk390/technologies_tech_note09186a0080094665.shtml
+ */
+static void dec21140_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len)
 {
+   static m_uint8_t isl_xaddr[N_ETH_ALEN] = { 0x01,0x00,0x0c,0x00,0x10,0x00 };
+   u_int real_offset,real_len;
+   n_eth_hdr_t *hdr;
+   m_uint32_t ifcs;
+
+   hdr = (n_eth_hdr_t *)pkt;
+   if (!memcmp(&hdr->daddr,isl_xaddr,N_ETH_ALEN)) {
+      real_offset = N_ETH_HLEN + N_ISL_HDR_SIZE;
+      real_len    = ntohs(hdr->type);
+      real_len    -= (N_ISL_HDR_SIZE + 4);
+   
+      if ((real_offset+real_len) > tot_len)
+         return;
+   
+      /* Rewrite the destination MAC address */
+      hdr->daddr.eth_addr_byte[4] = 0x00;
+
+      /* Compute the internal FCS on the encapsulated packet */
+      ifcs = crc32_compute(0xFFFFFFFF,pkt+real_offset,real_len);
+      pkt[tot_len-4] = ifcs & 0xff;
+      pkt[tot_len-3] = (ifcs >> 8) & 0xff;
+      pkt[tot_len-2] = (ifcs >> 16) & 0xff;
+      pkt[tot_len-1] = ifcs >> 24;
+   }
+}
+
+/* Check if a packet must be delivered to the emulated chip */
+static inline int dec21140_handle_mac_addr(struct dec21140_data *d,
+                                           m_uint8_t *pkt)
+{
+   n_eth_hdr_t *hdr = (n_eth_hdr_t *)pkt;
    int i;
 
+   /* Ignore traffic sent by us */
+   for(i=0;i<d->mac_addr_count;i++)
+      if (!memcmp(&d->mac_addr[i],&hdr->saddr,N_ETH_ALEN))
+         return(FALSE);
+
+   /* Accept systematically frames if we are running is promiscuous mode */
    if (d->csr[6] & DEC21140_CSR6_PROMISC)
       return(TRUE);
-   
-   if (eth_addr_is_mcast(addr))
+
+   /* Accept systematically all multicast frames */
+   if (eth_addr_is_mcast(&hdr->daddr))
       return(TRUE);
 
+   /* Accept frames directly for us, discard others */
    for(i=0;i<d->mac_addr_count;i++)
-      if (!memcmp(&d->mac_addr[i],addr,N_ETH_ALEN))
+      if (!memcmp(&d->mac_addr[i],&hdr->daddr,N_ETH_ALEN))
          return(TRUE);
       
    return(FALSE);
@@ -227,11 +249,11 @@ static void dec21140_update_mac_addr(struct dec21140_data *d,
 
       if (!eth_addr_is_mcast(&addr)) {
          memcpy(&d->mac_addr[d->mac_addr_count],&addr,N_ETH_ALEN);
-         m_log(d->name,
-               "unicast MAC address: %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
-               addr.eth_addr_byte[0],addr.eth_addr_byte[1],
-               addr.eth_addr_byte[2],addr.eth_addr_byte[3],
-               addr.eth_addr_byte[4],addr.eth_addr_byte[5]);
+         DEC21140_LOG(d,"unicast MAC address: "
+                      "%2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
+                      addr.eth_addr_byte[0],addr.eth_addr_byte[1],
+                      addr.eth_addr_byte[2],addr.eth_addr_byte[3],
+                      addr.eth_addr_byte[4],addr.eth_addr_byte[5]);
          d->mac_addr_count++;
       }
    }
@@ -255,14 +277,21 @@ static char *pci_cfgreg_name(int reg)
 static m_uint16_t mii_reg_read(struct dec21140_data *d)
 {
 #if DEBUG_MII_REGS
-   m_log(d->name,"mii phy read %d reg %d\n",d->mii_phy,d->mii_reg);
+   DEC21140_LOG(d,"MII PHY read %d reg %d\n",d->mii_phy,d->mii_reg);
 #endif
 
    /*
     * if it's BASIC MODE STATUS REGISTER (BMSR) at address 0x1
     * then tell them that "Link Status" is up and no troubles.
     */
-   return(d->mii_reg == 1 ? 0x4 : d->mii_regs[d->mii_phy][d->mii_reg]);
+   if (d->mii_reg == 1) {
+      if (d->nio != NULL)
+         return(0x04);
+      else
+         return(0x00);
+   }
+
+   return(d->mii_regs[d->mii_phy][d->mii_reg]);
 }
 
 /*
@@ -271,8 +300,8 @@ static m_uint16_t mii_reg_read(struct dec21140_data *d)
 static void mii_reg_write(struct dec21140_data *d)
 {
 #if DEBUG_MII_REGS
-   m_log(d->name,"mii phy write %d reg %d value %04x\n",
-         d->mii_phy,d->mii_reg,d->mii_data);
+   DEC21140_LOG(d,"MII PHY write %d reg %d value %04x\n",
+                d->mii_phy,d->mii_reg,d->mii_data);
 #endif
    assert(d->mii_phy < 32);
    assert(d->mii_reg < 32);
@@ -285,7 +314,7 @@ static void mii_reg_write(struct dec21140_data *d)
 static void mii_newbit(struct dec21140_data *d,int newbit)
 {
 #if DEBUG_MII_REGS
-   m_log(d->name,"mii state was %d\n",d->mii_state);
+   DEC21140_LOG(d,"MII state was %d\n",d->mii_state);
 #endif
 
    switch (d->mii_state) {
@@ -360,11 +389,11 @@ static void mii_newbit(struct dec21140_data *d,int newbit)
 
          break;
       default:
-         m_log(d->name,"mii impossible state\n");
+         DEC21140_LOG(d,"MII impossible state\n");
    }
 
 #if DEBUG_MII_REGS
-   m_log(d->name,"mii state now %d\n",d->mii_state);
+   DEC21140_LOG(d,"MII state now %d\n",d->mii_state);
 #endif
 }
 
@@ -378,20 +407,17 @@ void *dev_dec21140_access(cpu_mips_t *cpu,struct vdevice *dev,
    struct dec21140_data *d = dev->priv_data;
    u_int reg;
    
-   /* compute the real offset */
-   offset -= (d->cbma_addr - d->bay_addr);
-
    /* which CSR register ? */
    reg = offset / 8;
 
    if ((reg >= DEC21140_CSR_NR) || (offset % 8) != 0) {
-      m_log(d->name,"invalid access to offset 0x%x\n",offset);
+      cpu_log(cpu,d->name,"invalid access to offset 0x%x\n",offset);
       return NULL;
    }
 
    if (op_type == MTS_READ) {
 #if DEBUG_CSR_REGS
-      m_log(d->name,"read CSR%u value 0x%x\n",reg,d->csr[reg]);
+      cpu_log(cpu,d->name,"read CSR%u value 0x%x\n",reg,d->csr[reg]);
 #endif
 
       /* Dynamically construct CSR5 */
@@ -414,47 +440,46 @@ void *dev_dec21140_access(cpu_mips_t *cpu,struct vdevice *dev,
          d->csr[reg] = 0;
    } else {
 #if DEBUG_CSR_REGS
-      m_log(d->name,"write CSR%u value 0x%x\n",reg,(m_uint32_t)*data);
+      cpu_log(cpu,d->name,"write CSR%u value 0x%x\n",reg,(m_uint32_t)*data);
 #endif
       d->csr[reg] = *data;
 
       switch(reg) {
-      case 3:
-         d->rx_current = d->csr[reg];
-         break;
-
-      case 4:
-         d->tx_current = d->csr[reg];
-         break;
-
-      case 9:
-         /*
-          * CSR9, probably they want to mess with MII PHY
-          * The protocol to PHY is like serial over one bit.
-          * We will ignore clock 0 of read or write.
-          *
-          * This whole code is needed only to tell IOS that "Link Status"
-          * bit in BMSR register of DP83840A PHY is set.
-          *
-          * Also it makes "sh contr f0/0" happy.
-          */
-         if ((*data&~DEC21140_CSR9_TX_BIT) == (DEC21140_CSR9_MII_READ|
-             DEC21140_CSR9_READ|DEC21140_CSR9_MDC_CLOCK)) {
+         case 3:
+            d->rx_current = d->csr[reg];
+            break;
+         case 4:
+            d->tx_current = d->csr[reg];
+            break;
+         case 9:
             /*
-             * read, pop one bit from mii_outbits
+             * CSR9, probably they want to mess with MII PHY
+             * The protocol to PHY is like serial over one bit.
+             * We will ignore clock 0 of read or write.
+             *
+             * This whole code is needed only to tell IOS that "Link Status"
+             * bit in BMSR register of DP83840A PHY is set.
+             *
+             * Also it makes "sh contr f0/0" happy.
              */
-            if (d->mii_outbits & (1<<31))
-               d->csr[9] |= DEC21140_CSR9_RX_BIT;
-            else
-               d->csr[9] &= ~DEC21140_CSR9_RX_BIT;
-            d->mii_outbits <<= 1;
-         } else if((*data&~DEC21140_CSR9_TX_BIT) == 
-                   (DEC21140_CSR9_WRITE|DEC21140_CSR9_MDC_CLOCK)) {
-            /*
-             * write, we've got input, do state machine
-             */
-            mii_newbit(d,(*data&DEC21140_CSR9_TX_BIT) ? 1 : 0);            
-         }
+            if ((*data&~DEC21140_CSR9_TX_BIT) == (DEC21140_CSR9_MII_READ|
+                 DEC21140_CSR9_READ|DEC21140_CSR9_MDC_CLOCK)) {
+               /*
+                * read, pop one bit from mii_outbits
+                */
+               if (d->mii_outbits & (1<<31))
+                  d->csr[9] |= DEC21140_CSR9_RX_BIT;
+               else
+                  d->csr[9] &= ~DEC21140_CSR9_RX_BIT;
+               d->mii_outbits <<= 1;
+            } else if((*data&~DEC21140_CSR9_TX_BIT) == 
+                      (DEC21140_CSR9_WRITE|DEC21140_CSR9_MDC_CLOCK)) {
+               /*
+                * write, we've got input, do state machine
+                */
+               mii_newbit(d,(*data&DEC21140_CSR9_TX_BIT) ? 1 : 0);            
+            }
+            break;
       }
    }
 
@@ -487,7 +512,7 @@ static void rxdesc_read(struct dec21140_data *d,m_uint32_t rxd_addr,
                         struct rx_desc *rxd)
 {
    /* get the next descriptor from VM physical RAM */
-   physmem_copy_from_vm(d->mgr_cpu,rxd,rxd_addr,sizeof(struct rx_desc));
+   physmem_copy_from_vm(d->vm,rxd,rxd_addr,sizeof(struct rx_desc));
 
    /* byte-swapping */
    rxd->rdes[0] = vmtoh32(rxd->rdes[0]);
@@ -522,7 +547,7 @@ static void rxdesc_put_pkt(struct dec21140_data *d,struct rx_desc *rxd,
       cp_len = m_min(len1,*pkt_len);
       
       /* copy packet data to the VM physical RAM */
-      physmem_copy_to_vm(d->mgr_cpu,*pkt,rxd->rdes[2],cp_len);
+      physmem_copy_to_vm(d->vm,*pkt,rxd->rdes[2],cp_len);
       
       *pkt += cp_len;
       *pkt_len -= cp_len;
@@ -535,7 +560,7 @@ static void rxdesc_put_pkt(struct dec21140_data *d,struct rx_desc *rxd,
       cp_len = m_min(len2,*pkt_len);
       
       /* copy packet data to the VM physical RAM */
-      physmem_copy_to_vm(d->mgr_cpu,*pkt,rxd->rdes[3],cp_len);
+      physmem_copy_to_vm(d->vm,*pkt,rxd->rdes[3],cp_len);
       
       *pkt += cp_len;
       *pkt_len -= cp_len;
@@ -545,13 +570,14 @@ static void rxdesc_put_pkt(struct dec21140_data *d,struct rx_desc *rxd,
 /*
  * Put a packet in the RX ring of the DEC21140.
  */
-static void dev_dec21140_receive_pkt(struct dec21140_data *d,
-                                     u_char *pkt,ssize_t pkt_len)
+static int dev_dec21140_receive_pkt(struct dec21140_data *d,
+                                    u_char *pkt,ssize_t pkt_len)
 {
    m_uint32_t rx_start,rxdn_addr,rxdn_rdes0;
    struct rx_desc rxd0,rxdn,*rxdc;
    ssize_t tot_len = pkt_len;
    u_char *pkt_ptr = pkt;
+   n_eth_hdr_t *hdr;
    int i;
 
    /* Truncate the packet if it is too big */
@@ -559,10 +585,10 @@ static void dev_dec21140_receive_pkt(struct dec21140_data *d,
 
    /* Copy the current rxring descriptor */
    rxdesc_read(d,d->rx_current,&rxd0);
-   
+
    /* We must have the first descriptor... */
    if (!rxdesc_acquire(rxd0.rdes[0]))
-      return;
+      return(FALSE);
 
    /* Remember the first RX descriptor address */
    rx_start = d->rx_current;
@@ -580,15 +606,20 @@ static void dev_dec21140_receive_pkt(struct dec21140_data *d,
          rxdc->rdes[0] = DEC21140_RXDESC_LS;
          rxdc->rdes[0] |= (pkt_len + 4) << DEC21140_RXDESC_FL_SHIFT;
 
+         /* if this is a multicast frame, set the appropriate bit */
+         hdr = (n_eth_hdr_t *)pkt;
+         if (eth_addr_is_mcast(&hdr->daddr))
+            rxdc->rdes[0] |= DEC21140_RXDESC_MF;
+
          if (i != 0)
-            physmem_copy_u32_to_vm(d->mgr_cpu,d->rx_current,rxdc->rdes[0]);
+            physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
 
          d->rx_current = rxdn_addr;
          break;
       }
 
       /* Get status of the next descriptor to see if we can acquire it */
-      rxdn_rdes0 = physmem_copy_u32_from_vm(d->mgr_cpu,rxdn_addr);
+      rxdn_rdes0 = physmem_copy_u32_from_vm(d->vm,rxdn_addr);
 
       if (!rxdesc_acquire(rxdn_rdes0))
          rxdc->rdes[0] = DEC21140_RXDESC_LS | DEC21140_RXDESC_DE;
@@ -597,7 +628,7 @@ static void dev_dec21140_receive_pkt(struct dec21140_data *d,
 
       /* Update the new status (only if we are not on the first desc) */
       if (i != 0)
-         physmem_copy_u32_to_vm(d->mgr_cpu,d->rx_current,rxdc->rdes[0]);
+         physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
 
       /* Update the RX pointer */
       d->rx_current = rxdn_addr;
@@ -612,38 +643,30 @@ static void dev_dec21140_receive_pkt(struct dec21140_data *d,
 
    /* Update the first RX descriptor */
    rxd0.rdes[0] |= DEC21140_RXDESC_FS;
-   physmem_copy_u32_to_vm(d->mgr_cpu,rx_start,rxd0.rdes[0]);
+   physmem_copy_u32_to_vm(d->vm,rx_start,rxd0.rdes[0]);
 
    /* Indicate that we have a frame ready */
    d->csr[5] |= DEC21140_CSR5_RI;
 
    /* Generate IRQ on CPU */
-   pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev);
+   pci_dev_trigger_irq(d->vm,d->pci_dev);
+   return(TRUE);
 }
 
 /* Handle the DEC21140 RX ring */
-static void dev_dec21140_handle_rxring(struct dec21140_data *d)
-{      
-   u_char pkt[DEC21140_MAX_PKT_SIZE];
-   ssize_t pkt_len;
-   n_eth_hdr_t *hdr;
-
-   pkt_len = netio_recv(d->nio,pkt,DEC21140_MAX_PKT_SIZE);
-
-   if (pkt_len < 0) {
-      m_log(d->name,"net_io RX failed %s\n",strerror(errno));
-      return;
-   }
-
+static int dev_dec21140_handle_rxring(netio_desc_t *nio,
+                                      u_char *pkt,ssize_t pkt_len,
+                                      struct dec21140_data *d)
+{
    /* 
-    * Don't start receive if the rxring address has not been set
+    * Don't start receive if the RX ring address has not been set
     * and if the SR bit in CSR6 is not set yet.
     */
-   if ((d->csr[3] == 0) || (!(d->csr[6] & DEC21140_CSR6_START_RX)))
-      return;
+   if ((d->csr[3] == 0) || !(d->csr[6] & DEC21140_CSR6_START_RX))
+      return(FALSE);
 
 #if DEBUG_RECEIVE
-   m_log(d->name,"receiving a packet of %d bytes\n",pkt_len);
+   DEC21140_LOG(d,"receiving a packet of %d bytes\n",pkt_len);
    mem_dump(log_file,pkt,pkt_len);
 #endif
 
@@ -651,17 +674,18 @@ static void dev_dec21140_handle_rxring(struct dec21140_data *d)
     * Receive only multicast/broadcast trafic + unicast traffic 
     * for this virtual machine.
     */
-   hdr = (n_eth_hdr_t *)pkt;
-   if (dec21140_handle_mac_addr(d,&hdr->daddr))
+   if (dec21140_handle_mac_addr(d,pkt))
       dev_dec21140_receive_pkt(d,pkt,pkt_len);
+
+   return(TRUE);
 }
 
 /* Read a TX descriptor */
 static void txdesc_read(struct dec21140_data *d,m_uint32_t txd_addr,
                         struct tx_desc *txd)
 {
-   /* get the next descriptor from VM physical RAM */
-   physmem_copy_from_vm(d->mgr_cpu,txd,txd_addr,sizeof(struct tx_desc));
+   /* get the descriptor from VM physical RAM */
+   physmem_copy_from_vm(d->vm,txd,txd_addr,sizeof(struct tx_desc));
 
    /* byte-swapping */
    txd->tdes[0] = vmtoh32(txd->tdes[0]);
@@ -683,8 +707,8 @@ static void txdesc_set_next(struct dec21140_data *d,struct tx_desc *txd)
    }
 }
 
-/* Handle the TX ring */
-static int dev_dec21140_handle_txring(struct dec21140_data *d)
+/* Handle the TX ring (single packet) */
+static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
 {   
    u_char pkt[DEC21140_MAX_PKT_SIZE],*pkt_ptr;
    u_char setup_frame[DEC21140_SETUP_FRAME_SIZE];
@@ -704,7 +728,7 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
    ptxd = &txd0;
    txdesc_read(d,d->tx_current,ptxd);
 
-   /* If the we don't own the descriptor, we cannot transmit */
+   /* If we don't own the first descriptor, we cannot transmit */
    if (!(txd0.tdes[0] & DEC21140_TXDESC_OWN))
       return(FALSE);
 
@@ -719,7 +743,7 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
       len2 = (ptxd->tdes[1] >> 11) & DEC21140_TXDESC_LEN_MASK;
 
       if (txd0.tdes[1] & DEC21140_TXDESC_SET) {
-         physmem_copy_from_vm(d->mgr_cpu,setup_frame,ptxd->tdes[2],
+         physmem_copy_from_vm(d->vm,setup_frame,ptxd->tdes[2],
                               sizeof(setup_frame));
          dec21140_update_mac_addr(d,setup_frame);
       }
@@ -729,23 +753,24 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
    }
 
 #if DEBUG_TRANSMIT
-   m_log(d->name,"dec21140_handle_txring: 1st desc: "
-         "tdes[0]=0x%x, tdes[1]=0x%x, tdes[2]=0x%x, tdes[3]=0x%x\n",
-         ptxd->tdes[0],ptxd->tdes[1],ptxd->tdes[2],ptxd->tdes[3]);
+   DEC21140_LOG(d,"dec21140_handle_txring: 1st desc: "
+                "tdes[0]=0x%x, tdes[1]=0x%x, tdes[2]=0x%x, tdes[3]=0x%x\n",
+                ptxd->tdes[0],ptxd->tdes[1],ptxd->tdes[2],ptxd->tdes[3]);
 #endif
 
+   /* Empty packet for now */
    pkt_ptr = pkt;
    tot_len = 0;
 
    do {
 #if DEBUG_TRANSMIT
-      m_log(d->name,"dec21140_handle_txring: loop: "
-            "tdes[0]=0x%x, tdes[1]=0x%x, tdes[2]=0x%x, tdes[3]=0x%x\n",
-            ptxd->tdes[0],ptxd->tdes[1],ptxd->tdes[2],ptxd->tdes[3]);
+      DEC21140_LOG(d,"dec21140_handle_txring: loop: "
+                   "tdes[0]=0x%x, tdes[1]=0x%x, tdes[2]=0x%x, tdes[3]=0x%x\n",
+                   ptxd->tdes[0],ptxd->tdes[1],ptxd->tdes[2],ptxd->tdes[3]);
 #endif
 
       if (!(ptxd->tdes[0] & DEC21140_TXDESC_OWN)) {
-         m_log(d->name,"dec21140_handle_txring: descriptor not owned!\n");
+         DEC21140_LOG(d,"dec21140_handle_txring: descriptor not owned!\n");
          return(FALSE);
       }
 
@@ -757,10 +782,10 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
       if (clen != 0)
       {
          if (len1 != 0)
-            physmem_copy_from_vm(d->mgr_cpu,pkt_ptr,ptxd->tdes[2],len1);
+            physmem_copy_from_vm(d->vm,pkt_ptr,ptxd->tdes[2],len1);
          
          if ((len2 != 0) && !(ptxd->tdes[1] & DEC21140_TXDESC_TCH))
-            physmem_copy_from_vm(d->mgr_cpu,pkt_ptr+len1,ptxd->tdes[3],len2);
+            physmem_copy_from_vm(d->vm,pkt_ptr+len1,ptxd->tdes[3],len2);
       }
 
       pkt_ptr += clen;
@@ -768,7 +793,7 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
 
       /* Clear the OWN bit if this is not the first descriptor */
       if (!(ptxd->tdes[1] & DEC21140_TXDESC_FS))
-         physmem_copy_u32_to_vm(d->mgr_cpu,d->tx_current,0);
+         physmem_copy_u32_to_vm(d->vm,d->tx_current,0);
 
       /* Go to the next descriptor */
       txdesc_set_next(d,ptxd);
@@ -786,35 +811,39 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
 
    if (tot_len != 0) {
 #if DEBUG_TRANSMIT
-      m_log(d->name,"sending of packet of %u bytes\n",tot_len);
+      DEC21140_LOG(d,"sending packet of %u bytes\n",tot_len);
       mem_dump(log_file,pkt,tot_len);
 #endif
+      /* rewrite ISL header if required */
+      dec21140_isl_rewrite(pkt,tot_len);
+
       /* send it on wire */
       netio_send(d->nio,pkt,tot_len);
    }
 
  clear_txd0_own_bit:
    /* Clear the OWN flag of the first descriptor */
-   physmem_copy_u32_to_vm(d->mgr_cpu,tx_start,0);
+   physmem_copy_u32_to_vm(d->vm,tx_start,0);
 
    /* Interrupt on completion ? */
    if (!(txd0.tdes[1] & DEC21140_TXDESC_IC)) {
       d->csr[5] |= DEC21140_CSR5_TI;
-      pci_dev_trigger_irq(d->mgr_cpu,d->pci_dev);
+      pci_dev_trigger_irq(d->vm,d->pci_dev);
    }
    
    return(TRUE);
 }
 
-/* RX thread */
-static void *dev_dec21140_rxthread(void *arg)
-{
-   struct dec21140_data *d = arg;
+/* Handle the TX ring */
+static int dev_dec21140_handle_txring(struct dec21140_data *d)
+{  
+   int i;
 
-   for(;;)
-      dev_dec21140_handle_rxring(d);
+   for(i=0;i<DEC21140_TXRING_PASS_COUNT;i++)
+      if (!dev_dec21140_handle_txring_single(d))
+         break;
 
-   return NULL;
+   return(TRUE);
 }
 
 /*
@@ -822,12 +851,13 @@ static void *dev_dec21140_rxthread(void *arg)
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_dec21140_read(struct pci_device *dev,int reg)
+static m_uint32_t pci_dec21140_read(cpu_mips_t *cpu,struct pci_device *dev,
+                                    int reg)
 {   
    struct dec21140_data *d = dev->priv_data;
 
 #if DEBUG_PCI_REGS
-   m_log(d->name,"read C%s(%u)\n",pci_cfgreg_name(reg),reg);
+   DEC21140_LOG(d,"read C%s(%u)\n",pci_cfgreg_name(reg),reg);
 #endif
 
    switch (reg) {
@@ -836,7 +866,7 @@ static m_uint32_t pci_dec21140_read(struct pci_device *dev,int reg)
       case DEC21140_PCI_CFRV_REG_OFFSET:
          return(0x02000011);
       case DEC21140_PCI_CBMA_REG_OFFSET:
-         return(d->cbma_addr);
+         return(d->dev->phys_addr);
       default:
          return(0);
    }
@@ -847,18 +877,19 @@ static m_uint32_t pci_dec21140_read(struct pci_device *dev,int reg)
  *
  * Write a PCI register.
  */
-static void pci_dec21140_write(struct pci_device *dev,int reg,m_uint32_t value)
+static void pci_dec21140_write(cpu_mips_t *cpu,struct pci_device *dev,
+                               int reg,m_uint32_t value)
 {
    struct dec21140_data *d = dev->priv_data;
 
 #if DEBUG_PCI_REGS
-   m_log(d->name,"write C%s(%u) value 0x%x\n",pci_cfgreg_name(reg),reg,value);
+   DEC21140_LOG(d,"write C%s(%u) value 0x%x\n",pci_cfgreg_name(reg),reg,value);
 #endif
 
    switch(reg) {
       case DEC21140_PCI_CBMA_REG_OFFSET:
-         d->cbma_addr = value;
-         m_log(d->name,"registers are mapped at 0x%x\n",value);
+         vm_map_device(cpu->vm,d->dev,(m_uint64_t)value);
+         DEC21140_LOG(d,"registers are mapped at 0x%x\n",value);
          break;
    }
 }
@@ -868,19 +899,13 @@ static void pci_dec21140_write(struct pci_device *dev,int reg,m_uint32_t value)
  *
  * Generic DEC21140 initialization code.
  */
-struct dec21140_data *dev_dec21140_init(cpu_group_t *cpu_group,char *name,
-                                        m_uint32_t phys_addr,
-                                        m_uint32_t phys_len,
-                                        struct pci_data *pci_data,
-                                        int pci_bus,int pci_device,int irq)
+struct dec21140_data *dev_dec21140_init(vm_instance_t *vm,char *name,
+                                        struct pci_bus *pci_bus,int pci_device,
+                                        int irq)
 {
    struct dec21140_data *d;
    struct pci_device *pci_dev;
    struct vdevice *dev;
-   cpu_mips_t *cpu0;
-
-   /* Device is managed by CPU0 */ 
-   cpu0 = cpu_group_find_id(cpu_group,0);
 
    /* Allocate the private data structure for DEC21140 */
    if (!(d = malloc(sizeof(*d)))) {
@@ -891,144 +916,75 @@ struct dec21140_data *dev_dec21140_init(cpu_group_t *cpu_group,char *name,
    memset(d,0,sizeof(*d));
 
    /* Add as PCI device */
-   pci_dev = pci_dev_add(pci_data,name,
+   pci_dev = pci_dev_add(pci_bus,name,
                          DEC21140_PCI_VENDOR_ID,DEC21140_PCI_PRODUCT_ID,
-                         pci_bus,pci_device,0,irq,
+                         pci_device,0,irq,
                          d,NULL,pci_dec21140_read,pci_dec21140_write);
 
    if (!pci_dev) {
       fprintf(stderr,"%s (DEC21140): unable to create PCI device.\n",name);
-      return NULL;
+      goto err_pci_dev;
    }
 
    /* Create the device itself */
    if (!(dev = dev_create(name))) {
       fprintf(stderr,"%s (DEC21140): unable to create device.\n",name);
-      return NULL;
+      goto err_dev;
    }
 
    d->name     = name;
-   d->bay_addr = phys_addr;
-   d->mgr_cpu  = cpu0;
+   d->vm       = vm;
    d->pci_dev  = pci_dev;
+   d->dev      = dev;
 
+   /* Basic register setup */
    d->csr[0]   = 0xfff80000;
    d->csr[8]   = 0xfffe0000;
 
-   dev->phys_addr = phys_addr;
-   dev->phys_len  = phys_len;
+   dev->phys_addr = 0;
+   dev->phys_len  = 0x20000;
    dev->handler   = dev_dec21140_access;
-
-   /* store device info */
    dev->priv_data = d;
-   d->dev = dev;
-
-   /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
    return(d);
+
+ err_dev:
+   pci_dev_remove(pci_dev);
+ err_pci_dev:
+   free(d);
+   return NULL;
 }
 
-/*
- * dev_c7200_iocard_init()
- *
- * Add an IOcard into slot 0.
- */
-int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay)
+/* Remove a DEC21140 device */
+void dev_dec21140_remove(struct dec21140_data *d)
 {
-   struct dec21140_data *data;
-   m_uint64_t bay_addr;
-   
-   if (pa_bay != 0) {
-      fprintf(stderr,"C7200: cannot put IOCARD in PA bay %u!\n",pa_bay);
-      return(-1);
+   if (d != NULL) {
+      pci_dev_remove(d->pci_dev);
+      vm_unbind_device(d->vm,d->dev);
+      cpu_group_rebuild_mts(d->vm->cpu_group);
+      free(d->dev);
+      free(d);
    }
-
-   /* Set the EEPROM */
-   c7200_pa_set_eeprom(pa_bay,&eeprom_c7200_io_fe);
-
-   /* Get the bay physical address */
-   c7200_get_mmio_addr(0,&bay_addr);
-
-   /* Create the DEC21140 chip */
-   data = dev_dec21140_init(router->cpu_group,name,bay_addr,PCI_BAY_SPACE,
-                            router->pa_bay[pa_bay].pci_map,
-                            router->npe_driver->dec21140_pci_bus,
-                            router->npe_driver->dec21140_pci_dev,
-                            C7200_NETIO_IRQ);
-   if (!data) return(-1);
-
-   /* Start the TX ring scanner */
-   ptask_add((ptask_callback)dev_dec21140_handle_txring,data,NULL);
-
-   /* Store device info into the router structure */
-   return(c7200_set_slot_drvinfo(router,pa_bay,data));
 }
 
-int dev_c7200_iocard_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                             netio_desc_t *nio)
-{
-   struct dec21140_data *data;
-
-   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
+/* Bind a NIO to DEC21140 device */
+int dev_dec21140_set_nio(struct dec21140_data *d,netio_desc_t *nio)
+{   
+   /* check that a NIO is not already bound */
+   if (d->nio != NULL)
       return(-1);
 
-   data->nio = nio;
-
-   /* create the RX thread */
-   pthread_create(&data->rx_thread,NULL,dev_dec21140_rxthread,data);
+   d->nio = nio;
+   d->tx_tid = ptask_add((ptask_callback)dev_dec21140_handle_txring,d,NULL);
+   netio_rxl_add(nio,(netio_rx_handler_t)dev_dec21140_handle_rxring,d,NULL);
    return(0);
 }
 
-/*
- * dev_c7200_pa_fe_tx_init()
- *
- * Add a PA-FE-TX port adapter into specified slot.
- */
-int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
+/* Unbind a NIO from a DEC21140 device */
+void dev_dec21140_unset_nio(struct dec21140_data *d)
 {
-   struct pa_bay_info *bay_info;
-   struct dec21140_data *data;
-   cpu_mips_t *cpu0;
-
-   /* Device is managed by CPU0 */ 
-   cpu0 = cpu_group_find_id(router->cpu_group,0);
-
-   /* Set the EEPROM */
-   c7200_pa_set_eeprom(pa_bay,&eeprom_c7200_pa_fe_tx);
-
-   /* Get PCI bus info about this bay */
-   if (!(bay_info = c7200_get_pa_bay_info(pa_bay))) {
-      fprintf(stderr,"%s: unable to get info for PA bay %u\n",name,pa_bay);
-      return(-1);
+   if (d->nio != NULL) {
+      ptask_remove(d->tx_tid);
+      netio_rxl_remove(d->nio);
+      d->nio = NULL;
    }
-
-   /* Create the DEC21140 chip */
-   data = dev_dec21140_init(router->cpu_group,name,
-                            bay_info->phys_addr,PCI_BAY_SPACE,
-                            router->pa_bay[pa_bay].pci_map,
-                            bay_info->pci_secondary_bus,0,
-                            C7200_NETIO_IRQ);
-   if (!data) return(-1);
-
-   /* Start the TX ring scanner */
-   ptask_add((ptask_callback)dev_dec21140_handle_txring,data,NULL);
-
-   /* Store device info into the router structure */
-   return(c7200_set_slot_drvinfo(router,pa_bay,data));
-}
-
-/* Bind a Network IO descriptor */
-int dev_c7200_pa_fe_tx_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                               netio_desc_t *nio)
-{
-   struct dec21140_data *data;
-
-   if ((port_id > 0) || !(data = c7200_get_slot_drvinfo(router,pa_bay)))
-      return(-1);
-   
-   data->nio = nio;
-
-   /* create the RX thread */
-   pthread_create(&data->rx_thread,NULL,dev_dec21140_rxthread,data);
-   return(0);
 }

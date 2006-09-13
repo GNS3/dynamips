@@ -31,6 +31,7 @@
 
 /* Debugging flags */
 #define DEBUG_UNKNOWN  1
+#define DEBUG_ACCESS   0
 #define DEBUG_LED      0
 #define DEBUG_IO_CTL   0
 #define DEBUG_ENVM     0
@@ -93,18 +94,21 @@
 
 /* IO FPGA structure */
 struct iofpga_data {
-   u_int io_ctrl_reg;
+   vm_obj_t vm_obj;
+   struct vdevice dev;
+   c7200_t *router;
 
-   /* Managing CPU */
-   cpu_mips_t *mgr_cpu;
+   /* Lock test */
+   pthread_mutex_t lock;
+
+   /* Periodic task to trigger dummy DUART IRQ */
+   ptask_id_t duart_irq_tid;
 
    /* DUART & Console Management */
-   u_int duart_interrupt;
-   pthread_t duart_con_thread;
-   pthread_t duart_aux_thread;
-
-   /* Virtual TTY for Console and AUX ports */
-   vtty_t *vtty_con,*vtty_aux;
+   u_int duart_isr,duart_imr,duart_irq_seq;
+   
+   /* IO control register */
+   u_int io_ctrl_reg;
 
    /* Temperature Control */
    u_int temp_cfg_reg[C7200_TEMP_SENSORS];
@@ -121,37 +125,39 @@ struct iofpga_data {
    u_int mux;
 };
 
+#define IOFPGA_LOCK(d)   pthread_mutex_lock(&(d)->lock)
+#define IOFPGA_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
+
 /* Empty EEPROM */
-static unsigned short eeprom_empty_data[16] = {
+static const m_uint16_t eeprom_empty_data[16] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
 };
 
 /* CPU EEPROM definition */
-static struct nmc93c46_group_def eeprom_cpu_def = {
+static const struct nmc93c46_eeprom_def eeprom_cpu_def = {
    SK1_CLOCK_CPU, CS1_CHIP_SEL_CPU, 
    DI1_DATA_IN_CPU, DO1_DATA_OUT_CPU,
    NULL, 0,
 };
 
 /* Midplane EEPROM definition */
-static struct nmc93c46_group_def eeprom_midplane_def = {
+static const struct nmc93c46_eeprom_def eeprom_midplane_def = {
    SK2_CLOCK_MIDPLANE, CS2_CHIP_SEL_MIDPLANE, 
    DI2_DATA_IN_MIDPLANE, DO2_DATA_OUT_MIDPLANE,
    NULL, 0,
 };
 
 /* PEM (NPE-B) EEPROM definition */
-static struct nmc93c46_group_def eeprom_pem_def = {
+static const struct nmc93c46_eeprom_def eeprom_pem_def = {
    SK1_CLOCK_PEM, CS1_CHIP_SEL_PEM, DI1_DATA_IN_PEM, DO1_DATA_OUT_PEM,
-   eeprom_empty_data, (sizeof(eeprom_empty_data) / 2),
+   (m_uint16_t *)eeprom_empty_data, (sizeof(eeprom_empty_data) / 2),
 };
 
 /* IOFPGA manages simultaneously CPU and Midplane EEPROM */
-static struct nmc93c46_eeprom eeprom_cpu_midplane = {
+static const struct nmc93c46_group eeprom_cpu_midplane = {
    2, 0, "CPU and Midplane EEPROM", 0, 
-   { &eeprom_cpu_def, &eeprom_midplane_def },
-   { { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0} },
+   { NULL, NULL, }, { { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0} },
 };
 
 /* 
@@ -159,8 +165,8 @@ static struct nmc93c46_eeprom eeprom_cpu_midplane = {
  * PEM stands for "Power Entry Module":
  * http://www.cisco.com/en/US/products/hw/routers/ps341/products_field_notice09186a00801cb26d.shtml
  */
-static struct nmc93c46_eeprom eeprom_pem_npeb = {
-   1, 0, "PEM (NPE-B) EEPROM", 0, { &eeprom_pem_def }, { { 0, 0, 0, 0, 0} },
+static const struct nmc93c46_group eeprom_pem_npeb = {
+   1, 0, "PEM (NPE-B) EEPROM", 0, { NULL }, { { 0, 0, 0, 0, 0} },
 };
 
 /* Reset DS1620 */
@@ -220,7 +226,8 @@ static u_int temp_read_data(struct iofpga_data *d)
          break;
 
       default:
-         m_log("IO_FPGA","temp_sensors: CMD = 0x%x\n",d->temp_cmd);
+         vm_log(d->router->vm,"IO_FPGA","temp_sensors: CMD = 0x%x\n",
+                d->temp_cmd);
    }
 
    return(data);
@@ -255,8 +262,9 @@ static void temp_write_data(struct iofpga_data *d,u_char val)
             case DS1620_READ_TEMP:
                break;
             default:
-               m_log("IO_FPGA","temp_sensors: IOS sent command 0x%x.\n",
-                     d->temp_cmd);
+               vm_log(d->router->vm,"IO_FPGA",
+                      "temp_sensors: IOS sent command 0x%x.\n",
+                      d->temp_cmd);
          }
       }
    }
@@ -269,59 +277,104 @@ static void temp_write_data(struct iofpga_data *d,u_char val)
    }
 }
 
-/* Console port input thread */
-static void *tty_con_input(struct iofpga_data *d)
+/* Console port input */
+static void tty_con_input(vtty_t *vtty)
 {
-   while(1) {
-      if (!vtty_read_and_store(d->vtty_con)) {
-         if (d->duart_interrupt & DUART_RXRDYA)
-            mips64_set_irq(d->mgr_cpu,C7200_DUART_IRQ);
-      }
-   }
+   struct iofpga_data *d = vtty->priv_data;
 
-   return NULL;
+   IOFPGA_LOCK(d);
+   if (d->duart_imr & DUART_RXRDYA) {
+      d->duart_isr |= DUART_RXRDYA;
+      vm_set_irq(d->router->vm,C7200_DUART_IRQ);
+   }
+   IOFPGA_UNLOCK(d);
 }
 
-/* AUX port input thread */
-static void *tty_aux_input(struct iofpga_data *d)
+/* AUX port input */
+static void tty_aux_input(vtty_t *vtty)
 {
-   while(1) {
-      if (!vtty_read_and_store(d->vtty_aux)) {
-         if (d->duart_interrupt & DUART_RXRDYB)
-            mips64_set_irq(d->mgr_cpu,C7200_DUART_IRQ);
-      }
-   }
+   struct iofpga_data *d = vtty->priv_data;
 
-   return NULL;
+   IOFPGA_LOCK(d);
+   if (d->duart_imr & DUART_RXRDYB) {
+      d->duart_isr |= DUART_RXRDYB;
+      vm_set_irq(d->router->vm,C7200_DUART_IRQ);
+   }
+   IOFPGA_UNLOCK(d);
 }
 
 /* IRQ trickery for Console and AUX ports */
 static int tty_trigger_dummy_irq(struct iofpga_data *d,void *arg)
 {
-   if (d->duart_interrupt & (DUART_TXRDYA|DUART_TXRDYB))
-      mips64_set_irq(d->mgr_cpu,C7200_DUART_IRQ);
+   u_int mask;
+
+   IOFPGA_LOCK(d);
+   d->duart_irq_seq++;
+   
+   if (d->duart_irq_seq == 2) {
+      mask = DUART_TXRDYA|DUART_TXRDYB;
+      if (d->duart_imr & mask) {
+         d->duart_isr |= DUART_TXRDYA|DUART_TXRDYB;
+         vm_set_irq(d->router->vm,C7200_DUART_IRQ);
+      }
+
+      d->duart_irq_seq = 0;
+   }
+   
+   IOFPGA_UNLOCK(d);
    return(0);
 }
 
 /*
- * dev_iofpga_access()
+ * dev_c7200_iofpga_access()
  */
-void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
-                        u_int op_size,u_int op_type,m_uint64_t *data)
+void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
+                              m_uint32_t offset,u_int op_size,u_int op_type,
+                              m_uint64_t *data)
 {
    struct iofpga_data *d = dev->priv_data;
+   vm_instance_t *vm = d->router->vm;
    u_char odata;
 
    if (op_type == MTS_READ)
-      *data = 0;
+      *data = 0x0;
+
+#if DEBUG_ACCESS
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,"IO_FPGA","reading reg 0x%x at pc=0x%llx\n",offset,cpu->pc);
+   } else {
+      cpu_log(cpu,"IO_FPGA","writing reg 0x%x at pc=0x%llx, data=0x%llx\n",
+              offset,cpu->pc,*data);
+   }
+#endif
+
+   IOFPGA_LOCK(d);
 
    switch(offset) {
+      case 0x294:
+         /* 
+          * Unknown, seen in 12.4(6)T, and seems to be read at each 
+          * network interrupt.
+          */
+         if (op_type == MTS_READ)
+            *data = 0x0;
+         break;
+
+      /* NPE-G1 test - unknown (value written: 0x01) */
+      case 0x338:
+         break;
+
+      /* NPE-G1 test - has influence on slot 0 / flash / pcmcia ... */
+      case 0x390:
+         if (op_type == MTS_READ)
+            *data = 0x0FFF0000; //0xFFFF0000;
+         break;
+
       /* I/O control register */
       case 0x204:
          if (op_type == MTS_WRITE) {
 #if DEBUG_IO_CTL
-            m_log("IO_FPGA: setting value 0x%llx in IO control register\n",
-                  *data);
+            vm_log(vm,"IO_FPGA","setting value 0x%llx in io_ctrl_reg\n",*data);
 #endif
             d->io_ctrl_reg = *data;
          }
@@ -334,17 +387,17 @@ void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       /* CPU/Midplane EEPROMs */
       case 0x21c:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&eeprom_cpu_midplane,(u_int)(*data));
+            nmc93c46_write(&d->router->sys_eeprom_g1,(u_int)(*data));
          else
-            *data = nmc93c46_read(&eeprom_cpu_midplane);
+            *data = nmc93c46_read(&d->router->sys_eeprom_g1);
          break;
 
       /* PEM (NPE-B) EEPROM */
       case 0x388:
           if (op_type == MTS_WRITE)
-            nmc93c46_write(&eeprom_pem_npeb,(u_int)(*data));
+            nmc93c46_write(&d->router->sys_eeprom_g2,(u_int)(*data));
          else
-            *data = nmc93c46_read(&eeprom_pem_npeb);
+            *data = nmc93c46_read(&d->router->sys_eeprom_g2);
          break;
 
       /* Watchdog */
@@ -353,12 +406,16 @@ void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
       /* 
        * FPGA release/presence ? Flash SIMM size:
-       *   0x0001: 2048K Flash (2 banks)
-       *   0x0504: 8192K Flash (2 banks)
+       *   0x0001: 2048K  Flash (2 banks)
+       *   0x0504: 8192K  Flash (2 banks)
        *   0x0704: 16384K Flash (2 banks)
-       *   0x2001: 1024K Flash (1 bank)
-       *   0x2504: 4096K Flash (1 bank)
-       *   0x2704: 8192K Flash (1 bank)
+       *   0x0904: 32768K Flash (2 banks)
+       *   0x0B04: 65536K Flash (2 banks)
+       *   0x2001: 1024K  Flash (1 bank)
+       *   0x2504: 4096K  Flash (1 bank)
+       *   0x2704: 8192K  Flash (1 bank)
+       *   0x2904: 16384K Flash (1 bank)
+       *   0x2B04: 32768K Flash (1 bank)
        *
        *   Number of Flash SIMM banks + size.
        *   Touching some lower bits causes problems with environmental monitor.
@@ -367,73 +424,104 @@ void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
        */
       case 0x23c:
          if (op_type == MTS_READ)
-            *data = 0x00002704;
+            *data = 0x2704;
          break;
 
       /* LEDs */
       case 0x244:
 #if DEBUG_LED
-         m_log("IO_FPGA","LED register is now 0x%x (0x%x)\n",
-               *data,(~*data) & 0x0F);
+         vm_log(vm,"IO_FPGA","LED register is now 0x%x (0x%x)\n",
+                *data,(~*data) & 0x0F);
 #endif
          break;
 
       /* ==== DUART SCN2681 (console/aux) ==== */
+      case 0x404:   /* Mode Register A (MRA) */
+         break;
+
       case 0x40c:   /* Status Register A (SRA) */
          if (op_type == MTS_READ) {
             odata = 0;
 
-            if (vtty_is_char_avail(d->vtty_con))
+            if (vtty_is_char_avail(vm->vtty_con))
                odata |= DUART_RX_READY;
 
             odata |= DUART_TX_READY;
          
-            mips64_clear_irq(d->mgr_cpu,C7200_DUART_IRQ);
+            vm_clear_irq(vm,C7200_DUART_IRQ);
             *data = odata;
          }
          break;
 
       case 0x414:   /* Command Register A (CRA) */
+         /* Disable TX = High */
+         if ((op_type == MTS_WRITE) && (*data & 0x8)) {
+            vm->vtty_con->managed_flush = TRUE;          
+            vtty_flush(vm->vtty_con);
+         }
          break;
 
       case 0x41c:   /* RX/TX Holding Register A (RHRA/THRA) */
          if (op_type == MTS_WRITE) {
-            vtty_put_char(d->vtty_con,(char)*data);
+            vtty_put_char(vm->vtty_con,(char)*data);
+            d->duart_isr &= ~DUART_TXRDYA;
          } else {
-            *data = vtty_get_char(d->vtty_con);
+            *data = vtty_get_char(vm->vtty_con);
+            d->duart_isr &= ~DUART_RXRDYA;
          }
+         break;
+
+      case 0x424:   /* WRITE: Aux Control Register (ACR) */
          break;
 
       case 0x42c:   /* Interrupt Status/Mask Register (ISR/IMR) */
          if (op_type == MTS_WRITE) {
-            d->duart_interrupt = *data;
+            d->duart_imr = *data;
          } else
-            *data = d->duart_interrupt;
-         break;         
+            *data = d->duart_isr;
+         break;
+
+      case 0x434:   /* Counter/Timer Upper Value (CTU) */
+      case 0x43c:   /* Counter/Timer Lower Value (CTL) */
+      case 0x444:   /* Mode Register B (MRB) */
+         break;
 
       case 0x44c:   /* Status Register B (SRB) */
          if (op_type == MTS_READ) {
             odata = 0;
 
-            if (vtty_is_char_avail(d->vtty_aux))
+            if (vtty_is_char_avail(vm->vtty_aux))
                odata |= DUART_RX_READY;
 
             odata |= DUART_TX_READY;
          
-            //mips64_clear_irq(d->mgr_cpu,C7200_DUART_IRQ);
+            //vm_clear_irq(vm,C7200_DUART_IRQ);
             *data = odata;
          }
          break;
 
       case 0x454:   /* Command Register B (CRB) */
+         /* Disable TX = High */
+         if ((op_type == MTS_WRITE) && (*data & 0x8)) {
+            vm->vtty_aux->managed_flush = TRUE;
+            vtty_flush(vm->vtty_aux);
+         }
          break;
 
       case 0x45c:   /* RX/TX Holding Register B (RHRB/THRB) */
          if (op_type == MTS_WRITE) {
-            vtty_put_char(d->vtty_aux,(char)*data);
+            vtty_put_char(vm->vtty_aux,(char)*data);
+            d->duart_isr &= ~DUART_TXRDYA;
          } else {
-            *data = vtty_get_char(d->vtty_aux);
+            *data = vtty_get_char(vm->vtty_aux);
+            d->duart_isr &= ~DUART_RXRDYB;
          }
+         break;
+
+      case 0x46c:   /* WRITE: Output Port Configuration Register (OPCR) */
+      case 0x474:   /* READ: Start Counter Command; */
+                    /* WRITE: Set Output Port Bits Command */
+      case 0x47c:   /* WRITE: Reset Output Port Bits Command */
          break;
 
       /* ==== DS 1620 (temp sensors) ==== */
@@ -450,12 +538,26 @@ void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          break;
 
       case 0x22c:   /* Temperature data read */
-         *data = temp_read_data(d);
+         if (op_type == MTS_READ)
+            *data = temp_read_data(d);
+         break;
+
+      /* 
+       * NPE-G1 - Voltages + Power Supplies.
+       * I don't understand exactly how it works, it seems that the low
+       * part must be equal to the high part to have the better values.
+       */
+      case 0x254:
+#if DEBUG_ENVM
+         vm_log(vm,"ENVM","access to envm a/d converter - mux = %u\n",d->mux);
+#endif
+         if (op_type == MTS_READ)
+            *data = 0xFFFFFFFF;
          break;
 
       case 0x257:   /* ENVM A/D Converter */
 #if DEBUG_ENVM
-         m_log("ENVM","access to envm a/d converter - mux = %u\n",d->mux);
+         vm_log(vm,"ENVM","access to envm a/d converter - mux = %u\n",d->mux);
 #endif
          if (op_type == MTS_READ) {
             switch(d->mux) {
@@ -493,78 +595,69 @@ void *dev_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
 #if DEBUG_UNKNOWN
       default:
-         if (op_type == MTS_WRITE)
-            m_log("IO_FPGA","read from addr 0x%x\n",offset);
-         else
-            m_log("IO_FPGA","write to addr 0x%x, value=0x%llx\n",offset,*data);
+         if (op_type == MTS_READ) {
+            cpu_log(cpu,"IO_FPGA","read from addr 0x%x, pc=0x%llx (size=%u)\n",
+                    offset,cpu->pc,op_size);
+         } else {
+            cpu_log(cpu,"IO_FPGA","write to addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+         }
 #endif
    }
 
+   IOFPGA_UNLOCK(d);
    return NULL;
 }
 
-/*
- * Set the base MAC address of the system.
- */
-static int dev_iofpga_set_mac_addr(struct c7200_eeprom *mp_eeprom,
-                                   char *mac_addr)
+/* Initialize EEPROM groups */
+void c7200_init_eeprom_groups(c7200_t *router)
 {
-   m_eth_addr_t addr;
-
-   if (parse_mac_addr(&addr,mac_addr) == -1) {
-      fprintf(stderr,"IO_FPGA: unable to parse MAC address '%s'\n",mac_addr);
-      return(-1);
-   }
+   struct nmc93c46_group *g;
    
-   c7200_set_mac_addr(mp_eeprom,&addr);
-   return(0);
+   /* Copy EEPROM definitions */
+   memcpy(&router->cpu_eeprom,&eeprom_cpu_def,sizeof(eeprom_cpu_def));
+   memcpy(&router->mp_eeprom,&eeprom_midplane_def,sizeof(eeprom_midplane_def));
+   memcpy(&router->pem_eeprom,&eeprom_pem_def,sizeof(eeprom_pem_def));
+
+   /* Initialize groups */
+   g = &router->sys_eeprom_g1;
+   memcpy(g,&eeprom_cpu_midplane,sizeof(eeprom_cpu_midplane));
+   g->def[0] = &router->cpu_eeprom;
+   g->def[1] = &router->mp_eeprom;
+
+   g = &router->sys_eeprom_g2;
+   memcpy(g,&eeprom_pem_npeb,sizeof(eeprom_pem_npeb));
+   g->def[0] = &router->pem_eeprom;   
+}
+
+/* Shutdown the IO FPGA device */
+void dev_c7200_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
+{
+   if (d != NULL) {
+      IOFPGA_LOCK(d);
+      vm->vtty_con->read_notifier = NULL;
+      vm->vtty_aux->read_notifier = NULL;
+      IOFPGA_UNLOCK(d);
+
+      /* Remove the dummy IRQ periodic task */
+      ptask_remove(d->duart_irq_tid);
+
+      /* Remove the device */
+      dev_remove(vm,&d->dev);
+
+      /* Free the structure itself */
+      free(d);
+   }
 }
 
 /*
- * dev_iofpga_init()
+ * dev_c7200_iofpga_init()
  */
-int dev_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
-{  
-   struct c7200_eeprom *npe_eeprom,*mp_eeprom,*pem_eeprom;
+int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
+{
+   vm_instance_t *vm = router->vm;
    struct iofpga_data *d;
-   struct vdevice *dev;
-   cpu_mips_t *cpu0;
    u_int i;
-
-   /* Device is managed by CPU0 */
-   cpu0 = cpu_group_find_id(router->cpu_group,0);
-
-   /* Set the NPE EEPROM */
-   if (!(npe_eeprom = c7200_get_cpu_eeprom(router->npe_type))) {
-      fprintf(stderr,"C7200: unknown NPE \"%s\"!\n",router->npe_type);
-      return(-1);
-   }
-   
-   eeprom_cpu_def.data = npe_eeprom->data;
-   eeprom_cpu_def.data_len = npe_eeprom->len;
-
-   /* Set the Midplane EEPROM */
-   if (!(mp_eeprom = c7200_get_midplane_eeprom(router->midplane_type))) {
-      fprintf(stderr,"C7200: unknown Midplane \"%s\"!\n",
-              router->midplane_type);
-      return(-1);
-   }
-   
-   eeprom_midplane_def.data = mp_eeprom->data;
-   eeprom_midplane_def.data_len = mp_eeprom->len;
-
-   /* Set the PEM EEPROM for NPE-175/NPE-225 */
-   if ((pem_eeprom = c7200_get_pem_eeprom(router->npe_type)) != NULL) {
-      eeprom_pem_def.data = pem_eeprom->data;
-      eeprom_pem_def.data_len = pem_eeprom->len;
-   }
-
-   /* Set the base MAC address */
-   if (router->mac_addr != NULL) {
-      dev_iofpga_set_mac_addr(mp_eeprom,router->mac_addr);
-   } else {
-      printf("C7200: Warning, no MAC address set.\n");
-   }
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {
@@ -573,38 +666,39 @@ int dev_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
    }
 
    memset(d,0,sizeof(*d));
-   d->mgr_cpu  = cpu0;
-   d->vtty_con = vtty_create("Console port",
-                             router->vtty_con_type,router->vtty_con_tcp_port);
-   d->vtty_aux = vtty_create("AUX port",
-                             router->vtty_aux_type,router->vtty_aux_tcp_port);
+
+   pthread_mutex_init(&d->lock,NULL);
+   d->router = router;
 
    for(i=0;i<C7200_TEMP_SENSORS;i++) {
       d->temp_cfg_reg[i] = DS1620_CONFIG_STATUS_CPU;
       d->temp_deg_reg[i] = C7200_DEFAULT_TEMP * 2;
    }
 
-   /* Create the device itself */
-   if (!(dev = dev_create("io_fpga"))) {
-      fprintf(stderr,"IO_FPGA: unable to create device.\n");
-      return(-1);
-   }
+   vm_object_init(&d->vm_obj);
+   d->vm_obj.name = "io_fpga";
+   d->vm_obj.data = d;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_c7200_iofpga_shutdown;
 
-   dev->phys_addr = paddr;
-   dev->phys_len  = len;
-   dev->handler   = dev_iofpga_access;
-   dev->priv_data = d;
+   /* Set device properties */
+   dev_init(&d->dev);
+   d->dev.name      = "io_fpga";
+   d->dev.phys_addr = paddr;
+   d->dev.phys_len  = len;
+   d->dev.handler   = dev_c7200_iofpga_access;
+   d->dev.priv_data = d;
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(router->cpu_group,dev);
+   /* Set console and AUX port notifying functions */
+   vm->vtty_con->priv_data = d;
+   vm->vtty_aux->priv_data = d;
+   vm->vtty_con->read_notifier = tty_con_input;
+   vm->vtty_aux->read_notifier = tty_aux_input;
 
-   /* Create console threads */
-   if (router->vtty_con_type != VTTY_TYPE_NONE)
-      pthread_create(&d->duart_con_thread,NULL,(void *)tty_con_input,d);
-   
-   if (router->vtty_aux_type != VTTY_TYPE_NONE)
-      pthread_create(&d->duart_aux_thread,NULL,(void *)tty_aux_input,d);
+   /* Trigger periodically a dummy IRQ to flush buffers */
+   d->duart_irq_tid = ptask_add((ptask_callback)tty_trigger_dummy_irq,d,NULL);
 
-   ptask_add((ptask_callback)tty_trigger_dummy_irq,d,NULL);
+   /* Map this device to the VM */
+   vm_bind_device(vm,&d->dev);
+   vm_object_add(vm,&d->vm_obj);
    return(0);
 }

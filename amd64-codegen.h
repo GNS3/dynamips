@@ -92,6 +92,12 @@ typedef union {
 
 #include "x86-codegen.h"
 
+#define amd64_bswap32(inst,reg) \
+        do {    \
+                *(inst)++ = 0x0f;	\
+                *(inst)++ = (unsigned char)0xc8 + (reg); \
+        } while (0)
+
 /* In 64 bit mode, all registers have a low byte subregister */
 #undef X86_IS_BYTE_REG
 #define X86_IS_BYTE_REG(reg) 1

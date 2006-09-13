@@ -147,7 +147,7 @@ void *mp_dup(mempool_t *pool,void *data,size_t size)
 }
 
 /* Duplicate specified string and insert it in a memory pool */
-char *mp_dup_string(mempool_t *pool,char *str)
+char *mp_strdup(mempool_t *pool,char *str)
 {
    char *new_str;
 

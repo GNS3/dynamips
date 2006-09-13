@@ -19,6 +19,14 @@ static m_uint8_t microcode[] = {
 #include "microcode_dump.inc"
 };
 
+/* ROM private data */
+struct rom_data {
+   vm_obj_t vm_obj;
+   struct vdevice dev;
+   m_uint8_t *rom_ptr;
+   m_uint32_t rom_size;
+};
+
 /*
  * dev_rom_access()
  */
@@ -26,35 +34,64 @@ void *dev_rom_access(cpu_mips_t *cpu,struct vdevice *dev,
                      m_uint32_t offset,u_int op_size,u_int op_type,
                      m_uint64_t *data)
 {
+   struct rom_data *d = dev->priv_data;
+
    if (op_type == MTS_WRITE) {
-      m_log("ROM","write attempt at address 0x%llx (data=0x%llx)\n",
-            dev->phys_addr+offset,*data);
+      cpu_log(cpu,"ROM","write attempt at address 0x%llx (data=0x%llx)\n",
+              dev->phys_addr+offset,*data);
       return NULL;
    }
 
-   if (offset >= sizeof(microcode)) {
+   if (offset >= d->rom_size) {
       *data = 0;
       return NULL;
    }
 
-   return((void *)(microcode + offset));
+   return((void *)(d->rom_ptr + offset));
 }
 
-/* dev_rom_init() */
-int dev_rom_init(cpu_group_t *cpu_group,m_uint64_t paddr,m_uint32_t len)
+/* Shutdown a ROM device */
+void dev_rom_shutdown(vm_instance_t *vm,struct rom_data *d)
 {
-   struct vdevice *dev;
+   if (d != NULL) {
+      /* Remove the device */
+      dev_remove(vm,&d->dev);
 
-   if (!(dev = dev_create("rom"))) {
+      /* Free the structure itself */
+      free(d);
+   }
+}
+
+/* Initialize a ROM zone */
+int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len)
+{
+   struct rom_data *d;
+
+   /* allocate the private data structure */
+   if (!(d = malloc(sizeof(*d)))) {
       fprintf(stderr,"ROM: unable to create device.\n");
       return(-1);
    }
 
-   dev->phys_addr = paddr;
-   dev->phys_len  = len;
-   dev->handler   = dev_rom_access;
+   memset(d,0,sizeof(*d));
+   d->rom_ptr  = microcode;
+   d->rom_size = sizeof(microcode);
 
-   /* Map this device to all CPU */
-   cpu_group_bind_device(cpu_group,dev);
+   vm_object_init(&d->vm_obj);
+   d->vm_obj.name = name;
+   d->vm_obj.data = d;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_rom_shutdown;
+
+   dev_init(&d->dev);
+   d->dev.name      = name;
+   d->dev.priv_data = d;
+   d->dev.phys_addr = paddr;
+   d->dev.phys_len  = len;
+   d->dev.flags     = VDEVICE_FLAG_CACHING;
+   d->dev.handler   = dev_rom_access;
+
+   /* Map this device to the VM */
+   vm_bind_device(vm,&d->dev);
+   vm_object_add(vm,&d->vm_obj);
    return(0);
 }

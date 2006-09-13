@@ -2,8 +2,7 @@
  * Cisco 7200 (Predator) simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
- * Cisco C7200 (Predator) Pericom PCI bridge.
- * This is just a fake device.
+ * Pericom PCI bridge.
  */
 
 #include <stdio.h>
@@ -22,12 +21,13 @@
 /*
  * dev_pericom_init()
  */
-int dev_pericom_init(struct pci_data *pci_data,int pci_bus,int pci_device)
+int dev_pericom_init(struct pci_bus *pci_bus,int pci_device,
+                     struct pci_bus *sec_bus)
 {
    struct pci_device *dev;
    
-   dev = pci_dev_add_basic(pci_data,"pericom",
-                           PCI_VENDOR_PERICOM,PCI_PRODUCT_PERICOM,
-                           pci_bus,pci_device,0);
+   dev = pci_bridge_create_dev(pci_bus,"pericom",
+                               PCI_VENDOR_PERICOM,PCI_PRODUCT_PERICOM,
+                               pci_device,0,sec_bus,NULL,NULL);
    return((dev != NULL) ? 0 : -1);
 }

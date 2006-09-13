@@ -12,6 +12,7 @@
 static const char rcsid_rbtree[] = "$Id$";
 
 #include <sys/types.h>
+#include "mempool.h"
 
 /* Comparison function for 2 keys */
 typedef int (*tree_fcompare)(void *key1,void *key2,void *opt);
@@ -52,6 +53,7 @@ struct rbtree_node {
 typedef struct rbtree_tree rbtree_tree;
 struct rbtree_tree {
    int node_count;              /* Number of Nodes */
+   mempool_t mp;                  /* Memory pool */
    rbtree_node nil;             /* Sentinel */
    rbtree_node *root;           /* Root node */
    tree_fcompare key_cmp;       /* Key comparison function */
