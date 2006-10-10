@@ -82,16 +82,19 @@ typedef int (*c3600_chassis_init_fn)(c3600_t *router);
 /* Prototype of NM driver initialization function */
 typedef int (*c3600_nm_init_fn)(c3600_t *router,char *name,u_int nm_bay);
 
-/* Prototype of PA driver shutdown function */
+/* Prototype of NM driver shutdown function */
 typedef int (*c3600_nm_shutdown_fn)(c3600_t *router,u_int nm_bay);
 
-/* Prototype of PA NIO set function */
+/* Prototype of NM NIO set function */
 typedef int (*c3600_nm_set_nio_fn)(c3600_t *router,u_int nm_bay,u_int port_id,
                                    netio_desc_t *nio);
 
-/* Prototype of PA NIO unset function */
+/* Prototype of NM NIO unset function */
 typedef int (*c3600_nm_unset_nio_fn)(c3600_t *router,u_int nm_bay,
                                      u_int port_id);
+
+/* Prototype of NM NIO show info function */
+typedef int (*c3600_nm_show_info_fn)(c3600_t *router,u_int nm_bay);
 
 /* C3600 Network Module Driver */
 struct c3600_nm_driver {
@@ -102,7 +105,8 @@ struct c3600_nm_driver {
    c3600_nm_shutdown_fn nm_shutdown;
    c3600_nm_set_nio_fn nm_set_nio;
    c3600_nm_unset_nio_fn nm_unset_nio;
-   
+   c3600_nm_show_info_fn nm_show_info;
+
    /* TODO: WAN Interface Cards (WIC) */
 };
 
@@ -246,6 +250,9 @@ int c3600_nm_shutdown(c3600_t *router,u_int nm_bay);
 /* Shutdown all NM of a router */
 int c3600_nm_shutdown_all(c3600_t *router);
 
+/* Show info about all NMs */
+int c3600_nm_show_all_info(c3600_t *router);
+
 /* Create a Network Module (command line) */
 int c3600_cmd_nm_create(c3600_t *router,char *str);
 
@@ -294,5 +301,6 @@ extern struct c3600_nm_driver dev_c3600_nm_4e_driver;
 extern struct c3600_nm_driver dev_c3600_nm_1fe_tx_driver;
 extern struct c3600_nm_driver dev_c3600_nm_4t_driver;
 extern struct c3600_nm_driver dev_c3600_leopard_2fe_driver;
+extern struct c3600_nm_driver dev_c3600_nm_16esw_driver;
 
 #endif

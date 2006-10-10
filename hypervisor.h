@@ -84,6 +84,9 @@ extern int hypervisor_ethsw_init(void);
 /* Hypervisor VM initialization */
 extern int hypervisor_vm_init(void);
 
+/* Hypervisor VM debugging initialization */
+extern int hypervisor_vm_debug_init(void);
+
 /* Hypervisor C7200 initialization */
 extern int hypervisor_c7200_init(void);
 

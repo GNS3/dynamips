@@ -13,8 +13,11 @@ HAS_RFC2553?=1
 HAS_PCAP?=1
 
 # Current dynamips release
-VERSION=0.2.5
-VERSION_DEV=$(VERSION)-$(shell date +%Y%m%d-%H)
+VERSION_TRAIN=0.2.6
+VERSION_SUB=-RC1
+
+VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
+VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
 
 # Executable binary extension
 BIN_EXT?=
@@ -82,13 +85,13 @@ SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c \
 	dev_plx9060.c dev_dec21x50.c dev_pericom.c dev_ap1011.c \
 	dev_ns16552.c dev_dec21140.c dev_am79c971.c dev_mueslix.c \
 	dev_c3600.c dev_c3600_bay.c dev_c3600_iofpga.c \
-	dev_c3600_eth.c dev_c3600_serial.c \
+	dev_c3600_eth.c dev_c3600_serial.c dev_c3600_esw.c \
 	dev_c7200.c dev_c7200_iofpga.c dev_c7200_mpfpga.c \
 	dev_c7200_sram.c dev_c7200_eth.c dev_c7200_serial.c dev_c7200_pos.c \
 	dev_c7200_bri.c \
 	dev_pa_a1.c dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
 	hv_nio.c hv_nio_bridge.c hv_frsw.c hv_atmsw.c hv_ethsw.c \
-	hv_vm.c hv_c7200.c hv_c3600.c
+	hv_vm.c hv_vm_debug.c hv_c7200.c hv_c3600.c
 
 # Profiling
 #SOURCES += profiler.c

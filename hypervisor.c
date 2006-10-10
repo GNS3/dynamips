@@ -58,6 +58,20 @@ static int cmd_version(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Parser test */
+static int cmd_parser_test(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   int i;
+
+   for(i=0;i<argc;i++)
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,
+                            "arg %d (len %u): \"%s\"",
+                            i,strlen(argv[i]),argv[i]);
+
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Show hypervisor module list */
 static int cmd_mod_list(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -151,6 +165,7 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
 /* Hypervisor commands */
 static hypervisor_cmd_t hypervisor_cmd_array[] = {
    { "version", 0, 0, cmd_version, NULL },
+   { "parser_test", 0, 10, cmd_parser_test, NULL },
    { "module_list", 0, 0, cmd_mod_list, NULL },
    { "cmd_list", 1, 1, cmd_modcmd_list, NULL },
    { "working_dir", 1, 1, cmd_set_working_dir, NULL },
@@ -325,51 +340,61 @@ static int hypervisor_exec_cmd(hypervisor_conn_t *conn,
 static void *hypervisor_thread(void *arg)
 {   
    hypervisor_conn_t *conn = arg;
-   char buffer[4096],**tokens;
-   parser_token_t *tok_list;
-   int res,tok_count;
+   char buffer[512],**tokens;
+   parser_context_t ctx;
+   int res;
    
+   tokens = NULL;
+   parser_context_init(&ctx);
+
    while(conn->active) {
-      if (!m_fgets(buffer,sizeof(buffer),conn->in))
+      if (!fgets(buffer,sizeof(buffer),conn->in))
          break;
    
       if (!*buffer)
          continue;
 
       /* Tokenize command line */
-      tokens = NULL;
-      res = parser_tokenize(buffer,&tok_list,&tok_count);
+      res = parser_scan_buffer(&ctx,buffer,strlen(buffer));
 
-      if (res != 0) {
-         hypervisor_send_reply(conn,HSC_ERR_PARSING,1,"Parse error: %s",
-                               parser_strerror(res));
-         continue;
-      }
+      if (res != 0) {   
+         tokens = NULL;
 
-      if (tok_count < 2) {
-         hypervisor_send_reply(conn,HSC_ERR_PARSING,1,
-                               "At least a module and a command "
-                               "must be specified");
-         goto free_tokens;
-      }
+         if (ctx.error != 0) {
+            hypervisor_send_reply(conn,HSC_ERR_PARSING,1,"Parse error: %s",
+                                  parser_strerror(&ctx));
+            goto free_tokens;
+         }
 
-      /* Map token list to an array */
-      tokens = parser_map_array(tok_list,tok_count);
+         if (ctx.tok_count < 2) {
+            hypervisor_send_reply(conn,HSC_ERR_PARSING,1,
+                                  "At least a module and a command "
+                                  "must be specified");
+            goto free_tokens;
+         }
+
+         /* Map token list to an array */
+         tokens = parser_map_array(&ctx);
       
-      if (!tokens) {
-         hypervisor_send_reply(conn,HSC_ERR_PARSING,1,"No memory");
-         goto free_tokens;
-      }
+         if (!tokens) {
+            hypervisor_send_reply(conn,HSC_ERR_PARSING,1,"No memory");
+            goto free_tokens;
+         }
 
-      /* Execute command */
-      m_log("hypervisor_exec","%s\n",buffer);
-      hypervisor_exec_cmd(conn,tokens[0],tokens[1],tok_count-2,&tokens[2]);
+         /* Execute command */
+         //m_log("hypervisor_exec","%s\n",buffer);
+         hypervisor_exec_cmd(conn,tokens[0],tokens[1],ctx.
+                             tok_count-2,&tokens[2]);
       
-   free_tokens:
-      free(tokens);
-      parser_free_tokens(tok_list);
+      free_tokens:
+         free(tokens);
+         tokens = NULL;
+         parser_context_free(&ctx);
+      }
    }
 
+   free(tokens);
+   parser_context_free(&ctx);
    return NULL;
 }
 
@@ -518,6 +543,7 @@ int hypervisor_tcp_server(int tcp_port)
    hypervisor_atmsw_init();
    hypervisor_ethsw_init();
    hypervisor_vm_init();
+   hypervisor_vm_debug_init();
    hypervisor_c7200_init();
    hypervisor_c3600_init();
 

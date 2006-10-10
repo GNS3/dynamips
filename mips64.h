@@ -602,6 +602,12 @@ fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 /* Virtual breakpoint */
 fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);
 
+/* Add a virtual breakpoint */
+int mips64_add_breakpoint(cpu_mips_t *cpu,m_uint64_t pc);
+
+/* Remove a virtual breakpoint */
+void mips64_remove_breakpoint(cpu_mips_t *cpu,m_uint64_t pc);
+
 /* Debugging for register-jump to address 0 */
 fastcall void mips64_debug_jr0(cpu_mips_t *cpu);
 

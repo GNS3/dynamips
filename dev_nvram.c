@@ -190,3 +190,23 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
    vm_object_add(vm,&d->vm_obj);
    return(0);
 }
+
+/* Compute NVRAM checksum */
+m_uint16_t nvram_cksum(vm_instance_t *vm,m_uint64_t addr,size_t count) 
+{
+   m_uint32_t sum = 0;
+
+   while(count > 1) {
+      sum = sum + physmem_copy_u16_from_vm(vm,addr);
+      addr += sizeof(m_uint16_t);
+      count -= sizeof(m_uint16_t);
+   }
+
+   if (count > 0) 
+      sum = sum + ((physmem_copy_u16_from_vm(vm,addr) & 0xFF) << 8); 
+
+   while(sum>>16)
+      sum = (sum & 0xffff) + (sum >> 16);
+
+   return(~sum);
+}

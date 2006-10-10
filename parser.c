@@ -27,13 +27,6 @@
 
 #define TOKEN_MAX_SIZE  512
 
-/* Parser states */
-enum {
-   PARSER_STATE_BLANK,
-   PARSER_STATE_STRING,
-   PARSER_STATE_QUOTED_STRING,
-};
-
 /* Character types */
 enum {
    PARSER_CHAR_BLANK,
@@ -44,11 +37,13 @@ enum {
 };
 
 /* Get a description given an error code */
-char *parser_strerror(int error)
+char *parser_strerror(parser_context_t *ctx)
 {
-   printf("error = %d\n",error);
+   printf("error = %d\n",ctx->error);
 
-   switch(error) {
+   switch(ctx->error) {
+      case 0:
+         return "no error";
       case PARSER_ERROR_NOMEM:
          return "insufficient memory";
       case PARSER_ERROR_UNEXP_QUOTE:
@@ -60,37 +55,106 @@ char *parser_strerror(int error)
    }
 }
 
-/* Create a new token */
-static int token_create(parser_token_t **head,parser_token_t **last,
-                        char *value)
+/* Dump a token list */
+void parser_dump_tokens(parser_context_t *ctx)
 {
-   parser_token_t *t;
+   parser_token_t *tok;
 
-   if (!(t = malloc(sizeof(*t))))
-      return(-1);
+   for(tok=ctx->tok_head;tok;tok=tok->next)
+      printf("\"%s\" ",tok->value);
+}
 
-   if (!(t->value = strdup(value))) {
-      free(t);
-      return(-1);
+/* Map a token list to an array */
+char **parser_map_array(parser_context_t *ctx)
+{
+   parser_token_t *tok;
+   char **map;
+   int i;
+
+   if (ctx->tok_count <= 0)
+      return NULL;
+
+   if (!(map = calloc(ctx->tok_count,sizeof(char **))))
+      return NULL;
+
+   for(i=0,tok=ctx->tok_head;(i<ctx->tok_count) && tok;i++,tok=tok->next)
+      map[i] = tok->value;
+
+   return map;
+}
+
+/* Add a character to temporary token (resize if necessary) */
+static int tmp_token_add_char(parser_context_t *ctx,u_char c)
+{
+   size_t new_size;
+   char *new_str;
+
+   if (!ctx->tmp_tok || (ctx->tmp_cur_len == (ctx->tmp_tot_len - 1))) {
+      new_size = ctx->tmp_tot_len + TOKEN_MAX_SIZE;
+      new_str  = realloc(ctx->tmp_tok,new_size);
+
+      if (!new_str)
+         return(-1);
+
+      ctx->tmp_tok = new_str;
+      ctx->tmp_tot_len = new_size;
    }
 
-   t->next = NULL;
-
-   if (*last) {
-      (*last)->next = t;
-      *last = t;
-   } else {
-      *head = *last = t;
-   }
-
+   ctx->tmp_tok[ctx->tmp_cur_len++] = c;
+   ctx->tmp_tok[ctx->tmp_cur_len] = 0;
    return(0);
+}
+
+/* Move current token to the active token list */
+static int parser_move_tmp_token(parser_context_t *ctx)
+{
+   parser_token_t *tok;
+
+   /* no token ... */
+   if (!ctx->tmp_tok)
+      return(0);
+
+   if (!(tok = malloc(sizeof(*tok))))
+      return(-1);
+
+   tok->value = ctx->tmp_tok;
+   tok->next  = NULL;
+
+   /* add it to the token list */
+   if (ctx->tok_last != NULL)
+      ctx->tok_last->next = tok;
+   else
+      ctx->tok_head = tok;
+
+   ctx->tok_last = tok;
+   ctx->tok_count++;
+
+   /* start a new token */
+   ctx->tmp_tok = NULL;
+   ctx->tmp_tot_len = ctx->tmp_cur_len = 0;
+   return(0);
+}
+
+/* Initialize parser context */
+void parser_context_init(parser_context_t *ctx)
+{
+   ctx->tok_head = ctx->tok_last = NULL;
+   ctx->tok_count = 0;
+
+   ctx->tmp_tok = NULL;
+   ctx->tmp_tot_len = ctx->tmp_cur_len = 0;
+
+   ctx->state = PARSER_STATE_BLANK;
+   ctx->error = 0;
+
+   ctx->consumed_len = 0;
 }
 
 /* Free a token list */
 void parser_free_tokens(parser_token_t *tok_list)
 {
    parser_token_t *t,*next;
-   
+
    for(t=tok_list;t;t=next) {
       next = t->next;
       free(t->value);
@@ -98,144 +162,127 @@ void parser_free_tokens(parser_token_t *tok_list)
    }
 }
 
-/* Dump a token list */
-void parser_dump_tokens(parser_token_t *tok_list)
+/* Free memory used by a parser context */
+void parser_context_free(parser_context_t *ctx)
 {
-   parser_token_t *t;
+   parser_free_tokens(ctx->tok_head);
 
-   for(t=tok_list;t;t=t->next)
-      printf("\"%s\" ",t->value);
+   if (ctx->tmp_tok != NULL)
+      free(ctx->tmp_tok);
+
+   parser_context_init(ctx);
 }
 
-/* Map a token list to an array */
-char **parser_map_array(parser_token_t *tok_list,int tok_count)
+/* Determine the type of the input character */
+static int parser_get_char_type(u_char c)
 {
-   char **map;
-   int i;
-
-   if (tok_count <= 0)
-      return NULL;
-
-   if (!(map = calloc(tok_count,sizeof(char **))))
-      return NULL;
-
-   for(i=0;(i<tok_count) && tok_list;i++,tok_list=tok_list->next)
-      map[i] = tok_list->value;
-
-   return map;
+   switch(c) {
+      case '\n':
+      case '\r':
+      case 0:
+         return(PARSER_CHAR_NEWLINE);
+      case '\t':
+         //case '\r':
+      case ' ':
+         return(PARSER_CHAR_BLANK);
+      case '!':
+      case '#':
+         return(PARSER_CHAR_COMMENT);
+      case '"':
+         return(PARSER_CHAR_QUOTE);
+      default:
+         return(PARSER_CHAR_OTHER);
+   }
 }
 
-/* Add a character to a buffer */
-static int buffer_add_char(char *buffer,int *pos,char c)
+/* Send a buffer to the tokenizer */
+int parser_scan_buffer(parser_context_t *ctx,u_char *buf,size_t buf_size)
 {
-   if (*pos >= TOKEN_MAX_SIZE)
-      return(-1);
+   int i,type;
+   u_char c;
 
-   buffer[(*pos)++] = c;
-   buffer[*pos] = 0;
-   return(0);
-}
-
-/* Tokenize a string */
-int parser_tokenize(char *str,struct parser_token **tokens,int *tok_count)
-{
-   char buffer[TOKEN_MAX_SIZE+1];
-   parser_token_t *tok_head,*tok_last;
-   int i,buf_pos,type;
-   int state,error,done;
-   size_t len;
-   char c;
-
-   len        = strlen(str);
-   tok_head   = tok_last = NULL;
-   *tokens    = NULL;
-   *tok_count = 0;
-   state      = PARSER_STATE_BLANK;
-   done       = FALSE;
-   error      = 0;
-   buf_pos    = 0;
-
-   for(i=0;(i<len+1) && !error && !done;i++)
+   for(i=0;(i<buf_size) && (ctx->state != PARSER_STATE_DONE);i++)
    {
-      c = str[i];
+      ctx->consumed_len++;
+      c = buf[i];
       
       /* Determine character type */
-      switch(c) {
-         case '\n':
-         case '\r':
-         case 0:
-            type = PARSER_CHAR_NEWLINE;
-            break;
-         case '\t':
-         case ' ':
-            type = PARSER_CHAR_BLANK;
-            break;
-         case '!':
-         case '#':
-            type = PARSER_CHAR_COMMENT;
-            break;
-         case '"':
-            type = PARSER_CHAR_QUOTE;
-            break;
-         default:
-            type = PARSER_CHAR_OTHER;
-      }
+      type = parser_get_char_type(c);
 
       /* Basic finite state machine */
-      switch(state) {
+      switch(ctx->state) {
+         case PARSER_STATE_SKIP:
+            if (type == PARSER_CHAR_NEWLINE)
+               ctx->state = PARSER_STATE_DONE;
+
+            /* Simply ignore character until we reach end of line */
+            break;
+
          case PARSER_STATE_BLANK:
             switch(type) {
                case PARSER_CHAR_BLANK:
                   /* Eat space */
                   break;
 
-               case PARSER_CHAR_NEWLINE:
                case PARSER_CHAR_COMMENT:
-                  done = TRUE;
+                  ctx->state = PARSER_STATE_SKIP;
+                  break;
+
+               case PARSER_CHAR_NEWLINE:
+                  ctx->state = PARSER_STATE_DONE;
                   break;
 
                case PARSER_CHAR_QUOTE:
-                  state = PARSER_STATE_QUOTED_STRING;
-                  buf_pos = 0;
+                  ctx->state = PARSER_STATE_QUOTED_STRING;
                   break;
                   
                default:
                   /* Begin a new string */
-                  state = PARSER_STATE_STRING;                  
-                  buf_pos = 0;
-                  buffer_add_char(buffer,&buf_pos,c);
+                  if (!tmp_token_add_char(ctx,c)) {
+                     ctx->state = PARSER_STATE_STRING;
+                  } else {
+                     ctx->state = PARSER_STATE_SKIP;
+                     ctx->error = PARSER_ERROR_NOMEM;
+                  }
             }
             break;
 
          case PARSER_STATE_STRING:
             switch(type) {
                case PARSER_CHAR_BLANK:
-                  if (token_create(&tok_head,&tok_last,buffer) == -1)
-                     error = PARSER_ERROR_NOMEM;
-
-                  (*tok_count)++;
-                  state = PARSER_STATE_BLANK;
+                  if (!parser_move_tmp_token(ctx)) {
+                     ctx->state = PARSER_STATE_BLANK;
+                  } else {
+                     ctx->state = PARSER_STATE_SKIP;
+                     ctx->error = PARSER_ERROR_NOMEM;
+                  }
                   break;
 
                case PARSER_CHAR_NEWLINE:
-                  if (token_create(&tok_head,&tok_last,buffer) == -1)
-                     error = PARSER_ERROR_NOMEM;
+                  if (parser_move_tmp_token(ctx) == -1)
+                     ctx->error = PARSER_ERROR_NOMEM;
 
-                  (*tok_count)++;
-                  done = TRUE;
+                  ctx->state = PARSER_STATE_DONE;
                   break;
 
                case PARSER_CHAR_COMMENT:
-                  done = TRUE;
+                  if (parser_move_tmp_token(ctx) == -1)
+                     ctx->error = PARSER_ERROR_NOMEM;
+
+                  ctx->state = PARSER_STATE_SKIP;
                   break;
 
                case PARSER_CHAR_QUOTE:
-                  error = PARSER_ERROR_UNEXP_QUOTE;
+                  ctx->error = PARSER_ERROR_UNEXP_QUOTE;
+                  ctx->state = PARSER_STATE_SKIP;
                   break;
 
                default:
                   /* Add the character to the buffer */
-                  buffer_add_char(buffer,&buf_pos,c);
+                  if (tmp_token_add_char(ctx,c) == -1) {
+                     ctx->state = PARSER_STATE_SKIP;
+                     ctx->error = PARSER_ERROR_NOMEM;
+                  }
             }
             break;
 
@@ -243,32 +290,31 @@ int parser_tokenize(char *str,struct parser_token **tokens,int *tok_count)
             switch(type) {
                case PARSER_CHAR_NEWLINE:
                   /* Unterminated string! */
-                  error = PARSER_ERROR_UNEXP_EOL;
+                  ctx->error = PARSER_ERROR_UNEXP_EOL;
+                  ctx->state = PARSER_STATE_DONE;
                   break;
 
                case PARSER_CHAR_QUOTE:
-                  if (token_create(&tok_head,&tok_last,buffer) == -1)
-                     error = PARSER_ERROR_NOMEM;
-
-                  (*tok_count)++;
-                  state = PARSER_STATE_BLANK;
+                  if (!parser_move_tmp_token(ctx)) {
+                     ctx->state = PARSER_STATE_BLANK;
+                  } else {
+                     ctx->state = PARSER_STATE_SKIP;
+                     ctx->error = PARSER_ERROR_NOMEM;
+                  }
                   break;
 
                default:
                   /* Add the character to the buffer */
-                  buffer_add_char(buffer,&buf_pos,c);
+                  if (tmp_token_add_char(ctx,c) == -1) {
+                     ctx->state = PARSER_STATE_SKIP;
+                     ctx->error = PARSER_ERROR_NOMEM;
+                  }
             }
             break;
       }
    }
 
-   if (error) {
-      parser_free_tokens(tok_head);
-      return(error);
-   }
-
-   *tokens = tok_head;
-   return(0);
+   return(ctx->state == PARSER_STATE_DONE);
 }
 
 /* Parser tests */
@@ -285,21 +331,26 @@ static char *parser_test_str[] = {
 
 void parser_run_tests(void)
 {
-   struct parser_token *tok_list;
-   int i,res,tok_count;
+   parser_context_t ctx;
+   int i,res;
 
    for(i=0;parser_test_str[i];i++) {
-      res = parser_tokenize(parser_test_str[i],&tok_list,&tok_count);
+      parser_context_init(&ctx);
 
-      printf("\n%d: Test string: [%s] => res=%d\n",
-             i,parser_test_str[i],res);
+      res = parser_scan_buffer(&ctx,parser_test_str[i],
+                               strlen(parser_test_str[i])+1);
+
+      printf("\n%d: Test string: [%s] => res=%d, state=%d\n",
+             i,parser_test_str[i],res,ctx.state);
       
-      if (tok_list) {
-         printf("Tokens: ");
-         parser_dump_tokens(tok_list);
-         printf("\n");
-
-         parser_free_tokens(tok_list);
+      if ((res != 0) && (ctx.error == 0)) {
+         if (ctx.tok_head) {
+            printf("Tokens: ");
+            parser_dump_tokens(&ctx);
+            printf("\n");
+         }
       }
+
+      parser_context_free(&ctx);
    }
 }

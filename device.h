@@ -126,6 +126,9 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
                    m_uint64_t paddr,m_uint32_t len,
                    u_int *conf_reg);
 
+/* Compute NVRAM checksum */
+m_uint16_t nvram_cksum(vm_instance_t *vm,m_uint64_t addr,size_t count);
+
 /* Create a 8 Mb bootflash */
 int dev_bootflash_init(vm_instance_t *vm,char *name,
                        m_uint64_t paddr,m_uint32_t len);
@@ -175,7 +178,7 @@ int dev_clpd6729_init(vm_instance_t *vm,
 
 /* Create a NS16552 device */
 int dev_ns16552_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len,
-                     u_int irq,vtty_t *vtty_portA,vtty_t *vtty_portB);
+                     u_int reg_div,u_int irq,vtty_t *vtty_A,vtty_t *vtty_B);
 
 /* Initialize an SRAM device */
 int dev_c7200_sram_init(vm_instance_t *vm,char *name,

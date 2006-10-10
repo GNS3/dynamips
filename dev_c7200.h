@@ -115,6 +115,9 @@ typedef int (*c7200_pa_set_nio_fn)(c7200_t *router,u_int pa_bay,u_int port_id,
 typedef int (*c7200_pa_unset_nio_fn)(c7200_t *router,u_int pa_bay,
                                      u_int port_id);
 
+/* Prototype of NM NIO show info function */
+typedef int (*c7200_pa_show_info_fn)(c7200_t *router,u_int pa_bay);
+
 /* C7200 Port Adapter Driver */
 struct c7200_pa_driver {
    char *dev_type;
@@ -123,6 +126,7 @@ struct c7200_pa_driver {
    c7200_pa_shutdown_fn pa_shutdown;
    c7200_pa_set_nio_fn pa_set_nio;
    c7200_pa_unset_nio_fn pa_unset_nio;
+   c7200_pa_show_info_fn pa_show_info;
 };
 
 /* C7200 NIO binding to a slot/port */
@@ -280,6 +284,9 @@ int c7200_pa_shutdown(c7200_t *router,u_int pa_bay);
 
 /* Shutdown all PA of a router */
 int c7200_pa_shutdown_all(c7200_t *router);
+
+/* Show info about all NMs */
+int c7200_pa_show_all_info(c7200_t *router);
 
 /* Create a Port Adapter (command line) */
 int c7200_cmd_pa_create(c7200_t *router,char *str);

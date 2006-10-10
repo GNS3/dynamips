@@ -702,7 +702,6 @@ static int am79c971_receive_pkt(struct am79c971_data *d,
    rxd0.rmd[1] |= AM79C971_RMD1_STP;
    physmem_copy_u32_to_vm(d->vm,rx_start+4,rxd0.rmd[1]);
 
-   /* Generate RX interrupt */
    d->csr[0] |= AM79C971_CSR0_RINT;
    am79c971_update_intr_flag(d);
    am79c971_trigger_irq(d);
@@ -1012,7 +1011,7 @@ void dev_am79c971_remove(struct am79c971_data *d)
 
 /* Bind a NIO to an AMD Am79c971 device */
 int dev_am79c971_set_nio(struct am79c971_data *d,netio_desc_t *nio)
-{   
+{
    /* check that a NIO is not already bound */
    if (d->nio != NULL)
       return(-1);

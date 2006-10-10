@@ -182,6 +182,7 @@ struct c7200_pa_driver dev_c7200_io_fe_driver = {
    dev_c7200_iocard_shutdown,
    dev_c7200_iocard_set_nio,
    dev_c7200_iocard_unset_nio,
+   NULL,
 };
 
 /* PA-FE-TX driver */
@@ -191,6 +192,7 @@ struct c7200_pa_driver dev_c7200_pa_fe_tx_driver = {
    dev_c7200_pa_fe_tx_shutdown,
    dev_c7200_pa_fe_tx_set_nio,
    dev_c7200_pa_fe_tx_unset_nio,
+   NULL,
 };
 
 /* ====================================================================== */
@@ -353,6 +355,7 @@ struct c7200_pa_driver dev_c7200_pa_4e_driver = {
    dev_c7200_pa_4e8e_shutdown, 
    dev_c7200_pa_4e8e_set_nio,
    dev_c7200_pa_4e8e_unset_nio,
+   NULL,
 };
 
 /* PA-8E driver */
@@ -362,4 +365,5 @@ struct c7200_pa_driver dev_c7200_pa_8e_driver = {
    dev_c7200_pa_4e8e_shutdown, 
    dev_c7200_pa_4e8e_set_nio,
    dev_c7200_pa_4e8e_unset_nio,
+   NULL,
 };

@@ -778,4 +778,5 @@ struct c7200_pa_driver dev_c7200_pa_pos_oc3_driver = {
    dev_c7200_pa_pos_shutdown,
    dev_c7200_pa_pos_set_nio,
    dev_c7200_pa_pos_unset_nio,
+   NULL,
 };

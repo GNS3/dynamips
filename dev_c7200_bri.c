@@ -921,4 +921,5 @@ struct c7200_pa_driver dev_c7200_pa_4b_driver = {
    dev_c7200_pa_bri_shutdown,
    dev_c7200_pa_bri_set_nio,
    dev_c7200_pa_bri_unset_nio,
+   NULL,
 };

@@ -39,12 +39,24 @@
 #define EEPROM_NM_CLK   2
 #define EEPROM_NM_CS    4
 
+#define C3600_NET_IRQ_CLEARING_DELAY  16
+
 /* IO FPGA structure */
 struct iofpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
    c3600_t *router;
-
+   
+   /* 
+    * Used to introduce a "delay" before clearing the network interrupt
+    * on 3620/3640 platforms. Added due to a packet loss when using an 
+    * Ethernet NM on these platforms.
+    *
+    * Anyway, we should rely on the device information with appropriate IRQ
+    * routing.
+    */
+   int net_irq_clearing_count;
+   
    /* Slot select for EEPROM access */
    u_int eeprom_slot;
 
@@ -232,13 +244,16 @@ dev_c3620_c3640_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
       case 0x20001:
       case 0x20002:
       case 0x20003:
-         /* XXX Thisn't seem to be correct (at least on 3620) */
+         /* XXX This doesn't seem to be correct (at least on 3620) */
          slot = offset - 0x20000;
 
          if (op_type == MTS_READ)
             *data = 0xFF;
 
-         vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
+         if (++d->net_irq_clearing_count == C3600_NET_IRQ_CLEARING_DELAY) {
+            vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
+            d->net_irq_clearing_count = 0;
+         }
          break;
 
       /* 

@@ -400,7 +400,7 @@ void *mips64_exec_run_cpu(cpu_mips_t *cpu)
    cpu->cpu_thread_running = TRUE;
  start_cpu:
    for(;;) {
-      if (unlikely(!cpu->pc) || unlikely(cpu->state != MIPS_CPU_RUNNING))
+      if (unlikely(cpu->state != MIPS_CPU_RUNNING))
          break;
 
       /* Handle virtual idle loop */

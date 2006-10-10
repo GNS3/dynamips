@@ -1678,4 +1678,5 @@ struct c7200_pa_driver dev_c7200_pa_a1_driver = {
    dev_c7200_pa_a1_shutdown,
    dev_c7200_pa_a1_set_nio,
    dev_c7200_pa_a1_unset_nio,
+   NULL,
 };

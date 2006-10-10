@@ -1,5 +1,5 @@
 /*  
- * Cisco C3600 (Predator) simulation platform.
+ * Cisco C3600 simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Ethernet Network Modules.
@@ -255,6 +255,7 @@ struct c3600_nm_driver dev_c3600_nm_1fe_tx_driver = {
    dev_c3600_nm_eth_shutdown,
    dev_c3600_nm_eth_set_nio,
    dev_c3600_nm_eth_unset_nio,
+   NULL,
 };
 
 /* NM-1E driver */
@@ -264,6 +265,7 @@ struct c3600_nm_driver dev_c3600_nm_1e_driver = {
    dev_c3600_nm_eth_shutdown,
    dev_c3600_nm_eth_set_nio,
    dev_c3600_nm_eth_unset_nio,
+   NULL,
 };
 
 /* NM-4E driver */
@@ -273,6 +275,7 @@ struct c3600_nm_driver dev_c3600_nm_4e_driver = {
    dev_c3600_nm_eth_shutdown,
    dev_c3600_nm_eth_set_nio,
    dev_c3600_nm_eth_unset_nio,
+   NULL,
 };
 
 /* Leopard-2FE driver */
@@ -282,4 +285,5 @@ struct c3600_nm_driver dev_c3600_leopard_2fe_driver = {
    dev_c3600_nm_eth_shutdown,
    dev_c3600_nm_eth_set_nio,
    dev_c3600_nm_eth_unset_nio,
+   NULL,
 };

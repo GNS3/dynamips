@@ -923,7 +923,7 @@ mts64_entry_t *mts64_slow_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
    mts_access_special(cpu,vaddr,MTS_ACC_T,op_code,op_type,op_size,data,exc);
    return NULL;
 }
-     
+
 /* MTS64 access */
 static forced_inline void *mts64_access(cpu_mips_t *cpu,m_uint64_t vaddr,
                                         u_int op_code,u_int op_size,
@@ -1667,9 +1667,11 @@ void mts32_init_memop_vectors(cpu_mips_t *cpu)
    /* Cache Operation */
    cpu->mem_op_fn[MIPS_MEMOP_CACHE] = mts_cache;
 
+#if 0
 #if defined(FAST_ASM) && MTSASM_ENABLE
    if (cpu->vm->jit_use)
       cpu->mem_op_fn[MIPS_MEMOP_LW] = mts32_lw_asm;
+#endif
 #endif
 }
 

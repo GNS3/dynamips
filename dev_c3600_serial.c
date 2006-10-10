@@ -113,4 +113,5 @@ struct c3600_nm_driver dev_c3600_nm_4t_driver = {
    dev_c3600_nm_4t_shutdown,
    dev_c3600_nm_4t_set_nio,
    dev_c3600_nm_4t_unset_nio,
+   NULL,
 };

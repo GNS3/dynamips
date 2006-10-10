@@ -53,6 +53,9 @@ struct ns16552_data {
    vm_instance_t *vm;
    u_int irq;
    
+   /* Register offset divisor */
+   u_int reg_div;
+
    /* Periodic task to trigger DUART IRQ */
    ptask_id_t tid;
 
@@ -125,13 +128,15 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
    }
 #endif
 
-   if (offset >= 0x40)
+   offset >>= d->reg_div;
+
+   if (offset >= 0x08)
       channel = 1;
 
    switch(offset) {
       /* Receiver Buffer Reg. (RBR) / Transmitting Holding Reg. (THR) */
       case 0x00:
-      case 0x40:
+      case 0x08:
          if (op_type == MTS_WRITE) {
             vtty_put_char(d->channel[channel].vtty,(char)*data);
 
@@ -145,8 +150,8 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          break;
 
       /* Interrupt Enable Register (IER) */
-      case 0x08:
-      case 0x48:
+      case 0x01:
+      case 0x09:
          if (op_type == MTS_READ) {
             *data = d->channel[channel].ier;
          } else {
@@ -160,9 +165,9 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          break;
 
       /* Interrupt Ident Register (IIR) */
-      case 0x10:
+      case 0x02:
          vm_clear_irq(d->vm,d->irq);
-      case 0x50:
+      case 0x0A:
          if (op_type == MTS_READ) {
             odata = IIR_NPENDING;
 
@@ -180,8 +185,8 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          break;
 
       /* Line Status Register (LSR) */
-      case 0x28:
-      case 0x68:
+      case 0x05:
+      case 0x0D:
          if (op_type == MTS_READ) {
             odata = 0;
 
@@ -228,7 +233,7 @@ void dev_ns16552_shutdown(vm_instance_t *vm,struct ns16552_data *d)
 
 /* Create a NS16552 device */
 int dev_ns16552_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len,
-                     u_int irq,vtty_t *vtty_portA,vtty_t *vtty_portB)
+                     u_int reg_div,u_int irq,vtty_t *vtty_A,vtty_t *vtty_B)
 {  
    struct ns16552_data *d;
 
@@ -241,8 +246,9 @@ int dev_ns16552_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len,
    memset(d,0,sizeof(*d));
    d->vm  = vm;
    d->irq = irq;
-   d->channel[0].vtty = vtty_portA;
-   d->channel[1].vtty = vtty_portB;
+   d->reg_div = reg_div;
+   d->channel[0].vtty = vtty_A;
+   d->channel[1].vtty = vtty_B;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "ns16552";
@@ -257,10 +263,10 @@ int dev_ns16552_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len,
    d->dev.handler   = dev_ns16552_access;
    d->dev.priv_data = d;
 
-   vtty_portA->priv_data = d;
-   vtty_portB->priv_data = d;
-   vtty_portA->read_notifier = tty_con_input;
-   vtty_portB->read_notifier = tty_aux_input;
+   vtty_A->priv_data = d;
+   vtty_B->priv_data = d;
+   vtty_A->read_notifier = tty_con_input;
+   vtty_B->read_notifier = tty_aux_input;
 
    /* Trigger periodically a dummy IRQ to flush buffers */
    d->tid = ptask_add((ptask_callback)tty_trigger_dummy_irq,d,NULL);

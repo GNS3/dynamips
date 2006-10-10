@@ -57,9 +57,10 @@ static inline void mips64_load_imm(insn_block_t *b,
 /* Set the Pointer Counter (PC) register */
 void mips64_set_pc(insn_block_t *b,m_uint64_t new_pc)
 {
-   mips64_load_imm(b,X86_EDX,X86_EBX,new_pc);
-   x86_mov_membase_reg(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,pc),X86_EBX,4);
-   x86_mov_membase_reg(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,pc)+4,X86_EDX,4);
+   x86_mov_membase_imm(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,pc),
+                       new_pc & 0xFFFFFFFF,4);
+   x86_mov_membase_imm(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,pc)+4,
+                       new_pc >> 32,4);
 }
 
 /* Set the Return Address (RA) register */

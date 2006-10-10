@@ -86,8 +86,8 @@
 /* Maximum packet size */
 #define DEC21140_MAX_PKT_SIZE     2048
 
-/* Send up to 16 packets in a TX ring scan pass */
-#define DEC21140_TXRING_PASS_COUNT  16
+/* Send up to 32 packets in a TX ring scan pass */
+#define DEC21140_TXRING_PASS_COUNT  32
 
 /* Setup frame size */
 #define DEC21140_SETUP_FRAME_SIZE 192
@@ -419,25 +419,28 @@ void *dev_dec21140_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_CSR_REGS
       cpu_log(cpu,d->name,"read CSR%u value 0x%x\n",reg,d->csr[reg]);
 #endif
+      switch(reg) {
+         case 5:
+            /* Dynamically construct CSR5 */
+            *data = 0;
 
-      /* Dynamically construct CSR5 */
-      if (reg == 5) {
-         *data = 0;
-
-         if (d->csr[6] & DEC21140_CSR6_START_RX)
-            *data |= 0x03 << DEC21140_CSR5_RS_SHIFT;
-
-         if (d->csr[6] & DEC21140_CSR6_START_TX)
-            *data |= 0x03 << DEC21140_CSR5_TS_SHIFT;
+            if (d->csr[6] & DEC21140_CSR6_START_RX)
+               *data |= 0x03 << DEC21140_CSR5_RS_SHIFT;
+               
+            if (d->csr[6] & DEC21140_CSR6_START_TX)
+               *data |= 0x03 << DEC21140_CSR5_TS_SHIFT;
          
-         *data |= d->csr[5] & (DEC21140_CSR5_TI|DEC21140_CSR5_RI);
-      }
-      else
-         *data = d->csr[reg];
+            *data |= d->csr[5] & (DEC21140_CSR5_TI|DEC21140_CSR5_RI);
+            break;
 
-      /* CSR8 is cleared when read */
-      if (reg == 8)
-         d->csr[reg] = 0;
+         case 8:
+            /* CSR8 is cleared when read */
+            d->csr[reg] = 0;
+            break;
+            
+         default:
+            *data = d->csr[reg];
+      }
    } else {
 #if DEBUG_CSR_REGS
       cpu_log(cpu,d->name,"write CSR%u value 0x%x\n",reg,(m_uint32_t)*data);
@@ -939,6 +942,7 @@ struct dec21140_data *dev_dec21140_init(vm_instance_t *vm,char *name,
 
    /* Basic register setup */
    d->csr[0]   = 0xfff80000;
+   d->csr[5]   = 0xfc000000;
    d->csr[8]   = 0xfffe0000;
 
    dev->phys_addr = 0;

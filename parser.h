@@ -15,6 +15,15 @@ enum {
    PARSER_ERROR_UNEXP_EOL,      /* Unexpected end of line */
 };
 
+/* Parser states */
+enum {   
+   PARSER_STATE_DONE,
+   PARSER_STATE_SKIP,
+   PARSER_STATE_BLANK,
+   PARSER_STATE_STRING,
+   PARSER_STATE_QUOTED_STRING,
+};
+
 /* Token */
 typedef struct parser_token parser_token_t;
 struct parser_token {
@@ -22,17 +31,41 @@ struct parser_token {
    struct parser_token *next;
 };
 
-/* Get a description given an error code */
-char *parser_strerror(int error);
+/* Parser context */
+typedef struct parser_context parser_context_t;
+struct parser_context {
+   /* Token list */
+   parser_token_t *tok_head,*tok_last;
+   int tok_count;
 
-/* Free a token list */
-void parser_free_tokens(parser_token_t *tok_list);
+   /* Temporary token */
+   char *tmp_tok;
+   size_t tmp_tot_len,tmp_cur_len;
+
+   /* Parser state and error */
+   int state,error;
+
+   /* Number of consumed chars */
+   size_t consumed_len;
+};
+
+/* Get a description given an error code */
+char *parser_strerror(parser_context_t *ctx);
 
 /* Dump a token list */
-void parser_dump_tokens(parser_token_t *tok_list);
+void parser_dump_tokens(parser_context_t *ctx);
 
 /* Map a token list to an array */
-char **parser_map_array(parser_token_t *tok_list,int tok_count);
+char **parser_map_array(parser_context_t *ctx);
+
+/* Initialize parser context */
+void parser_context_init(parser_context_t *ctx);
+
+/* Free memory used by a parser context */
+void parser_context_free(parser_context_t *ctx);
+
+/* Send a buffer to the tokenizer */
+int parser_scan_buffer(parser_context_t *ctx,u_char *buf,size_t buf_size);
 
 /* Tokenize a string */
 int parser_tokenize(char *str,struct parser_token **tokens,int *tok_count);

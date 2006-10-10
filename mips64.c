@@ -491,9 +491,49 @@ fastcall void mips64_run_breakpoint(cpu_mips_t *cpu)
    cpu_log(cpu,"BREAKPOINT",
            "Virtual breakpoint reached at PC=0x%llx\n",cpu->pc);
 
-   printf("[[[ Virtual Breakpoint reached at PC=0x%llx ]]]\n",cpu->pc);
+   printf("[[[ Virtual Breakpoint reached at PC=0x%llx RA=0x%llx]]]\n",
+          cpu->pc,cpu->gpr[MIPS_GPR_RA]);
+
    mips64_dump_regs(cpu);
    memlog_dump(cpu);
+}
+
+/* Add a virtual breakpoint */
+int mips64_add_breakpoint(cpu_mips_t *cpu,m_uint64_t pc)
+{
+   int i;
+
+   for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
+      if (!cpu->breakpoints[i])
+         break;
+
+   if (i == MIPS64_MAX_BREAKPOINTS)
+      return(-1);
+
+   cpu->breakpoints[i] = pc;
+   cpu->breakpoints_enabled = TRUE;
+   return(0);
+}
+
+/* Remove a virtual breakpoint */
+void mips64_remove_breakpoint(cpu_mips_t *cpu,m_uint64_t pc)
+{
+   int i,j;
+
+   for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
+      if (cpu->breakpoints[i] == pc)
+      {
+         for(j=i;j<MIPS64_MAX_BREAKPOINTS-1;j++)
+            cpu->breakpoints[j] = cpu->breakpoints[j+1];
+
+         cpu->breakpoints[MIPS64_MAX_BREAKPOINTS-1] = 0;
+      }
+
+   for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
+      if (cpu->breakpoints[i] != 0)
+         return;
+
+   cpu->breakpoints_enabled = TRUE;
 }
 
 /* Debugging for register-jump to address 0 */

@@ -591,7 +591,8 @@ static void remote_control(vtty_t *vtty,u_char c)
   
       /* Reboot the C7200 */
       case 'k':
-         c7200_boot_ios(VM_C7200(vm));
+         if (vm->type == VM_TYPE_C7200)
+            c7200_boot_ios(VM_C7200(vm));
          break;
   
       /* Show the device list */
@@ -599,6 +600,18 @@ static void remote_control(vtty_t *vtty,u_char c)
          dev_show_list(vm);
          pci_dev_show_list(vm->pci_bus[0]);
          pci_dev_show_list(vm->pci_bus[1]);
+         break;
+
+      /* Show info about Port Adapters or Network Modules */
+      case 'p':
+         switch(vm->type) {
+            case VM_TYPE_C3600:
+               c3600_nm_show_all_info(VM_C3600(vm));
+               break;
+            case VM_TYPE_C7200:
+               c7200_pa_show_all_info(VM_C7200(vm));
+               break;
+         }
          break;
   
       /* Dump the MIPS registers */
@@ -666,6 +679,7 @@ static void remote_control(vtty_t *vtty,u_char c)
          if (cpu0) {
             /* IRQ triggering */
             mips64_set_irq(cpu0,2/*C7200_PA_MGMT_IRQ*/);
+            //mips64_set_irq(cpu0,C7200_PA_MGMT_IRQ);
          }
          break;
   

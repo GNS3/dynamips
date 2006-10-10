@@ -1486,3 +1486,71 @@
   - Incorrect display of device name in PLX9060 driver.
   - Added manpages provided by Erik Wenzel (erik@debian.org). Many thanks
     to him for this and for his work on packaging for Debian.
+  - Final 0.2.5 release.
+  - C7200: Added missing NVRAM checksum.
+
+15/21-Sep-2006
+-----------
+  - Working on NM-16ESW.
+	
+22-Sep-2006
+-----------
+  - NM-16ESW: interfaces are now up (handles specifically the appropriate
+    MII register).
+
+23/25-Sep-2006
+--------------
+  - Still continuing on the NM-16ESW (first packets received/transmitted).
+
+26-Sep-2006
+-----------
+  - NM-16ESW: seems to be working! (although there are still a lot of things
+    to do).
+
+28-Sep-2006
+-----------
+  - Added a hack to allow Ethernet NM to work correctly in 3620/3640
+    (seen when directly attached to the real network with very few packets
+    incoming).
+  - NM-16ESW: proper support for tx ring scatter/gather support.
+  - NM-16ESW: fixed a bug in ARL insertion.
+  - NM-16ESW: send directly BPDU packets to the CPU.
+
+29-Sep-2006
+-----------
+  - NM-16ESW: added support for "trunks" (ie etherchannel).
+  - Added "Ctrl+p" sequence key to dump Port Adapter / Network Module info
+    (only NM-16ESW reports something at this time).
+
+30-Sep-2006
+-----------
+  - NM-16ESW: proper management of station movement (etherchannel is handled).
+
+01-Oct-2006
+-----------
+  - NM-16ESW: added register handling.
+
+02-Oct-2006
+-----------
+  - NM-16ESW: playing with the port mirroring feature.
+	
+04-Oct-2006
+-----------
+  - Finally understood how to handle link status changes! Now, 
+    "shut"/"no shut" is working. Better understanding of MII registers
+    in general.
+
+05-Oct-2006
+-----------
+  - Fixed bug described in BTS entry #65 (in the case where two virtual 
+    addresses point at the same physical address, the JIT can use
+    inappropriate block). This was a "silent" bug.
+
+07-Oct-2006
+-----------
+  - Modified the hypervisor parser to allow long lines (to upload IOS configs).
+
+09-Oct-2006
+-----------
+  - NM-16ESW: added ingress and egress port mirroring (todo: BPDU and CDP
+    packets shouldn't be replicated).

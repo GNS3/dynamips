@@ -267,28 +267,35 @@ ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
 int c7200_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
 {
    struct vdevice *nvram_dev;
-   m_uint64_t addr,cfg_addr,cfg_start_addr;
+   m_uint64_t addr,cfg_addr;
+   m_uint32_t cklen;
+   m_uint16_t cksum;
 
    if (!(nvram_dev = dev_get_by_name(vm,"nvram")))
       return(-1);
 
    addr = nvram_dev->phys_addr + vm->nvram_rom_space;
-   cfg_start_addr = cfg_addr = addr + 0x40;
+   cfg_addr = addr + 0x2c;
 
    /* Write IOS tag, uncompressed config... */
    physmem_copy_u16_to_vm(vm,addr+0x06,0xF0A5);
    physmem_copy_u16_to_vm(vm,addr+0x08,0xABCD);      /* Magic number */
    physmem_copy_u16_to_vm(vm,addr+0x0a,0x0001);      /* ??? */
    physmem_copy_u16_to_vm(vm,addr+0x0c,0x0000);      /* zero */
-   physmem_copy_u16_to_vm(vm,addr+0x0e,0x0c04);      /* IOS version */
+   physmem_copy_u16_to_vm(vm,addr+0x0e,0x0000);      /* IOS version */
 
    /* Store file contents to NVRAM */
    physmem_copy_to_vm(vm,buffer,cfg_addr,len);
 
    /* Write config addresses + size */
-   physmem_copy_u32_to_vm(vm,addr+0x10,cfg_start_addr);
-   physmem_copy_u32_to_vm(vm,addr+0x14,cfg_addr);
-   physmem_copy_u32_to_vm(vm,addr+0x18,cfg_addr - cfg_start_addr);
+   physmem_copy_u32_to_vm(vm,addr+0x10,cfg_addr);
+   physmem_copy_u32_to_vm(vm,addr+0x14,cfg_addr + len);
+   physmem_copy_u32_to_vm(vm,addr+0x18,len);
+
+   /* Compute the checksum */
+   cklen = nvram_dev->phys_len - (vm->nvram_rom_space + 0x08);
+   cksum = nvram_cksum(vm,addr+0x08,cklen);
+   physmem_copy_u16_to_vm(vm,addr+0x0c,cksum);
    return(0);
 }
 
@@ -928,6 +935,23 @@ int c7200_pa_shutdown_all(c7200_t *router)
          continue;
 
       c7200_pa_shutdown(router,i);
+   }
+
+   return(0);
+}
+
+/* Show info about all NMs */
+int c7200_pa_show_all_info(c7200_t *router)
+{
+   struct c7200_pa_bay *bay;
+   int i;
+
+   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
+      if (!(bay = c7200_pa_get_info(router,i)) || !bay->pa_driver)
+         continue;
+
+      if (bay->pa_driver->pa_show_info != NULL)
+         bay->pa_driver->pa_show_info(router,i);
    }
 
    return(0);

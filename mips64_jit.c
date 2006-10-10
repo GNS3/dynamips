@@ -660,6 +660,15 @@ int insn_block_local_addr(insn_block_t *block,m_uint64_t vaddr,
    return(0);
 }
 
+/* Check if PC register matches the compiled block virtual address */
+static forced_inline int insn_block_match(cpu_mips_t *cpu,insn_block_t *block)
+{
+   m_uint64_t vpage;
+
+   vpage = cpu->pc & ~(m_uint64_t)MIPS_MIN_PAGE_IMASK;
+   return(block->start_pc == vpage);
+}
+
 /* Execute a compiled MIPS code */
 void *insn_block_execute(cpu_mips_t *cpu)
 {  
@@ -681,7 +690,7 @@ void *insn_block_execute(cpu_mips_t *cpu)
    cpu->cpu_thread_running = TRUE;
  start_cpu:   
    for(;;) {
-      if (unlikely(!cpu->pc) || unlikely(cpu->state != MIPS_CPU_RUNNING))
+      if (unlikely(cpu->state != MIPS_CPU_RUNNING))
          break;
 
       /* Handle virtual idle loop */
@@ -714,7 +723,13 @@ void *insn_block_execute(cpu_mips_t *cpu)
       block = cpu->exec_phys_map[phys_page];
 
       /* No block found, compile the page */
-      if (unlikely(!block)) {
+      if (unlikely(!block) || unlikely(!insn_block_match(cpu,block))) 
+      {
+         if (block != NULL) {
+            insn_block_free(cpu,block,TRUE);
+            cpu->exec_phys_map[phys_page] = NULL;
+         }
+
          block = insn_page_compile(cpu,cpu->pc);
          if (unlikely(!block)) {
             fprintf(stderr,

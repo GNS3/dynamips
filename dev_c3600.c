@@ -90,6 +90,7 @@ static struct c3600_nm_driver *nm_drivers[] = {
    &dev_c3600_nm_1fe_tx_driver,
    &dev_c3600_nm_4t_driver,
    &dev_c3600_leopard_2fe_driver,
+   &dev_c3600_nm_16esw_driver,
    NULL,
 };
 
@@ -138,27 +139,6 @@ ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
    return(clen);
 }
 
-/* Compute NVRAM checksum */
-static u_int16_t nvram_cksum(vm_instance_t *vm,m_uint64_t addr,size_t count) 
-{
-   m_uint32_t sum = 0;
-
-   while(count > 1) {
-      sum = sum + physmem_copy_u16_from_vm(vm,addr);
-      addr += sizeof(m_uint16_t);
-      count -= sizeof(m_uint16_t);
-   }
-
-   if (count > 0) 
-      sum = sum + ((physmem_copy_u16_from_vm(vm,addr) & 0xFF) << 8); 
-
-   while(sum>>16)
-      sum = (sum & 0xffff) + (sum >> 16);
-
-   return(~sum);
-}
-
-
 /* Directly push the IOS configuration to the NVRAM device */
 int c3600_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
 {
@@ -173,7 +153,7 @@ int c3600_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
 
    addr = nvram_dev->phys_addr + vm->nvram_rom_space;
    cfg_offset = 0x2c;
-   cfg_addr   = addr + cfg_offset;;
+   cfg_addr   = addr + cfg_offset;
 
    /* Write IOS tag, uncompressed config... */
    physmem_copy_u16_to_vm(vm,addr+0x06,0xF0A5);
@@ -740,6 +720,23 @@ int c3600_nm_shutdown_all(c3600_t *router)
          continue;
 
       c3600_nm_shutdown(router,i);
+   }
+
+   return(0);
+}
+
+/* Show info about all NMs */
+int c3600_nm_show_all_info(c3600_t *router)
+{
+   struct c3600_nm_bay *bay;
+   int i;
+
+   for(i=0;i<C3600_MAX_NM_BAYS;i++) {
+      if (!(bay = c3600_nm_get_info(router,i)) || !bay->nm_driver)
+         continue;
+
+      if (bay->nm_driver->nm_show_info != NULL)
+         bay->nm_driver->nm_show_info(router,i);
    }
 
    return(0);
@@ -1315,7 +1312,7 @@ int c3600_init_platform(c3600_t *router)
    }
 
    /* Initialize the NS16552 DUART */
-   dev_ns16552_init(vm,C3600_DUART_ADDR,0x1000,C3600_DUART_IRQ,
+   dev_ns16552_init(vm,C3600_DUART_ADDR,0x1000,3,C3600_DUART_IRQ,
                     vm->vtty_con,vm->vtty_aux);
 
    /* Cirrus Logic PD6729 (PCI-to-PCMCIA host adapter) */
@@ -1380,7 +1377,7 @@ int c3600_boot_ios(c3600_t *router)
    vm_log(vm,"C3600_BOOT",
           "starting instance (CPU0 PC=0x%llx,idle_pc=0x%llx,JIT %s)\n",
           vm->boot_cpu->pc,vm->boot_cpu->idle_pc,vm->jit_use ? "on":"off");
-   
+
    /* Start main CPU */
    vm->status = VM_STATUS_RUNNING;
    cpu_start(vm->boot_cpu);
