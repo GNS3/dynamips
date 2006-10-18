@@ -90,7 +90,7 @@ static m_uint16_t eeprom_cpu_npeg1_data[64] = {
 /*
  * CPU EEPROM array.
  */
-static struct c7200_eeprom c7200_cpu_eeprom[] = {
+static struct cisco_eeprom c7200_cpu_eeprom[] = {
    { "npe-100", eeprom_cpu_npe100_data, sizeof(eeprom_cpu_npe100_data)/2 },
    { "npe-150", eeprom_cpu_npe150_data, sizeof(eeprom_cpu_npe150_data)/2 },
    { "npe-175", eeprom_cpu_npe175_data, sizeof(eeprom_cpu_npe175_data)/2 },
@@ -125,7 +125,7 @@ static m_uint16_t eeprom_vxr_midplane_data[32] = {
 /*
  * Midplane EEPROM array.
  */
-static struct c7200_eeprom c7200_midplane_eeprom[] = {
+static struct cisco_eeprom c7200_midplane_eeprom[] = {
    { "std", eeprom_midplane_data, sizeof(eeprom_midplane_data)/2 },
    { "vxr", eeprom_vxr_midplane_data, sizeof(eeprom_vxr_midplane_data)/2 },
    { NULL, NULL, 0 },
@@ -150,7 +150,7 @@ static m_uint16_t eeprom_pem_npe225_data[16] = {
 /*
  * PEM EEPROM array.
  */
-static struct c7200_eeprom c7200_pem_eeprom[] = {
+static struct cisco_eeprom c7200_pem_eeprom[] = {
    { "npe-175", eeprom_pem_npe175_data, sizeof(eeprom_pem_npe175_data)/2 },
    { "npe-225", eeprom_pem_npe225_data, sizeof(eeprom_pem_npe225_data)/2 },
    { NULL, NULL, 0 },
@@ -198,16 +198,6 @@ static struct c7200_npe_driver npe_drivers[] = {
    { "npe-g1"  , c7200_init_npeg1, 1024, 0, 
      C7200_NPEG1_NVRAM_ADDR, 17, 16, 16, 0 },
    { NULL      , NULL },
-};
-
-/* ======================================================================== */
-/* Empty EEPROM for PAs                                                     */
-/* ======================================================================== */
-static const m_uint16_t eeprom_pa_empty[64] = {
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* ======================================================================== */
@@ -299,52 +289,40 @@ int c7200_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
    return(0);
 }
 
-/* Find an EEPROM in the specified array */
-struct c7200_eeprom *c7200_get_eeprom(struct c7200_eeprom *eeproms,char *name)
-{
-   int i;
-
-   for(i=0;eeproms[i].name;i++)
-      if (!strcmp(eeproms[i].name,name))
-         return(&eeproms[i]);
-
-   return NULL;
-}
-
 /* Get an EEPROM for a given NPE model */
-struct c7200_eeprom *c7200_get_cpu_eeprom(char *npe_name)
+static const struct cisco_eeprom *c7200_get_cpu_eeprom(char *npe_name)
 {
-   return(c7200_get_eeprom(c7200_cpu_eeprom,npe_name));
+   return(cisco_eeprom_find(c7200_cpu_eeprom,npe_name));
 }
 
 /* Get an EEPROM for a given midplane model */
-struct c7200_eeprom *c7200_get_midplane_eeprom(char *midplane_name)
+static const struct cisco_eeprom *
+c7200_get_midplane_eeprom(char *midplane_name)
 {
-   return(c7200_get_eeprom(c7200_midplane_eeprom,midplane_name));
+   return(cisco_eeprom_find(c7200_midplane_eeprom,midplane_name));
 }
 
 /* Get a PEM EEPROM for a given NPE model */
-struct c7200_eeprom *c7200_get_pem_eeprom(char *npe_name)
+static const struct cisco_eeprom *c7200_get_pem_eeprom(char *npe_name)
 {
-   return(c7200_get_eeprom(c7200_pem_eeprom,npe_name));
+   return(cisco_eeprom_find(c7200_pem_eeprom,npe_name));
 }
 
 /* Set the base MAC address of the chassis */
-static int c7200_burn_mac_addr(m_uint16_t *data,size_t data_len,
-                               n_eth_addr_t *addr)
+static int c7200_burn_mac_addr(c7200_t *router,n_eth_addr_t *addr)
 {
    m_uint8_t eeprom_ver;
 
    /* Read EEPROM format version */
-   cisco_eeprom_get_byte(data,data_len,0,&eeprom_ver);
+   cisco_eeprom_get_byte(&router->mp_eeprom,0,&eeprom_ver);
 
    if (eeprom_ver != 1) {
-      fprintf(stderr,"c7200_burn_mac_addr: unable to handle "
+      vm_error(router->vm,"c7200_burn_mac_addr: unable to handle "
               "EEPROM version %u\n",eeprom_ver);
       return(-1);
    }
 
-   cisco_eeprom_set_region(data,data_len,12,addr->eth_addr_byte,6);
+   cisco_eeprom_set_region(&router->mp_eeprom,12,addr->eth_addr_byte,6);
    return(0);
 }
 
@@ -417,6 +395,11 @@ static int c7200_free_instance(void *data,void *arg)
 
       /* Free specific HW resources */
       c7200_free_hw_ressources(router);
+
+      /* Free EEPROMs */
+      cisco_eeprom_free(&router->cpu_eeprom);
+      cisco_eeprom_free(&router->mp_eeprom);
+      cisco_eeprom_free(&router->pem_eeprom);
 
       /* Free all resources used by VM */
       vm_free(vm);
@@ -496,7 +479,7 @@ void c7200_save_config_all(FILE *fd)
 /* Set NPE eeprom definition */
 static int c7200_npe_set_eeprom(c7200_t *router)
 {
-   struct c7200_eeprom *eeprom;
+   const struct cisco_eeprom *eeprom;
 
    if (!(eeprom = c7200_get_cpu_eeprom(router->npe_driver->npe_type))) {
       vm_error(router->vm,"unknown NPE \"%s\" (internal error)!\n",
@@ -504,15 +487,18 @@ static int c7200_npe_set_eeprom(c7200_t *router)
       return(-1);
    }
 
-   router->cpu_eeprom.data = eeprom->data;
-   router->cpu_eeprom.data_len = eeprom->len;
+   if (cisco_eeprom_copy(&router->cpu_eeprom,eeprom) == -1) {
+      vm_error(router->vm,"unable to set NPE EEPROM.\n");
+      return(-1);
+   }
+
    return(0);
 }
 
 /* Set PEM eeprom definition */
 static int c7200_pem_set_eeprom(c7200_t *router)
 {
-   struct c7200_eeprom *eeprom;
+   const struct cisco_eeprom *eeprom;
 
    if (!(eeprom = c7200_get_pem_eeprom(router->npe_driver->npe_type))) {
       vm_error(router->vm,"no PEM EEPROM found for NPE type \"%s\"!\n",
@@ -520,22 +506,28 @@ static int c7200_pem_set_eeprom(c7200_t *router)
       return(-1);
    }
 
-   router->pem_eeprom.data = eeprom->data;
-   router->pem_eeprom.data_len = eeprom->len;
+   if (cisco_eeprom_copy(&router->pem_eeprom,eeprom) == -1) {
+      vm_error(router->vm,"unable to set PEM EEPROM.\n");
+      return(-1);
+   }
+
    return(0);
 }
 
 /* Set PA EEPROM definition */
 int c7200_pa_set_eeprom(c7200_t *router,u_int pa_bay,
-                        const struct c7200_eeprom *eeprom)
+                        const struct cisco_eeprom *eeprom)
 {
    if (pa_bay >= C7200_MAX_PA_BAYS) {
       vm_error(router->vm,"c7200_pa_set_eeprom: invalid PA Bay %u.\n",pa_bay);
       return(-1);
    }
-   
-   router->pa_bay[pa_bay].eeprom.data = eeprom->data;
-   router->pa_bay[pa_bay].eeprom.data_len = eeprom->len;
+
+   if (cisco_eeprom_copy(&router->pa_bay[pa_bay].eeprom,eeprom) == -1) {
+      vm_error(router->vm,"c7200_pa_set_eeprom: no memory.\n");
+      return(-1);
+   }
+
    return(0);
 }
 
@@ -547,25 +539,17 @@ int c7200_pa_unset_eeprom(c7200_t *router,u_int pa_bay)
       return(-1);
    }
    
-   router->pa_bay[pa_bay].eeprom.data = (m_uint16_t *)eeprom_pa_empty;
-   router->pa_bay[pa_bay].eeprom.data_len = sizeof(eeprom_pa_empty)/2;
+   cisco_eeprom_free(&router->pa_bay[pa_bay].eeprom);
    return(0);
 }
 
 /* Check if a bay has a port adapter */
 int c7200_pa_check_eeprom(c7200_t *router,u_int pa_bay)
 {
-   struct nmc93c46_eeprom_def *def;
-
    if (!pa_bay || (pa_bay >= C7200_MAX_PA_BAYS))
-      return(0);
+      return(FALSE);
 
-   def = &router->pa_bay[pa_bay].eeprom;
-   
-   if (def->data == eeprom_pa_empty)
-      return(0);
-
-   return(1);
+   return(cisco_eeprom_valid(&router->pa_bay[pa_bay].eeprom));
 }
 
 /* Get bay info */
@@ -1208,7 +1192,7 @@ void c7200_npe_show_drivers(void)
 /* Set Midplane type */
 int c7200_midplane_set_type(c7200_t *router,char *midplane_type)
 {
-   struct c7200_eeprom *eeprom;
+   const struct cisco_eeprom *eeprom;
    m_uint8_t version;
 
    if (router->vm->status == VM_STATUS_RUNNING) {
@@ -1222,20 +1206,19 @@ int c7200_midplane_set_type(c7200_t *router,char *midplane_type)
       return(-1);
    }
 
-   memcpy(router->mp_eeprom_data,eeprom->data,eeprom->len << 1);
+   /* Copy the midplane EEPROM */
+   if (cisco_eeprom_copy(&router->mp_eeprom,eeprom) == -1) {
+      vm_error(router->vm,"unable to set midplane EEPROM.\n");
+      return(-1);
+   }
 
    /* Set the chassis base MAC address */
-   c7200_burn_mac_addr(router->mp_eeprom_data,sizeof(router->mp_eeprom_data),
-                       &router->mac_addr);
-
-   router->mp_eeprom.data = router->mp_eeprom_data;
-   router->mp_eeprom.data_len = eeprom->len;
-   router->midplane_type = eeprom->name;
+   c7200_burn_mac_addr(router,&router->mac_addr);
 
    /* Get the midplane version */
-   cisco_eeprom_get_byte(router->mp_eeprom.data,router->mp_eeprom.data_len*2,
-                         2,&version);
-   router->midplane_version = version;
+   cisco_eeprom_get_byte(&router->mp_eeprom,2,&version);
+   router->midplane_version = version;  
+   router->midplane_type = eeprom->name;
    return(0);
 }
 
@@ -1248,8 +1231,7 @@ int c7200_midplane_set_mac_addr(c7200_t *router,char *mac_addr)
    }
 
    /* Set the chassis base MAC address */
-   c7200_burn_mac_addr(router->mp_eeprom_data,sizeof(router->mp_eeprom_data),
-                       &router->mac_addr);
+   c7200_burn_mac_addr(router,&router->mac_addr);
    return(0);
 }
 

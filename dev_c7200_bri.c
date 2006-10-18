@@ -285,17 +285,6 @@ struct pa_4b_data {
    u_int m32_offset;
 };
 
-/* EEPROM definition (3D = PA-4B, 3E = PA-8B) */
-static const m_uint16_t eeprom_pa_4b_data[64] = {
-   0x013D, 0x0202, 0xffff, 0xffff, 0x490C, 0x7806, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x0208, 0x1900, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_pa_4b = {
-   "PA-4B", (m_uint16_t *)eeprom_pa_4b_data,
-   sizeof(eeprom_pa_4b_data)/2,
-};
-
 /* Log a PA-4B/PA-8B message */
 #define BRI_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
@@ -810,7 +799,7 @@ int dev_c7200_pa_bri_init(c7200_t *router,char *name,u_int pa_bay)
    d->m32_data.vm = router->vm;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pa_4b);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4B"));
 
    /* Add as PCI device PA-4B */
    pci_dev = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,

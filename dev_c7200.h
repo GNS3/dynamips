@@ -91,13 +91,6 @@
 /* C7200 router */
 typedef struct c7200_router c7200_t;
 
-/* C7200 EEPROM */
-struct c7200_eeprom {
-   char *name;
-   m_uint16_t *data;
-   u_int len;
-};
-
 /* Prototype of NPE driver initialization function */
 typedef int (*c7200_npe_init_fn)(c7200_t *router);
 
@@ -140,8 +133,8 @@ struct c7200_nio_binding {
 struct c7200_pa_bay {
    char *dev_name;                       /* Device Name */
    char *dev_type;                       /* Device Type */
+   struct cisco_eeprom eeprom;           /* PA EEPROM */
    struct pci_bus *pci_map;              /* PCI bus */
-   struct nmc93c46_eeprom_def eeprom;    /* PA EEPROM */
    struct c7200_pa_driver *pa_driver;    /* PA driver */
    void *drv_info;                       /* Private driver info */
    struct c7200_nio_binding *nio_list;   /* NIO bindings to ports */
@@ -180,11 +173,7 @@ struct c7200_router {
    struct pci_bus *pcmcia_bus;
 
    /* Midplane EEPROM can be modified to change the chassis MAC address... */
-   m_uint16_t mp_eeprom_data[64];
-   
-   struct nmc93c46_eeprom_def cpu_eeprom;  /* CPU EEPROM */
-   struct nmc93c46_eeprom_def mp_eeprom;   /* Midplane EEPROM */
-   struct nmc93c46_eeprom_def pem_eeprom;  /* Power Entry Module EEPROM */
+   struct cisco_eeprom cpu_eeprom,mp_eeprom,pem_eeprom;
 
    struct nmc93c46_group sys_eeprom_g1;    /* EEPROMs for CPU and Midplane */
    struct nmc93c46_group sys_eeprom_g2;    /* EEPROM for PEM */
@@ -194,18 +183,6 @@ struct c7200_router {
 
 /* Initialize EEPROM groups */
 void c7200_init_eeprom_groups(c7200_t *router);
-
-/* Find an EEPROM in the specified array */
-struct c7200_eeprom *c7200_get_eeprom(struct c7200_eeprom *eeproms,char *name);
-
-/* Get an EEPROM for a given NPE model */
-struct c7200_eeprom *c7200_get_cpu_eeprom(char *npe_name);
-
-/* Get an EEPROM for a given midplane model */
-struct c7200_eeprom *c7200_get_midplane_eeprom(char *midplane_name);
-
-/* Get a PEM EEPROM for a given NPE model */
-struct c7200_eeprom *c7200_get_pem_eeprom(char *npe_name);
 
 /* Create a new router instance */
 c7200_t *c7200_create_instance(char *name,int instance_id);
@@ -224,7 +201,7 @@ void c7200_save_config_all(FILE *fd);
 
 /* Set PA EEPROM definition */
 int c7200_pa_set_eeprom(c7200_t *router,u_int pa_bay,
-                        const struct c7200_eeprom *eeprom);
+                        const struct cisco_eeprom *eeprom);
 
 /* Unset PA EEPROM definition (empty bay) */
 int c7200_pa_unset_eeprom(c7200_t *router,u_int pa_bay);

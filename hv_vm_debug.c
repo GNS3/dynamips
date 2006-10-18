@@ -86,7 +86,6 @@ static int cmd_set_cpu_reg(hypervisor_conn_t *conn,int argc,char *argv[])
       return(-1);
    }
 
-
    /* Set register value */
    cpu->gpr[reg_index] = strtoull(argv[3],NULL,0);
 

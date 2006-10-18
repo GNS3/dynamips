@@ -93,17 +93,6 @@ struct pos_oc3_data {
    ptask_id_t tx_tid;
 };
 
-/* EEPROM definition */
-static const m_uint16_t eeprom_pos_oc3_data[64] = {
-   0x0196, 0x0202, 0xffff, 0xffff, 0x490C, 0x7806, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x0208, 0x1900, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_pos_oc3 = {
-   "PA-POS-OC3MM", (m_uint16_t *)eeprom_pos_oc3_data,
-   sizeof(eeprom_pos_oc3_data)/2,
-};
-
 /* Log a PA-POS-OC3 message */
 #define POS_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
@@ -653,7 +642,7 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->vm   = router->vm;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pos_oc3);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-POS-OC3"));
 
    /* Get the appropriate PCI bus */
    pci_bus = router->pa_bay[pa_bay].pci_map;

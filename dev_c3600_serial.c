@@ -26,16 +26,6 @@
 /* NM-4T                                                                  */
 /* ====================================================================== */
 
-/* NM-4T: 4 Serial Network Module EEPROM */
-static m_uint16_t eeprom_c3600_nm_4t_data[64] = {
-   0x0154, 0x0101, 0x009D, 0x2D64, 0x5009, 0x0A02, 0x0000, 0x0000,
-   0x5800, 0x0000, 0x9811, 0x0300, 0x0005, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c3600_eeprom eeprom_c3600_nm_4t = {
-   "NM-4T", eeprom_c3600_nm_4t_data, sizeof(eeprom_c3600_nm_4t_data)/2,
-};
-
 /*
  * dev_c3600_nm_4t_init()
  *
@@ -47,7 +37,7 @@ int dev_c3600_nm_4t_init(c3600_t *router,char *name,u_int nm_bay)
    struct mueslix_data *data;
 
    /* Set the EEPROM */
-   c3600_nm_set_eeprom(router,nm_bay,&eeprom_c3600_nm_4t);
+   c3600_nm_set_eeprom(router,nm_bay,cisco_eeprom_find_nm("NM-4T"));
 
    /* Get PCI bus info about this bay */
    bay_info = c3600_nm_get_bay_info(c3600_chassis_get_id(router),nm_bay);

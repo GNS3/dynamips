@@ -22,7 +22,6 @@
 
 #include ARCH_INC_FILE
 
-#include "rbtree.h"
 #include "dynamips.h"
 #include "mips64.h"
 #include "mips64_exec.h"
@@ -30,6 +29,7 @@
 #include "dev_c3600.h"
 #include "dev_vtty.h"
 #include "ptask.h"
+#include "timer.h"
 #include "registry.h"
 #include "hypervisor.h"
 #include "net_io.h"
@@ -179,6 +179,7 @@ static void show_usage(int argc,char *argv[],int platform)
    printf("Usage: %s [options] <ios_image>\n\n",argv[0]);
    
    printf("Available options:\n"
+          "  -H <tcp_port>      : Run in hypervisor mode\n\n"
           "  -P <platform>      : Platform to emulate (7200 or 3600) "
           "(default: 7200)\n\n"
           "  -l <log_file>      : Set logging file (default is %s)\n"
@@ -800,6 +801,9 @@ int main(int argc,char *argv[])
 
    printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
    printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
+
+   /* Initialize timers */
+   timer_init();
 
    /* Initialize object registry */
    registry_init();

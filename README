@@ -1,4 +1,4 @@
-Help for Cisco 7200/3600 simulator (dynamips-0.2.5)
+Help for Cisco 7200/3600 simulator (dynamips-0.2.6)
 =====================================================
 Authors of this document: Fabien Devaux, Christophe Fillot, MtvE
 
@@ -244,6 +244,7 @@ h : JIT hash table statistics
 l : MTS64 cache statistics
 c : Write IOS configuration to disk (ios_cfg.txt)
 j : Non-JIT mode statistics
+i : Determine an idling pointer counter
 x : Experimentations (can crash the box!)
 ^]: Send ^]
 

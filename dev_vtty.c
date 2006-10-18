@@ -236,7 +236,7 @@ int vtty_parse_serial_option(vtty_serial_option_t *option, char *optarg)
    return(0);
 }
 
-#if defined(__CYGWIN__)
+#if defined(__CYGWIN__) || defined(SUNOS)
 void cfmakeraw(struct termios *termios_p) {
     termios_p->c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|
                             INLCR|IGNCR|ICRNL|IXON);

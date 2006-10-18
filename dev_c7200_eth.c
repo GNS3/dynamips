@@ -23,19 +23,8 @@
 #include "dev_c7200.h"
 
 /* ====================================================================== */
-/* PA-FE-TX / C7200-IO-FE                                                 */
+/* C7200-IO-FE EEPROM                                                     */
 /* ====================================================================== */
-
-/* PA-FE-TX: FastEthernet Port Adapter EEPROM */
-static const m_uint16_t eeprom_c7200_pa_fe_tx_data[16] = {
-   0x0111, 0x0102, 0xffff, 0xffff, 0x4906, 0x9804, 0x0000, 0x0000,
-   0x6000, 0x0000, 0x9812, 0x1700, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_c7200_pa_fe_tx = {
-   "PA-FE-TX", (m_uint16_t *)eeprom_c7200_pa_fe_tx_data, 
-   sizeof(eeprom_c7200_pa_fe_tx_data)/2,
-};
 
 /* C7200-IO-FE: C7200 IOCard with one FastEthernet port EEPROM */
 static const m_uint16_t eeprom_c7200_io_fe_data[16] = {
@@ -43,7 +32,7 @@ static const m_uint16_t eeprom_c7200_io_fe_data[16] = {
    0x5000, 0x0000, 0x9812, 0x2800, 0x00FF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
-static const struct c7200_eeprom eeprom_c7200_io_fe = {
+static const struct cisco_eeprom eeprom_c7200_io_fe = {
    "C7200-IO-FE", (m_uint16_t *)eeprom_c7200_io_fe_data,
    sizeof(eeprom_c7200_io_fe_data)/2,
 };
@@ -69,7 +58,6 @@ static int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay)
    /* Create the DEC21140 chip */
    data = dev_dec21140_init(router->vm,name,
                             router->pa_bay[pa_bay].pci_map,
-                            /*router->npe_driver->dec21140_pci_bus,*/ //PCI
                             router->npe_driver->dec21140_pci_dev,
                             C7200_NETIO_IRQ);
    if (!data) return(-1);
@@ -126,7 +114,7 @@ static int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
    struct dec21140_data *data;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_pa_fe_tx);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-FE-TX"));
 
    /* Create the DEC21140 chip */
    data = dev_dec21140_init(router->vm,name,router->pa_bay[pa_bay].pci_map,0,
@@ -205,28 +193,6 @@ struct pa_4e8e_data {
    struct am79c971_data *port[8];
 };
 
-/* PA-4E: 4 Ethernet Port Adapter EEPROM */
-static const m_uint16_t eeprom_c7200_pa_4e_data[16] = {
-   0x0102, 0x010E, 0xFFFF, 0xFFFF, 0x4906, 0x1404, 0x0000, 0x0000,
-   0x5000, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_c7200_pa_4e = {
-   "PA-4E", (m_uint16_t *)eeprom_c7200_pa_4e_data, 
-   sizeof(eeprom_c7200_pa_4e_data)/2,
-};
-
-/* PA-8E: 8 Ethernet Port Adapter EEPROM */
-static const m_uint16_t eeprom_c7200_pa_8e_data[16] = {
-   0x0101, 0x010E, 0xFFFF, 0xFFFF, 0x4906, 0x1404, 0x0000, 0x0000,
-   0x5000, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_c7200_pa_8e = {
-   "PA-8E", (m_uint16_t *)eeprom_c7200_pa_8e_data, 
-   sizeof(eeprom_c7200_pa_8e_data)/2,
-};
-
 /*
  * dev_c7200_pa_4e_init()
  *
@@ -248,7 +214,7 @@ static int dev_c7200_pa_4e_init(c7200_t *router,char *name,u_int pa_bay)
    data->nr_port = 4;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_pa_4e);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4E"));
 
    /* Create the AMD Am79c971 chips */
    for(i=0;i<data->nr_port;i++) {
@@ -282,7 +248,7 @@ static int dev_c7200_pa_8e_init(c7200_t *router,char *name,u_int pa_bay)
    data->nr_port = 8;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_pa_8e);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-8E"));
 
    /* Create the AMD Am79c971 chips */
    for(i=0;i<data->nr_port;i++) {

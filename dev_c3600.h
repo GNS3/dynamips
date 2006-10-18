@@ -69,13 +69,6 @@
 /* C3600 router */
 typedef struct c3600_router c3600_t;
 
-/* C3600 EEPROM */
-struct c3600_eeprom {
-   char *name;
-   m_uint16_t *data;
-   u_int len;
-};
-
 /* Prototype of chassis driver initialization function */
 typedef int (*c3600_chassis_init_fn)(c3600_t *router);
 
@@ -121,9 +114,8 @@ struct c3600_nio_binding {
 struct c3600_nm_bay {
    char *dev_name;                       /* Device name */
    char *dev_type;                       /* Device Type */
+   struct cisco_eeprom eeprom;           /* NM EEPROM */
    struct pci_bus *pci_map;              /* PCI bus */
-   m_uint16_t *eeprom_data;              /* NM EEPROM data */
-   u_int eeprom_data_len;                /* NM EEPROM data length */
    struct c3600_nm_driver *nm_driver;    /* NM Driver */
    void *drv_info;                       /* Private driver info */
    struct c3600_nio_binding *nio_list;   /* NIO bindings to ports */
@@ -135,8 +127,7 @@ struct c3600_chassis_driver {
    int chassis_id;
    int supported;  
    c3600_chassis_init_fn chassis_init;
-   m_uint16_t *mb_eeprom;
-   u_int mb_eeprom_len;
+   struct cisco_eeprom *eeprom;
 };
 
 /* C3600 router */
@@ -159,16 +150,13 @@ struct c3600_router {
     * Mainboard EEPROM.
     * It can be modified to change the chassis MAC address.
     */
-   m_uint16_t mb_eeprom_data[64];
-   struct nmc93c46_eeprom_def mb_eeprom;   
+   struct cisco_eeprom mb_eeprom;
    struct nmc93c46_group mb_eeprom_group;
 
    /* Network Module EEPROMs (3620/3640) */
-   struct nmc93c46_eeprom_def nm_eeprom;
    struct nmc93c46_group nm_eeprom_group;
 
    /* Cisco 3660 NM EEPROMs */
-   struct nmc93c46_eeprom_def c3660_nm_eeprom_def[C3600_MAX_NM_BAYS];
    struct nmc93c46_group c3660_nm_eeprom_group[C3600_MAX_NM_BAYS];
 };
 
@@ -189,7 +177,7 @@ void c3600_save_config_all(FILE *fd);
 
 /* Set NM EEPROM definition */
 int c3600_nm_set_eeprom(c3600_t *router,u_int nm_bay,
-                        const struct c3600_eeprom *eeprom);
+                        const struct cisco_eeprom *eeprom);
 
 /* Unset NM EEPROM definition (empty bay) */
 int c3600_nm_unset_eeprom(c3600_t *router,u_int nm_bay);

@@ -35,7 +35,7 @@ struct nm_eth_data {
  */
 static int dev_c3600_nm_eth_init(c3600_t *router,char *name,u_int nm_bay,
                                  int nr_port,int interface_type,
-                                 const struct c3600_eeprom *eeprom)
+                                 const struct cisco_eeprom *eeprom)
 {
    struct nm_bay_info *bay_info;
    struct nm_eth_data *data;
@@ -130,17 +130,6 @@ static int dev_c3600_nm_eth_unset_nio(c3600_t *router,u_int nm_bay,
 /* NM-1E                                                                  */
 /* ====================================================================== */
 
-/* NM-1E: 1 Ethernet Network Module EEPROM */
-static const m_uint16_t eeprom_c3600_nm_1e_data[16] = {
-   0x0143, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
-   0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c3600_eeprom eeprom_c3600_nm_1e = {
-   "NM-1E", (m_uint16_t *)eeprom_c3600_nm_1e_data, 
-   sizeof(eeprom_c3600_nm_1e_data)/2,
-};
-
 /*
  * dev_c3600_nm_1e_init()
  *
@@ -149,23 +138,12 @@ static const struct c3600_eeprom eeprom_c3600_nm_1e = {
 static int dev_c3600_nm_1e_init(c3600_t *router,char *name,u_int nm_bay)
 {
    return(dev_c3600_nm_eth_init(router,name,nm_bay,1,AM79C971_TYPE_10BASE_T,
-                                &eeprom_c3600_nm_1e));
+                                cisco_eeprom_find_nm("NM-1E")));
 }
 
 /* ====================================================================== */
 /* NM-4E                                                                  */
 /* ====================================================================== */
-
-/* NM-4E: 4 Ethernet Network Module EEPROM */
-static const m_uint16_t eeprom_c3600_nm_4e_data[16] = {
-   0x0142, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
-   0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c3600_eeprom eeprom_c3600_nm_4e = {
-   "NM-4E", (m_uint16_t *)eeprom_c3600_nm_4e_data, 
-   sizeof(eeprom_c3600_nm_4e_data)/2,
-};
 
 /*
  * dev_c3600_nm_4e_init()
@@ -175,23 +153,12 @@ static const struct c3600_eeprom eeprom_c3600_nm_4e = {
 static int dev_c3600_nm_4e_init(c3600_t *router,char *name,u_int nm_bay)
 {
    return(dev_c3600_nm_eth_init(router,name,nm_bay,4,AM79C971_TYPE_10BASE_T,
-                                &eeprom_c3600_nm_4e));
+                                cisco_eeprom_find_nm("NM-4E")));
 }
 
 /* ====================================================================== */
 /* NM-1FE-TX                                                              */
 /* ====================================================================== */
-
-/* NM-1FE-TX: 1 FastEthernet Network Module EEPROM */
-static const m_uint16_t eeprom_c3600_nm_1fe_tx_data[16] = {
-   0x0144, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
-   0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c3600_eeprom eeprom_c3600_nm_1fe_tx = {
-   "NM-1FE-TX", (m_uint16_t *)eeprom_c3600_nm_1fe_tx_data, 
-   sizeof(eeprom_c3600_nm_1fe_tx_data)/2,
-};
 
 /*
  * dev_c3600_nm_1fe_tx_init()
@@ -201,7 +168,7 @@ static const struct c3600_eeprom eeprom_c3600_nm_1fe_tx = {
 static int dev_c3600_nm_1fe_tx_init(c3600_t *router,char *name,u_int nm_bay)
 {
    return(dev_c3600_nm_eth_init(router,name,nm_bay,1,AM79C971_TYPE_100BASE_TX,
-                                &eeprom_c3600_nm_1fe_tx));
+                                cisco_eeprom_find_nm("NM-1FE-TX")));
 }
 
 /* ====================================================================== */
@@ -224,7 +191,7 @@ static m_uint16_t eeprom_c3600_leopard_2fe_data[] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFF00,
 };
 
-static const struct c3600_eeprom eeprom_c3600_leopard_2fe = {
+static const struct cisco_eeprom eeprom_c3600_leopard_2fe = {
    "Leopard-2FE", (m_uint16_t *)eeprom_c3600_leopard_2fe_data, 
    sizeof(eeprom_c3600_leopard_2fe_data)/2,
 };

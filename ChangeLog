@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco 7200/3600 simulation platform.
  */
 
 15-Aug-2005, the project is starting.
@@ -1554,3 +1554,43 @@
 -----------
   - NM-16ESW: added ingress and egress port mirroring (todo: BPDU and CDP
     packets shouldn't be replicated).
+
+10-Oct-2006
+-----------
+  - 0.2.6-RC1 release.
+  - NM-16ESW: implemented ARL count. Fixed the MAC address table display 
+    problems.
+
+11-Oct-2006
+-----------
+  - C3600: fixed NVRAM configuration export.
+  - Merged a patch for Solaris/x86 from Damjan Marion.
+  - Cleaned the EEPROM stuff to have something more generic.
+  - NM-16ESW: base MAC address is now automatically generated.
+
+12-Oct-2006
+-----------
+  - NM-16ESW: added support to discard input packets.
+
+13-Oct-2006
+-----------
+  - NM-16ESW: modified the discard support to let BPDU packets arrive to
+    the CPU.
+  - Added online setup of idle-pc through the hypervisor command
+    "vm set_idle_pc_online <vm_name> <cpu_id>".
+  - Values computed for idle-pc are now stored in the virtual MIPS CPU
+    and can be known through the hypervisor command 
+    "vm show_idle_pc_prop <vm_name> <cpu_id>".
+
+15-Oct-2006
+-----------
+  - Added a timer module.
+  - NM-16ESW: added an ARL ager that removes expired MAC addresses.
+
+18-Oct-2006
+-----------
+  - Added hypervisor commands to tune idle-pc parameters
+    ("vm set_idle_max" and "vm set_idle_sleep_time").
+  - Centralized NM/PA EEPROM to have common definitions for platforms
+    with the same type of network interfaces.
+  - 0.2.6-RC2 release.

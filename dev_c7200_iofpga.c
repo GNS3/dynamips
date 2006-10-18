@@ -128,36 +128,27 @@ struct iofpga_data {
 #define IOFPGA_LOCK(d)   pthread_mutex_lock(&(d)->lock)
 #define IOFPGA_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
 
-/* Empty EEPROM */
-static const m_uint16_t eeprom_empty_data[16] = {
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-};
-
 /* CPU EEPROM definition */
 static const struct nmc93c46_eeprom_def eeprom_cpu_def = {
    SK1_CLOCK_CPU, CS1_CHIP_SEL_CPU, 
    DI1_DATA_IN_CPU, DO1_DATA_OUT_CPU,
-   NULL, 0,
 };
 
 /* Midplane EEPROM definition */
 static const struct nmc93c46_eeprom_def eeprom_midplane_def = {
    SK2_CLOCK_MIDPLANE, CS2_CHIP_SEL_MIDPLANE, 
    DI2_DATA_IN_MIDPLANE, DO2_DATA_OUT_MIDPLANE,
-   NULL, 0,
 };
 
 /* PEM (NPE-B) EEPROM definition */
 static const struct nmc93c46_eeprom_def eeprom_pem_def = {
    SK1_CLOCK_PEM, CS1_CHIP_SEL_PEM, DI1_DATA_IN_PEM, DO1_DATA_OUT_PEM,
-   (m_uint16_t *)eeprom_empty_data, (sizeof(eeprom_empty_data) / 2),
 };
 
 /* IOFPGA manages simultaneously CPU and Midplane EEPROM */
 static const struct nmc93c46_group eeprom_cpu_midplane = {
    2, 0, "CPU and Midplane EEPROM", 0, 
-   { NULL, NULL, }, { { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0} },
+   { &eeprom_cpu_def, &eeprom_midplane_def }, 
 };
 
 /* 
@@ -166,7 +157,7 @@ static const struct nmc93c46_group eeprom_cpu_midplane = {
  * http://www.cisco.com/en/US/products/hw/routers/ps341/products_field_notice09186a00801cb26d.shtml
  */
 static const struct nmc93c46_group eeprom_pem_npeb = {
-   1, 0, "PEM (NPE-B) EEPROM", 0, { NULL }, { { 0, 0, 0, 0, 0} },
+   1, 0, "PEM (NPE-B) EEPROM", 0, { &eeprom_pem_def },
 };
 
 /* Reset DS1620 */
@@ -612,22 +603,13 @@ void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 /* Initialize EEPROM groups */
 void c7200_init_eeprom_groups(c7200_t *router)
 {
-   struct nmc93c46_group *g;
-   
-   /* Copy EEPROM definitions */
-   memcpy(&router->cpu_eeprom,&eeprom_cpu_def,sizeof(eeprom_cpu_def));
-   memcpy(&router->mp_eeprom,&eeprom_midplane_def,sizeof(eeprom_midplane_def));
-   memcpy(&router->pem_eeprom,&eeprom_pem_def,sizeof(eeprom_pem_def));
+   router->sys_eeprom_g1 = eeprom_cpu_midplane;
+   router->sys_eeprom_g2 = eeprom_pem_npeb;
 
-   /* Initialize groups */
-   g = &router->sys_eeprom_g1;
-   memcpy(g,&eeprom_cpu_midplane,sizeof(eeprom_cpu_midplane));
-   g->def[0] = &router->cpu_eeprom;
-   g->def[1] = &router->mp_eeprom;
+   router->sys_eeprom_g1.eeprom[0] = &router->cpu_eeprom;
+   router->sys_eeprom_g1.eeprom[1] = &router->mp_eeprom;
 
-   g = &router->sys_eeprom_g2;
-   memcpy(g,&eeprom_pem_npeb,sizeof(eeprom_pem_npeb));
-   g->def[0] = &router->pem_eeprom;   
+   router->sys_eeprom_g2.eeprom[0] = &router->pem_eeprom;
 }
 
 /* Shutdown the IO FPGA device */

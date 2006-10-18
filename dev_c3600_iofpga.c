@@ -70,24 +70,22 @@ struct iofpga_data {
 static const struct nmc93c46_eeprom_def eeprom_mb_def = {
    EEPROM_MB_CLK, EEPROM_MB_CS,
    EEPROM_MB_DIN, EEPROM_MB_DOUT,
-   NULL, 0,
 };
 
 /* Mainboard EEPROM */
 static const struct nmc93c46_group eeprom_mb_group = {
-   1, 0, "Mainboard EEPROM", 0, { NULL }, { { 0, 0, 0, 0, 0} },
+   1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
 static const struct nmc93c46_eeprom_def eeprom_nm_def = {
    EEPROM_NM_CLK, EEPROM_NM_CS,
    EEPROM_NM_DIN, EEPROM_NM_DOUT,
-   NULL, 0,
 };
 
 /* NM EEPROM */
 static const struct nmc93c46_group eeprom_nm_group = {
-   1, 0, "NM EEPROM", 0, { NULL }, { { 0, 0, 0, 0, 0} },
+   1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
 };
 
 /* C3660 NM presence masks */
@@ -103,8 +101,7 @@ static const m_uint16_t c3660_nm_masks[6] = {
 /* Select the current NM EEPROM */
 static void nm_eeprom_select(struct iofpga_data *d,u_int slot)
 {
-   d->router->nm_eeprom.data = d->router->nm_bay[slot].eeprom_data;
-   d->router->nm_eeprom.data_len = d->router->nm_bay[slot].eeprom_data_len;
+   d->router->nm_eeprom_group.eeprom[0] = &d->router->nm_bay[slot].eeprom;
 }
 
 /* Return the NM status register given the detected EEPROM (3620/3640) */
@@ -599,37 +596,22 @@ dev_c3660_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 /* Initialize EEPROM groups */
 void c3600_init_eeprom_groups(c3600_t *router)
 {
-   struct nmc93c46_group *g;
    int i;
 
-   /* Copy Mainboard EEPROM definition */
-   memcpy(&router->mb_eeprom,&eeprom_mb_def,sizeof(eeprom_mb_def));
+   /* Initialize Mainboard EEPROM */
+   router->mb_eeprom_group = eeprom_mb_group;
+   router->mb_eeprom_group.eeprom[0] = &router->mb_eeprom;
+   router->mb_eeprom.data = NULL;
+   router->mb_eeprom.len  = 0;
 
-   /* Initialize group */
-   g = &router->mb_eeprom_group;
-   memcpy(g,&eeprom_mb_group,sizeof(eeprom_mb_group));
-   g->def[0] = &router->mb_eeprom;
+   /* Initialize NM EEPROM for 3620/3640 */
+   router->nm_eeprom_group = eeprom_nm_group;
+   router->nm_eeprom_group.eeprom[0] = NULL;
 
-   /* Copy NM EEPROM definition (3620/3640) */
-   memcpy(&router->nm_eeprom,&eeprom_nm_def,sizeof(eeprom_nm_def));
-   router->nm_eeprom.data = NULL;
-   router->nm_eeprom.data_len = 0;
-
-   /* Initialize group (3620/3640) */
-   g = &router->nm_eeprom_group;
-   memcpy(g,&eeprom_nm_group,sizeof(eeprom_nm_group));
-   g->def[0] = &router->nm_eeprom;
-
-   /* 3660 NM EEPROM */
+   /* Initialize NM EEPROM for 3660 */
    for(i=0;i<C3600_MAX_NM_BAYS;i++) {
-      memcpy(&router->c3660_nm_eeprom_def[i],&eeprom_nm_def,
-             sizeof(struct nmc93c46_eeprom_def));
-
-      memcpy(&router->c3660_nm_eeprom_group[i],&eeprom_nm_group,
-             sizeof(struct nmc93c46_group));
-
-      router->c3660_nm_eeprom_group[i].def[0] = 
-         &router->c3660_nm_eeprom_def[i];
+      router->c3660_nm_eeprom_group[i] = eeprom_nm_group;
+      router->c3660_nm_eeprom_group[i].eeprom[0] = &router->nm_bay[i].eeprom;
    }
 }
 

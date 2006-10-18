@@ -8,6 +8,7 @@
 
 #include <sys/types.h>
 #include "utils.h"
+#include "cisco_eeprom.h"
 
 /* 8 groups with 4 differents bits (clock,select,data_in,data_out) */
 #define NMC93C46_MAX_EEPROM_PER_GROUP  8
@@ -33,8 +34,6 @@ struct nmc93c46_eeprom_def {
    u_int select_bit;
    u_int din_bit;
    u_int dout_bit;
-   m_uint16_t *data;
-   u_int data_len;
 };
 
 struct nmc93c46_eeprom_state {   
@@ -50,8 +49,9 @@ struct nmc93c46_group {
    u_int eeprom_reg;
    char *description;
    int debug;
-   struct nmc93c46_eeprom_def *def[NMC93C46_MAX_EEPROM_PER_GROUP];
+   const struct nmc93c46_eeprom_def *def[NMC93C46_MAX_EEPROM_PER_GROUP];
    struct nmc93c46_eeprom_state state[NMC93C46_MAX_EEPROM_PER_GROUP];
+   struct cisco_eeprom *eeprom[NMC93C46_MAX_EEPROM_PER_GROUP];
 };
 
 /* Handle write */

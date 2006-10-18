@@ -1503,7 +1503,7 @@ void *netio_rxl_gen_thread(void *arg)
 
       /* Wait for incoming packets */
       tv.tv_sec = 0;
-      tv.tv_usec = 200 * 1000;  /* 200 ms */
+      tv.tv_usec = 20 * 1000;  /* 200 ms */
       res = select(fd_max+1,&rfds,NULL,NULL,&tv);
 
       if (res == -1) {

@@ -43,6 +43,23 @@
 #include "registry.h"
 #include "hypervisor.h"
 
+/* Find the specified CPU */
+static cpu_mips_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
+                            u_int cpu_id)
+{
+   cpu_mips_t *cpu;
+
+   cpu = cpu_group_find_id(vm->cpu_group,cpu_id);
+
+   if (!cpu) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"Bad CPU specified");
+      return NULL;
+   }
+   
+   return cpu;
+}
+
 /* Set debugging level */
 static int cmd_set_debug_level(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -172,6 +189,115 @@ static int cmd_set_idle_pc(hypervisor_conn_t *conn,int argc,char *argv[])
       return(-1);
 
    vm->idle_pc = strtoull(argv[1],NULL,0);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Set the idle PC value when the CPU is online */
+static int cmd_set_idle_pc_online(hypervisor_conn_t *conn,
+                                  int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   cpu->idle_pc = strtoull(argv[2],NULL,0);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Get the idle PC proposals */
+static int cmd_get_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
+{  
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+   int i;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   mips64_get_idling_pc(cpu);
+
+   for(i=0;i<cpu->idle_pc_prop_count;i++) {
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"0x%llx [%d]",
+                            cpu->idle_pc_prop[i].pc,
+                            cpu->idle_pc_prop[i].count);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Dump the idle PC proposals */
+static int cmd_show_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+   int i;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   for(i=0;i<cpu->idle_pc_prop_count;i++) {
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"0x%llx [%d]",
+                            cpu->idle_pc_prop[i].pc,
+                            cpu->idle_pc_prop[i].count);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Set CPU idle max value */
+static int cmd_set_idle_max(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   cpu->idle_max = atoi(argv[2]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Set CPU idle sleep time value */
+static int cmd_set_idle_sleep_time(hypervisor_conn_t *conn,
+                                   int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   cpu->idle_sleep_time = atoi(argv[2]);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -438,6 +564,11 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_disk1", 2, 2, cmd_set_disk1, NULL },
    { "set_conf_reg", 2, 2, cmd_set_conf_reg, NULL },
    { "set_idle_pc", 2, 2, cmd_set_idle_pc, NULL },
+   { "set_idle_pc_online", 3, 3, cmd_set_idle_pc_online, NULL },
+   { "get_idle_pc_prop", 2, 2, cmd_get_idle_pc_prop, NULL },
+   { "show_idle_pc_prop", 2, 2, cmd_show_idle_pc_prop, NULL },
+   { "set_idle_max", 3, 3, cmd_set_idle_max, NULL },
+   { "set_idle_sleep_time", 3, 3, cmd_set_idle_sleep_time, NULL },
    { "set_con_tcp_port", 2, 2, cmd_set_con_tcp_port, NULL },
    { "set_aux_tcp_port", 2, 2, cmd_set_aux_tcp_port, NULL },
    { "extract_config", 1, 1, cmd_extract_config, NULL },

@@ -675,7 +675,6 @@ void *insn_block_execute(cpu_mips_t *cpu)
    pthread_t timer_irq_thread;
    insn_block_t *block;
    m_uint32_t phys_page;
-   int idle_count = 0;
    int timer_irq_check = 0;
 
    if (pthread_create(&timer_irq_thread,NULL,
@@ -688,16 +687,19 @@ void *insn_block_execute(cpu_mips_t *cpu)
    }
 
    cpu->cpu_thread_running = TRUE;
+
  start_cpu:   
+   cpu->idle_count = 0;
+
    for(;;) {
       if (unlikely(cpu->state != MIPS_CPU_RUNNING))
          break;
 
       /* Handle virtual idle loop */
       if (unlikely(cpu->pc == cpu->idle_pc)) {
-         if (++idle_count == cpu->idle_max) {
+         if (++cpu->idle_count == cpu->idle_max) {
             mips64_idle_loop(cpu);
-            idle_count = 0;
+            cpu->idle_count = 0;
          }
       }
 

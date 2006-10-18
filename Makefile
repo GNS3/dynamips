@@ -1,4 +1,4 @@
-# Makefile for Dynamips 0.2.5
+# Makefile for Dynamips 0.2.6
 # Copyright (c) 2005-2006 Christophe Fillot.
 
 # Replace x86 by amd64 for a build on x86_64.
@@ -14,7 +14,7 @@ HAS_PCAP?=1
 
 # Current dynamips release
 VERSION_TRAIN=0.2.6
-VERSION_SUB=-RC1
+VERSION_SUB=-RC2
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -32,7 +32,7 @@ ARCH_INC_FILE=\"$(DYNAMIPS_ARCH)_trans.h\"
 CFLAGS+=-g -Wall -O3 -fomit-frame-pointer \
 	-DJIT_ARCH=\"$(DYNAMIPS_ARCH)\" \
 	-DARCH_INC_FILE=$(ARCH_INC_FILE) -DDYNAMIPS_VERSION=\"$(VERSION)\" \
-	-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE \
+	-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE \
 	-DHAS_RFC2553=$(HAS_RFC2553)
 
 PCAP_LIB=/usr/local/lib/libpcap.a
@@ -40,20 +40,30 @@ PCAP_LIB=/usr/local/lib/libpcap.a
 
 ifeq ($(shell uname), FreeBSD)
    PTHREAD_LIBS?=-pthread
-   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf $(PTHREAD_CFLAGS)
+   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf $(PTHREAD_CFLAGS) \
+         -D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/local/lib -L. -lelf $(PTHREAD_LIBS)
 else
 ifeq ($(shell uname -s), Darwin)
-   CFLAGS+=-I/usr/local/include -mdynamic-no-pic
+   CFLAGS+=-I/usr/local/include -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/local/lib -L. -lelf -lpthread
 else
+ifeq ($(shell uname -s), SunOS)
+   CFLAGS+=-I/usr/local/include -DINADDR_NONE=0xFFFFFFFF \
+	-I /opt/csw/include -DSUNOS
+   LIBS=-L/usr/local/lib -L. -lelf -lpthread -L/opt/csw/lib \
+	-lsocket -lnsl -lresolv
+   PCAP_LIB=/opt/csw/lib/libpcap.a
+else
 ifeq ($(shell uname -o), Cygwin)
-   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf -DCYGWIN
+   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf -DCYGWIN \
+	-D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/local/lib -L. -lelf -lpthread
    PCAP_LIB=-lpacket -lwpcap
 else
-   CFLAGS+=-I/usr/include/libelf
+   CFLAGS+=-I/usr/include/libelf -D_FILE_OFFSET_BITS=64
    LIBS=-L. /usr/lib/libelf.a -lpthread
+endif
 endif
 endif
 endif
@@ -69,12 +79,12 @@ ARCHIVE_DEV=$(PACKAGE_DEV).tar.gz
 HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h \
 	crc.h base64.h net.h net_io.h net_io_bridge.h net_io_filter.h \
 	atm.h frame_relay.h eth_switch.h \
-	ptask.h hypervisor.h dynamips.h insn_lookup.h \
+	ptask.h timer.h hypervisor.h dynamips.h insn_lookup.h \
 	vm.h mips64.h mips64_exec.h cpu.h cp0.h memory.h device.h \
 	nmc93c46.h cisco_eeprom.h ds1620.h pci_dev.h pci_io.h \
 	dev_dec21140.h dev_am79c971.h dev_mueslix.h \
 	dev_vtty.h dev_c7200.h dev_c3600.h dev_c3600_bay.h
-SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c \
+SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c timer.c \
 	crc.c base64.c net.c net_io.c net_io_bridge.c net_io_filter.c \
 	atm.c frame_relay.c eth_switch.c \
 	dynamips.c insn_lookup.c vm.c mips64.c mips64_jit.c mips64_exec.c \

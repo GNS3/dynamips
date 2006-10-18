@@ -329,16 +329,6 @@ struct pa_a1_data {
    ptask_id_t tx_tid;
 };
 
-/* EEPROM definition */
-static const m_uint16_t eeprom_pa_a1_data[64] = {
-   0x0117, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_pa_a1 = {
-   "PA-A1-OC3MM", (m_uint16_t *)eeprom_pa_a1_data, sizeof(eeprom_pa_a1_data)/2,
-};
-
 /* Log a TI1570 message */
 #define TI1570_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
@@ -1537,7 +1527,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    memset(d,0,sizeof(*d));
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pa_a1);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-A1"));
 
    /* Add PCI device TI1570 */
    pci_dev_ti = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,

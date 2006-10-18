@@ -223,6 +223,34 @@ static inline m_tmcnt_t m_gettime_usec(void)
    return(((m_tmcnt_t)tvp.tv_sec * 1000000) + (m_tmcnt_t)tvp.tv_usec);
 }
 
+#ifdef __CYGWIN__
+#define GET_TIMEZONE _timezone
+#else
+#define GET_TIMEZONE timezone
+#endif
+
+/* Get current time in number of ms (localtime) */
+static inline m_tmcnt_t m_gettime_adj(void)
+{
+   struct timeval tvp;
+   struct tm tmx;
+   time_t gmt_adjust;
+   time_t ct;
+
+   gettimeofday(&tvp,NULL);
+   ct = tvp.tv_sec;
+   localtime_r(&ct,&tmx);
+
+#if defined(__CYGWIN__) || defined(SUNOS)
+   gmt_adjust = -(tmx.tm_isdst ? GET_TIMEZONE - 3600 : GET_TIMEZONE);
+#else
+   gmt_adjust = tmx.tm_gmtoff;
+#endif
+
+   tvp.tv_sec += gmt_adjust;
+   return(((m_tmcnt_t)tvp.tv_sec * 1000) + ((m_tmcnt_t)tvp.tv_usec / 1000));
+}
+
 /* Add an element to a list */
 m_list_t *m_list_add(m_list_t **head,void *data);
 
@@ -255,5 +283,14 @@ ssize_t m_read_file(char *filename,char **buffer);
 
 /* Allocate aligned memory */
 void *m_memalign(size_t boundary,size_t size);
+
+/* Block specified signal for calling thread */
+int m_signal_block(int sig);
+
+/* Unblock specified signal for calling thread */
+int m_signal_unblock(int sig);
+
+/* Set non-blocking mode on a file descriptor */
+int m_fd_set_non_block(int fd);
 
 #endif

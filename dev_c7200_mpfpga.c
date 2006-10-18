@@ -90,56 +90,53 @@ static const struct nmc93c46_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
    /* Bay 0 */
    { BAY0_EEPROM_CLOCK_BIT , BAY0_EEPROM_SELECT_BIT,
      BAY0_EEPROM_DIN_BIT   , BAY0_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 1 */
    { BAY1_EEPROM_CLOCK_BIT , BAY1_EEPROM_SELECT_BIT,
      BAY1_EEPROM_DIN_BIT   , BAY1_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 2 */
    { BAY2_EEPROM_CLOCK_BIT , BAY2_EEPROM_SELECT_BIT,
      BAY2_EEPROM_DIN_BIT   , BAY2_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 3 */
    { BAY3_EEPROM_CLOCK_BIT , BAY3_EEPROM_SELECT_BIT,
      BAY3_EEPROM_DIN_BIT   , BAY3_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 4 */
    { BAY4_EEPROM_CLOCK_BIT , BAY4_EEPROM_SELECT_BIT,
      BAY4_EEPROM_DIN_BIT   , BAY4_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 5 */
    { BAY5_EEPROM_CLOCK_BIT , BAY5_EEPROM_SELECT_BIT,
      BAY5_EEPROM_DIN_BIT   , BAY5_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 
    /* Bay 6 */
    { BAY6_EEPROM_CLOCK_BIT , BAY6_EEPROM_SELECT_BIT,
      BAY6_EEPROM_DIN_BIT   , BAY6_EEPROM_DOUT_BIT,
-     NULL, 0 },
+   },
 };
 
 /* EEPROM group #1 (Bays 0, 1, 3, 4) */
 static const struct nmc93c46_group eeprom_bays_g1 = {
    4, 0, "PA Bays (Group #1) EEPROM", FALSE,
 
-   { NULL, NULL, NULL, NULL },
-
-   { { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0}, 
-     { 0, 0, 0, 0, 0} },
+   { &eeprom_bay_def[0], &eeprom_bay_def[1], 
+     &eeprom_bay_def[3], &eeprom_bay_def[4],
+   },
 };
 
 /* EEPROM group #2 (Bays 2, 5, 6) */
 static const struct nmc93c46_group eeprom_bays_g2 = {
-   3, 0, "PA Bays (Group #2) EEPROM", FALSE, 
+   3, 0, "PA Bays (Group #2) EEPROM", FALSE,
 
-   { NULL, NULL, NULL },
-
-   { { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0} },
+   { &eeprom_bay_def[2], &eeprom_bay_def[5], &eeprom_bay_def[6] },
 };
 
 /* Midplane FPGA private data */
@@ -344,32 +341,18 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 /* Initialize EEPROM groups */
 static void init_eeprom_groups(c7200_t *router)
 {
-   struct nmc93c46_group *g;
-   int i;
-
-   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
-      memcpy(&router->pa_bay[i].eeprom,&eeprom_bay_def[i],
-             sizeof(struct nmc93c46_eeprom_def));
-   }
-
    /* Group 1: bays 0, 1, 3, 4 */
-   g = &router->pa_eeprom_g1;
-   memcpy(g,&eeprom_bays_g1,sizeof(struct nmc93c46_group));
-   g->def[0] = &router->pa_bay[0].eeprom;
-   g->def[1] = &router->pa_bay[1].eeprom;
-   g->def[2] = &router->pa_bay[3].eeprom;
-   g->def[3] = &router->pa_bay[4].eeprom;
+   router->pa_eeprom_g1 = eeprom_bays_g1;
+   router->pa_eeprom_g1.eeprom[0] = &router->pa_bay[0].eeprom;
+   router->pa_eeprom_g1.eeprom[1] = &router->pa_bay[1].eeprom;
+   router->pa_eeprom_g1.eeprom[2] = &router->pa_bay[3].eeprom;
+   router->pa_eeprom_g1.eeprom[3] = &router->pa_bay[4].eeprom;
 
    /* Group 2: bays 2, 5, 6 */
-   g = &router->pa_eeprom_g2;
-   memcpy(g,&eeprom_bays_g2,sizeof(struct nmc93c46_group));
-   g->def[0] = &router->pa_bay[2].eeprom;
-   g->def[1] = &router->pa_bay[5].eeprom;
-   g->def[2] = &router->pa_bay[6].eeprom;
-
-   /* Set empty EEPROMs for all slots */
-   for(i=0;i<C7200_MAX_PA_BAYS;i++)
-      c7200_pa_unset_eeprom(router,i);
+   router->pa_eeprom_g2 = eeprom_bays_g2;
+   router->pa_eeprom_g2.eeprom[0] = &router->pa_bay[2].eeprom;
+   router->pa_eeprom_g2.eeprom[1] = &router->pa_bay[5].eeprom;
+   router->pa_eeprom_g2.eeprom[2] = &router->pa_bay[6].eeprom;
 }
 
 /* Shutdown the MP FPGA device */

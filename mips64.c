@@ -146,6 +146,7 @@ void mips64_idle_loop(cpu_mips_t *cpu)
 void mips64_idle_break_wait(cpu_mips_t *cpu)
 {
    pthread_cond_signal(&cpu->idle_cond);
+   cpu->idle_count = 0;
 }
 
 /* Timer IRQ */
@@ -192,24 +193,25 @@ void *mips64_timer_irq_run(cpu_mips_t *cpu)
    return NULL;
 }
 
+#define IDLE_HASH_SIZE  8192
+
 /* Idle PC hash item */
-struct mips64_idle_pc {
+struct mips64_idle_pc_hash {
    m_uint64_t pc;
    u_int count;
-   struct mips64_idle_pc *next;
+   struct mips64_idle_pc_hash *next;
 };
-
-#define IDLE_HASH_SIZE  8192
-#define IDLE_MAX_RES    10
 
 /* Determine an "idling" PC */
 int mips64_get_idling_pc(cpu_mips_t *cpu)
 {
-   struct mips64_idle_pc *res[IDLE_MAX_RES];
-   struct mips64_idle_pc **pc_hash,*p;
+   struct mips64_idle_pc_hash **pc_hash,*p;
+   struct mips64_idle_pc *res;
    u_int h_index,res_count;
    m_uint64_t cur_pc;
    int i;
+
+   cpu->idle_pc_prop_count = 0;
 
    if (cpu->idle_pc != 0) {
       printf("\nYou already use an idle PC, using the calibration would give "
@@ -248,28 +250,32 @@ int mips64_get_idling_pc(cpu_mips_t *cpu)
    }
 
    /* Select PCs */
-   memset(res,0,sizeof(res));
-
    for(i=0,res_count=0;i<IDLE_HASH_SIZE;i++) {
       for(p=pc_hash[i];p;p=p->next)
          if ((p->count >= 20) && (p->count <= 80)) {
-            res[res_count++] = p;
+            res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
 
-            if (res_count >= IDLE_MAX_RES)
+            res->pc    = p->pc;
+            res->count = p->count;
+
+            if (cpu->idle_pc_prop_count >= MIPS64_IDLE_PC_MAX_RES)
                goto done;
          }
    }
 
  done:
    /* Set idle PC */
-   if (res_count) {
+   if (cpu->idle_pc_prop_count) {
       printf("Done. Suggested idling PC:\n");
 
-      for(i=0;i<res_count;i++)
-         printf("   0x%llx (count=%u)\n",res[i]->pc,res[i]->count);
-         
+      for(i=0;i<cpu->idle_pc_prop_count;i++) {
+         printf("   0x%llx (count=%u)\n",
+                cpu->idle_pc_prop[i].pc,
+                cpu->idle_pc_prop[i].count);
+      }         
+
       printf("Restart the emulator with \"--idle-pc=0x%llx\" (for example)\n",
-             res[0]->pc);
+             cpu->idle_pc_prop[0].pc);
    } else {
       printf("Done. No suggestion for idling PC\n");
    }

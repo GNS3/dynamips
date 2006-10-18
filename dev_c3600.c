@@ -28,7 +28,7 @@
 /* ======================================================================== */
 
 /* Cisco 3620 mainboard EEPROM */
-static m_uint16_t eeprom_c3620_mainboard[64] = {
+static m_uint16_t eeprom_c3620_mainboard_data[64] = {
    0x0001, 0x0000, 0x0000, 0x0000, 0x0AFF, 0x7318, 0x5011, 0x0020,
    0x0000, 0x0000, 0xA0FF, 0x9904, 0x19FF, 0xFFFF, 0xFFFF, 0x0002,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -39,8 +39,14 @@ static m_uint16_t eeprom_c3620_mainboard[64] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
+struct cisco_eeprom eeprom_c3620_mainboard = {
+   "C3620 Mainboard", 
+   eeprom_c3620_mainboard_data,
+   sizeof(eeprom_c3620_mainboard_data)/2,
+};
+
 /* Cisco 3640 mainboard EEPROM */
-static m_uint16_t eeprom_c3640_mainboard[64] = {
+static m_uint16_t eeprom_c3640_mainboard_data[64] = {
    0x0001, 0x0000, 0x0000, 0x0000, 0x0AFF, 0x7316, 0x8514, 0x0040,
    0x0000, 0x0000, 0xA1FF, 0x0102, 0x22FF, 0xFFFF, 0xFFFF, 0x0002,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -51,8 +57,14 @@ static m_uint16_t eeprom_c3640_mainboard[64] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
+struct cisco_eeprom eeprom_c3640_mainboard = {
+   "C3640 Mainboard", 
+   eeprom_c3640_mainboard_data,
+   sizeof(eeprom_c3640_mainboard_data)/2,
+};
+
 /* Cisco 3660 backplane EEPROM */
-static m_uint16_t eeprom_c3660_backplane[64] = {
+static m_uint16_t eeprom_c3660_backplane_data[64] = {
    0x04FF, 0x4000, 0xC841, 0x0100, 0xC046, 0x0320, 0x0012, 0x8402,
    0x4243, 0x3080, 0x0000, 0x0000, 0x0202, 0xC18B, 0x4841, 0x4430,
    0x3434, 0x3431, 0x3135, 0x4A03, 0x0081, 0x0000, 0x0000, 0x0400,
@@ -63,6 +75,12 @@ static m_uint16_t eeprom_c3660_backplane[64] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
+struct cisco_eeprom eeprom_c3660_backplane = {
+   "C3660 Backplane", 
+   eeprom_c3660_backplane_data,
+   sizeof(eeprom_c3660_backplane_data)/2,
+};
+
 /* ======================================================================== */
 /* Chassis Drivers                                                          */
 /* ======================================================================== */
@@ -71,14 +89,10 @@ static int c3640_init(c3600_t *router);
 static int c3660_init(c3600_t *router);
 
 static struct c3600_chassis_driver chassis_drivers[] = {
-   { "3620"  , 3620, 1, c3620_init, 
-     eeprom_c3620_mainboard, sizeof(eeprom_c3620_mainboard)/2 },
-   { "3640"  , 3640, 1, c3640_init, 
-     eeprom_c3640_mainboard, sizeof(eeprom_c3640_mainboard)/2 },
-   { "3660"  , 3660, 1, c3660_init,
-     eeprom_c3660_backplane, sizeof(eeprom_c3660_backplane)/2 },
-
-   { NULL    , -1, 0, NULL },
+   { "3620"  , 3620, 1, c3620_init, &eeprom_c3620_mainboard },
+   { "3640"  , 3640, 1, c3640_init, &eeprom_c3640_mainboard },
+   { "3660"  , 3660, 1, c3660_init, &eeprom_c3660_backplane },
+   { NULL    , -1,   0, NULL,       NULL },
 };
 
 /* ======================================================================== */
@@ -102,7 +116,7 @@ static struct c3600_nm_driver *nm_drivers[] = {
 ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
 {   
    struct vdevice *nvram_dev;
-   m_uint32_t start,end,clen,nvlen;
+   m_uint32_t start,nvlen;
    m_uint16_t magic1,magic2;
    m_uint64_t addr;
 
@@ -120,23 +134,21 @@ ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
    }
 
    start = physmem_copy_u32_from_vm(vm,addr+0x10) + 1;
-   end   = physmem_copy_u32_from_vm(vm,addr+0x14);
    nvlen = physmem_copy_u32_from_vm(vm,addr+0x18);
-   clen  = end - start;
 
-   if ((clen + 1) != nvlen) {
+   if (nvlen <= 10) {
       vm_error(vm,"invalid configuration size (0x%x)\n",nvlen);
       return(-1);
    }
 
-   if (!(*buffer = malloc(clen+1))) {
-      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",clen);
+   if (!(*buffer = malloc(nvlen+1))) {
+      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",nvlen);
       return(-1);
    }
 
-   physmem_copy_from_vm(vm,*buffer,addr+start+0x08,clen);
-   (*buffer)[clen] = 0;
-   return(clen);
+   physmem_copy_from_vm(vm,*buffer,addr+start+0x08,nvlen-1);
+   (*buffer)[nvlen-1] = 0;
+   return(nvlen-1);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
@@ -232,6 +244,9 @@ static int c3600_free_instance(void *data,void *arg)
       /* Shutdown all Network Modules */
       c3600_nm_shutdown_all(router);
 
+      /* Free mainboard EEPROM */
+      cisco_eeprom_free(&router->mb_eeprom);
+
       /* Free all resources used by VM */
       vm_free(vm);
 
@@ -309,20 +324,18 @@ void c3600_save_config_all(FILE *fd)
 
 /* Set NM EEPROM definition */
 int c3600_nm_set_eeprom(c3600_t *router,u_int nm_bay,
-                        const struct c3600_eeprom *eeprom)
+                        const struct cisco_eeprom *eeprom)
 {
    if (nm_bay >= C3600_MAX_NM_BAYS) {
       vm_error(router->vm,"c3600_nm_set_eeprom: invalid NM Bay %u.\n",nm_bay);
       return(-1);
    }
    
-   /* 3620/3640 */
-   router->nm_bay[nm_bay].eeprom_data = eeprom->data;
-   router->nm_bay[nm_bay].eeprom_data_len = eeprom->len;
-
-   /* 3660 */
-   router->c3660_nm_eeprom_def[nm_bay].data = eeprom->data;
-   router->c3660_nm_eeprom_def[nm_bay].data_len = eeprom->len;
+   if (cisco_eeprom_copy(&router->nm_bay[nm_bay].eeprom,eeprom) == -1) {
+      vm_error(router->vm,"c3600_nm_set_eeprom: no memory.\n");
+      return(-1);
+   }
+   
    return(0);
 }
 
@@ -334,13 +347,7 @@ int c3600_nm_unset_eeprom(c3600_t *router,u_int nm_bay)
       return(-1);
    }
    
-   /* 3620/3640 */
-   router->nm_bay[nm_bay].eeprom_data = NULL;
-   router->nm_bay[nm_bay].eeprom_data_len = 0;
-
-   /* 3660 */
-   router->c3660_nm_eeprom_def[nm_bay].data = NULL;
-   router->c3660_nm_eeprom_def[nm_bay].data_len = 0;
+   cisco_eeprom_free(&router->nm_bay[nm_bay].eeprom);
    return(0);
 }
 
@@ -350,7 +357,7 @@ int c3600_nm_check_eeprom(c3600_t *router,u_int nm_bay)
    if (nm_bay >= C3600_MAX_NM_BAYS)
       return(FALSE);
 
-   return((router->nm_bay[nm_bay].eeprom_data != NULL) ? TRUE : FALSE);
+   return(cisco_eeprom_valid(&router->nm_bay[nm_bay].eeprom));
 }
 
 /* Get bay info */
@@ -950,30 +957,29 @@ struct c3600_chassis_driver *c3600_chassis_get_driver(char *chassis_type)
 }
 
 /* Set the base MAC address of the chassis */
-static int c3600_burn_mac_addr(m_uint16_t *data,size_t data_len,
-                               n_eth_addr_t *addr)
+static int c3600_burn_mac_addr(c3600_t *router,n_eth_addr_t *addr)
 {
    m_uint8_t eeprom_ver;
    size_t offset;
 
    /* Read EEPROM format version */
-   cisco_eeprom_get_byte(data,data_len,0,&eeprom_ver);
+   cisco_eeprom_get_byte(&router->mb_eeprom,0,&eeprom_ver);
 
    switch(eeprom_ver) {
       case 0:
-         cisco_eeprom_set_region(data,data_len,2,addr->eth_addr_byte,6);
+         cisco_eeprom_set_region(&router->mb_eeprom,2,addr->eth_addr_byte,6);
          break;
 
       case 4:
-         if (!cisco_eeprom_v4_find_field(data,data_len,0xC3,&offset)) {
-            cisco_eeprom_set_region(data,data_len,offset,
+         if (!cisco_eeprom_v4_find_field(&router->mb_eeprom,0xC3,&offset)) {
+            cisco_eeprom_set_region(&router->mb_eeprom,offset,
                                     addr->eth_addr_byte,6);
          }
          break;
 
       default:
-         fprintf(stderr,"c3600_burn_mac_addr: unable to handle "
-                 "EEPROM version %u\n",eeprom_ver);
+         vm_error(router->vm,"c3600_burn_mac_addr: unable to handle "
+                  "EEPROM version %u\n",eeprom_ver);
          return(-1);
    }
 
@@ -989,8 +995,7 @@ int c3600_chassis_set_mac_addr(c3600_t *router,char *mac_addr)
    }
 
    /* Set the chassis base MAC address */
-   c3600_burn_mac_addr(router->mb_eeprom_data,sizeof(router->mb_eeprom_data),
-                       &router->mac_addr);
+   c3600_burn_mac_addr(router,&router->mac_addr);
    return(0);
 }
 
@@ -1012,14 +1017,13 @@ int c3600_chassis_set_type(c3600_t *router,char *chassis_type)
    router->chassis_driver = driver;
 
    /* Copy the mainboard EEPROM */
-   memcpy(router->mb_eeprom_data,driver->mb_eeprom,driver->mb_eeprom_len << 1);
+   if (cisco_eeprom_copy(&router->mb_eeprom,driver->eeprom) == -1) {
+      vm_error(router->vm,"unable to set chassis EEPROM '%s'.\n",chassis_type);
+      return(-1);
+   }
 
    /* Set the chassis base MAC address */
-   c3600_burn_mac_addr(router->mb_eeprom_data,sizeof(router->mb_eeprom_data),
-                       &router->mac_addr);
-
-   router->mb_eeprom.data = router->mb_eeprom_data;
-   router->mb_eeprom.data_len = driver->mb_eeprom_len;
+   c3600_burn_mac_addr(router,&router->mac_addr);
    return(0);
 }
 

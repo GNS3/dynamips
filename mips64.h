@@ -374,6 +374,15 @@ struct mts64_entry {
 /* MTS64 chunk forward declaration */
 typedef struct mts64_chunk mts64_chunk_t;
 
+/* Maximum results for idle pc */
+#define MIPS64_IDLE_PC_MAX_RES  10
+
+/* Idle PC hash item */
+struct mips64_idle_pc {
+   m_uint64_t pc;
+   u_int count;
+};
+
 /* MIPS CPU definition */
 struct cpu_mips {  
    /* MTS 1st level array */
@@ -432,7 +441,7 @@ struct cpu_mips {
 
    /* "Idle" loop management */
    volatile m_uint64_t idle_pc;
-   u_int idle_max,idle_sleep_time;
+   u_int idle_count,idle_max,idle_sleep_time;
    pthread_mutex_t idle_mutex;
    pthread_cond_t idle_cond;
 
@@ -509,6 +518,10 @@ struct cpu_mips {
    /* Breakpoints */
    m_uint64_t breakpoints[MIPS64_MAX_BREAKPOINTS];
    u_int breakpoints_enabled;
+
+   /* Idle PC proposal */
+   struct mips64_idle_pc idle_pc_prop[MIPS64_IDLE_PC_MAX_RES];
+   u_int idle_pc_prop_count;
 
    /* Symtrace */
    int sym_trace;

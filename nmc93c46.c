@@ -55,9 +55,9 @@ void nmc93c46_check_cs(struct nmc93c46_group *g,u_int old,u_int new)
 void nmc93c46_check_clk_group(struct nmc93c46_group *g,int group_id,
                               u_int old,u_int new)
 {
+   struct cisco_eeprom *eeprom;
    u_int cmd,op,addr,pos;
    u_int clk_bit, din_bit;
-   m_uint16_t *data;
 
    clk_bit = g->def[group_id]->clock_bit;
    din_bit = g->def[group_id]->din_bit;
@@ -130,10 +130,10 @@ void nmc93c46_check_clk_group(struct nmc93c46_group *g,int group_id,
 #endif
           
          pos = g->state[group_id].dataout_pos++;
-         data = g->def[group_id]->data;
+         eeprom = g->eeprom[group_id];
 
-         if ((data != NULL) && (addr < g->def[group_id]->data_len)) {
-            g->state[group_id].dataout_val = data[addr] & (1 << pos);
+         if (eeprom && eeprom->data && (addr < eeprom->len)) {
+            g->state[group_id].dataout_val = eeprom->data[addr] & (1 << pos);
          } else {
             /* access out of bounds */
             g->state[group_id].dataout_val = (1 << pos);

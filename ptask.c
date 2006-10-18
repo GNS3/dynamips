@@ -34,6 +34,9 @@ static ptask_id_t ptask_current_id = 0;
 /* Periodic task thread */
 static void *ptask_run(void *arg)
 {
+   pthread_mutex_t umutex = PTHREAD_MUTEX_INITIALIZER;
+   pthread_cond_t ucond = PTHREAD_COND_INITIALIZER;
+
    ptask_t *task;
 
    for(;;) {
@@ -41,7 +44,23 @@ static void *ptask_run(void *arg)
       for(task=ptask_list;task;task=task->next)
          task->cbk(task->object,task->arg);
       PTASK_UNLOCK();
-      usleep(ptask_sleep_time*1000);
+
+      /* For testing! */
+      {
+         struct timespec t_spc;
+         m_tmcnt_t expire;
+
+         expire = m_gettime_usec() + 2000;
+
+         pthread_mutex_lock(&umutex);
+         t_spc.tv_sec = expire / 1000000;
+         t_spc.tv_nsec = (expire % 1000000) * 1000;
+         pthread_cond_timedwait(&ucond,&umutex,&t_spc);
+         pthread_mutex_unlock(&umutex);
+      }
+
+      /* Old method... */
+      //usleep(ptask_sleep_time*1000);
    }
 
    return NULL;

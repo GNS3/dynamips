@@ -20,6 +20,7 @@
 #include <assert.h>
 
 #include "utils.h"
+#include "timer.h"
 #include "net.h"
 #include "net_io.h"
 #include "ptask.h"
@@ -101,7 +102,9 @@
 #define BCM5600_CMD_CPU_SHIFT    0
 
 /* Memory zones */
-#define BCM5600_ADDR_ARLCNT      0x01000000
+#define BCM5600_ADDR_ARLCNT0     0x01000000
+#define BCM5600_ADDR_ARLCNT1     0x01100000
+#define BCM5600_ADDR_ARLCNT2     0x01200000
 #define BCM5600_ADDR_ARL0        0x02000000
 #define BCM5600_ADDR_ARL1        0x02100000
 #define BCM5600_ADDR_ARL2        0x02200000
@@ -361,8 +364,6 @@ struct bcm5600_port {
    netio_desc_t *nio;
    u_int id;
    char name[32];
-
-   /* Other info ? */
 };
 
 /* NM-16ESW private data */
@@ -375,6 +376,9 @@ struct nm_16esw_data {
    struct pci_device *pci_dev;
 
    pthread_mutex_t lock;
+
+   /* Ager task */
+   timer_id ager_tid;
 
    /* S-channel command and command result */
    m_uint32_t schan_cmd,schan_cmd_res;
@@ -423,6 +427,9 @@ struct nm_16esw_data {
    /* Current egress port of all trunks */
    u_int trunk_last_egress_port[BCM5600_MAX_TRUNKS];
 
+   /* ARL count table */
+   m_uint32_t *arl_cnt;
+
    /* ARL (Address Resolution Logic) Table */
    m_uint32_t *arl_table;
 
@@ -442,23 +449,6 @@ struct nm_16esw_data {
 /* NM-16ESW Port physical port mapping table (Cisco => BCM) */
 static int nm16esw_port_mapping[] = {
    2, 0, 6, 4, 10, 8, 14, 12, 3, 1, 7, 5, 11, 9, 15, 13,
-};
-
-/* NM-16ESW: 16 Ethernet port switch module */
-static m_uint16_t eeprom_c3600_nm_16esw_data[] = {
-   0x04FF, 0x4002, 0xA941, 0x0100, 0xC046, 0x0320, 0x003B, 0x3401,
-   0x4245, 0x3080, 0x0000, 0x0000, 0x0203, 0xC18B, 0x464F, 0x4330,
-   0x3931, 0x3132, 0x454E, 0x3803, 0x0081, 0x0000, 0x0000, 0x0400,
-   0xCF06, 0x0013, 0x1A1D, 0x0BD1, 0x4300, 0x11FF, 0xFFFF, 0xFFFF,
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
-};
-
-static const struct c3600_eeprom eeprom_c3600_nm_16esw = {
-   "NM-16ESW", (m_uint16_t *)eeprom_c3600_nm_16esw_data, 
-   sizeof(eeprom_c3600_nm_16esw_data)/2,
 };
 
 /* Log a BCM message */
@@ -524,7 +514,7 @@ static void bcm5600_mii_read(struct nm_16esw_data *d)
             d->mii_output |= 0x1000;  /* autoneg */
             break;
          case 0x01:
-            if (bcm5600_mii_port_status(d,port))
+            if (d->ports[port].nio && bcm5600_mii_port_status(d,port))
                d->mii_output = 0x782C;
             else
                d->mii_output = 0;
@@ -651,6 +641,10 @@ static void bcm5600_reg_write_special(struct nm_16esw_data *d,
       case 0x8000d:
          d->mirror_egress_ports = value;
          break;
+
+      case 0x80009:
+         /* age timer */
+         break;
    }
 }
 
@@ -704,9 +698,14 @@ static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
 
 static struct bcm5600_table bcm5600_tables[] = {
    /* ARL tables */
-   { "arl0", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL0, 1, 8191, 3 },
-   { "arl1", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL1, 1, 8191, 3 },
-   { "arl2", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL2, 1, 8191, 3 },
+   { "arlcnt0", BCM_OFFSET(arl_cnt), BCM5600_ADDR_ARLCNT0, 0, 0, 1 },
+   { "arlcnt1", BCM_OFFSET(arl_cnt), BCM5600_ADDR_ARLCNT1, 0, 0, 1 },
+   { "arlcnt2", BCM_OFFSET(arl_cnt), BCM5600_ADDR_ARLCNT2, 0, 0, 1 },
+
+   /* ARL tables */
+   { "arl0", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL0, 0, 8191, 3 },
+   { "arl1", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL1, 0, 8191, 3 },
+   { "arl2", BCM_OFFSET(arl_table), BCM5600_ADDR_ARL2, 0, 8191, 3 },
 
    /* Multicast ARL tables */
    { "marl0", BCM_OFFSET(marl_table), BCM5600_ADDR_MARL0, 1, 255, 5 },
@@ -1083,26 +1082,17 @@ static void bcm5600_dump_main_tables(struct nm_16esw_data *d)
 static int bcm5600_find_free_arl_entry(struct nm_16esw_data *d)
 {   
    struct bcm5600_table *table = d->t_arl;
-   m_uint32_t *entry;
-   u_int vlan;
-   int i;
 
-   for(i=table->min_index;i<=table->max_index;i++) {
-      entry = bcm5600_table_get_entry(d,table,i);
+   if (d->arl_cnt[0] == table->max_index)
+      return(-1);
 
-      vlan = (entry[1] & BCM5600_ARL_VLAN_TAG_MASK);
-      vlan >>= BCM5600_ARL_VLAN_TAG_SHIFT;
-
-      if (vlan == 0xFFF)
-         return(i);
-   }
-
-   return(-1);
+   return(d->arl_cnt[0] - 1);
 }
 
 /* ARL Lookup. TODO: this must be optimized in the future. */
 static inline int bcm5600_gen_arl_lookup(struct nm_16esw_data *d,
                                          struct bcm5600_table *table,
+                                         u_int index_start,u_int index_end,
                                          n_eth_addr_t *mac_addr,
                                          u_int vlan)
 {
@@ -1119,7 +1109,7 @@ static inline int bcm5600_gen_arl_lookup(struct nm_16esw_data *d,
 
    mask = BCM5600_ARL_VLAN_TAG_MASK | BCM5600_ARL_MAC_MSB_MASK;
 
-   for(i=table->min_index;i<=table->max_index;i++) {
+   for(i=index_start;i<index_end;i++) {
       entry = bcm5600_table_get_entry(d,table,i);
 
       if ((entry[0] == tmp[0]) && ((entry[1] & mask) == tmp[1]))
@@ -1134,7 +1124,8 @@ static inline int bcm5600_arl_lookup(struct nm_16esw_data *d,
                                      n_eth_addr_t *mac_addr,
                                      u_int vlan)
 {
-   return(bcm5600_gen_arl_lookup(d,d->t_arl,mac_addr,vlan));
+   struct bcm5600_table *table = d->t_arl;
+   return(bcm5600_gen_arl_lookup(d,table,1,d->arl_cnt[0]-1,mac_addr,vlan));
 }
 
 /* MARL Lookup */
@@ -1142,24 +1133,48 @@ static inline int bcm5600_marl_lookup(struct nm_16esw_data *d,
                                       n_eth_addr_t *mac_addr,
                                       u_int vlan)
 {
-   return(bcm5600_gen_arl_lookup(d,d->t_marl,mac_addr,vlan));
+   struct bcm5600_table *table = d->t_marl;
+   return(bcm5600_gen_arl_lookup(d,table,table->min_index,table->max_index+1,
+                                 mac_addr,vlan));
+}
+
+/* Invalidate an ARL entry */
+static void bcm5600_invalidate_arl_entry(m_uint32_t *entry)
+{
+   entry[0] = entry[1] = entry[2] = 0;
 }
 
 /* Insert an entry into the ARL table */
 static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
 {   
    struct bcm5600_table *table = d->t_arl;
-   m_uint32_t *entry;
-   int index;
+   m_uint32_t *entry,mask;
+   int i,index;
 
-   if ((index = bcm5600_find_free_arl_entry(d)) == -1)
-      return(-1);
+   mask = BCM5600_ARL_VLAN_TAG_MASK | BCM5600_ARL_MAC_MSB_MASK;
+
+   for(i=0;i<d->arl_cnt[0]-1;i++) {
+      entry = bcm5600_table_get_entry(d,table,i);
+
+      /* If entry already exists, just modify it */
+      if ((entry[0] == d->dw[1]) && ((entry[1] & mask) == (d->dw[2] & mask))) {
+         entry[0] = d->dw[1];
+         entry[1] = d->dw[2];
+         entry[2] = d->dw[3];
+         d->dw[1] = i;
+         return(0);
+      }
+   }
+
+   index = d->arl_cnt[0] - 1;
 
    entry = bcm5600_table_get_entry(d,table,index);
    entry[0] = d->dw[1];
    entry[1] = d->dw[2];
    entry[2] = d->dw[3];
    d->dw[1] = index;
+   
+   d->arl_cnt[0]++;
    return(0);
 }
 
@@ -1167,7 +1182,7 @@ static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
 static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
 {  
    struct bcm5600_table *table;
-   m_uint32_t *entry,mac_msb;
+   m_uint32_t *entry,*last_entry,mac_msb;
    u_int cvlan,vlan;
    int i;
 
@@ -1189,11 +1204,15 @@ static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
       if ((cvlan == vlan) && (entry[0] == d->dw[1]) &&
           ((entry[1] & BCM5600_ARL_MAC_MSB_MASK) == mac_msb))
       {            
-         entry[0] = 0xFFFFFFFF;
-         entry[1] = (VLAN_INVALID << BCM5600_ARL_VLAN_TAG_SHIFT) | 0xFFFF;
-         entry[2] = 0;
-
          d->dw[1] = i;
+
+         last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2);
+            
+         entry[0] = last_entry[0];
+         entry[1] = last_entry[1];
+         entry[2] = last_entry[2];
+
+         d->arl_cnt[0]--;
          return(i);
       }
    }
@@ -1203,7 +1222,7 @@ static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
 
 /* Reset the ARL tables */
 static int bcm5600_reset_arl(struct nm_16esw_data *d)
-{   
+{
    struct bcm5600_table *table;
    m_uint32_t *entry;
    int i;
@@ -1213,13 +1232,44 @@ static int bcm5600_reset_arl(struct nm_16esw_data *d)
 
    for(i=table->min_index;i<=table->max_index;i++) {
       entry = bcm5600_table_get_entry(d,table,i);
-
-      entry[0] = 0xFFFFFFFF;
-      entry[1] = (VLAN_INVALID << BCM5600_ARL_VLAN_TAG_SHIFT) | 0xFFFF;
-      entry[2] = 0;
+      bcm5600_invalidate_arl_entry(entry);
    }
 
    return(0);
+}
+
+/* MAC Address Ager */
+static int bcm5600_arl_ager(struct nm_16esw_data *d)
+{
+   m_uint32_t *entry,*last_entry;
+   int i;
+
+   BCM_LOCK(d);
+
+   for(i=1;i<d->arl_cnt[0]-1;i++) {
+      entry = bcm5600_table_get_entry(d,d->t_arl,i);
+      assert(entry);
+
+      if (entry[2] & BCM5600_ARL_ST_FLAG)
+         continue;
+
+      /* The entry has expired, purge it */
+      if (!(entry[2] & BCM5600_ARL_HIT_FLAG)) {
+         last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2);
+        
+         entry[0] = last_entry[0];
+         entry[1] = last_entry[1];
+         entry[2] = last_entry[2];
+
+         d->arl_cnt[0]--;
+         i--;
+      } else {
+         entry[2] &= ~BCM5600_ARL_HIT_FLAG;
+      }
+   }
+
+   BCM_UNLOCK(d);
+   return(TRUE);
 }
 
 /* Get the VTABLE entry matching the specified VLAN */
@@ -1247,7 +1297,7 @@ static void bcm5600_handle_read_mem_cmd(struct nm_16esw_data *d)
    int i;
 
    if (bcm5600_table_read_entry(d) != 0) {
-      for(i=0;i<BCM5600_DW_MAX;i++)
+      for(i=1;i<BCM5600_DW_MAX;i++)
          d->dw[i] = 0;
    }
 
@@ -1699,9 +1749,7 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
    src_mac_index = bcm5600_find_free_arl_entry(d);
 
    if (src_mac_index == -1) {
-#if DEBUG_FORWARD
-      BCM_LOG(d,"no free entries in ARL table.\n");
-#endif
+      BCM_LOG(d,"no free entries in ARL table!\n");
       return(FALSE);
    }
 
@@ -1726,6 +1774,7 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
       arl_entry[2] |= (trunk_id << BCM5600_ARL_TGID_SHIFT);
    }
 
+   d->arl_cnt[0]++;
    return(TRUE);
 }
 
@@ -1784,23 +1833,16 @@ static int bcm5600_dst_mac_lookup(struct nm_16esw_data *d,
    int dst_mac_index;
    int is_mcast;
 
-   /* Check for the reserved addresses (BPDU for spanning-tree) */
-   if (!memcmp(&eth_hdr->daddr,"\x01\x80\xc2\x00\x00",5)) {
-      p->egress_bitmap |= 1 << d->cpu_port;
-      return(TRUE);
-   }
-
-   /* Select the appropriate ARL table */
+   /* Select the appropriate ARL table and do the lookup on dst MAC + VLAN */
    if (eth_addr_is_mcast(dst_mac)) {
       is_mcast = TRUE;
       arl_table = d->t_marl;
+      dst_mac_index = bcm5600_marl_lookup(d,dst_mac,p->real_vlan);
    } else {
       is_mcast = FALSE;
       arl_table = d->t_arl;
+      dst_mac_index = bcm5600_arl_lookup(d,dst_mac,p->real_vlan);
    }
-
-   /* ARL Lookup for this MAC address + VLAN */
-   dst_mac_index = bcm5600_gen_arl_lookup(d,arl_table,dst_mac,p->real_vlan);
 
    /*
     * Destination Lookup Failure (DLF).
@@ -2023,11 +2065,44 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
 {
    m_uint32_t *port_entry;
    n_eth_dot1q_hdr_t *eth_hdr;
-   
+   u_int discard;
+
+   /* No egress port at this time */
+   p->egress_bitmap = 0;
+
+   /* Never send back frames to the source port */
+   p->egress_filter_bitmap = 1 << p->ingress_port;
+
    if (!(port_entry = bcm5600_table_get_entry(d,d->t_ptable,p->ingress_port)))
       return(FALSE);
 
+   /* Analyze the Ethernet header */
    eth_hdr = (n_eth_dot1q_hdr_t *)p->pkt;
+
+   /* Check for the reserved addresses (BPDU for spanning-tree) */
+   if (!memcmp(&eth_hdr->daddr,"\x01\x80\xc2\x00\x00",5)) {
+      p->egress_bitmap |= 1 << d->cpu_port;
+      return(bcm5600_forward_pkt(d,p));
+   }
+
+   /* Discard packet ? */
+   discard = port_entry[0] & BCM5600_PTABLE_PRT_DIS_MASK;
+   discard >>= BCM5600_PTABLE_PRT_DIS_SHIFT;
+
+   if (discard) {
+      if (discard != 0x20) {
+         printf("\n\n\n"
+                "-----------------------------------------------------------"
+                "---------------------------------\n"
+                "Unspported feature: please post your current configuration "
+                "on http://www.ipflow.utc.fr/blog/\n"
+                "-----------------------------------------------------------"
+                "---------------------------------\n");
+      }
+
+      /* Drop the packet */
+      return(FALSE);
+   }
 
    /* Mirroring on Ingress ? */
    if (port_entry[1] & BCM5600_PTABLE_MI_FLAG)
@@ -2061,12 +2136,6 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
            d->ports[p->ingress_port].name,p->real_vlan);
 #endif
 
-   /* No egress port at this time */
-   p->egress_bitmap = 0;
-
-   /* Never send back frames to the source port */
-   p->egress_filter_bitmap = 1 << p->ingress_port;
-
    /* Source MAC address learning */
    if (!bcm5600_src_mac_learning(d,p))
       return(FALSE);
@@ -2085,15 +2154,6 @@ static int bcm5600_handle_tx_pkt(struct nm_16esw_data *d,
                                  u_int egress_bitmap)
 {   
    n_eth_dot1q_hdr_t *eth_hdr;
-
-   {    
-      eth_hdr = (n_eth_dot1q_hdr_t *)p->pkt;
-
-      if (ntohs(eth_hdr->type) == 0x9000) {
-         printf("bcm5600_handle_tx_pkt: KEEPALIVE ????\n");
-         return(FALSE);
-      }
-   }
    
    /* Never send back frames to the source port */
    p->egress_filter_bitmap = 1 << p->ingress_port;
@@ -2312,6 +2372,41 @@ static void pci_bcm5605_write(cpu_mips_t *cpu,struct pci_device *dev,
    }
 }
 
+/* Rewrite the base MAC address */
+static int dev_c3600_nm_16esw_burn_mac_addr(c3600_t *router,u_int nm_bay)
+{
+   struct cisco_eeprom *eeprom;
+   m_uint8_t eeprom_ver;
+   size_t offset;
+   n_eth_addr_t addr;
+   m_uint16_t pid;
+
+   pid = (m_uint16_t)getpid();
+
+   /* Generate automatically the MAC address */
+   addr.eth_addr_byte[0] = 0xCE;
+   addr.eth_addr_byte[1] = router->vm->instance_id & 0xFF;
+   addr.eth_addr_byte[2] = pid >> 8;
+   addr.eth_addr_byte[3] = pid & 0xFF;
+   addr.eth_addr_byte[4] = nm_bay;
+   addr.eth_addr_byte[5] = 0x00;
+
+   /* Modify the EEPROM data which have been duplicated */
+   eeprom = &router->nm_bay[nm_bay].eeprom;
+   
+   /* Read EEPROM format version */
+   cisco_eeprom_get_byte(eeprom,0,&eeprom_ver);
+
+   if (eeprom_ver != 4)
+      return(-1);
+
+   if (cisco_eeprom_v4_find_field(eeprom,0xCF,&offset) == -1)
+      return(-1);
+
+   cisco_eeprom_set_region(eeprom,offset,addr.eth_addr_byte,6);
+   return(0);
+}
+
 /* Initialize a NM-16ESW module */
 static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
 {
@@ -2339,7 +2434,7 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
 
    /* Clear the various tables */
    bcm5600_reset_arl(data);
-
+   data->arl_cnt[0] = 1;
    data->t_ptable = bcm5600_table_find(data,BCM5600_ADDR_PTABLE0);
    data->t_vtable = bcm5600_table_find(data,BCM5600_ADDR_VTABLE0);
    data->t_arl    = bcm5600_table_find(data,BCM5600_ADDR_ARL0);
@@ -2359,7 +2454,8 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
    }
 
    /* Set the EEPROM */
-   c3600_nm_set_eeprom(router,nm_bay,&eeprom_c3600_nm_16esw);
+   c3600_nm_set_eeprom(router,nm_bay,cisco_eeprom_find_nm("NM-16ESW"));
+   dev_c3600_nm_16esw_burn_mac_addr(router,nm_bay);
 
    /* Get PCI bus info about this bay */
    bay_info = c3600_nm_get_bay_info(c3600_chassis_get_id(router),nm_bay);
@@ -2398,6 +2494,10 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
    data->tx_tid = ptask_add((ptask_callback)dev_bcm5606_handle_txring,
                             data,NULL);
 
+   /* Start the MAC address ager */
+   data->ager_tid = timer_create_entry(15000,FALSE,10,
+                                       (timer_proc)bcm5600_arl_ager,data);
+
    /* Store device info into the router structure */
    return(c3600_nm_set_drvinfo(router,nm_bay,data));
 }
@@ -2415,6 +2515,9 @@ static int dev_c3600_nm_16esw_shutdown(c3600_t *router,u_int nm_bay)
 
    /* Remove the NM EEPROM */
    c3600_nm_unset_eeprom(router,nm_bay);
+
+   /* Stop the Ager */
+   timer_remove(data->ager_tid);
 
    /* Stop the TX ring task */
    ptask_remove(data->tx_tid);
@@ -2476,6 +2579,7 @@ static int dev_c3600_nm_16esw_show_info(c3600_t *router,u_int nm_bay)
       return(-1);
    
    BCM_LOCK(d);
+   printf("ARL count = %u\n\n",d->arl_cnt[0]);
    bcm5600_dump_main_tables(d);
    bcm5600_mirror_show_status(d);
    bcm5600_reg_dump(d,FALSE);

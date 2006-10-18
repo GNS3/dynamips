@@ -678,9 +678,9 @@ static int dev_dec21140_handle_rxring(netio_desc_t *nio,
     * for this virtual machine.
     */
    if (dec21140_handle_mac_addr(d,pkt))
-      dev_dec21140_receive_pkt(d,pkt,pkt_len);
+      return(dev_dec21140_receive_pkt(d,pkt,pkt_len));
 
-   return(TRUE);
+   return(FALSE);
 }
 
 /* Read a TX descriptor */

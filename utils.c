@@ -12,6 +12,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -297,7 +298,7 @@ void *m_memalign(size_t boundary,size_t size)
 #ifdef __linux__
    if (posix_memalign((void *)&p,boundary,size))
 #else
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__) || defined(SUNOS)
    if (!(p = memalign(boundary,size)))
 #else
    if (!(p = malloc(size)))    
@@ -309,3 +310,31 @@ void *m_memalign(size_t boundary,size_t size)
    return p;
 }
 
+/* Block specified signal for calling thread */
+int m_signal_block(int sig)
+{
+   sigset_t sig_mask;
+   sigemptyset(&sig_mask);
+   sigaddset(&sig_mask,sig);
+   return(pthread_sigmask(SIG_BLOCK,&sig_mask,NULL));
+}
+
+/* Unblock specified signal for calling thread */
+int m_signal_unblock(int sig)
+{
+   sigset_t sig_mask;
+   sigemptyset(&sig_mask);
+   sigaddset(&sig_mask,sig);
+   return(pthread_sigmask(SIG_UNBLOCK,&sig_mask,NULL));
+}
+
+/* Set non-blocking mode on a file descriptor */
+int m_fd_set_non_block(int fd)
+{
+   int flags;
+
+   if ((flags = fcntl(fd,F_GETFL,0)) < 1)
+      return(-1);
+
+   return(fcntl(fd,F_SETFL, flags | O_NONBLOCK));
+}

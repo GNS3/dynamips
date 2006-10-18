@@ -38,16 +38,6 @@
 /* PA-4T+                                                                 */
 /* ====================================================================== */
 
-/* PA-4T+ EEPROM definition */
-static m_uint16_t eeprom_pa_4t_data[64] = {
-   0x010C, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_pa_4t = {
-   "PA-4T+", eeprom_pa_4t_data, sizeof(eeprom_pa_4t_data)/2,
-};
-
 /*
  * dev_c7200_pa_4t_init()
  *
@@ -58,7 +48,7 @@ int dev_c7200_pa_4t_init(c7200_t *router,char *name,u_int pa_bay)
    struct mueslix_data *data;
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pa_4t);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4T+"));
 
    /* Create the Mueslix chip */
    data = dev_mueslix_init(router->vm,name,1,
@@ -126,16 +116,6 @@ struct pa8t_data {
    struct mueslix_data *mueslix[2];
 };
 
-/* EEPROM definition */
-static m_uint16_t eeprom_pa_8t_data[64] = {
-   0x010E, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
-   0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-static const struct c7200_eeprom eeprom_pa_8t = {
-   "PA-8T", eeprom_pa_8t_data, sizeof(eeprom_pa_8t_data)/2,
-};
-
 /*
  * dev_c7200_pa_8t_init()
  *
@@ -152,7 +132,7 @@ int dev_c7200_pa_8t_init(c7200_t *router,char *name,u_int pa_bay)
    }
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_pa_8t);
+   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-8T"));
 
    /* Create the 1st Mueslix chip */
    data->mueslix[0] = dev_mueslix_init(router->vm,name,1,
