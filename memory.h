@@ -6,10 +6,8 @@
 #ifndef __MEMORY_H__
 #define __MEMORY_H__
 
-#ifndef DYNAMIPS_ASM
 #include <sys/types.h>
 #include "utils.h"
-#endif
 
 /* MTS operation */
 #define MTS_READ  0
@@ -39,19 +37,6 @@
 #define MTS_ACC_T   0x00000004   /* TLB Exception */
 #define MTS_ACC_U   0x00000006   /* Unexistent */
 
-/* 32-bit Virtual Address seen by MTS */
-#define MTS32_LEVEL1_BITS  10
-#define MTS32_LEVEL2_BITS  10
-#define MTS32_OFFSET_BITS  12
-
-/* Each level-1 entry covers 4 Mb */
-#define MTS32_LEVEL1_SIZE  (1 << (MTS32_LEVEL2_BITS + MTS32_OFFSET_BITS))
-#define MTS32_LEVEL1_MASK  (MTS32_LEVEL1_SIZE - 1)
-
-/* Each level-2 entry covers 4 Kb */
-#define MTS32_LEVEL2_SIZE  (1 << MTS32_OFFSET_BITS)
-#define MTS32_LEVEL2_MASK  (MTS32_LEVEL2_SIZE - 1)
-
 /* Hash table size for MTS64 (default: [shift:16,bits:12]) */
 #define MTS64_HASH_SHIFT   15
 #define MTS64_HASH_BITS    15
@@ -59,23 +44,20 @@
 #define MTS64_HASH_MASK    (MTS64_HASH_SIZE - 1)
 
 /* MTS64 hash on virtual addresses */
-#define MTS64_HASH(vaddr) (((vaddr) >> MTS64_HASH_SHIFT) & MTS64_HASH_MASK)
+#define MTS64_HASH(vaddr)  (((vaddr) >> MTS64_HASH_SHIFT) & MTS64_HASH_MASK)
+
+/* Hash table size for MTS32 (default: [shift:15,bits:15]) */
+#define MTS32_HASH_SHIFT   15
+#define MTS32_HASH_BITS    15
+#define MTS32_HASH_SIZE    (1 << MTS32_HASH_BITS)
+#define MTS32_HASH_MASK    (MTS32_HASH_SIZE - 1)
+
+/* MTS32 hash on virtual addresses */
+#define MTS32_HASH(vaddr)  (((vaddr) >> MTS32_HASH_SHIFT) & MTS32_HASH_MASK)
 
 /* Number of entries per chunk */
 #define MTS64_CHUNK_SIZE   256
-
-#ifndef DYNAMIPS_ASM
-/* MTS32: Level 1 & 2 arrays */
-typedef struct mts32_l1_array mts32_l1_array_t;
-struct mts32_l1_array {
-   m_iptr_t entry[1 << MTS32_LEVEL1_BITS];
-};
-
-typedef struct mts32_l2_array mts32_l2_array_t;
-struct mts32_l2_array {
-   m_iptr_t entry[1 << MTS32_LEVEL2_BITS];
-   mts32_l2_array_t *next;
-};
+#define MTS32_CHUNK_SIZE   256
 
 /* MTS64: chunk definition */
 struct mts64_chunk {
@@ -84,47 +66,21 @@ struct mts64_chunk {
    u_int count;
 };
 
+/* MTS32: chunk definition */
+struct mts32_chunk {
+   mts32_entry_t entry[MTS32_CHUNK_SIZE];
+   struct mts32_chunk *next;
+   u_int count;
+};
+
 /* Show the last memory accesses */
 void memlog_dump(cpu_mips_t *cpu);
 
-/* Allocate an L1 array */
-mts32_l1_array_t *mts32_alloc_l1_array(m_iptr_t val);
-
-/* Allocate an L2 array */
-mts32_l2_array_t *mts32_alloc_l2_array(cpu_mips_t *cpu,m_iptr_t val);
-
-/* Initialize an empty MTS32 subsystem */
-int mts32_init_empty(cpu_mips_t *cpu);
-
-/* Free memory used by MTS32 */
-void mts32_shutdown(cpu_mips_t *cpu);
-
-/* Map a physical address to the specified virtual address */
-void mts32_map(cpu_mips_t *cpu,m_uint64_t vaddr,
-               m_uint64_t paddr,m_uint32_t len,
-               int cache_access);
-
-/* Unmap a memory zone */
-void mts32_unmap(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
-                 m_uint32_t val);
-
-/* Map all devices for kernel mode */
-void mts32_km_map_all_dev(cpu_mips_t *cpu);
-
-/* Initialize the MTS64 subsystem for the specified CPU */
-int mts64_init(cpu_mips_t *cpu);
-
-/* Free memory used by MTS64 */
-void mts64_shutdown(cpu_mips_t *cpu);
-
-/* Show MTS64 detailed information (debugging only!) */
-void mts64_show_stats(cpu_mips_t *cpu);
-
-/* Initialize memory access vectors */
-void mts_init_memop_vectors(cpu_mips_t *cpu);
-
 /* Shutdown MTS subsystem */
 void mts_shutdown(cpu_mips_t *cpu);
+
+/* Set the address mode */
+int mts_set_addr_mode(cpu_mips_t *cpu,u_int addr_mode);
 
 /* Copy a memory block from VM physical RAM to real host */
 void physmem_copy_from_vm(vm_instance_t *vm,void *real_buffer,
@@ -155,7 +111,5 @@ size_t physmem_strlen(vm_instance_t *vm,m_uint64_t paddr);
 
 /* Physical memory dump (32-bit words) */
 void physmem_dump_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t u32_count);
-
-#endif /* DYNAMIPS_ASM */
 
 #endif

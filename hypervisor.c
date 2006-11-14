@@ -36,6 +36,9 @@
 #include "dynamips.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
+#include "dev_c2691.h"
+#include "dev_c3725.h"
+#include "dev_c3745.h"
 #include "hypervisor.h"
 #include "net_io.h"
 #include "net_io_bridge.h"
@@ -133,6 +136,9 @@ static int cmd_save_config(hypervisor_conn_t *conn,int argc,char *argv[])
    netio_bridge_save_config_all(fd);
    c7200_save_config_all(fd);
    c3600_save_config_all(fd);
+   c2691_save_config_all(fd);
+   c3725_save_config_all(fd);
+   c3745_save_config_all(fd);
 
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -546,6 +552,9 @@ int hypervisor_tcp_server(int tcp_port)
    hypervisor_vm_debug_init();
    hypervisor_c7200_init();
    hypervisor_c3600_init();
+   hypervisor_c2691_init();
+   hypervisor_c3725_init();
+   hypervisor_c3745_init();
 
    signal(SIGPIPE,sigpipe_handler);
 
@@ -560,7 +569,7 @@ int hypervisor_tcp_server(int tcp_port)
    }
 
    /* Start accepting connections */
-   printf("Hypervisor TCP control server started.\n");
+   printf("Hypervisor TCP control server started (port %d).\n",tcp_port);
    hypervisor_running = TRUE;
 
    while(hypervisor_running) {

@@ -22,37 +22,6 @@
 
 #define DEBUG_DEV_ACCESS  0
 
-/* Map a memory zone from a file */
-u_char *memzone_map_file(int fd,size_t len)
-{
-   return(mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_SHARED,fd,(off_t)0));
-}
-
-/* Create a file to serve as a memory zone */
-int memzone_create_file(char *filename,size_t len,u_char **ptr)
-{
-   int fd;
-
-   if ((fd = open(filename,O_CREAT|O_RDWR,S_IRWXU)) == -1) {
-      perror("memzone_create_file: open");
-      return(-1);
-   }
-
-   if (ftruncate(fd,len) == -1) {
-      perror("memzone_create_file: ftruncate");
-      return(-1);
-   }
-   
-   *ptr = memzone_map_file(fd,len);
-
-   if (!*ptr) {
-      close(fd);
-      fd = -1;
-   }
-
-   return(fd);
-}
-
 /* Get device by ID */
 struct vdevice *dev_get_by_id(vm_instance_t *vm,u_int dev_id)
 {
@@ -217,6 +186,15 @@ void *dev_access(cpu_mips_t *cpu,u_int dev_id,m_uint32_t offset,
    return(dev->handler(cpu,dev,offset,op_size,op_type,data));
 }
 
+/* Synchronize memory for a memory-mapped (mmap) device */
+int dev_sync(struct vdevice *dev)
+{
+   if (!dev || !dev->host_addr)
+      return(-1);
+
+   return(msync((void *)dev->host_addr,dev->phys_len,MS_SYNC));
+}
+
 /* Remap a device at specified physical address */
 struct vdevice *dev_remap(char *name,struct vdevice *orig,
                           m_uint64_t paddr,m_uint32_t len)
@@ -251,11 +229,54 @@ struct vdevice *dev_create_ram(vm_instance_t *vm,char *name,char *filename,
 
    if (filename) {
       dev->fd = memzone_create_file(filename,dev->phys_len,&ram_ptr);
+
+      if (dev->fd == -1) {
+         perror("dev_create_ram: mmap");
+         free(dev);
+         return NULL;
+      }
+      
       dev->host_addr = (m_iptr_t)ram_ptr;
    } else {
       dev->host_addr = (m_iptr_t)m_memalign(4096,dev->phys_len);
    }
    
+   if (!dev->host_addr) {
+      free(dev);
+      return NULL;
+   }
+
+   vm_bind_device(vm,dev);
+   return dev;
+}
+
+/* Create a ghosted RAM device */
+struct vdevice *
+dev_create_ghost_ram(vm_instance_t *vm,char *name,char *filename,
+                     m_uint64_t paddr,m_uint32_t len)
+{
+   struct vdevice *dev;
+   u_char *ram_ptr;
+
+   if (!(dev = dev_create(name)))
+      return NULL;
+
+   dev->phys_addr = paddr;
+   dev->phys_len = len;
+   dev->flags = VDEVICE_FLAG_CACHING;
+
+   dev->fd = memzone_open_cow_file(filename,dev->phys_len,&ram_ptr);
+   if (dev->fd == -1) {
+      perror("dev_create_ghost_ram: mmap");
+      free(dev);
+      return NULL;
+   }
+
+   if (!(dev->host_addr = (m_iptr_t)ram_ptr)) {
+      free(dev);
+      return NULL;
+   }
+
    vm_bind_device(vm,dev);
    return dev;
 }

@@ -24,16 +24,14 @@
 #include "net.h"
 #include "net_io.h"
 #include "ptask.h"
-#include "dev_am79c971.h"
-#include "dev_c3600.h"
-#include "dev_c3600_bay.h"
+#include "dev_nm_16esw.h"
 
 /* Debugging flags */
 #define DEBUG_ACCESS     0
 #define DEBUG_UNKNOWN    0
 #define DEBUG_MII        0
 #define DEBUG_MEM        0
-#define DEBUG_REG        0
+#define DEBUG_REG        1
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
 #define DEBUG_FORWARD    0
@@ -173,7 +171,7 @@
 #define BCM5600_PTABLE_VLAN_TAG_MASK    0x00000FFF
 #define BCM5600_PTABLE_SP_ST_MASK       0x00003000
 #define BCM5600_PTABLE_SP_ST_SHIFT      12
-#define BCM5600_PTABLE_PRT_DIS_MASK     0x000fc000
+#define BCM5600_PTABLE_PRT_DIS_MASK     0x000FC000
 #define BCM5600_PTABLE_PRT_DIS_SHIFT    14
 #define BCM5600_PTABLE_JUMBO_FLAG       0x00100000
 #define BCM5600_PTABLE_RTAG_MASK        0x00E00000
@@ -511,7 +509,7 @@ static void bcm5600_mii_read(struct nm_16esw_data *d)
 
       switch(reg) {
          case 0x00:
-            d->mii_output |= 0x1000;  /* autoneg */
+            d->mii_output &= ~0x8200;
             break;
          case 0x01:
             if (d->ports[port].nio && bcm5600_mii_port_status(d,port))
@@ -1665,7 +1663,7 @@ static int bcm5600_send_pkt_to_cpu(struct nm_16esw_data *d,
    p->sent_to_cpu = TRUE;
 
 #if DEBUG_RECEIVE
-   BCM_LOG(d,"sending packet to CPU.\n");
+   BCM_LOG(d,"sending packet to CPU (orig_vlan=%d).\n",p->orig_vlan);
 #endif
    return(TRUE);
 }
@@ -2080,7 +2078,14 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    eth_hdr = (n_eth_dot1q_hdr_t *)p->pkt;
 
    /* Check for the reserved addresses (BPDU for spanning-tree) */
-   if (!memcmp(&eth_hdr->daddr,"\x01\x80\xc2\x00\x00",5)) {
+   if (!memcmp(&eth_hdr->daddr,"\x01\x80\xc2\x00\x00",5) ||
+       !memcmp(&eth_hdr->daddr,"\x01\x00\x0c\xcc\xcc\xcd",6))
+   {
+#if DEBUG_RECEIVE
+      BCM_LOG(d,"Received a BPDU packet:\n");
+      mem_dump(d->vm->log_fd,p->pkt,p->pkt_len);
+#endif
+      p->orig_vlan = 0;
       p->egress_bitmap |= 1 << d->cpu_port;
       return(bcm5600_forward_pkt(d,p));
    }
@@ -2186,6 +2191,9 @@ static int bcm5600_handle_tx_pkt(struct nm_16esw_data *d,
       if (!bcm5600_dst_mac_lookup(d,p))
          return(FALSE);
    } else {
+#if DEBUG_TRANSMIT
+      BCM_LOG(d,"Transmitting natively a packet from TX ring.\n");
+#endif
       /* The egress ports are specified, send the packet natively */
       p->orig_vlan = 0;
       p->egress_bitmap = egress_bitmap;
@@ -2196,7 +2204,7 @@ static int bcm5600_handle_tx_pkt(struct nm_16esw_data *d,
 }
 
 /* Handle the TX ring */
-static int dev_bcm5606_handle_txring(struct nm_16esw_data *d)
+static int dev_bcm5600_handle_txring(struct nm_16esw_data *d)
 {
    struct bcm5600_pkt pkt_data;
    m_uint32_t tdes[4],txd_len;
@@ -2268,7 +2276,7 @@ static int dev_bcm5606_handle_txring(struct nm_16esw_data *d)
 }
 
 /* Handle the RX ring */
-static int dev_bcm5606_handle_rxring(netio_desc_t *nio,
+static int dev_bcm5600_handle_rxring(netio_desc_t *nio,
                                      u_char *pkt,ssize_t pkt_len,
                                      struct nm_16esw_data *d,  
                                      struct bcm5600_port *port)
@@ -2373,9 +2381,9 @@ static void pci_bcm5605_write(cpu_mips_t *cpu,struct pci_device *dev,
 }
 
 /* Rewrite the base MAC address */
-static int dev_c3600_nm_16esw_burn_mac_addr(c3600_t *router,u_int nm_bay)
+int dev_nm_16esw_burn_mac_addr(vm_instance_t *vm,u_int nm_bay,
+                               struct cisco_eeprom *eeprom)
 {
-   struct cisco_eeprom *eeprom;
    m_uint8_t eeprom_ver;
    size_t offset;
    n_eth_addr_t addr;
@@ -2384,16 +2392,13 @@ static int dev_c3600_nm_16esw_burn_mac_addr(c3600_t *router,u_int nm_bay)
    pid = (m_uint16_t)getpid();
 
    /* Generate automatically the MAC address */
-   addr.eth_addr_byte[0] = 0xCE;
-   addr.eth_addr_byte[1] = router->vm->instance_id & 0xFF;
+   addr.eth_addr_byte[0] = vm_get_mac_addr_msb(vm);
+   addr.eth_addr_byte[1] = vm->instance_id & 0xFF;
    addr.eth_addr_byte[2] = pid >> 8;
    addr.eth_addr_byte[3] = pid & 0xFF;
-   addr.eth_addr_byte[4] = nm_bay;
+   addr.eth_addr_byte[4] = 0xF0 + nm_bay;
    addr.eth_addr_byte[5] = 0x00;
 
-   /* Modify the EEPROM data which have been duplicated */
-   eeprom = &router->nm_bay[nm_bay].eeprom;
-   
    /* Read EEPROM format version */
    cisco_eeprom_get_byte(eeprom,0,&eeprom_ver);
 
@@ -2408,9 +2413,10 @@ static int dev_c3600_nm_16esw_burn_mac_addr(c3600_t *router,u_int nm_bay)
 }
 
 /* Initialize a NM-16ESW module */
-static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
+struct nm_16esw_data *
+dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
+                  struct pci_bus *pci_bus,int pci_device,int irq)
 {
-   struct nm_bay_info *bay_info;
    struct nm_16esw_data *data;
    struct bcm5600_port *port;
    struct vdevice *dev;
@@ -2419,18 +2425,18 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
    /* Allocate the private data structure */
    if (!(data = malloc(sizeof(*data)))) {
       fprintf(stderr,"%s: out of memory\n",name);
-      return(-1);
+      return NULL;
    }
 
    memset(data,0,sizeof(*data));
    pthread_mutex_init(&data->lock,NULL);
    data->name = name;
    data->nr_port = 16;
-   data->vm = router->vm;
+   data->vm = vm;
 
    /* Create the BCM5600 tables */
    if (bcm5600_table_create(data) == -1)
-      return(-1);
+      return NULL;
 
    /* Clear the various tables */
    bcm5600_reset_arl(data);
@@ -2453,33 +2459,21 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
       snprintf(port->name,sizeof(port->name),"Fa%u/%d",nm_bay,i);
    }
 
-   /* Set the EEPROM */
-   c3600_nm_set_eeprom(router,nm_bay,cisco_eeprom_find_nm("NM-16ESW"));
-   dev_c3600_nm_16esw_burn_mac_addr(router,nm_bay);
-
-   /* Get PCI bus info about this bay */
-   bay_info = c3600_nm_get_bay_info(c3600_chassis_get_id(router),nm_bay);
-      
-   if (!bay_info) {
-      fprintf(stderr,"%s: unable to get info for NM bay %u\n",name,nm_bay);
-      return(-1);
-   }
-
    /* Create the BCM5605 PCI device */
-   data->pci_dev = pci_dev_add(router->nm_bay[nm_bay].pci_map,name,
+   data->pci_dev = pci_dev_add(pci_bus,name,
                                BCM5605_PCI_VENDOR_ID,BCM5605_PCI_PRODUCT_ID,
-                               0,0,C3600_NETIO_IRQ,data,
+                               pci_device,0,irq,data,
                                NULL,pci_bcm5605_read,pci_bcm5605_write);
 
    if (!data->pci_dev) {
       fprintf(stderr,"%s: unable to create PCI device.\n",name);
-      return(-1);
+      return NULL;
    }
 
    /* Create the BCM5605 device itself */
    if (!(dev = dev_create(name))) {
       fprintf(stderr,"%s: unable to create device.\n",name);
-      return(-1);
+      return NULL;
    }
 
    dev->phys_addr = 0;
@@ -2491,36 +2485,29 @@ static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
    data->dev = dev;
 
    /* Create the TX ring scanner */
-   data->tx_tid = ptask_add((ptask_callback)dev_bcm5606_handle_txring,
+   data->tx_tid = ptask_add((ptask_callback)dev_bcm5600_handle_txring,
                             data,NULL);
 
    /* Start the MAC address ager */
    data->ager_tid = timer_create_entry(15000,FALSE,10,
                                        (timer_proc)bcm5600_arl_ager,data);
-
-   /* Store device info into the router structure */
-   return(c3600_nm_set_drvinfo(router,nm_bay,data));
+   return data;
 }
 
 /* Remove a NM-16ESW from the specified slot */
-static int dev_c3600_nm_16esw_shutdown(c3600_t *router,u_int nm_bay) 
+int dev_nm_16esw_remove(struct nm_16esw_data *data)
 {
-   struct c3600_nm_bay *bay;
-   struct nm_16esw_data *data;
-
-   if (!(bay = c3600_nm_get_info(router,nm_bay)))
-      return(-1);
-
-   data = bay->drv_info;
-
-   /* Remove the NM EEPROM */
-   c3600_nm_unset_eeprom(router,nm_bay);
-
    /* Stop the Ager */
    timer_remove(data->ager_tid);
 
    /* Stop the TX ring task */
    ptask_remove(data->tx_tid);
+
+   /* Remove device + PCI stuff */
+   pci_dev_remove(data->pci_dev);
+   vm_unbind_device(data->vm,data->dev);
+   cpu_group_rebuild_mts(data->vm->cpu_group);
+   free(data->dev);
 
    /* Free all tables and registers */
    bcm5600_table_free(data);
@@ -2530,13 +2517,10 @@ static int dev_c3600_nm_16esw_shutdown(c3600_t *router,u_int nm_bay)
 }
 
 /* Bind a Network IO descriptor */
-static int dev_c3600_nm_16esw_set_nio(c3600_t *router,u_int nm_bay,
-                                      u_int port_id,netio_desc_t *nio)
+int dev_nm_16esw_set_nio(struct nm_16esw_data *d,u_int port_id,
+                         netio_desc_t *nio)
 {
-   struct nm_16esw_data *d;
    struct bcm5600_port *port;
-
-   d = c3600_nm_get_drvinfo(router,nm_bay);
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -2544,18 +2528,14 @@ static int dev_c3600_nm_16esw_set_nio(c3600_t *router,u_int nm_bay,
    /* define the new NIO */
    port = &d->ports[nm16esw_port_mapping[port_id]];
    port->nio = nio;
-   netio_rxl_add(nio,(netio_rx_handler_t)dev_bcm5606_handle_rxring,d,port);
+   netio_rxl_add(nio,(netio_rx_handler_t)dev_bcm5600_handle_rxring,d,port);
    return(0);
 }
 
 /* Unbind a Network IO descriptor */
-static int dev_c3600_nm_16esw_unset_nio(c3600_t *router,u_int nm_bay,
-                                        u_int port_id)
+int dev_nm_16esw_unset_nio(struct nm_16esw_data *d,u_int port_id)
 {
-   struct nm_16esw_data *d;
    struct bcm5600_port *port;
-
-   d = c3600_nm_get_drvinfo(router,nm_bay);
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -2571,13 +2551,8 @@ static int dev_c3600_nm_16esw_unset_nio(c3600_t *router,u_int nm_bay,
 }
 
 /* Show debugging information */
-static int dev_c3600_nm_16esw_show_info(c3600_t *router,u_int nm_bay)
-{
-   struct nm_16esw_data *d;
-
-   if (!(d = c3600_nm_get_drvinfo(router,nm_bay)))
-      return(-1);
-   
+int dev_nm_16esw_show_info(struct nm_16esw_data *d)
+{   
    BCM_LOCK(d);
    printf("ARL count = %u\n\n",d->arl_cnt[0]);
    bcm5600_dump_main_tables(d);
@@ -2586,13 +2561,3 @@ static int dev_c3600_nm_16esw_show_info(c3600_t *router,u_int nm_bay)
    BCM_UNLOCK(d);
    return(0);
 }
-
-/* NM-16ESW driver */
-struct c3600_nm_driver dev_c3600_nm_16esw_driver = {
-   "NM-16ESW", 1, 0,
-   dev_c3600_nm_16esw_init, 
-   dev_c3600_nm_16esw_shutdown,
-   dev_c3600_nm_16esw_set_nio,
-   dev_c3600_nm_16esw_unset_nio,
-   dev_c3600_nm_16esw_show_info,
-};

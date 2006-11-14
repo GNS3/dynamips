@@ -29,7 +29,7 @@
 /*
  * dev_c3600_nm_4t_init()
  *
- * Add a PA-4T network module into specified slot.
+ * Add a NM-4T network module into specified slot.
  */
 int dev_c3600_nm_4t_init(c3600_t *router,char *name,u_int nm_bay)
 {
@@ -43,7 +43,7 @@ int dev_c3600_nm_4t_init(c3600_t *router,char *name,u_int nm_bay)
    bay_info = c3600_nm_get_bay_info(c3600_chassis_get_id(router),nm_bay);
 
    if (!bay_info) {
-      fprintf(stderr,"%s: unable to get info for PA bay %u\n",name,nm_bay);
+      fprintf(stderr,"%s: unable to get info for NM bay %u\n",name,nm_bay);
       return(-1);
    }
 
@@ -58,7 +58,7 @@ int dev_c3600_nm_4t_init(c3600_t *router,char *name,u_int nm_bay)
    return(c3600_nm_set_drvinfo(router,nm_bay,data));
 }
 
-/* Remove a PA-4T+ from the specified slot */
+/* Remove a NM-4T from the specified slot */
 int dev_c3600_nm_4t_shutdown(c3600_t *router,u_int nm_bay) 
 {
    struct c3600_nm_bay *bay;

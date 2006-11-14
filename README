@@ -1,14 +1,21 @@
-Help for Cisco 7200/3600 simulator (dynamips-0.2.6)
-=====================================================
+Help for Cisco router simulator (dynamips-0.2.6)
+================================================
 Authors of this document: Fabien Devaux, Christophe Fillot, MtvE
 
 Emulated hardware
 *****************
 
-The emulator currently supports Cisco 7200 and Cisco 3600 series.
+The emulator currently supports the following platforms:
+  - Cisco 7200 (NPE-100 to NPE-400)
+  - Cisco 3600 (3620, 3640 and 3660)
+  - Cisco 2691
+  - Cisco 3725
+  - Cisco 3745
+
 By default, a Cisco 7206VXR with NPE-200 (256 Mb of DRAM) is emulated.
 
-To emulate a Cisco 3600, use the "-P 3600" command line option.
+To emulate another platform, use the "-P" command line option (for example,
+"-P 3725" or "-P 3600").
 
 For the 7200, you can change the NPE type with the "-t" option. 
 It is possible to select "npe-100", "npe-150", "npe-175", "npe-200", 
@@ -70,8 +77,28 @@ Options specific to the Cisco 7200 series:
 Options specific to the Cisco 3600 series ("dynamips -P 3600 --help"):
 
   -t <chassis_type>  : Select Chassis type (default: "3640")
+  --iomem-size <val> : IO memory (in percents, default: 5)
   -p <nm_desc>       : Define a Network Module
   -s <nm_nio>        : Bind a Network IO interface to a Network Module
+
+Options specific to the Cisco 2691 series ("dynamips -P 2691 --help"):
+
+  --iomem-size <val> : IO memory (in percents, default: 5)
+  -p <nm_desc>       : Define a Network Module
+  -s <nm_nio>        : Bind a Network IO interface to a Network Module
+
+Options specific to the Cisco 3725 series ("dynamips -P 3725 --help"):
+
+  --iomem-size <val> : IO memory (in percents, default: 5)
+  -p <nm_desc>       : Define a Network Module
+  -s <nm_nio>        : Bind a Network IO interface to a Network Module
+
+Options specific to the Cisco 3745 series ("dynamips -P 3745 --help"):
+
+  --iomem-size <val> : IO memory (in percents, default: 5)
+  -p <nm_desc>       : Define a Network Module
+  -s <nm_nio>        : Bind a Network IO interface to a Network Module
+
 
 
 Command Line Options details
@@ -144,7 +171,21 @@ Cisco 3600 Network Module Description "<nm_desc>":
         - NM-4E        (Ethernet, 4 ports)
         - NM-1FE-TX    (FastEthernet, 1 port)
         - NM-4T        (Serial, 4 ports)
+        - NM-16ESW     (Ethernet switch module, 16 ports)
         - Leopard-2FE  (Cisco 3660 FastEthernet in slot 0, automatically used)
+
+
+Cisco 2691/3725/3745 Network Module Description "<nm_desc>":
+------------------------------------------------------------
+   Format: slot:nm_driver
+
+   slot: the number of the physical slot (starts from 0)
+
+   nm_driver: the name of a Network Module driver in:
+        - NM-1FE-TX    (FastEthernet, 1 port)
+        - NM-4T        (Serial, 4 ports)
+        - NM-16ESW     (Ethernet switch module, 16 ports)
+        - GT96100-FE   (2 integrated ports, automatically used)
 
 
 NIO binding to Port Adapter "<pa_nio>" and Network Modules "<nm_nio>":

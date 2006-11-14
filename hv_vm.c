@@ -304,6 +304,30 @@ static int cmd_set_idle_sleep_time(hypervisor_conn_t *conn,
    return(0);
 }
 
+/* Show info about potential timer drift */
+static int cmd_show_timer_drift(hypervisor_conn_t *conn,
+                                int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   cpu_mips_t *cpu;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
+      return(-1);
+
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
+                         cpu->timer_drift);
+
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
+                         cpu->timer_irq_pending);
+      
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set the exec area size */
 static int cmd_set_exec_area(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -318,6 +342,37 @@ static int cmd_set_exec_area(hypervisor_conn_t *conn,int argc,char *argv[])
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
+
+/* Set ghost RAM file */
+static int cmd_set_ghost_file(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vm->ghost_ram_filename = strdup(argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Set ghost RAM status */
+static int cmd_set_ghost_status(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vm->ghost_status = atoi(argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 
 /* Set PCMCIA ATA disk0 size */
 static int cmd_set_disk0(hypervisor_conn_t *conn,int argc,char *argv[])
@@ -531,6 +586,36 @@ static int cmd_resume(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Send a message on the console */
+static int cmd_send_con_msg(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vtty_store_str(vm->vtty_con,argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Send a message on the AUX port */
+static int cmd_send_aux_msg(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vtty_store_str(vm->vtty_aux,argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Show info about VM object */
 static void cmd_show_vm_list(registry_entry_t *entry,void *opt,int *err)
 {
@@ -569,6 +654,9 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "show_idle_pc_prop", 2, 2, cmd_show_idle_pc_prop, NULL },
    { "set_idle_max", 3, 3, cmd_set_idle_max, NULL },
    { "set_idle_sleep_time", 3, 3, cmd_set_idle_sleep_time, NULL },
+   { "show_timer_drift", 2, 2, cmd_show_timer_drift, NULL },
+   { "set_ghost_file", 3, 3, cmd_set_ghost_file, NULL },
+   { "set_ghost_status", 3, 3, cmd_set_ghost_status, NULL },
    { "set_con_tcp_port", 2, 2, cmd_set_con_tcp_port, NULL },
    { "set_aux_tcp_port", 2, 2, cmd_set_aux_tcp_port, NULL },
    { "extract_config", 1, 1, cmd_extract_config, NULL },
@@ -576,6 +664,8 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "cpu_info", 2, 2, cmd_show_cpu_info, NULL },
    { "suspend", 1, 1, cmd_suspend, NULL },
    { "resume", 1, 1, cmd_resume, NULL },
+   { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
+   { "send_aux_msg", 2, 2, cmd_send_aux_msg, NULL },
    { "list", 0, 0, cmd_vm_list, NULL },
    { NULL, -1, -1, NULL, NULL },
 };

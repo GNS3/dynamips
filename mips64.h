@@ -175,7 +175,8 @@
 /* TLB masks and shifts */
 #define MIPS_TLB_PAGE_MASK     0x01ffe000
 #define MIPS_TLB_PAGE_SHIFT    13
-#define MIPS_TLB_VPN2_MASK     0xffffffffffffe000ULL
+#define MIPS_TLB_VPN2_MASK_32  0xffffe000ULL
+#define MIPS_TLB_VPN2_MASK_64  0xc00000ffffffe000ULL
 #define MIPS_TLB_PFN_MASK      0x3fffffc0
 #define MIPS_TLB_ASID_MASK     0x000000ff     /* "asid" in EntryHi */
 #define MIPS_TLB_G_MASK        0x00001000     /* "Global" in EntryHi */
@@ -371,8 +372,20 @@ struct mts64_entry {
    mts64_entry_t *next,**pprev;
 };
 
-/* MTS64 chunk forward declaration */
+/* MTS32 entry */
+typedef struct mts32_entry mts32_entry_t;
+struct mts32_entry {
+   m_uint32_t start;
+   m_iptr_t   action;
+   m_uint32_t mask;
+   m_uint32_t phys_page;
+   mts32_entry_t **pself;
+   mts32_entry_t *next,**pprev;
+};
+
+/* MTS chunk forward declaration */
 typedef struct mts64_chunk mts64_chunk_t;
+typedef struct mts32_chunk mts32_chunk_t;
 
 /* Maximum results for idle pc */
 #define MIPS64_IDLE_PC_MAX_RES  10
@@ -388,8 +401,8 @@ struct cpu_mips {
    /* MTS 1st level array */
    void *mts_l1_ptr;
 
-   /* MTS64 cache */
-   mts64_entry_t **mts64_cache;
+   /* MTS32/MTS64 caches */
+   void **mts_cache;
 
    /* Virtual version of CP0 Compare Register */
    m_uint32_t cp0_virt_cnt_reg,cp0_virt_cmp_reg;
@@ -418,10 +431,7 @@ struct cpu_mips {
    /* FPU (CP1) */
    mips_cp1_t fpu;
 
-   /* MTS32 array free list */
-   void *mts32_l2_free_list;
-   
-   /* Address bus mask */
+   /* Address bus mask for physical addresses */
    m_uint64_t addr_bus_mask;
 
    /* IRQ counters and cause */
@@ -484,16 +494,21 @@ struct cpu_mips {
 
    void (*mts_rebuild)(cpu_mips_t *cpu);
 
-   /* MTS64 chunk list */
-   mts64_chunk_t *mts64_chunk_list;
-   mts64_chunk_t *mts64_chunk_free_list;
-   mts64_entry_t *mts64_entry_free_list;
+   void (*mts_shutdown)(cpu_mips_t *cpu);
 
-   /* MTS64 cache statistics */
-   m_uint64_t mts64_misses,mts64_lookups;
+   /* Show MTS statistics */
+   void (*mts_show_stats)(cpu_mips_t *cpu);
+
+   /* MTS chunk list */
+   void *mts_chunk_list;
+   void *mts_chunk_free_list;
+   void *mts_entry_free_list;
+
+   /* MTS cache statistics */
+   m_uint64_t mts_misses,mts_lookups;
 
    /* Reverse map for MTS64 */
-   mts64_entry_t *mts64_rmap[MIPS64_TLB_MAX_ENTRIES];
+   void *mts_rmap[MIPS64_TLB_MAX_ENTRIES];
 
    /* JIT flush method */
    u_int jit_flush_method;
@@ -503,6 +518,9 @@ struct cpu_mips {
 
    /* Fast memory operations use */
    u_int fast_memop;
+
+   /* Address mode (32 or 64 bits) */
+   u_int addr_mode;
 
    /* Current exec page (non-JIT) info */
    m_uint64_t njm_exec_page;
@@ -640,7 +658,7 @@ int mips64_save_state(cpu_mips_t *cpu,char *filename);
 int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr);
 
 /* Load an ELF image into the simulated memory */
-int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,
+int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
                           m_uint32_t *entry_point);
 
 /* Symbol lookup */

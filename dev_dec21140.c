@@ -206,11 +206,6 @@ static inline int dec21140_handle_mac_addr(struct dec21140_data *d,
    n_eth_hdr_t *hdr = (n_eth_hdr_t *)pkt;
    int i;
 
-   /* Ignore traffic sent by us */
-   for(i=0;i<d->mac_addr_count;i++)
-      if (!memcmp(&d->mac_addr[i],&hdr->saddr,N_ETH_ALEN))
-         return(FALSE);
-
    /* Accept systematically frames if we are running is promiscuous mode */
    if (d->csr[6] & DEC21140_CSR6_PROMISC)
       return(TRUE);
@@ -434,8 +429,9 @@ void *dev_dec21140_access(cpu_mips_t *cpu,struct vdevice *dev,
             break;
 
          case 8:
-            /* CSR8 is cleared when read */
+            /* CSR8 is cleared when read (missed frame counter) */
             d->csr[reg] = 0;
+            *data = 0;
             break;
             
          default:
@@ -510,7 +506,7 @@ static m_uint32_t rxdesc_get_next(struct dec21140_data *d,m_uint32_t rxd_addr,
    return(nrxd_addr);
 }
 
-/* Read an RX descriptor */
+/* Read a RX descriptor */
 static void rxdesc_read(struct dec21140_data *d,m_uint32_t rxd_addr,
                         struct rx_desc *rxd)
 {
@@ -729,7 +725,7 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
    /* Copy the current txring descriptor */
    tx_start = d->tx_current;   
    ptxd = &txd0;
-   txdesc_read(d,d->tx_current,ptxd);
+   txdesc_read(d,tx_start,ptxd);
 
    /* If we don't own the first descriptor, we cannot transmit */
    if (!(txd0.tdes[0] & DEC21140_TXDESC_OWN))

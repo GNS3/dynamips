@@ -65,6 +65,7 @@ struct virtual_tty {
    int tcp_port;
    int terminal_support;
    int input_state;
+   int input_pending;
    int telnet_cmd, telnet_opt, telnet_qual;
    int fd,accept_fd,*select_fd;
    int managed_flush;
@@ -88,6 +89,9 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
 
 /* delete a virtual tty */
 void vtty_delete(vtty_t *vtty);
+
+/* Store a string in the FIFO buffer */
+int vtty_store_str(vtty_t *vtty,char *str);
 
 /* read a character from the buffer (-1 if the buffer is empty) */
 int vtty_get_char(vtty_t *vtty);

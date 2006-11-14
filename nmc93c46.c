@@ -122,10 +122,8 @@ void nmc93c46_check_clk_group(struct nmc93c46_group *g,int group_id,
 
 #if DEBUG_EEPROM
          if (g->state[group_id].dataout_pos == 0)
-            printf("nmc93c46: %s(%d): read addr = %x (%d), data=%4.4x, "
-                   "val = %4.4x\n",
-                   g->description,group_id,
-                   addr,addr,g->def[group_id]->data[addr],
+            printf("nmc93c46: %s(%d): read addr=%x (%d), val = %4.4x\n",
+                   g->description,group_id,addr,addr,
                    g->state[group_id].cmd_val);
 #endif
           
@@ -180,6 +178,9 @@ u_int nmc93c46_read(struct nmc93c46_group *g)
    res = g->eeprom_reg;
 
    for(i=0;i<g->nr_eeprom;i++) {
+      if (!(g->eeprom_reg & (1 << g->def[i]->select_bit)))
+         continue;
+
       if (g->state[i].dataout_val)
          res |= 1 << g->def[i]->dout_bit;
       else

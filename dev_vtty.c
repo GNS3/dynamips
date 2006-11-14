@@ -496,6 +496,23 @@ static int vtty_store(vtty_t *vtty,u_char c)
    return(0);
 }
 
+/* Store a string in the FIFO buffer */
+int vtty_store_str(vtty_t *vtty,char *str)
+{
+   if (!vtty)
+      return(0);
+
+   while(*str != 0) {
+      if (vtty_store(vtty,*str) == -1)
+         return(-1);
+      
+      str++;
+   }
+
+   vtty->input_pending = TRUE;
+   return(0);
+}
+
 /* Store CTRL+C in buffer */
 int vtty_store_ctrlc(vtty_t *vtty)
 {
@@ -639,6 +656,11 @@ static void remote_control(vtty_t *vtty,u_char c)
          if (cpu0) tlb_dump(cpu0);
          break;
   
+      /* Dump the MIPS TLB (raw mode) */
+      case 'z':
+         if (cpu0) tlb_raw_dump(cpu0);
+         break;
+  
       /* Show information about JIT compiled pages */
       case 'b':
          if (cpu0) {
@@ -653,7 +675,7 @@ static void remote_control(vtty_t *vtty,u_char c)
       /* MTS64 cache statistics */
       case 'l':
          if (cpu0) {
-            mts64_show_stats(cpu0);
+            cpu0->mts_show_stats(cpu0);
          }
          break;
   
@@ -679,10 +701,11 @@ static void remote_control(vtty_t *vtty,u_char c)
          if (cpu0) {
             /* IRQ triggering */
             mips64_set_irq(cpu0,2/*C7200_PA_MGMT_IRQ*/);
+            //mips64_set_irq(cpu0,3/*C7200_PA_MGMT_IRQ*/);
             //mips64_set_irq(cpu0,C7200_PA_MGMT_IRQ);
          }
          break;
-  
+
       /* Twice Ctrl + ']' (0x1d, 29), or Alt-Gr + '*' (0xb3, 179) */
       case 0x1d:
       case 0xb3:
@@ -696,6 +719,7 @@ static void remote_control(vtty_t *vtty,u_char c)
                 "d     - Show the device list\n"
                 "r     - Dump MIPS CPU registers\n"
                 "t     - Dump MIPS TLB entries\n"
+                "z     - Dump MIPS TLB entries (raw mode)\n"
                 "m     - Dump the latest memory accesses\n"
                 "s     - Suspend CPU emulation\n"
                 "u     - Resume CPU emulation\n"
@@ -998,9 +1022,14 @@ static void *vtty_thread_main(void *arg)
          
          if (FD_ISSET(fd,&rfds)) {
             vtty_read_and_store(vtty);
+            vtty->input_pending = TRUE;
+         }
 
+         if (vtty->input_pending) {
             if (vtty->read_notifier != NULL)
-               vtty->read_notifier(vtty);            
+               vtty->read_notifier(vtty);
+
+            vtty->input_pending = FALSE;
          }
 
          /* Flush any pending output */

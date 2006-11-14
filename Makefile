@@ -14,12 +14,13 @@ HAS_PCAP?=1
 
 # Current dynamips release
 VERSION_TRAIN=0.2.6
-VERSION_SUB=-RC2
+VERSION_SUB=-RC3
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
 
 # Executable binary extension
+DESTDIR?=/usr
 BIN_EXT?=
 
 CC?=gcc
@@ -44,6 +45,13 @@ ifeq ($(shell uname), FreeBSD)
          -D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/local/lib -L. -lelf $(PTHREAD_LIBS)
 else
+ifeq ($(shell uname), Linux)
+   PTHREAD_LIBS?=-lpthread
+   PCAP_LIB=-lpcap
+   CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
+   LIBS=-L/usr/lib -L. -lelf $(PTHREAD_LIBS)
+   DESTDIR=/usr
+else
 ifeq ($(shell uname -s), Darwin)
    CFLAGS+=-I/usr/local/include -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/local/lib -L. -lelf -lpthread
@@ -67,6 +75,7 @@ endif
 endif
 endif
 endif
+endif
 
 PROG=dynamips$(BIN_EXT)
 PACKAGE=$(PROG)-$(VERSION)
@@ -81,27 +90,36 @@ HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h \
 	atm.h frame_relay.h eth_switch.h \
 	ptask.h timer.h hypervisor.h dynamips.h insn_lookup.h \
 	vm.h mips64.h mips64_exec.h cpu.h cp0.h memory.h device.h \
-	nmc93c46.h cisco_eeprom.h ds1620.h pci_dev.h pci_io.h \
-	dev_dec21140.h dev_am79c971.h dev_mueslix.h \
-	dev_vtty.h dev_c7200.h dev_c3600.h dev_c3600_bay.h
+	nmc93c46.h cisco_eeprom.h ds1620.h \
+	pci_dev.h pci_io.h dev_gt.h dev_plx.h \
+	dev_dec21140.h dev_am79c971.h dev_mueslix.h dev_nm_16esw.h \
+	dev_vtty.h dev_c7200.h dev_c3600.h dev_c3600_bay.h \
+	dev_c2691.h dev_c3725.h dev_c3745.h
+
 SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c timer.c \
 	crc.c base64.c net.c net_io.c net_io_bridge.c net_io_filter.c \
 	atm.c frame_relay.c eth_switch.c \
 	dynamips.c insn_lookup.c vm.c mips64.c mips64_jit.c mips64_exec.c \
 	cpu.c cp0.c memory.c device.c nmc93c46.c cisco_eeprom.c \
 	pci_dev.c pci_io.c \
-	dev_zero.c dev_vtty.c dev_ram.c dev_rom.c dev_nvram.c dev_bootflash.c \
-	dev_remote.c dev_clpd6729.c dev_pcmcia_disk.c dev_gt64k.c \
-	dev_plx9060.c dev_dec21x50.c dev_pericom.c dev_ap1011.c \
+	dev_zero.c dev_vtty.c dev_ram.c dev_rom.c dev_nvram.c \
+	dev_bootflash.c dev_flash.c \
+	dev_remote.c dev_clpd6729.c dev_pcmcia_disk.c dev_gt.c \
+	dev_plx.c dev_dec21x50.c dev_pericom.c dev_ti2050b.c dev_ap1011.c \
 	dev_ns16552.c dev_dec21140.c dev_am79c971.c dev_mueslix.c \
 	dev_c3600.c dev_c3600_bay.c dev_c3600_iofpga.c \
-	dev_c3600_eth.c dev_c3600_serial.c dev_c3600_esw.c \
+	dev_c3600_eth.c dev_c3600_serial.c \
 	dev_c7200.c dev_c7200_iofpga.c dev_c7200_mpfpga.c \
 	dev_c7200_sram.c dev_c7200_eth.c dev_c7200_serial.c dev_c7200_pos.c \
 	dev_c7200_bri.c \
-	dev_pa_a1.c dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
+	dev_c2691.c dev_c2691_iofpga.c dev_c2691_eth.c dev_c2691_serial.c \
+	dev_c3725.c dev_c3725_iofpga.c dev_c3725_eth.c dev_c3725_serial.c \
+	dev_c3745.c dev_c3745_iofpga.c dev_c3745_eth.c dev_c3745_serial.c \
+	dev_nm_16esw.c dev_pa_a1.c dev_pa_mc8te1.c \
+	dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
 	hv_nio.c hv_nio_bridge.c hv_frsw.c hv_atmsw.c hv_ethsw.c \
-	hv_vm.c hv_vm_debug.c hv_c7200.c hv_c3600.c
+	hv_vm.c hv_vm_debug.c \
+	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c
 
 # Profiling
 #SOURCES += profiler.c
@@ -110,8 +128,6 @@ SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c timer.c \
 ifeq ($(DYNAMIPS_ARCH),x86)
 HDR += x86-codegen.h x86_trans.h
 SOURCES += x86_trans.c
-ASMSRC += x86_asm.S
-CFLAGS += -DFAST_ASM
 endif
 
 ifeq ($(DYNAMIPS_ARCH),amd64)
@@ -144,12 +160,13 @@ C_OBJS=$(SOURCES:.c=.o)
 A_OBJS=$(ASMSRC:.S=.o)
 LEX_C=$(LEX_SOURCES:.l=.c)
 
-SUPPL=Makefile ChangeLog COPYING README README.hypervisor TODO \
-	dynamips.1 nvram_export.1 hypervisor_mode.7 microcode
+SUPPL=mips_mts.c Makefile ChangeLog COPYING README README.hypervisor TODO \
+	dynamips.1 nvram_export.1 hypervisor_mode.7 microcode debian/
+
 FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
-	x86-codegen.h x86_trans.c x86_trans.h x86_asm.S \
+	x86-codegen.h x86_trans.c x86_trans.h \
 	amd64-codegen.h amd64_trans.c amd64_trans.h \
-	nojit_trans.c nojit_trans.h asmdefs.c \
+	nojit_trans.c nojit_trans.h \
 	linux_eth.c linux_eth.h gen_eth.c gen_eth.h \
 	profiler.c profiler_resolve.pl bin2c.c rom2c.c \
 	nvram_export.c
@@ -157,7 +174,7 @@ FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 .PHONY: all
 all: $(PROG) nvram_export
 
-$(PROG): microcode_dump.inc asmdefs.h $(LEX_C) $(C_OBJS) $(A_OBJS)
+$(PROG): microcode_dump.inc $(LEX_C) $(C_OBJS) $(A_OBJS)
 	@echo "Linking $@"
 	@$(CC) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
 
@@ -181,6 +198,16 @@ nvram_export$(BIN_EXT): nvram_export.c
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) -o $@ nvram_export.c
 
+install: $(PROG) nvram_export
+	@echo "Installing"
+	install -d $(DESTDIR)/bin $(DESTDIR)/man/man1 $(DESTDIR)/man/man7 $(DESTDIR)/etc
+	install dynamips nvram_export   $(DESTDIR)/bin
+	install -m644 dynamips.1        $(DESTDIR)/man/man1
+	install -m644 nvram_export.1    $(DESTDIR)/man/man1
+	install -m644 hypervisor_mode.7 $(DESTDIR)/man/man7
+# install -m644 example         $(DESTDIR)/etc/dynamips
+
+
 .PHONY: clean
 clean:
 	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc asmdefs$(BIN_EXT) \
@@ -190,7 +217,7 @@ clean:
 .PHONY: package
 package:
 	@mkdir -p distrib/$(PACKAGE)
-	@$(CP) $(FILE_LIST) distrib/$(PACKAGE)
+	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE)
 	@cd distrib ; $(TAR) czf $(ARCHIVE) $(PACKAGE)
 
 .PHONY: packdev

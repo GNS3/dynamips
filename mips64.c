@@ -67,9 +67,7 @@ int mips64_reset(cpu_mips_t *cpu)
    memset(&cpu->cp0.tlb,0,MIPS64_TLB_MAX_ENTRIES*sizeof(tlb_entry_t));
 
    /* Restart the MTS subsystem */
-   mts_shutdown(cpu);
-   mts64_init(cpu);
-   mts_init_memop_vectors(cpu);
+   mts_set_addr_mode(cpu,64);
    cpu->mts_rebuild(cpu);
 
    /* Flush JIT structures */
@@ -87,7 +85,7 @@ int mips64_init(cpu_mips_t *cpu)
 
    /* Initialize idle timer */
    cpu->idle_max = 1500;
-   cpu->idle_sleep_time = 50000;
+   cpu->idle_sleep_time = 30000;
 
    /* Timer IRQ parameters (default frequency: 250 Hz <=> 4ms period) */
    cpu->timer_irq_check_itv = 1000;
@@ -851,7 +849,7 @@ int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
 }
 
 /* Load an ELF image into the simulated memory */
-int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,
+int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
                           m_uint32_t *entry_point)
 {
    m_uint64_t vaddr;
@@ -903,47 +901,51 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,
       return(-1);
    }
 
-   for(i=0;i<ehdr->e_shnum;i++) {
-      scn = elf_getscn(img_elf,i);
+   if (!skip_load) {
+      for(i=0;i<ehdr->e_shnum;i++) {
+         scn = elf_getscn(img_elf,i);
 
-      shdr = elf32_getshdr(scn);
-      name = elf_strptr(img_elf, ehdr->e_shstrndx, (size_t)shdr->sh_name);
-      len  = shdr->sh_size;
+         shdr = elf32_getshdr(scn);
+         name = elf_strptr(img_elf, ehdr->e_shstrndx, (size_t)shdr->sh_name);
+         len  = shdr->sh_size;
 
-      if (!(shdr->sh_flags & SHF_ALLOC) || !len)
-         continue;
+         if (!(shdr->sh_flags & SHF_ALLOC) || !len)
+            continue;
 
-      fseek(bfd,shdr->sh_offset,SEEK_SET);
-      vaddr = sign_extend(shdr->sh_addr,32);
+         fseek(bfd,shdr->sh_offset,SEEK_SET);
+         vaddr = sign_extend(shdr->sh_addr,32);
 
-      if (cpu->vm->debug_level > 0) {
-         printf("   * Adding section at virtual address 0x%8.8llx "
-                "(len=0x%8.8lx)\n",vaddr & 0xFFFFFFFF,(u_long)len);
-      }
-
-      while(len > 0)
-      {
-         haddr = cpu->mem_op_lookup(cpu,vaddr);
-   
-         if (!haddr) {
-            fprintf(stderr,"load_elf_image: invalid load address 0x%llx\n",
-                    vaddr);
-            return(-1);
+         if (cpu->vm->debug_level > 0) {
+            printf("   * Adding section at virtual address 0x%8.8llx "
+                   "(len=0x%8.8lx)\n",vaddr & 0xFFFFFFFF,(u_long)len);
          }
+         
+         while(len > 0)
+         {
+            haddr = cpu->mem_op_lookup(cpu,vaddr);
+   
+            if (!haddr) {
+               fprintf(stderr,"load_elf_image: invalid load address 0x%llx\n",
+                       vaddr);
+               return(-1);
+            }
 
-         if (len > MIPS_MIN_PAGE_SIZE)
-            clen = MIPS_MIN_PAGE_SIZE;
-         else
-            clen = len;
+            if (len > MIPS_MIN_PAGE_SIZE)
+               clen = MIPS_MIN_PAGE_SIZE;
+            else
+               clen = len;
 
-         clen = fread((u_char *)haddr,clen,1,bfd);
+            clen = fread((u_char *)haddr,clen,1,bfd);
 
-         if (clen != 1)
-            break;
+            if (clen != 1)
+               break;
 
-         vaddr += MIPS_MIN_PAGE_SIZE;
-         len -= clen;
+            vaddr += MIPS_MIN_PAGE_SIZE;
+            len -= clen;
+         }
       }
+   } else {
+      printf("ELF loading skipped, using a ghost RAM file.\n");
    }
 
    printf("ELF entry point: 0x%x\n",ehdr->e_entry);

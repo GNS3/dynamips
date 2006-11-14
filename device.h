@@ -56,13 +56,6 @@ void *dev_access_fast(cpu_mips_t *cpu,u_int dev_id,m_uint32_t offset,
    return(dev->handler(cpu,dev,offset,op_size,op_type,data));
 }
 
-
-/* Map a memory zone from a file */
-u_char *memzone_map_file(int fd,size_t len);
-
-/* Create a file to serve as a memory zone */
-int memzone_create_file(char *filename,size_t len,u_char **ptr);
-
 /* Get device by ID */
 struct vdevice *dev_get_by_id(vm_instance_t *vm,u_int dev_id);
 
@@ -95,6 +88,9 @@ void dev_show_list(vm_instance_t *vm);
 void *dev_access(cpu_mips_t *cpu,u_int dev_id,m_uint32_t offset,
                  u_int op_size,u_int op_type,m_uint64_t *data);
 
+/* Synchronize memory for a memory-mapped (mmap) device */
+int dev_sync(struct vdevice *dev);
+
 /* Remap a device at specified physical address */
 struct vdevice *dev_remap(char *name,struct vdevice *orig,
                           m_uint64_t paddr,m_uint32_t len);
@@ -102,6 +98,11 @@ struct vdevice *dev_remap(char *name,struct vdevice *orig,
 /* Create a RAM device */
 struct vdevice *dev_create_ram(vm_instance_t *vm,char *name,char *filename,
                                m_uint64_t paddr,m_uint32_t len);
+
+/* Create a ghosted RAM device */
+struct vdevice *
+dev_create_ghost_ram(vm_instance_t *vm,char *name,char *filename,
+                     m_uint64_t paddr,m_uint32_t len);
 
 /* Create a memory alias */
 struct vdevice *dev_create_ram_alias(vm_instance_t *vm,char *name,char *orig,
@@ -115,8 +116,12 @@ int dev_zero_init(vm_instance_t *vm,char *name,
                   m_uint64_t paddr,m_uint32_t len);
 
 /* Initialize a RAM zone */
-int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,
-                 m_uint64_t paddr,m_uint32_t len);
+int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,int delete_file,
+                 char *alternate_name,m_uint64_t paddr,m_uint32_t len);
+
+/* Initialize a ghosted RAM zone */
+int dev_ram_ghost_init(vm_instance_t *vm,char *name,char *filename,
+                       m_uint64_t paddr,m_uint32_t len);
 
 /* Initialize a ROM zone */
 int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len);
@@ -126,25 +131,17 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
                    m_uint64_t paddr,m_uint32_t len,
                    u_int *conf_reg);
 
-/* Compute NVRAM checksum */
-m_uint16_t nvram_cksum(vm_instance_t *vm,m_uint64_t addr,size_t count);
-
 /* Create a 8 Mb bootflash */
 int dev_bootflash_init(vm_instance_t *vm,char *name,
                        m_uint64_t paddr,m_uint32_t len);
 
-/* Create a PLX9060 device */
-vm_obj_t *dev_plx9060_init(vm_instance_t *vm,char *name,
-                           struct pci_bus *pci_bus,int pci_device,
-                           struct vdevice *dev);
+/* Create a Flash device */
+vm_obj_t *dev_flash_init(vm_instance_t *vm,char *name,
+                         m_uint64_t paddr,m_uint32_t len);
 
-/* Create a new GT64010 controller */
-int dev_gt64010_init(vm_instance_t *vm,char *name,
-                     m_uint64_t paddr,m_uint32_t len,u_int irq);
-
-/* Create a new GT64120 controller */
-int dev_gt64120_init(vm_instance_t *vm,char *name,
-                     m_uint64_t paddr,m_uint32_t len,u_int irq);
+/* Copy data directly to a flash device */
+int dev_flash_copy_data(vm_obj_t *obj,m_uint32_t offset,
+                        u_char *ptr,ssize_t len);
 
 /* dev_dec21050_init() */
 int dev_dec21050_init(struct pci_bus *pci_bus,int pci_device,
@@ -165,6 +162,10 @@ int dev_dec21152_init(struct pci_bus *pci_bus,int pci_device,
 /* dev_pericom_init() */
 int dev_pericom_init(struct pci_bus *pci_bus,int pci_device,
                       struct pci_bus *sec_bus);
+
+/* dev_ti2050b_init() */
+int dev_ti2050b_init(struct pci_bus *pci_bus,int pci_device,
+                     struct pci_bus *sec_bus);
 
 /* Create an AP1011 Sturgeon HyperTransport-PCI Bridge */
 int dev_ap1011_init(struct pci_bus *pci_bus,int pci_device,
@@ -188,7 +189,7 @@ int dev_c7200_sram_init(vm_instance_t *vm,char *name,
 /* Initialize a PCMCIA disk */
 vm_obj_t *dev_pcmcia_disk_init(vm_instance_t *vm,char *name,
                                m_uint64_t paddr,m_uint32_t len,
-                               u_int disk_size);
+                               u_int disk_size,int mode);
 
 /* Create SB-1 system control devices */
 int dev_sb1_init(vm_instance_t *vm);

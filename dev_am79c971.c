@@ -202,10 +202,6 @@ static inline int am79c971_handle_mac_addr(struct am79c971_data *d,
 {
    n_eth_hdr_t *hdr = (n_eth_hdr_t *)pkt;
 
-   /* Ignore traffic sent by us */
-   if (!memcmp(&d->mac_addr,&hdr->saddr,N_ETH_ALEN))
-      return(FALSE);
-
    /* Accept systematically frames if we are running is promiscuous mode */
    if (d->csr[15] & AM79C971_CSR15_PROM)
       return(TRUE);

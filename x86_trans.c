@@ -132,11 +132,11 @@ static void mips64_memop_fast_sw(insn_block_t *b,int target)
    x86_mov_memindex_reg(b->jit_ptr,X86_EAX,0,X86_EBX,0,X86_EDX,4);
 }
 
-/* Fast memory operation */
-static void mips64_emit_memop_fast(insn_block_t *b,int op,
-                                   int base,int offset,
-                                   int target,int keep_ll_bit,
-                                   memop_fast_access op_handler)
+/* Fast memory operation (64-bit) */
+static void mips64_emit_memop_fast64(insn_block_t *b,int op,
+                                     int base,int offset,
+                                     int target,int keep_ll_bit,
+                                     memop_fast_access op_handler)
 {
    m_uint64_t val = sign_extend(offset,16);
    u_char *test1,*test2,*test3,*test4;
@@ -154,9 +154,9 @@ static void mips64_emit_memop_fast(insn_block_t *b,int op,
    x86_shift_reg_imm(b->jit_ptr,X86_SHR,X86_EAX,MTS64_HASH_SHIFT);
    x86_alu_reg_imm(b->jit_ptr,X86_AND,X86_EAX,MTS64_HASH_MASK);
 
-   /* EDX = mts64_cache */
+   /* EDX = mts_cache */
    x86_mov_reg_membase(b->jit_ptr,X86_EDX,
-                       X86_EDI,OFFSET(cpu_mips_t,mts64_cache),4);
+                       X86_EDI,OFFSET(cpu_mips_t,mts_cache),4);
 
    /* ESI = mts64_entry */
    x86_mov_reg_memindex(b->jit_ptr,X86_ESI,X86_EDX,0,X86_EAX,2,4);
@@ -234,6 +234,124 @@ static void mips64_emit_memop_fast(insn_block_t *b,int op,
 
    x86_patch(p_exit,b->jit_ptr);
    x86_patch(p_exception,b->jit_ptr);
+}
+
+/* Fast memory operation (32-bit) */
+static void mips64_emit_memop_fast32(insn_block_t *b,int op,
+                                     int base,int offset,
+                                     int target,int keep_ll_bit,
+                                     memop_fast_access op_handler)
+{
+   m_uint32_t val = sign_extend(offset,16);
+   u_char *test1,*test2,*test3;
+   u_char *p_exception,*p_exit;
+
+   /* EBX = sign-extended offset */
+   x86_mov_reg_imm(b->jit_ptr,X86_EBX,val);
+
+   /* EBX = GPR[base] + sign-extended offset */
+   x86_alu_reg_membase(b->jit_ptr,X86_ADD,X86_EBX,X86_EDI,REG_OFFSET(base));
+
+   /* EAX = mts32_entry index */
+   x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EBX,4);
+   x86_shift_reg_imm(b->jit_ptr,X86_SHR,X86_EAX,MTS32_HASH_SHIFT);
+   x86_alu_reg_imm(b->jit_ptr,X86_AND,X86_EAX,MTS32_HASH_MASK);
+
+   /* EDX = mts_cache */
+   x86_mov_reg_membase(b->jit_ptr,X86_EDX,
+                       X86_EDI,OFFSET(cpu_mips_t,mts_cache),4);
+
+   /* ESI = mts32_entry */
+   x86_mov_reg_memindex(b->jit_ptr,X86_ESI,X86_EDX,0,X86_EAX,2,4);
+   x86_test_reg_reg(b->jit_ptr,X86_ESI,X86_ESI);   /* slow lookup */
+   test1 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+
+   /* ECX = entry mask, compare the virtual addresses */
+   x86_mov_reg_membase(b->jit_ptr,X86_ECX,
+                       X86_ESI,OFFSET(mts32_entry_t,mask),4);
+   x86_alu_reg_reg(b->jit_ptr,X86_AND,X86_ECX,X86_EBX);
+   x86_alu_reg_membase(b->jit_ptr,X86_CMP,X86_ECX,X86_ESI,
+                       OFFSET(mts32_entry_t,start));
+   test2 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   /* Ok, we have the good entry. Test if this is a device */
+   x86_mov_reg_membase(b->jit_ptr,X86_EAX,
+                       X86_ESI,OFFSET(mts32_entry_t,action),4);
+   x86_mov_reg_reg(b->jit_ptr,X86_EDX,X86_EAX,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_AND,X86_EDX,MTS_DEV_MASK);
+   test3 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   /* EAX = action */
+   x86_alu_reg_imm(b->jit_ptr,X86_AND,X86_EAX,MTS_ADDR_MASK);
+
+   /* Compute offset */
+   x86_alu_reg_membase(b->jit_ptr,X86_SUB,X86_EBX,
+                       X86_ESI,OFFSET(mts32_entry_t,start));
+
+   /* Memory access */
+   op_handler(b,target);
+ 
+   p_exit = b->jit_ptr;
+   x86_jump8(b->jit_ptr,0);
+
+   /* === Slow lookup === */
+   x86_patch(test1,b->jit_ptr);
+   x86_patch(test2,b->jit_ptr);
+   x86_patch(test3,b->jit_ptr);
+
+   /* Update PC (EBX = vaddr) */
+   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+
+   /* Sign-extend virtual address and put vaddr in ECX:EDX */
+   x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EBX,4);
+   x86_cdq(b->jit_ptr);
+   x86_mov_reg_reg(b->jit_ptr,X86_ECX,X86_EDX,4);
+   x86_mov_reg_reg(b->jit_ptr,X86_EDX,X86_EAX,4);
+
+   /* EBX = target register */
+   x86_mov_reg_imm(b->jit_ptr,X86_EBX,target);
+
+   /* EAX = CPU instance pointer */
+   x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+
+   /* 
+    * Push parameters on stack and call memory function.
+    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
+    */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(op));
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+
+   /* Check for exception */
+   x86_test_reg_reg(b->jit_ptr,X86_EAX,X86_EAX);
+   p_exception = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   insn_block_push_epilog(b);
+
+   x86_patch(p_exit,b->jit_ptr);
+   x86_patch(p_exception,b->jit_ptr);
+}
+
+/* Fast memory operation */
+static void mips64_emit_memop_fast(cpu_mips_t *cpu,insn_block_t *b,int op,
+                                   int base,int offset,
+                                   int target,int keep_ll_bit,
+                                   memop_fast_access op_handler)
+{
+   switch(cpu->addr_mode) {
+      case 32:
+         mips64_emit_memop_fast32(b,op,base,offset,target,keep_ll_bit,
+                                  op_handler);
+         break;
+      case 64:
+         mips64_emit_memop_fast64(b,op,base,offset,target,keep_ll_bit,
+                                  op_handler);
+         break;
+   }
 }
 
 /* Memory operation */
@@ -1844,7 +1962,7 @@ static int mips64_emit_LW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(b,MIPS_MEMOP_LW,base,offset,rt,TRUE,
+      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_LW,base,offset,rt,TRUE,
                              mips64_memop_fast_lw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_LW,base,offset,rt,TRUE);
@@ -2559,7 +2677,7 @@ static int mips64_emit_SW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(b,MIPS_MEMOP_SW,base,offset,rt,FALSE,
+      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_SW,base,offset,rt,FALSE,
                              mips64_memop_fast_sw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_SW,base,offset,rt,FALSE);

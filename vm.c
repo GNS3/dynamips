@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <assert.h>
@@ -53,6 +54,8 @@ void vm_object_remove(vm_instance_t *vm,vm_obj_t *obj)
    if (obj->next)
       obj->next->pprev = obj->pprev;
    *(obj->pprev) = obj->next;
+
+   obj->shutdown(vm,obj->data);
 }
 
 /* Find an object given its name */
@@ -118,6 +121,15 @@ char *vm_get_type(vm_instance_t *vm)
       case VM_TYPE_C7200:
          machine = "c7200";
          break;
+      case VM_TYPE_C2691:
+         machine = "c2691";
+         break;
+      case VM_TYPE_C3725:
+         machine = "c3725";
+         break;
+     case VM_TYPE_C3745:
+         machine = "c3745";
+         break;
       default:
          machine = "unknown";
          break;
@@ -137,6 +149,15 @@ char *vm_get_platform_type(vm_instance_t *vm)
          break;
       case VM_TYPE_C7200:
          machine = "C7200";
+         break;     
+      case VM_TYPE_C2691:
+         machine = "C2691";
+         break;
+      case VM_TYPE_C3725:
+         machine = "C3725";
+         break;
+      case VM_TYPE_C3745:
+         machine = "C3745";
          break;
       default:
          machine = "VM";
@@ -144,6 +165,30 @@ char *vm_get_platform_type(vm_instance_t *vm)
    }
 
    return machine;
+}
+
+/* Get MAC address MSB */
+u_int vm_get_mac_addr_msb(vm_instance_t *vm)
+{
+   switch(vm->type) {
+      case VM_TYPE_C3600:
+         return(0xCC);
+
+      case VM_TYPE_C7200:
+         return(0xCA);
+
+      case VM_TYPE_C2691:
+         return(0xC0);
+
+      case VM_TYPE_C3725:
+         return(0xC2);
+
+      case VM_TYPE_C3745:
+         return(0xC4);
+
+      default:
+         return(0xC6);
+   }
 }
 
 /* Generate a filename for use by the instance */
@@ -404,6 +449,7 @@ void vm_free(vm_instance_t *vm)
       vm_release_lock(vm,TRUE);
 
       /* Free various elements */
+      free(vm->ghost_ram_filename);
       free(vm->sym_filename);
       free(vm->ios_image);
       free(vm->ios_config);
@@ -423,6 +469,21 @@ vm_instance_t *vm_acquire(char *name)
 int vm_release(vm_instance_t *vm)
 {
    return(registry_unref(vm->name,OBJ_TYPE_VM));
+}
+
+/* Initialize RAM */
+int vm_ram_init(vm_instance_t *vm,m_uint64_t paddr)
+{
+   m_uint32_t len;
+
+   len = vm->ram_size * 1048576;
+
+   if (vm->ghost_status == VM_GHOST_RAM_USE)
+      return(dev_ram_ghost_init(vm,"ram",vm->ghost_ram_filename,paddr,len));
+
+   return(dev_ram_init(vm,"ram",vm->ram_mmap,
+                       (vm->ghost_status != VM_GHOST_RAM_GENERATE),
+                       vm->ghost_ram_filename,paddr,len));
 }
 
 /* Initialize VTTY */
@@ -595,6 +656,59 @@ void vm_monitor(vm_instance_t *vm)
 {
    while(vm->status != VM_STATUS_SHUTDOWN)         
       usleep(200000);
+}
+
+/* Open a VM file and map it in memory */
+int vm_mmap_open_file(vm_instance_t *vm,char *name,
+                      u_char **ptr,off_t *fsize)
+{
+   char *filename;
+   int fd;
+
+   if (!(filename = vm_build_filename(vm,name))) {
+      fprintf(stderr,"vm_mmap_open_file: unable to create filename (%s)\n",
+              name);
+      return(-1);
+   }
+
+   if ((fd = memzone_open_file(filename,ptr,fsize)) == -1)
+      fprintf(stderr,"vm_mmap_open_file: unable to open file '%s' (%s)\n",
+              filename,strerror(errno));
+
+   free(filename);
+   return(fd);
+}
+
+/* Open/Create a VM file and map it in memory */
+int vm_mmap_create_file(vm_instance_t *vm,char *name,size_t len,u_char **ptr)
+{
+   char *filename;
+   int fd;
+
+   if (!(filename = vm_build_filename(vm,name))) {
+      fprintf(stderr,"vm_mmap_create_file: unable to create filename (%s)\n",
+              name);
+      return(-1);
+   }
+
+   if ((fd = memzone_create_file(filename,len,ptr)) == -1)
+      fprintf(stderr,"vm_mmap_create_file: unable to open file '%s' (%s)\n",
+              filename,strerror(errno));
+
+   free(filename);
+   return(fd);
+}
+
+/* Close a memory mapped file */
+int vm_mmap_close_file(int fd,u_char *ptr,size_t len)
+{
+   if (ptr != NULL)
+      munmap(ptr,len);
+   
+   if (fd != -1)
+      close(fd);
+   
+   return(0);
 }
 
 /* Save the Cisco IOS configuration from NVRAM */

@@ -18,7 +18,7 @@
 /* ====================================================================== */
 /* NM-1E: 1 Ethernet Port Network Module EEPROM                           */
 /* ====================================================================== */
-static const m_uint16_t eeprom_nm_1e_data[16] = {
+static const m_uint16_t eeprom_nm_1e_data[] = {
    0x0143, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
    0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -26,7 +26,7 @@ static const m_uint16_t eeprom_nm_1e_data[16] = {
 /* ====================================================================== */
 /* NM-4E: 4 Ethernet Port Network Module EEPROM                           */
 /* ====================================================================== */
-static const m_uint16_t eeprom_nm_4e_data[16] = {
+static const m_uint16_t eeprom_nm_4e_data[] = {
    0x0142, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
    0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -34,7 +34,7 @@ static const m_uint16_t eeprom_nm_4e_data[16] = {
 /* ====================================================================== */
 /* NM-1FE-TX: 1 FastEthernet Port Network Module EEPROM                   */
 /* ====================================================================== */
-static const m_uint16_t eeprom_nm_1fe_tx_data[16] = {
+static const m_uint16_t eeprom_nm_1fe_tx_data[] = {
    0x0144, 0x0100, 0x0075, 0xCD81, 0x500D, 0xA201, 0x0000, 0x0000,
    0x5800, 0x0000, 0x9803, 0x2000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -56,7 +56,7 @@ static m_uint16_t eeprom_nm_16esw_data[] = {
 /* ====================================================================== */
 /* NM-4T: 4 Serial Network Module EEPROM                                  */
 /* ====================================================================== */
-static m_uint16_t eeprom_nm_4t_data[64] = {
+static m_uint16_t eeprom_nm_4t_data[] = {
    0x0154, 0x0101, 0x009D, 0x2D64, 0x5009, 0x0A02, 0x0000, 0x0000,
    0x5800, 0x0000, 0x9811, 0x0300, 0x0005, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -85,7 +85,7 @@ const struct cisco_eeprom *cisco_eeprom_find_nm(char *name)
 /* ====================================================================== */
 /* PA-FE-TX: 1 FastEthernet Port Adapter EEPROM                           */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_fe_tx_data[16] = {
+static const m_uint16_t eeprom_pa_fe_tx_data[] = {
    0x0111, 0x0102, 0xffff, 0xffff, 0x4906, 0x9804, 0x0000, 0x0000,
    0x6000, 0x0000, 0x9812, 0x1700, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -93,7 +93,7 @@ static const m_uint16_t eeprom_pa_fe_tx_data[16] = {
 /* ====================================================================== */
 /* PA-4E: 4 Ethernet Port Adapter EEPROM                                  */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_4e_data[16] = {
+static const m_uint16_t eeprom_pa_4e_data[] = {
    0x0102, 0x010E, 0xFFFF, 0xFFFF, 0x4906, 0x1404, 0x0000, 0x0000,
    0x5000, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -101,7 +101,7 @@ static const m_uint16_t eeprom_pa_4e_data[16] = {
 /* ====================================================================== */
 /* PA-8E: 8 Ethernet Port Adapter EEPROM                                  */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_8e_data[16] = {
+static const m_uint16_t eeprom_pa_8e_data[] = {
    0x0101, 0x010E, 0xFFFF, 0xFFFF, 0x4906, 0x1404, 0x0000, 0x0000,
    0x5000, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -109,7 +109,7 @@ static const m_uint16_t eeprom_pa_8e_data[16] = {
 /* ====================================================================== */
 /* PA-4T+: 4 Serial Port Adapter EEPROM                                   */
 /* ====================================================================== */
-static m_uint16_t eeprom_pa_4t_data[64] = {
+static m_uint16_t eeprom_pa_4t_data[] = {
    0x010C, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -117,7 +117,7 @@ static m_uint16_t eeprom_pa_4t_data[64] = {
 /* ====================================================================== */
 /* PA-8T: 8 Serial Port Adapter EEPROM                                    */
 /* ====================================================================== */
-static m_uint16_t eeprom_pa_8t_data[64] = {
+static m_uint16_t eeprom_pa_8t_data[] = {
    0x010E, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -125,7 +125,7 @@ static m_uint16_t eeprom_pa_8t_data[64] = {
 /* ====================================================================== */
 /* PA-A1: 1 ATM Port Adapter EEPROM                                       */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_a1_data[64] = {
+static const m_uint16_t eeprom_pa_a1_data[] = {
    0x0117, 0x010F, 0xffff, 0xffff, 0x4906, 0x2E07, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0010, 0x2400, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -133,7 +133,7 @@ static const m_uint16_t eeprom_pa_a1_data[64] = {
 /* ====================================================================== */
 /* PA-POS-OC3: 1 POS Port Adapter EEPROM                                   */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_pos_oc3_data[64] = {
+static const m_uint16_t eeprom_pa_pos_oc3_data[] = {
    0x0196, 0x0202, 0xffff, 0xffff, 0x490C, 0x7806, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0208, 0x1900, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -141,9 +141,23 @@ static const m_uint16_t eeprom_pa_pos_oc3_data[64] = {
 /* ====================================================================== */
 /* PA-4B: 4 BRI Port Adapter EEPROM                                       */
 /* ====================================================================== */
-static const m_uint16_t eeprom_pa_4b_data[64] = {
+static const m_uint16_t eeprom_pa_4b_data[] = {
    0x013D, 0x0202, 0xffff, 0xffff, 0x490C, 0x7806, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0208, 0x1900, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
+};
+
+/* ====================================================================== */
+/* PA-MC-8TE1                                                             */
+/* ====================================================================== */
+static const m_uint16_t eeprom_pa_mc8te1_data[] = {
+   0x04FF, 0x4003, 0x4E41, 0x0200, 0xC18B, 0x4A41, 0x4530, 0x3834,
+   0x3159, 0x3251, 0x3082, 0x491D, 0x7D02, 0x4241, 0x3003, 0x0081,
+   0x0000, 0x0000, 0x0400, 0x8000, 0x0127, 0x9BCB, 0x9450, 0x412D,
+   0x4D43, 0x2D38, 0x5445, 0x312B, 0x2020, 0x2020, 0x2020, 0x2020,
+   0x20C0, 0x4603, 0x2000, 0x4BBB, 0x02FF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* ====================================================================== */
@@ -161,6 +175,8 @@ static const struct cisco_eeprom eeprom_pa_array[] = {
    { "PA-POS-OC3", (m_uint16_t *)eeprom_pa_pos_oc3_data,
      sizeof(eeprom_pa_pos_oc3_data)/2 },
    { "PA-4B", (m_uint16_t *)eeprom_pa_4b_data, sizeof(eeprom_pa_4b_data)/2 },
+   { "PA-MC-8TE1", (m_uint16_t *)eeprom_pa_mc8te1_data, 
+     sizeof(eeprom_pa_mc8te1_data)/2 },
    { NULL, NULL, 0 },
 };
 

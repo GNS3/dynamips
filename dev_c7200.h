@@ -332,5 +332,6 @@ extern struct c7200_pa_driver dev_c7200_pa_8t_driver;
 extern struct c7200_pa_driver dev_c7200_pa_a1_driver;
 extern struct c7200_pa_driver dev_c7200_pa_pos_oc3_driver;
 extern struct c7200_pa_driver dev_c7200_pa_4b_driver;
+extern struct c7200_pa_driver dev_c7200_pa_mc8te1_driver;
 
 #endif

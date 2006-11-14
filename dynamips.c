@@ -27,6 +27,9 @@
 #include "mips64_exec.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
+#include "dev_c2691.h"
+#include "dev_c3725.h"
+#include "dev_c3745.h"
 #include "dev_vtty.h"
 #include "ptask.h"
 #include "timer.h"
@@ -171,6 +174,36 @@ static void show_usage(int argc,char *argv[],int platform)
          def_disk1_size = C3600_DEFAULT_DISK1_SIZE;
          def_nm_iomem_size = C3600_DEFAULT_IOMEM_SIZE;
          break;
+      case VM_TYPE_C2691:
+         def_ram_size   = C2691_DEFAULT_RAM_SIZE;
+         def_rom_size   = C2691_DEFAULT_ROM_SIZE;
+         def_nvram_size = C2691_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C2691_DEFAULT_CONF_REG;
+         def_clock_div  = C2691_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C2691_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C2691_DEFAULT_DISK1_SIZE;
+         def_nm_iomem_size = C2691_DEFAULT_IOMEM_SIZE;
+         break;
+      case VM_TYPE_C3725:
+         def_ram_size   = C3725_DEFAULT_RAM_SIZE;
+         def_rom_size   = C3725_DEFAULT_ROM_SIZE;
+         def_nvram_size = C3725_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C3725_DEFAULT_CONF_REG;
+         def_clock_div  = C3725_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C3725_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C3725_DEFAULT_DISK1_SIZE;
+         def_nm_iomem_size = C3725_DEFAULT_IOMEM_SIZE;
+         break;
+      case VM_TYPE_C3745:
+         def_ram_size   = C3745_DEFAULT_RAM_SIZE;
+         def_rom_size   = C3745_DEFAULT_ROM_SIZE;
+         def_nvram_size = C3745_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C3745_DEFAULT_CONF_REG;
+         def_clock_div  = C3745_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C3745_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C3745_DEFAULT_DISK1_SIZE;
+         def_nm_iomem_size = C3745_DEFAULT_IOMEM_SIZE;
+         break;
       default:
          fprintf(stderr,"show_usage: invalid platform.\n");
          return;
@@ -180,7 +213,8 @@ static void show_usage(int argc,char *argv[],int platform)
    
    printf("Available options:\n"
           "  -H <tcp_port>      : Run in hypervisor mode\n\n"
-          "  -P <platform>      : Platform to emulate (7200 or 3600) "
+          "  -P <platform>      : Platform to emulate (7200, 3600, "
+          "2691, 3725 or 3745) "
           "(default: 7200)\n\n"
           "  -l <log_file>      : Set logging file (default is %s)\n"
           "  -j                 : Disable the JIT compiler, very slow\n"
@@ -199,6 +233,8 @@ static void show_usage(int argc,char *argv[],int platform)
           "  -C <cfg_file>      : Import an IOS configuration file "
           "into NVRAM\n"
           "  -X                 : Do not use a file to simulate RAM (faster)\n"
+          "  -G <ghost_file>    : Use a ghost file to simulate RAM\n"
+          "  -g <ghost_file>    : Generate a ghost RAM file\n"
           "  -R <rom_file>      : Load an alternate ROM (default: embedded)\n"
           "  -k <clock_div>     : Set the clock divisor (default: %d)\n"
           "\n"
@@ -237,6 +273,30 @@ static void show_usage(int argc,char *argv[],int platform)
                 "  -s <nm_nio>        : Bind a Network IO interface to a "
                 "Network Module\n",
                 C3600_DEFAULT_CHASSIS,def_nm_iomem_size);
+         break;
+
+      case VM_TYPE_C2691:
+         printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
+                "  -p <nm_desc>       : Define a Network Module\n"
+                "  -s <nm_nio>        : Bind a Network IO interface to a "
+                "Network Module\n",
+                def_nm_iomem_size);
+         break;
+
+      case VM_TYPE_C3725:
+         printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
+                "  -p <nm_desc>       : Define a Network Module\n"
+                "  -s <nm_nio>        : Bind a Network IO interface to a "
+                "Network Module\n",
+                def_nm_iomem_size);
+         break;
+
+      case VM_TYPE_C3745:
+         printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
+                "  -p <nm_desc>       : Define a Network Module\n"
+                "  -s <nm_nio>        : Bind a Network IO interface to a "
+                "Network Module\n",
+                def_nm_iomem_size);
          break;
    }
 
@@ -286,8 +346,47 @@ static void show_usage(int argc,char *argv[],int platform)
          /* Show the possible chassis types for C3600 platform */
          c3600_chassis_show_drivers();
 
-         /* Show the possible PA drivers */
+         /* Show the possible NM drivers */
          c3600_nm_show_drivers();
+         break;
+
+      case VM_TYPE_C2691:
+         printf("<nm_desc> format:\n"
+                "   \"slot:nm_driver\"\n"
+                "\n");
+
+         printf("<nm_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible NM drivers */
+         c2691_nm_show_drivers();
+         break;
+
+      case VM_TYPE_C3725:
+         printf("<nm_desc> format:\n"
+                "   \"slot:nm_driver\"\n"
+                "\n");
+
+         printf("<nm_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible NM drivers */
+         c3725_nm_show_drivers();
+         break;
+
+      case VM_TYPE_C3745:
+         printf("<nm_desc> format:\n"
+                "   \"slot:nm_driver\"\n"
+                "\n");
+
+         printf("<nm_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible NM drivers */
+         c3745_nm_show_drivers();
          break;
    }
    
@@ -330,6 +429,12 @@ static int cli_get_platform_type(int argc,char *argv[])
          vm_type = VM_TYPE_C3600;
       else if (!strcmp(str,"7200"))
          vm_type = VM_TYPE_C7200;
+      else if (!strcmp(str,"2691"))
+         vm_type = VM_TYPE_C2691;
+      else if (!strcmp(str,"3725"))
+         vm_type = VM_TYPE_C3725;
+      else if (!strcmp(str,"3745"))
+         vm_type = VM_TYPE_C3745;
       else
          fprintf(stderr,"Invalid platform type '%s'\n",str);
    }
@@ -431,12 +536,102 @@ static int cli_parse_c3600_options(vm_instance_t *vm,int option)
    return(0);
 }
 
+/* Parse specific options for the Cisco 2691 platform */
+static int cli_parse_c2691_options(vm_instance_t *vm,int option)
+{
+   c2691_t *router;
+
+   router = VM_C2691(vm);
+
+   switch(option) {
+      /* IO memory reserved for NMs (in percents!) */
+      case OPT_IOMEM_SIZE:
+         router->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* NM settings */
+      case 'p':
+         return(c2691_cmd_nm_create(router,optarg));
+
+      /* NM NIO settings */
+      case 's':
+         return(c2691_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
+/* Parse specific options for the Cisco 3725 platform */
+static int cli_parse_c3725_options(vm_instance_t *vm,int option)
+{
+   c3725_t *router;
+
+   router = VM_C3725(vm);
+
+   switch(option) {
+      /* IO memory reserved for NMs (in percents!) */
+      case OPT_IOMEM_SIZE:
+         router->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* NM settings */
+      case 'p':
+         return(c3725_cmd_nm_create(router,optarg));
+
+      /* NM NIO settings */
+      case 's':
+         return(c3725_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
+/* Parse specific options for the Cisco 3745 platform */
+static int cli_parse_c3745_options(vm_instance_t *vm,int option)
+{
+   c3745_t *router;
+
+   router = VM_C3745(vm);
+
+   switch(option) {
+      /* IO memory reserved for NMs (in percents!) */
+      case OPT_IOMEM_SIZE:
+         router->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* NM settings */
+      case 'p':
+         return(c3745_cmd_nm_create(router,optarg));
+
+      /* NM NIO settings */
+      case 's':
+         return(c3745_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
 /* Create a router instance */
 static vm_instance_t *cli_create_instance(char *name,int platform_type,
                                           int instance_id)
 {
    c7200_t *c7200;
    c3600_t *c3600;
+   c2691_t *c2691;
+   c3725_t *c3725;
+   c3745_t *c3745;
 
    switch(platform_type) {
       case VM_TYPE_C7200:
@@ -453,6 +648,27 @@ static vm_instance_t *cli_create_instance(char *name,int platform_type,
          }
          return(c3600->vm);
 
+      case VM_TYPE_C2691:
+         if (!(c2691 = c2691_create_instance(name,instance_id))) {
+            fprintf(stderr,"C2691: unable to create instance!\n");
+            return NULL;
+         }
+         return(c2691->vm);
+
+      case VM_TYPE_C3725:
+         if (!(c3725 = c3725_create_instance(name,instance_id))) {
+            fprintf(stderr,"C3725: unable to create instance!\n");
+            return NULL;
+         }
+         return(c3725->vm);
+
+      case VM_TYPE_C3745:
+         if (!(c3745 = c3745_create_instance(name,instance_id))) {
+            fprintf(stderr,"C3745: unable to create instance!\n");
+            return NULL;
+         }
+         return(c3745->vm);
+
       default:
          fprintf(stderr,"Unknown platform type '%d'!\n",platform_type);
          return NULL;
@@ -463,7 +679,7 @@ static vm_instance_t *cli_create_instance(char *name,int platform_type,
 static int parse_std_cmd_line(int argc,char *argv[],int *platform)
 {
    char *options_list = 
-      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:";
+      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:";
    vm_instance_t *vm;
    int instance_id;
    int res,option;
@@ -556,6 +772,18 @@ static int parse_std_cmd_line(int argc,char *argv[],int *platform)
          /* Use physical memory to emulate RAM (no-mapped file) */
          case 'X':
             vm->ram_mmap = 0;
+            break;
+
+         /* Use a ghost file to simulate RAM */           
+         case 'G':
+            vm->ghost_ram_filename = strdup(optarg);
+            vm->ghost_status = VM_GHOST_RAM_USE;
+            break;
+
+         /* Generate a ghost RAM image */
+         case 'g':
+            vm->ghost_ram_filename = strdup(optarg);
+            vm->ghost_status = VM_GHOST_RAM_GENERATE;
             break;
 
          /* Alternate ROM */
@@ -689,6 +917,15 @@ static int parse_std_cmd_line(int argc,char *argv[],int *platform)
                   break;
                case VM_TYPE_C3600:
                   res = cli_parse_c3600_options(vm,option);
+                  break;              
+               case VM_TYPE_C2691:
+                  res = cli_parse_c2691_options(vm,option);
+                  break;
+               case VM_TYPE_C3725:
+                  res = cli_parse_c3725_options(vm,option);
+                  break;
+              case VM_TYPE_C3745:
+                  res = cli_parse_c3745_options(vm,option);
                   break;
             }
 
@@ -771,9 +1008,12 @@ void dynamips_reset(void)
 {
    printf("Shutdown in progress...\n");
 
-   /* Delete all C7200 and C3600 instances */
+   /* Delete all virtual router instances */
    c7200_delete_all_instances();
    c3600_delete_all_instances();
+   c2691_delete_all_instances();
+   c3725_delete_all_instances();
+   c3745_delete_all_instances();
 
    /* Delete ATM and Frame-Relay switches + bridges */
    netio_bridge_delete_all();
@@ -800,7 +1040,8 @@ int main(int argc,char *argv[])
 #endif
 
    printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
-   printf("Copyright (c) 2005,2006 Christophe Fillot.\n\n");
+   printf("Copyright (c) 2005,2006 Christophe Fillot.\n");
+   printf("Build date: %s %s\n\n",__DATE__,__TIME__);
 
    /* Initialize timers */
    timer_init();
@@ -851,6 +1092,15 @@ int main(int argc,char *argv[])
             break;
          case VM_TYPE_C3600:
             res = c3600_init_instance(VM_C3600(vm));
+            break;      
+         case VM_TYPE_C2691:
+            res = c2691_init_instance(VM_C2691(vm));
+            break;
+         case VM_TYPE_C3725:
+            res = c3725_init_instance(VM_C3725(vm));
+            break;
+         case VM_TYPE_C3745:
+            res = c3745_init_instance(VM_C3745(vm));
             break;
          default:
             res = -1;

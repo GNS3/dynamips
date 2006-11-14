@@ -220,10 +220,10 @@ int dev_clpd6729_init(vm_instance_t *vm,
    /* PCMCIA disk test */
    if (vm->pcmcia_disk_size[0])
       d->slot_obj[0] = dev_pcmcia_disk_init(vm,"disk0",0x40000000ULL,0x4000000,
-                                            vm->pcmcia_disk_size[0]);
+                                            vm->pcmcia_disk_size[0],0);
 
    if (vm->pcmcia_disk_size[1])
       d->slot_obj[1] = dev_pcmcia_disk_init(vm,"disk1",0x44000000ULL,0x4000000,
-                                            vm->pcmcia_disk_size[1]);
+                                            vm->pcmcia_disk_size[1],0);
    return(0);
 }

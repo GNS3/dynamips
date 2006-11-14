@@ -192,7 +192,7 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
 }
 
 /* Compute NVRAM checksum */
-m_uint16_t nvram_cksum(vm_instance_t *vm,m_uint64_t addr,size_t count) 
+m_uint16_t nvram_cksum_old(vm_instance_t *vm,m_uint64_t addr,size_t count) 
 {
    m_uint32_t sum = 0;
 

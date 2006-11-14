@@ -22,6 +22,8 @@
 
 #define DEBUG_ACCESS  0
 #define DEBUG_ATA     0
+#define DEBUG_READ    0
+#define DEBUG_WRITE   0
 
 /* Default disk parameters: 4 heads, 32 sectors per track */
 #define DISK_NR_HEADS         4
@@ -141,6 +143,10 @@ static int disk_read_sector(struct pcmcia_disk_data *d,m_uint32_t sect,
 {
    off_t disk_offset = (off_t)sect * SECTOR_SIZE;
 
+#if DEBUG_READ
+   vm_log(d->vm,d->dev.name,"reading sector 0x%8.8x\n",sect);
+#endif
+
    if (lseek(d->fd,disk_offset,SEEK_SET) == -1) {
       perror("read_sector: lseek");
       return(-1);
@@ -159,6 +165,10 @@ static int disk_write_sector(struct pcmcia_disk_data *d,m_uint32_t sect,
                              m_uint8_t *buffer)
 {  
    off_t disk_offset = (off_t)sect * SECTOR_SIZE;
+
+#if DEBUG_WRITE
+   vm_log(d->vm,d->dev.name,"writing sector 0x%8.8x\n",sect);
+#endif
 
    if (lseek(d->fd,disk_offset,SEEK_SET) == -1) {
       perror("write_sector: lseek");
@@ -182,7 +192,7 @@ static void ata_identify_device(struct pcmcia_disk_data *d)
    sect_count = d->nr_heads * d->nr_cylinders * d->sects_per_track;
 
    /* Clear all fields (for safety) */
-   memset(p,0,SECTOR_SIZE);
+   memset(p,0x00,SECTOR_SIZE);
 
    /* Word 0: General Configuration */
    p[0] = 0x8a;
@@ -222,17 +232,20 @@ static void ata_identify_device(struct pcmcia_disk_data *d)
    /* Word 56: Current number of sectors per track */
    p[112] = d->sects_per_track;
 
-   /* Word 57/58: Current of sectors per card (MSW/LSW) */
-   p[114] = (sect_count >> 16) & 0xFF;
-   p[115] = (sect_count >> 24);
-   p[116] = sect_count & 0xFF;
-   p[117] = (sect_count >> 8) & 0xFF;
+   /* Word 57/58: Current of sectors per card (LSW/MSW) */
+   p[114] = sect_count & 0xFF;
+   p[115] = (sect_count >> 8) & 0xFF;
 
+   p[116] = (sect_count >> 16) & 0xFF;
+   p[117] = (sect_count >> 24);
+
+#if 0
    /* Word 60/61: Total sectors addressable in LBA mode (MSW/LSW) */
    p[120] = (sect_count >> 16) & 0xFF;
    p[121] = (sect_count >> 24);
    p[122] = sect_count & 0xFF;
    p[123] = (sect_count >> 8) & 0xFF;
+#endif
 }
 
 /* Set sector position */
@@ -241,11 +254,26 @@ static void ata_set_sect_pos(struct pcmcia_disk_data *d)
    u_int cyl;
 
    if (d->head & ATA_DH_LBA) {
-      /* TODO */
-   }
+      d->sect_pos  = (u_int)(d->head & 0x0F) << 24;
+      d->sect_pos |= (u_int)d->cyl_high << 16;
+      d->sect_pos |= (u_int)d->cyl_low  << 8;
+      d->sect_pos |= (u_int)d->sect_no;
 
-   cyl = (((u_int)d->cyl_high) << 8) + d->cyl_low;
-   d->sect_pos = chs_to_lba(d,cyl,d->head & 0x0F,d->sect_no);
+#if DEBUG_ATA
+      vm_log(d->vm,d->dev.name,"ata_set_sect_pos: LBA sect=0x%x\n",
+             d->sect_pos);
+#endif
+   } else {
+      cyl = (((u_int)d->cyl_high) << 8) + d->cyl_low;
+      d->sect_pos = chs_to_lba(d,cyl,d->head & 0x0F,d->sect_no);
+     
+#if DEBUG_ATA
+      vm_log(d->vm,d->dev.name,
+             "ata_set_sect_pos: cyl=0x%x,head=0x%x,sect=0x%x => "
+             "sect_pos=0x%x\n",
+             cyl,d->head & 0x0F,d->sect_no,d->sect_pos);
+#endif
+   }
 }
 
 /* ATA device identifier callback */
@@ -292,6 +320,8 @@ static void ata_handle_cmd(struct pcmcia_disk_data *d)
    vm_log(d->vm,d->dev.name,"ATA command 0x%2.2x\n",(u_int)d->ata_cmd);
 #endif
 
+   d->data_pos = 0;
+
    switch(d->ata_cmd) {
       case ATA_CMD_IDENT_DEVICE:
          ata_identify_device(d);
@@ -329,14 +359,13 @@ static void ata_handle_cmd(struct pcmcia_disk_data *d)
 }
 
 /*
- * dev_pcmcia_disk_access()
+ * dev_pcmcia_disk_access_0()
  */
-void *dev_pcmcia_disk_access(cpu_mips_t *cpu,struct vdevice *dev,
-                             m_uint32_t offset,u_int op_size,u_int op_type,
-                             m_uint64_t *data)
+void *dev_pcmcia_disk_access_0(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
 {
    struct pcmcia_disk_data *d = dev->priv_data;
-   m_uint32_t d_offset;
 
    /* Compute the good internal offset */
    offset = (offset >> 1) ^ 1;
@@ -390,7 +419,7 @@ void *dev_pcmcia_disk_access(cpu_mips_t *cpu,struct vdevice *dev,
             *data = (d->ata_status << 8) + d->head;
          else {
             d->ata_cmd = *data >> 8;
-            d->head = *data & 0xFF;
+            d->head = *data;
             ata_handle_cmd(d);
          }            
          break;
@@ -400,29 +429,104 @@ void *dev_pcmcia_disk_access(cpu_mips_t *cpu,struct vdevice *dev,
          if ((offset >= d->data_offset) && 
              (offset < d->data_offset + (SECTOR_SIZE/2)))
          {
-            d_offset = offset - d->data_offset;
-
             if (op_type == MTS_READ) {
-               *data =  d->data_buffer[(d_offset << 1)];
-               *data += d->data_buffer[(d_offset << 1)+1] << 8;
+               *data =  d->data_buffer[(d->data_pos << 1)];
+               *data += d->data_buffer[(d->data_pos << 1)+1] << 8;
             } else {
-               d->data_buffer[(d_offset << 1)]   = *data & 0xFF;
-               d->data_buffer[(d_offset << 1)+1] = *data >> 8;
+               d->data_buffer[(d->data_pos << 1)]   = *data & 0xFF;
+               d->data_buffer[(d->data_pos << 1)+1] = *data >> 8;
             }
+            
+            d->data_pos++;
 
-            /* Validate data transfer */
-            if (d_offset == d->data_pos) {
-               d->data_pos++;
-
-               /* Buffer validated: call the callback function */
-               if (d->data_pos == (SECTOR_SIZE/2)) {
-                  d->data_pos = 0;
-
-                  if (d->ata_cmd_callback)
-                     d->ata_cmd_callback(d);
-               }
+            /* Buffer complete: call the callback function */
+            if (d->data_pos == (SECTOR_SIZE/2)) {
+               d->data_pos = 0;
+               
+               if (d->ata_cmd_callback)
+                  d->ata_cmd_callback(d);
             }
          }
+   }
+
+   return NULL;
+}
+
+/*
+ * dev_pcmcia_disk_access_1()
+ */
+void *dev_pcmcia_disk_access_1(cpu_mips_t *cpu,struct vdevice *dev,
+                               m_uint32_t offset,u_int op_size,u_int op_type,
+                               m_uint64_t *data)
+{
+   struct pcmcia_disk_data *d = dev->priv_data;
+
+   /* Compute the good internal offset */
+   offset = (offset >> 1) ^ 1;
+   
+#if DEBUG_ACCESS
+   if (op_type == MTS_READ) {
+      cpu_log(cpu,d->dev.name,
+              "reading offset 0x%5.5x at pc=0x%llx (size=%u)\n",
+              offset,cpu->pc,op_size);
+   } else {
+      cpu_log(cpu,d->dev.name,
+              "writing offset 0x%5.5x, data=0x%llx at pc=0x%llx (size=%u)\n",
+              offset,*data,cpu->pc,op_size);
+   }
+#endif
+      
+   switch(offset) {
+      case 0x02:   /* Sector Count + Sector no */
+         if (op_type == MTS_READ) {
+            *data = (d->sect_no << 8) + d->sect_count;
+         } else {
+            d->sect_no    = *data >> 8;
+            d->sect_count = *data & 0xFF;
+         }
+         break;
+
+      case 0x04:   /* Cylinder Low + Cylinder High */
+         if (op_type == MTS_READ) {
+            *data = (d->cyl_high << 8) + d->cyl_low;
+         } else {
+            d->cyl_high = *data >> 8;
+            d->cyl_low  = *data & 0xFF;
+         }
+         break;
+
+      case 0x06:   /* Select Card/Head + Status/Command register */
+         if (op_type == MTS_READ)
+            *data = (d->ata_status << 8) + d->head;
+         else {
+            d->ata_cmd = *data >> 8;
+            d->head = *data & 0xFF;
+            ata_handle_cmd(d);
+         }            
+         break;
+
+      case 0x08:
+         if (op_type == MTS_READ) {
+            *data =  d->data_buffer[(d->data_pos << 1)];
+            *data += d->data_buffer[(d->data_pos << 1)+1] << 8;
+         } else {
+            d->data_buffer[(d->data_pos << 1)]   = *data & 0xFF;
+            d->data_buffer[(d->data_pos << 1)+1] = *data >> 8;
+         }
+
+         d->data_pos++;
+
+         /* Buffer complete: call the callback function */
+         if (d->data_pos == (SECTOR_SIZE/2)) {
+            d->data_pos = 0;
+               
+            if (d->ata_cmd_callback)
+               d->ata_cmd_callback(d);
+         }
+         break;
+
+      case 0x0E:
+         break;
    }
 
    return NULL;
@@ -449,7 +553,7 @@ void dev_pcmcia_disk_shutdown(vm_instance_t *vm,struct pcmcia_disk_data *d)
 /* Initialize a PCMCIA disk */
 vm_obj_t *dev_pcmcia_disk_init(vm_instance_t *vm,char *name,
                                m_uint64_t paddr,m_uint32_t len,
-                               u_int disk_size)
+                               u_int disk_size,int mode)
 {
    struct pcmcia_disk_data *d;
    m_uint32_t tot_sect;
@@ -497,7 +601,11 @@ vm_obj_t *dev_pcmcia_disk_init(vm_instance_t *vm,char *name,
    d->dev.phys_addr = paddr;
    d->dev.phys_len  = len;
    d->dev.flags     = VDEVICE_FLAG_CACHING;
-   d->dev.handler   = dev_pcmcia_disk_access;
+
+   if (mode == 0)
+      d->dev.handler = dev_pcmcia_disk_access_0;
+   else
+      d->dev.handler = dev_pcmcia_disk_access_1;
 
    /* Map this device to the VM */
    vm_bind_device(vm,&d->dev);

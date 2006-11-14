@@ -30,6 +30,16 @@ enum {
 enum {
    VM_TYPE_C7200 = 0,
    VM_TYPE_C3600,
+   VM_TYPE_C2691,
+   VM_TYPE_C3725,
+   VM_TYPE_C3745,
+};
+
+/* Ghost RAM status */
+enum {
+   VM_GHOST_RAM_NONE = 0,
+   VM_GHOST_RAM_GENERATE,
+   VM_GHOST_RAM_USE,
 };
 
 /* Timer IRQ check interval */
@@ -87,6 +97,12 @@ struct vm_instance {
    struct vdevice *dev_list;
    struct vdevice *dev_array[MIPS64_DEVICE_MAX];
 
+   /* Filename for ghosted RAM */
+   char *ghost_ram_filename;
+   
+   /* Ghost RAM image handling */
+   int ghost_status;
+
    /* "idling" pointer counter */
    m_uint64_t idle_pc;
 
@@ -117,6 +133,9 @@ struct vm_instance {
 
 #define VM_C7200(vm) ((c7200_t *)vm->hw_data)
 #define VM_C3600(vm) ((c3600_t *)vm->hw_data)
+#define VM_C2691(vm) ((c2691_t *)vm->hw_data)
+#define VM_C3725(vm) ((c3725_t *)vm->hw_data)
+#define VM_C3745(vm) ((c3745_t *)vm->hw_data)
 
 extern int vm_file_naming_type;
 
@@ -140,6 +159,9 @@ void vm_object_dump(vm_instance_t *vm);
 
 /* Get VM type */
 char *vm_get_type(vm_instance_t *vm);
+
+/* Get MAC address MSB */
+u_int vm_get_mac_addr_msb(vm_instance_t *vm);
 
 /* Generate a filename for use by the instance */
 char *vm_build_filename(vm_instance_t *vm,char *name);
@@ -180,6 +202,9 @@ vm_instance_t *vm_acquire(char *name);
 /* Release a VM (decrement reference count) */
 int vm_release(vm_instance_t *vm);
 
+/* Initialize RAM */
+int vm_ram_init(vm_instance_t *vm,m_uint64_t paddr);
+
 /* Initialize VTTY */
 int vm_init_vtty(vm_instance_t *vm);
 
@@ -212,6 +237,16 @@ int vm_stop(vm_instance_t *vm);
 
 /* Monitor an instance periodically */
 void vm_monitor(vm_instance_t *vm);
+
+/* Open a VM file and map it in memory */
+int vm_mmap_open_file(vm_instance_t *vm,char *name,
+                      u_char **ptr,off_t *fsize);
+
+/* Open/Create a VM file and map it in memory */
+int vm_mmap_create_file(vm_instance_t *vm,char *name,size_t len,u_char **ptr);
+
+/* Close a memory mapped file */
+int vm_mmap_close_file(int fd,u_char *ptr,size_t len);
 
 /* Save the Cisco IOS configuration from NVRAM */
 int vm_ios_save_config(vm_instance_t *vm);

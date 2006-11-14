@@ -27,6 +27,7 @@
 #include "net_io.h"
 #include "ptask.h"
 #include "dev_c7200.h"
+#include "dev_plx.h"
 
 /* Debugging flags */
 #define DEBUG_ACCESS    0
@@ -653,7 +654,6 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->rx_dev.name      = d->rx_name;
    d->rx_dev.priv_data = d;
    d->rx_dev.handler   = dev_pos_rx_access;
-   vm_bind_device(d->vm,&d->rx_dev);
 
    /* Initialize TX device */
    d->tx_name = dyn_sprintf("%s_TX",name);
@@ -661,7 +661,6 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->tx_dev.name      = d->tx_name;
    d->tx_dev.priv_data = d;
    d->tx_dev.handler   = dev_pos_tx_access;
-   vm_bind_device(d->vm,&d->tx_dev);
 
    /* Initialize CS device */
    d->cs_name = dyn_sprintf("%s_CS",name);
@@ -669,7 +668,6 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->cs_dev.name      = d->cs_name;
    d->cs_dev.priv_data = d;
    d->cs_dev.handler   = dev_pos_cs_access;
-   vm_bind_device(d->vm,&d->cs_dev);
 
    /* Initialize PLX9060 for RX part */
    d->rx_obj = dev_plx9060_init(d->vm,d->rx_name,pci_bus,0,&d->rx_dev);
@@ -686,7 +684,6 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->dev.priv_data = d;
    d->dev.phys_len  = 0x10000;
    d->dev.handler   = dev_pos_access;
-   vm_bind_device(d->vm,&d->dev);
 
    d->pci_dev = pci_dev_add(pci_bus,name,0,0,3,0,C7200_NETIO_IRQ,
                             d,NULL,pci_pos_read,pci_pos_write);
@@ -717,7 +714,11 @@ int dev_c7200_pa_pos_shutdown(c7200_t *router,u_int pa_bay)
    vm_object_remove(d->vm,d->tx_obj);
    vm_object_remove(d->vm,d->cs_obj);
 
-   /* Remove the device from the CPU address space */
+   /* Remove the devices from the CPU address space */
+   vm_unbind_device(router->vm,&d->rx_dev);
+   vm_unbind_device(router->vm,&d->tx_dev);
+   vm_unbind_device(router->vm,&d->cs_dev);
+
    vm_unbind_device(router->vm,&d->dev);
    cpu_group_rebuild_mts(router->vm->cpu_group);
 

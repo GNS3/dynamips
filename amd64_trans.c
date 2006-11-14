@@ -128,11 +128,11 @@ static void mips64_memop_fast_sw(insn_block_t *b,int target)
    amd64_mov_memindex_reg(b->jit_ptr,AMD64_RBX,0,AMD64_RSI,0,AMD64_RAX,4);
 }
 
-/* Fast memory operation */
-static void mips64_emit_memop_fast(insn_block_t *b,int op,
-                                   int base,int offset,
-                                   int target,int keep_ll_bit,
-                                   memop_fast_access op_handler)
+/* Fast memory operation (64-bit) */
+static void mips64_emit_memop_fast64(insn_block_t *b,int op,
+                                     int base,int offset,
+                                     int target,int keep_ll_bit,
+                                     memop_fast_access op_handler)
 {   
    m_uint64_t val = sign_extend(offset,16);
    u_char *test1,*test2,*test3;
@@ -151,9 +151,9 @@ static void mips64_emit_memop_fast(insn_block_t *b,int op,
    amd64_shift_reg_imm(b->jit_ptr,X86_SHR,AMD64_RBX,MTS64_HASH_SHIFT);
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,MTS64_HASH_MASK);
 
-   /* RCX = mts64_cache */
+   /* RCX = mts_cache */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
-                         AMD64_R15,OFFSET(cpu_mips_t,mts64_cache),8);
+                         AMD64_R15,OFFSET(cpu_mips_t,mts_cache),8);
 
    /* RAX = mts64_entry */
    amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RCX,0,AMD64_RBX,3,8);
@@ -217,6 +217,117 @@ static void mips64_emit_memop_fast(insn_block_t *b,int op,
 
    amd64_patch(p_exit,b->jit_ptr);
    amd64_patch(p_exception,b->jit_ptr);
+}
+
+/* Fast memory operation (32-bit) */
+static void mips64_emit_memop_fast32(insn_block_t *b,int op,
+                                     int base,int offset,
+                                     int target,int keep_ll_bit,
+                                     memop_fast_access op_handler)
+{   
+   m_uint32_t val = sign_extend(offset,16);
+   u_char *test1,*test2,*test3;
+   u_char *p_exception,*p_exit;
+
+   /* RDI = CPU instance */
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   /* ESI = GPR[base] + sign-extended offset */
+   amd64_mov_reg_imm(b->jit_ptr,X86_ESI,val);
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_ADD,
+                              X86_ESI,AMD64_RDI,REG_OFFSET(base),4);
+
+   /* EBX = mts32_entry index */
+   amd64_mov_reg_reg_size(b->jit_ptr,X86_EBX,X86_ESI,4);
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS64_HASH_SHIFT,4);
+   amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS64_HASH_MASK,4);
+
+   /* RCX = mts_cache */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
+                         AMD64_R15,OFFSET(cpu_mips_t,mts_cache),8);
+
+   /* RAX = mts32_entry */
+   amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RCX,0,AMD64_RBX,3,8);
+
+   /* Do we have a non-null entry ? */
+   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,8);
+   test1 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+
+   /* ECX = start */
+   amd64_mov_reg_membase(b->jit_ptr,X86_ECX,
+                         AMD64_RAX,OFFSET(mts32_entry_t,start),4);  
+   
+   /* EDX = mask, RBX = action */
+   amd64_mov_reg_membase(b->jit_ptr,X86_EDX,
+                         AMD64_RAX,OFFSET(mts32_entry_t,mask),4);
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
+                         AMD64_RAX,OFFSET(mts32_entry_t,action),8);
+   amd64_alu_reg_reg_size(b->jit_ptr,X86_AND,X86_EDX,X86_ESI,4);
+
+   /* Virtual Address in the good range ? */
+   amd64_alu_reg_reg_size(b->jit_ptr,X86_CMP,X86_EDX,X86_ECX,4);
+   test2 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
+
+   /* Device access ? */
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_R8,AMD64_RBX,8);
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_R8,MTS_DEV_MASK);
+   test3 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   /* === Fast access === */
+   amd64_alu_reg_reg_size(b->jit_ptr,X86_SUB,X86_ESI,X86_ECX,4);
+
+   /* Memory access */
+   op_handler(b,target);
+
+   p_exit = b->jit_ptr;
+   amd64_jump8(b->jit_ptr,0);
+
+   /* === Slow lookup === */
+   amd64_patch(test1,b->jit_ptr);
+   amd64_patch(test2,b->jit_ptr);
+   amd64_patch(test3,b->jit_ptr);
+
+   /* Save PC for exception handling */
+   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+
+   /* Sign-extend virtual address */
+   amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RSI,X86_ESI);
+
+   /* RDX = target register */
+   amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
+
+   /* Call memory access function */
+   amd64_call_membase(b->jit_ptr,AMD64_RDI,MEMOP_OFFSET(op));
+
+   /* Exception ? */
+   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
+   p_exception = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   insn_block_push_epilog(b);
+
+   amd64_patch(p_exit,b->jit_ptr);
+   amd64_patch(p_exception,b->jit_ptr);
+}
+
+/* Fast memory operation */
+static void mips64_emit_memop_fast(cpu_mips_t *cpu,insn_block_t *b,int op,
+                                   int base,int offset,
+                                   int target,int keep_ll_bit,
+                                   memop_fast_access op_handler)
+{
+   switch(cpu->addr_mode) {
+      case 32:
+         mips64_emit_memop_fast32(b,op,base,offset,target,keep_ll_bit,
+                                  op_handler);
+         break;
+      case 64:
+         mips64_emit_memop_fast64(b,op,base,offset,target,keep_ll_bit,
+                                  op_handler);
+         break;
+   }
 }
 
 /* Memory operation */
@@ -1674,7 +1785,7 @@ static int mips64_emit_LW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(b,MIPS_MEMOP_LW,base,offset,rt,TRUE,
+      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_LW,base,offset,rt,TRUE,
                              mips64_memop_fast_lw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_LW,base,offset,rt,TRUE);
@@ -2288,7 +2399,7 @@ static int mips64_emit_SW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(b,MIPS_MEMOP_SW,base,offset,rt,FALSE,
+      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_SW,base,offset,rt,FALSE,
                              mips64_memop_fast_sw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_SW,base,offset,rt,FALSE);

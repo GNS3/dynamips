@@ -15,9 +15,11 @@
 #include "device.h"
 
 /* Embedded ROM */
-static m_uint8_t microcode[] = {
+m_uint8_t microcode[] = {
 #include "microcode_dump.inc"
 };
+
+ssize_t microcode_len = sizeof(microcode);
 
 /* ROM private data */
 struct rom_data {

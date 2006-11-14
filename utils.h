@@ -293,4 +293,22 @@ int m_signal_unblock(int sig);
 /* Set non-blocking mode on a file descriptor */
 int m_fd_set_non_block(int fd);
 
+/* Map a memory zone from a file */
+u_char *memzone_map_file(int fd,size_t len);
+
+/* Map a memory zone from a file, with copy-on-write (COW) */
+u_char *memzone_map_cow_file(int fd,size_t len);
+
+/* Create a file to serve as a memory zone */
+int memzone_create_file(char *filename,size_t len,u_char **ptr);
+
+/* Open a file to serve as a COW memory zone */
+int memzone_open_cow_file(char *filename,size_t len,u_char **ptr);
+
+/* Open a file and map it in memory */
+int memzone_open_file(char *filename,u_char **ptr,off_t *fsize);
+
+/* Compute NVRAM checksum */
+m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count);
+
 #endif

@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -337,4 +338,106 @@ int m_fd_set_non_block(int fd)
       return(-1);
 
    return(fcntl(fd,F_SETFL, flags | O_NONBLOCK));
+}
+
+/* Map a memory zone from a file */
+u_char *memzone_map_file(int fd,size_t len)
+{
+   return(mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_SHARED,fd,(off_t)0));
+}
+
+/* Map a memory zone from a file, with copy-on-write (COW) */
+u_char *memzone_map_cow_file(int fd,size_t len)
+{
+   return(mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_PRIVATE,fd,(off_t)0));
+}
+
+/* Create a file to serve as a memory zone */
+int memzone_create_file(char *filename,size_t len,u_char **ptr)
+{
+   int fd;
+
+   if ((fd = open(filename,O_CREAT|O_RDWR,S_IRWXU)) == -1) {
+      perror("memzone_create_file: open");
+      return(-1);
+   }
+
+   if (ftruncate(fd,len) == -1) {
+      perror("memzone_create_file: ftruncate");
+      close(fd);
+      return(-1);
+   }
+
+   *ptr = memzone_map_file(fd,len);
+
+   if (!*ptr) {
+      close(fd);
+      fd = -1;
+   }
+
+   return(fd);
+}
+
+/* Open a file to serve as a COW memory zone */
+int memzone_open_cow_file(char *filename,size_t len,u_char **ptr)
+{
+   int fd;
+
+   if ((fd = open(filename,O_RDWR,S_IRWXU)) == -1) {
+      perror("memzone_open_file: open");
+      return(-1);
+   }
+
+   *ptr = memzone_map_cow_file(fd,len);
+
+   if (!*ptr) {
+      close(fd);
+      fd = -1;
+   }
+
+   return(fd);
+}
+
+/* Open a file and map it in memory */
+int memzone_open_file(char *filename,u_char **ptr,off_t *fsize)
+{
+   struct stat fprop;
+   int fd;
+
+   if ((fd = open(filename,O_RDWR,S_IRWXU)) == -1)
+      return(-1);
+
+   if (fstat(fd,&fprop) == -1)
+      goto err_fstat;
+
+   *fsize = fprop.st_size;
+   if (!(*ptr = memzone_map_file(fd,*fsize)))
+      goto err_mmap;
+   
+   return(fd);
+
+ err_mmap:   
+ err_fstat:
+   close(fd);
+   return(-1);
+}
+
+/* Compute NVRAM checksum */
+m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count) 
+{
+   m_uint32_t sum = 0;
+
+   while(count > 1) {
+      sum = sum + ntohs(*ptr);
+      ptr++;
+      count -= sizeof(m_uint16_t);
+   }
+
+   if (count > 0) 
+      sum = sum + ((ntohs(*ptr) & 0xFF) << 8); 
+
+   while(sum>>16)
+      sum = (sum & 0xffff) + (sum >> 16);
+
+   return(~sum);
 }

@@ -1,0 +1,6 @@
+dynamips (0.2.6-RC2-1) unstable; urgency=low
+
+  * Initial release (Closes: #383068)
+
+ -- Achim Dreyer <adreyer@adreyer.de>  Sat, 21 Oct 2006 14:48:59 +0100
+

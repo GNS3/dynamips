@@ -19,6 +19,7 @@
 #include "net_io.h"
 #include "ptask.h"
 #include "dev_am79c971.h"
+#include "dev_nm_16esw.h"
 #include "dev_c3600.h"
 #include "dev_c3600_bay.h"
 
@@ -172,6 +173,89 @@ static int dev_c3600_nm_1fe_tx_init(c3600_t *router,char *name,u_int nm_bay)
 }
 
 /* ====================================================================== */
+/* NM-16ESW                                                               */
+/* ====================================================================== */
+
+/* Add a NM-16ESW */
+static int dev_c3600_nm_16esw_init(c3600_t *router,char *name,u_int nm_bay)
+{
+   struct nm_bay_info *bay_info;
+   struct nm_16esw_data *data;
+
+   /* Set the EEPROM */
+   c3600_nm_set_eeprom(router,nm_bay,cisco_eeprom_find_nm("NM-16ESW"));
+   dev_nm_16esw_burn_mac_addr(router->vm,nm_bay,
+                              &router->nm_bay[nm_bay].eeprom);
+
+   /* Get PCI bus info about this bay */
+   bay_info = c3600_nm_get_bay_info(c3600_chassis_get_id(router),nm_bay);
+      
+   if (!bay_info) {
+      fprintf(stderr,"%s: unable to get info for NM bay %u\n",name,nm_bay);
+      return(-1);
+   }
+
+   /* Create the device */
+   data = dev_nm_16esw_init(router->vm,name,nm_bay,
+                            router->nm_bay[nm_bay].pci_map,
+                            bay_info->pci_device,C3600_NETIO_IRQ);
+
+   /* Store device info into the router structure */
+   return(c3600_nm_set_drvinfo(router,nm_bay,data));
+}
+
+/* Remove a NM-16ESW from the specified slot */
+static int dev_c3600_nm_16esw_shutdown(c3600_t *router,u_int nm_bay) 
+{
+   struct c3600_nm_bay *bay;
+   struct nm_16esw_data *data;
+
+   if (!(bay = c3600_nm_get_info(router,nm_bay)))
+      return(-1);
+
+   data = bay->drv_info;
+
+   /* Remove the NM EEPROM */
+   c3600_nm_unset_eeprom(router,nm_bay);
+
+   /* Remove the BCM5600 chip */
+   dev_nm_16esw_remove(data);
+   return(0);
+}
+
+/* Bind a Network IO descriptor */
+static int dev_c3600_nm_16esw_set_nio(c3600_t *router,u_int nm_bay,
+                                      u_int port_id,netio_desc_t *nio)
+{
+   struct nm_16esw_data *d;
+
+   d = c3600_nm_get_drvinfo(router,nm_bay);
+   dev_nm_16esw_set_nio(d,port_id,nio);
+   return(0);
+}
+
+/* Unbind a Network IO descriptor */
+static int dev_c3600_nm_16esw_unset_nio(c3600_t *router,u_int nm_bay,
+                                        u_int port_id)
+{
+   struct nm_16esw_data *d;
+
+   d = c3600_nm_get_drvinfo(router,nm_bay);
+   dev_nm_16esw_unset_nio(d,port_id);
+   return(0);
+}
+
+/* Show debug info */
+static int dev_c3600_nm_16esw_show_info(c3600_t *router,u_int nm_bay)
+{
+   struct nm_16esw_data *d;
+
+   d = c3600_nm_get_drvinfo(router,nm_bay);
+   dev_nm_16esw_show_info(d);
+   return(0);
+}
+
+/* ====================================================================== */
 /* Leopard-2FE                                                            */
 /* ====================================================================== */
 
@@ -243,6 +327,16 @@ struct c3600_nm_driver dev_c3600_nm_4e_driver = {
    dev_c3600_nm_eth_set_nio,
    dev_c3600_nm_eth_unset_nio,
    NULL,
+};
+
+/* NM-16ESW driver */
+struct c3600_nm_driver dev_c3600_nm_16esw_driver = {
+   "NM-16ESW", 1, 0,
+   dev_c3600_nm_16esw_init, 
+   dev_c3600_nm_16esw_shutdown,
+   dev_c3600_nm_16esw_set_nio,
+   dev_c3600_nm_16esw_unset_nio,
+   dev_c3600_nm_16esw_show_info,
 };
 
 /* Leopard-2FE driver */

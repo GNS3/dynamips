@@ -1,5 +1,5 @@
 /*
- * Cisco 7200/3600 simulation platform.
+ * Cisco 7200/3600/2691 simulation platform.
  */
 
 15-Aug-2005, the project is starting.
@@ -1594,3 +1594,168 @@
   - Centralized NM/PA EEPROM to have common definitions for platforms
     with the same type of network interfaces.
   - 0.2.6-RC2 release.
+
+19-Oct-2006
+-----------
+  - C2691: added sketelon code.
+  - C2691: working DUART.
+  - C2691: added mainboard EEPROM.
+
+20-Oct-2006
+-----------
+  - Bugfix: dec21140 and amd79c97x were incorrectly discarding frames based
+    on the source address, preventing HSRP/VRRP to work (BTS entry #75).
+  - C2691: added hypervisor module to handle instances.
+
+22-Oct-2006
+-----------
+  - C2691: trying to understand the network interrupt mechanism.
+
+23-Oct-2006
+-----------
+  - C2691: fixed Galileo interrupt (IRQ 3), allowing packets to be received!
+  - Added a basic GT96100 system controller (for C2691).
+  - GT96100: added MII registers.
+  - Added a basic Flash device to be used as ROM+NVRAM for C2691.
+  - C2691: NVRAM (simulated from flash) is now ok.
+  - C2691: Analyzed environmental monitor register. No warning anymore.
+
+24-Oct-2006
+-----------
+  - C2691: NVRAM config export is working, config import requires more work
+    (since write operations to flash are not immediate).
+  - Allowed Galileo DMA IRQ to preempt the idle loop.
+  - Fixed ATA Flash "current of sectors per card" which must be in LSW/MSW
+    order and not MSW/LSW.
+  - Added another ATA Flash access method (for c2691).
+  - C2691: added support for CompactFlash.
+
+25-Oct-2006
+-----------
+  - GT96100: added some definitions for the Ethernet part.
+
+26-Oct-2006
+-----------
+  - Working on TX part for GT96100. Unfortunately, don't know yet how to
+    signal an interrupt for it on the 2691 platform :(
+
+27-Oct-2006
+-----------
+  - C2691: found how to announce correctly NM presence in slot 1.
+  - GT96100: finally found how to notify appropriately the network interrupt:
+    the Serial Cause Register has to be handled.
+  - C2691: added the glue code to set up GT96100 ethernet ports.
+  - GT96100: added RX part. Packets are now sucessfully handled.
+  - C2691: better understanding of network interrupt status registers.
+  - C2691: added correct flash code detection.
+  - GT96100: fixed the "PHY reset" problem.
+  - C2691: added default correct chassis base MAC address.
+
+28-Oct-2006
+-----------
+  - GT96100: added hash function (Mode 0 ok, Mode 1 to fix) for Ethernet
+    address filtering + appropriate definitions.
+
+29-Oct-2006
+-----------
+  - GT96100: fixed hash mode 1 (not tested).
+  - GT96100: added address filtering process.
+
+30-Oct-2006
+-----------
+  - GT96100: added minimal MIB counters.
+  - Implemented LBA mode for PCMCIA ATA disk devices and fixed data access.
+  - Changed the default idle sleep time from 50ms to 30ms to avoid timer 
+    IRQ loss and timer drift.
+  - Added hypervisor command "vm show_timer_drift <vm_instance> <cpu_id>"
+    to display potential problem with a given idle-pc value.
+  - C2691: added proper support for IO memory.
+  - NM-16ESW: generalized code to support multiple platforms.
+  - C2691: added support for NM-16ESW.
+
+31-Oct-2006
+-----------
+  - C3725: initial support. Hardware very similar to c2691: Cisco rocks!
+  - C3745: added skeleton.
+  - C3745: fixed GT96100 address.
+  - C3745: added PCI bridges.
+  - C3745: Network Modules are working!
+  - C3745: CompactFlash working.
+
+01-Nov-2006
+-----------
+  - C3745: finally understood how to handle the system EEPROMs.
+  - Updated documentation (README).
+  - GT96100: minor enhancement of interrupt handling.
+
+02-Nov-2006
+-----------
+  - Added support for "ghost" RAM: instances use a RAM file (previously
+    created) and use copy-on-write on it. It allows to share common memory 
+    between instances and so less memory is used.
+
+03-Nov-2006
+-----------
+  - Better support for ghost RAM, added hypervisor commands 
+    "vm set_ghost_status" and "vm set_ghost_file".
+
+04-Nov-2006
+-----------
+  - NM-16ESW: fixed incorrect BPDU handling (which caused to add a 2nd
+    802.1Q tag to BPDU packets) and now 0100.0ccc.cccd is recognized as
+    a BPDU MAC address (BTS entry #).
+  - DEC21140: fixed CSR8 handling (missed frame counter), which returned
+    an undefined value (BTS entry #81).
+  - Merged a patch from Rostislav Opocensky who added support for C3600
+    in nvram_export utility.
+  - Re-enaebled debugging info for NM-16ESW on 2691/3600/37xx.
+
+05-Nov-2006
+-----------
+  - NM-16ESW: fixed a crash due to incomplete device removal.
+
+06-Nov-2006
+-----------
+  - Validated use of Serial interfaces with 2691/3725/3745.
+  - Correct config register handling for 3600/2691/3725/3745 platforms
+    (config register setting was ignored).
+  - Added detection of empty NVRAM for 2691/3725/3745 to set the ignore config
+    flag in the config register (to boot faster).
+  - C3745: Fixed NVRAM properties.
+  - C7200/C3600: rewrite of configuration push into NVRAM (can now be done 
+    offline).
+  - C2691/C3725/C3745: added support for config push into ROM flash
+    (simulated NVRAM).
+
+07-Nov-2006
+-----------
+  - Modified config export from NVRAM for all platforms (can now be done
+    offline).
+  - Better handling of base MAC address (2691/3725/3745 + NM-16ESW).
+
+08-Nov-2006
+-----------
+  - Rework of the MTS subsystem (generalization of MTS64 algorithms to MTS32
+    which was broken).
+  - Fast memory operations for 32-bit mode.
+
+09-Nov-2006
+-----------
+  - Rewrite of the MIPS TLB lookup operation.
+
+10-Nov-2006
+-----------
+  - Fixed another bug in TLB lookup.
+  - Beginning of work for PA-MC-8TE1 support.
+  - Added hypervisor commands to send messages to instances VTTY.
+  - Working on PLX PCI9054 for PA-MC-8TE1.
+
+11-Nov-2006
+-----------
+  - Continuing a bit on PA-MC-8TE1.
+	
+14-Nov-2006
+-----------
+  - Correct handling of VPN2 mask for TLB lookup.
+  - bugfix: support of c3745 was missing in the hypervisor.
+  - Merged a patch from Akim Dreyer for Debian support.

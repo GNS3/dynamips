@@ -26,6 +26,9 @@
 #include "vm.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
+#include "dev_c2691.h"
+#include "dev_c3725.h"
+#include "dev_c3745.h"
 
 #define DEBUG_ACCESS 0
 
@@ -46,7 +49,7 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
                                 m_uint64_t *data)
 {
    struct remote_data *d = dev->priv_data;
-   struct vdevice *nvram_dev;
+   struct vdevice *storage_dev;
    size_t len;
 
    if (op_type == MTS_READ)
@@ -176,8 +179,11 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
       /* NVRAM address */
       case 0x044:
          if (op_type == MTS_READ) {
-            if ((nvram_dev = dev_get_by_name(cpu->vm,"nvram")))
-               *data = nvram_dev->phys_addr;
+            if ((storage_dev = dev_get_by_name(cpu->vm,"nvram")))
+               *data = storage_dev->phys_addr;
+
+            if ((storage_dev = dev_get_by_name(cpu->vm,"ssa")))
+               *data = storage_dev->phys_addr;
          }
          break;
 
@@ -187,6 +193,15 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
             switch(cpu->vm->type) {
                case VM_TYPE_C3600:
                   *data = VM_C3600(cpu->vm)->nm_iomem_size;
+                  break;
+               case VM_TYPE_C2691:
+                  *data = VM_C2691(cpu->vm)->nm_iomem_size;
+                  break;
+               case VM_TYPE_C3725:
+                  *data = VM_C3725(cpu->vm)->nm_iomem_size;
+                  break;
+               case VM_TYPE_C3745:
+                  *data = VM_C3745(cpu->vm)->nm_iomem_size;
                   break;
                default:
                   *data = 0;

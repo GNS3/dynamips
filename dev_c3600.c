@@ -17,6 +17,7 @@
 #include "memory.h"
 #include "device.h"
 #include "pci_io.h"
+#include "dev_gt.h"
 #include "cisco_eeprom.h"
 #include "dev_c3600.h"
 #include "dev_c3600_bay.h"
@@ -114,18 +115,32 @@ static struct c3600_nm_driver *nm_drivers[] = {
 
 /* Directly extract the configuration from the NVRAM device */
 ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
-{   
-   struct vdevice *nvram_dev;
+{
+   u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
    m_uint32_t start,nvlen;
-   m_uint16_t magic1,magic2;
-   m_uint64_t addr;
+   m_uint16_t magic1,magic2; 
+   struct vdevice *nvram_dev;
+   off_t nvram_size;
+   int fd;
 
-   if (!(nvram_dev = dev_get_by_name(vm,"nvram")))
+   if ((nvram_dev = dev_get_by_name(vm,"nvram")))
+      dev_sync(nvram_dev);
+
+   fd = vm_mmap_open_file(vm,"nvram",&base_ptr,&nvram_size);
+
+   if (fd == -1)
       return(-1);
 
-   addr = nvram_dev->phys_addr + vm->nvram_rom_space;
-   magic1 = physmem_copy_u16_from_vm(vm,addr+0x06);
-   magic2 = physmem_copy_u16_from_vm(vm,addr+0x08);
+   ios_ptr = base_ptr + vm->nvram_rom_space;
+   end_ptr = base_ptr + nvram_size;
+
+   if ((ios_ptr + 0x30) >= end_ptr) {
+      vm_error(vm,"NVRAM file too small\n");
+      return(-1);
+   }
+
+   magic1  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x06));
+   magic2  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x08));
 
    if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
       vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
@@ -133,20 +148,22 @@ ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
       return(-1);
    }
 
-   start = physmem_copy_u32_from_vm(vm,addr+0x10) + 1;
-   nvlen = physmem_copy_u32_from_vm(vm,addr+0x18);
-
-   if (nvlen <= 10) {
-      vm_error(vm,"invalid configuration size (0x%x)\n",nvlen);
-      return(-1);
-   }
+   start = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x10)) + 1;
+   nvlen = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x18));
 
    if (!(*buffer = malloc(nvlen+1))) {
       vm_error(vm,"unable to allocate config buffer (%u bytes)\n",nvlen);
       return(-1);
    }
 
-   physmem_copy_from_vm(vm,*buffer,addr+start+0x08,nvlen-1);
+   cfg_ptr = ios_ptr + start + 0x08;
+
+   if ((cfg_ptr + nvlen) > end_ptr) {
+      vm_error(vm,"NVRAM file too small\n");
+      return(-1);
+   }
+
+   memcpy(*buffer,cfg_ptr,nvlen-1);
    (*buffer)[nvlen-1] = 0;
    return(nvlen-1);
 }
@@ -154,40 +171,43 @@ ssize_t c3600_nvram_extract_config(vm_instance_t *vm,char **buffer)
 /* Directly push the IOS configuration to the NVRAM device */
 int c3600_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
 {
-   struct vdevice *nvram_dev;
-   m_uint64_t addr,cfg_addr;
-   m_uint32_t tmp,cfg_offset;
-   m_uint32_t cklen;
+   u_char *base_ptr,*ios_ptr,*cfg_ptr;
+   m_uint32_t cfg_offset,cklen,tmp;
    m_uint16_t cksum;
+   int fd;
 
-   if (!(nvram_dev = dev_get_by_name(vm,"nvram")))
+   fd = vm_mmap_create_file(vm,"nvram",vm->nvram_size*1024,&base_ptr);
+
+   if (fd == -1)
       return(-1);
 
-   addr = nvram_dev->phys_addr + vm->nvram_rom_space;
    cfg_offset = 0x2c;
-   cfg_addr   = addr + cfg_offset;
+   ios_ptr = base_ptr + vm->nvram_rom_space;
+   cfg_ptr = ios_ptr  + cfg_offset;
 
    /* Write IOS tag, uncompressed config... */
-   physmem_copy_u16_to_vm(vm,addr+0x06,0xF0A5);
-   physmem_copy_u16_to_vm(vm,addr+0x08,0xABCD);      /* Magic number */
-   physmem_copy_u16_to_vm(vm,addr+0x0a,0x0001);      /* ??? */
-   physmem_copy_u16_to_vm(vm,addr+0x0c,0x0000);      /* Checksum */
-   physmem_copy_u16_to_vm(vm,addr+0x0e,0x0c04);      /* IOS version */
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x06) = htons(0xF0A5);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x08) = htons(0xABCD);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0a) = htons(0x0001);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(0x0000);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0e) = htons(0x0c04);
 
    /* Store file contents to NVRAM */
-   physmem_copy_to_vm(vm,buffer,cfg_addr,len);
+   memcpy(cfg_ptr,buffer,len);
 
    /* Write config addresses + size */
-   tmp = cfg_addr - addr - 0x08;
+   tmp = cfg_offset - 0x08;
 
-   physmem_copy_u32_to_vm(vm,addr+0x10,tmp);
-   physmem_copy_u32_to_vm(vm,addr+0x14,tmp + len);
-   physmem_copy_u32_to_vm(vm,addr+0x18,len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x10) = htonl(tmp);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(tmp + len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(len);
 
    /* Compute the checksum */
-   cklen = nvram_dev->phys_len - (vm->nvram_rom_space + 0x08);
-   cksum = nvram_cksum(vm,addr+0x08,cklen);
-   physmem_copy_u16_to_vm(vm,addr+0x0c,cksum);
+   cklen = (vm->nvram_size*1024) - (vm->nvram_rom_space + 0x08);
+   cksum = nvram_cksum((m_uint16_t *)(ios_ptr+0x08),cklen);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(cksum);
+
+   vm_mmap_close_file(fd,base_ptr,vm->nvram_size*1024);
    return(0);
 }
 
@@ -1212,7 +1232,7 @@ void c3600_init_defaults(c3600_t *router)
 
    /* Generate a chassis MAC address based on the instance ID */
    m = &router->mac_addr;
-   m->eth_addr_byte[0] = 0xCC;
+   m->eth_addr_byte[0] = vm_get_mac_addr_msb(vm);
    m->eth_addr_byte[1] = vm->instance_id & 0xFF;
    m->eth_addr_byte[2] = pid >> 8;
    m->eth_addr_byte[3] = pid & 0xFF;
@@ -1226,13 +1246,17 @@ void c3600_init_defaults(c3600_t *router)
    vm->ram_size          = C3600_DEFAULT_RAM_SIZE;
    vm->rom_size          = C3600_DEFAULT_ROM_SIZE;
    vm->nvram_size        = C3600_DEFAULT_NVRAM_SIZE;
-   vm->conf_reg          = C3600_DEFAULT_CONF_REG;
+   vm->conf_reg_setup    = C3600_DEFAULT_CONF_REG;
    vm->clock_divisor     = C3600_DEFAULT_CLOCK_DIV;
    vm->nvram_rom_space   = C3600_NVRAM_ROM_RES_SIZE;
    router->nm_iomem_size = C3600_DEFAULT_IOMEM_SIZE;
 
    vm->pcmcia_disk_size[0] = C3600_DEFAULT_DISK0_SIZE;
    vm->pcmcia_disk_size[1] = C3600_DEFAULT_DISK1_SIZE;
+
+   /* Enable NVRAM operations to load/store configs */
+   vm->nvram_extract_config = c3600_nvram_extract_config;
+   vm->nvram_push_config = c3600_nvram_push_config;
 }
 
 /* Initialize the C3600 Platform */
@@ -1264,6 +1288,7 @@ int c3600_init_platform(c3600_t *router)
 
    /* Mark the Network IO interrupt as high priority */
    cpu->irq_idle_preempt[C3600_NETIO_IRQ] = TRUE;
+   cpu->irq_idle_preempt[C3600_GT64K_IRQ] = TRUE;
    cpu->irq_idle_preempt[C3600_DUART_IRQ] = TRUE;
 
    /* Copy some parameters from VM to CPU (idle PC, ...) */
@@ -1304,7 +1329,7 @@ int c3600_init_platform(c3600_t *router)
       return(-1);
 
    /* Initialize RAM */
-   dev_ram_init(vm,"ram",vm->ram_mmap,0x00000000ULL,vm->ram_size*1048576);
+   vm_ram_init(vm,0x00000000ULL);
 
    /* Initialize ROM */
    if (!vm->rom_filename) {
@@ -1312,7 +1337,8 @@ int c3600_init_platform(c3600_t *router)
       dev_rom_init(vm,"rom",C3600_ROM_ADDR,vm->rom_size*1048576);
    } else {
       /* use alternate ROM */
-      dev_ram_init(vm,"rom",TRUE,C3600_ROM_ADDR,vm->rom_size*1048576);
+      dev_ram_init(vm,"rom",TRUE,TRUE,NULL,
+                   C3600_ROM_ADDR,vm->rom_size*1048576);
    }
 
    /* Initialize the NS16552 DUART */
@@ -1335,10 +1361,6 @@ int c3600_init_platform(c3600_t *router)
          return(-1);
       }
    }
-
-   /* Enable NVRAM operations to load/store configs */
-   vm->nvram_extract_config = c3600_nvram_extract_config;
-   vm->nvram_push_config = c3600_nvram_push_config;
 
    /* Show device list */
    c3600_show_hardware(router);
@@ -1367,6 +1389,7 @@ int c3600_boot_ios(c3600_t *router)
 
    /* Load IOS image */
    if (mips64_load_elf_image(vm->boot_cpu,vm->ios_image,
+                             (vm->ghost_status == VM_GHOST_RAM_USE),
                              &vm->ios_entry_point) < 0) 
    {
       vm_error(vm,"failed to load Cisco IOS image '%s'.\n",vm->ios_image);
@@ -1383,8 +1406,12 @@ int c3600_boot_ios(c3600_t *router)
           vm->boot_cpu->pc,vm->boot_cpu->idle_pc,vm->jit_use ? "on":"off");
 
    /* Start main CPU */
-   vm->status = VM_STATUS_RUNNING;
-   cpu_start(vm->boot_cpu);
+   if (vm->ghost_status != VM_GHOST_RAM_GENERATE) {
+      vm->status = VM_STATUS_RUNNING;
+      cpu_start(vm->boot_cpu);
+   } else {
+      vm->status = VM_STATUS_SHUTDOWN;
+   }
    return(0);
 }
 
@@ -1417,7 +1444,7 @@ int c3600_init_instance(c3600_t *router)
    rom_entry_point = (m_uint32_t)MIPS_ROM_PC;
 
    if ((vm->rom_filename != NULL) &&
-       (mips64_load_elf_image(cpu0,vm->rom_filename,&rom_entry_point) < 0))
+       (mips64_load_elf_image(cpu0,vm->rom_filename,0,&rom_entry_point) < 0))
    {
       vm_error(vm,"unable to load alternate ROM '%s', "
                "fallback to embedded ROM.\n\n",vm->rom_filename);

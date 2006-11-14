@@ -17,6 +17,7 @@
 #include "memory.h"
 #include "device.h"
 #include "pci_io.h"
+#include "dev_gt.h"
 #include "cisco_eeprom.h"
 #include "dev_c7200.h"
 #include "dev_vtty.h"
@@ -168,7 +169,8 @@ static struct c7200_pa_driver *pa_drivers[] = {
    &dev_c7200_pa_8t_driver,
    &dev_c7200_pa_a1_driver,
    &dev_c7200_pa_pos_oc3_driver,
-   &dev_c7200_pa_4b_driver,
+   &dev_c7200_pa_4b_driver,   
+   &dev_c7200_pa_mc8te1_driver,
    NULL,
 };
 
@@ -207,17 +209,33 @@ static struct c7200_npe_driver npe_drivers[] = {
 /* Directly extract the configuration from the NVRAM device */
 ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
 {   
+   u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
+   m_uint32_t start,end,nvlen,clen;
+   m_uint16_t magic1,magic2; 
    struct vdevice *nvram_dev;
-   m_uint32_t start,end,clen,nvlen;
-   m_uint16_t magic1,magic2;
-   m_uint64_t addr;
+   m_uint64_t nvram_addr;
+   off_t nvram_size;
+   int fd;
 
-   if (!(nvram_dev = dev_get_by_name(vm,"nvram")))
+   if ((nvram_dev = dev_get_by_name(vm,"nvram")))
+      dev_sync(nvram_dev);
+
+   fd = vm_mmap_open_file(vm,"nvram",&base_ptr,&nvram_size);
+
+   if (fd == -1)
       return(-1);
 
-   addr = nvram_dev->phys_addr + vm->nvram_rom_space;
-   magic1 = physmem_copy_u16_from_vm(vm,addr+0x06);
-   magic2 = physmem_copy_u16_from_vm(vm,addr+0x08);
+   nvram_addr = VM_C7200(vm)->npe_driver->nvram_addr;
+   ios_ptr = base_ptr + vm->nvram_rom_space;
+   end_ptr = base_ptr + nvram_size;
+
+   if ((ios_ptr + 0x30) >= end_ptr) {
+      vm_error(vm,"NVRAM file too small\n");
+      return(-1);
+   }
+
+   magic1  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x06));
+   magic2  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x08));
 
    if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
       vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
@@ -225,21 +243,13 @@ ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
       return(-1);
    }
 
-   start = physmem_copy_u32_from_vm(vm,addr+0x10) + 1;
-   end   = physmem_copy_u32_from_vm(vm,addr+0x14);
-   nvlen = physmem_copy_u32_from_vm(vm,addr+0x18);
+   start = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x10)) + 1;
+   end   = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x14));
+   nvlen = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x18));
    clen  = end - start;
 
    if ((clen + 1) != nvlen) {
       vm_error(vm,"invalid configuration size (0x%x)\n",nvlen);
-      return(-1);
-   }
-
-   if ((start <= nvram_dev->phys_addr) || (end <= nvram_dev->phys_addr) || 
-       (end <= start)) 
-   {
-      vm_error(vm,"invalid configuration markers (start=0x%x,end=0x%x)\n",
-               start,end);
       return(-1);
    }
 
@@ -248,44 +258,60 @@ ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
       return(-1);
    }
 
-   physmem_copy_from_vm(vm,*buffer,start,clen);
+   cfg_ptr = base_ptr + (start - nvram_addr);
+
+   if ((start < nvram_addr) || ((cfg_ptr + clen) > end_ptr)) {
+      vm_error(vm,"NVRAM file too small\n");
+      return(-1);
+   }
+
+   memcpy(*buffer,cfg_ptr,clen);
    (*buffer)[clen] = 0;
    return(clen);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
 int c7200_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
-{
-   struct vdevice *nvram_dev;
-   m_uint64_t addr,cfg_addr;
-   m_uint32_t cklen;
+{  
+   u_char *base_ptr,*ios_ptr,*cfg_ptr;
+   m_uint32_t cfg_addr,cfg_offset;
+   m_uint32_t nvram_addr,cklen;
    m_uint16_t cksum;
+   int fd;
 
-   if (!(nvram_dev = dev_get_by_name(vm,"nvram")))
+   fd = vm_mmap_create_file(vm,"nvram",vm->nvram_size*1024,&base_ptr);
+
+   if (fd == -1)
       return(-1);
 
-   addr = nvram_dev->phys_addr + vm->nvram_rom_space;
-   cfg_addr = addr + 0x2c;
+   cfg_offset = 0x2c;
+   ios_ptr = base_ptr + vm->nvram_rom_space;
+   cfg_ptr = ios_ptr  + cfg_offset;
+
+   nvram_addr = VM_C7200(vm)->npe_driver->nvram_addr;
+   cfg_addr = nvram_addr + vm->nvram_rom_space + cfg_offset;
 
    /* Write IOS tag, uncompressed config... */
-   physmem_copy_u16_to_vm(vm,addr+0x06,0xF0A5);
-   physmem_copy_u16_to_vm(vm,addr+0x08,0xABCD);      /* Magic number */
-   physmem_copy_u16_to_vm(vm,addr+0x0a,0x0001);      /* ??? */
-   physmem_copy_u16_to_vm(vm,addr+0x0c,0x0000);      /* zero */
-   physmem_copy_u16_to_vm(vm,addr+0x0e,0x0000);      /* IOS version */
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x06) = htons(0xF0A5);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x08) = htons(0xABCD);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0a) = htons(0x0001);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(0x0000);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0e) = htons(0x0000);
 
    /* Store file contents to NVRAM */
-   physmem_copy_to_vm(vm,buffer,cfg_addr,len);
+   memcpy(cfg_ptr,buffer,len);
 
    /* Write config addresses + size */
-   physmem_copy_u32_to_vm(vm,addr+0x10,cfg_addr);
-   physmem_copy_u32_to_vm(vm,addr+0x14,cfg_addr + len);
-   physmem_copy_u32_to_vm(vm,addr+0x18,len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x10) = htonl(cfg_addr);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(cfg_addr + len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(len);
 
    /* Compute the checksum */
-   cklen = nvram_dev->phys_len - (vm->nvram_rom_space + 0x08);
-   cksum = nvram_cksum(vm,addr+0x08,cklen);
-   physmem_copy_u16_to_vm(vm,addr+0x0c,cksum);
+   cklen = (vm->nvram_size*1024) - (vm->nvram_rom_space + 0x08);
+   cksum = nvram_cksum((m_uint16_t *)(ios_ptr+0x08),cklen);
+   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(cksum);
+
+   vm_mmap_close_file(fd,base_ptr,vm->nvram_size*1024);
    return(0);
 }
 
@@ -1620,7 +1646,7 @@ int c7200_init_npe300(c7200_t *router)
 
    /* 32 Mb of I/O memory */
    vm->iomem_size = 32;
-   dev_ram_init(vm,"iomem",vm->ram_mmap,C7200_IOMEM_ADDR,32*1048576);
+   dev_ram_init(vm,"iomem",vm->ram_mmap,TRUE,NULL,C7200_IOMEM_ADDR,32*1048576);
 
    /* Initialize the two Galileo GT-64120 system controllers */
    if (c7200_init_dual_gt64120(router) == -1)
@@ -1677,7 +1703,7 @@ int c7200_init_npe400(c7200_t *router)
    if (vm->ram_size > C7200_BASE_RAM_LIMIT) {
       vm->iomem_size = vm->ram_size - C7200_BASE_RAM_LIMIT;
       vm->ram_size = C7200_BASE_RAM_LIMIT;
-      dev_ram_init(vm,"ram1",vm->ram_mmap,
+      dev_ram_init(vm,"ram1",vm->ram_mmap,TRUE,NULL,
                    C7200_IOMEM_ADDR,vm->iomem_size*1048576);
    }
 
@@ -1805,7 +1831,7 @@ void c7200_init_defaults(c7200_t *router)
 
    /* Generate a chassis MAC address based on the instance ID */
    m = &router->mac_addr;
-   m->eth_addr_byte[0] = 0xCA;
+   m->eth_addr_byte[0] = vm_get_mac_addr_msb(vm);
    m->eth_addr_byte[1] = vm->instance_id & 0xFF;
    m->eth_addr_byte[2] = pid >> 8;
    m->eth_addr_byte[3] = pid & 0xFF;
@@ -1827,6 +1853,10 @@ void c7200_init_defaults(c7200_t *router)
 
    vm->pcmcia_disk_size[0] = C7200_DEFAULT_DISK0_SIZE;
    vm->pcmcia_disk_size[1] = C7200_DEFAULT_DISK1_SIZE;
+
+   /* Enable NVRAM operations to load/store configs */
+   vm->nvram_extract_config = c7200_nvram_extract_config;
+   vm->nvram_push_config = c7200_nvram_push_config;
 }
 
 /* Run the checklist */
@@ -1884,6 +1914,7 @@ int c7200_init_platform(c7200_t *router)
 
    /* Mark the Network IO interrupt as high priority */
    cpu0->irq_idle_preempt[C7200_NETIO_IRQ] = TRUE;
+   cpu0->irq_idle_preempt[C7200_GT64K_IRQ] = TRUE;
 
    /* Copy some parameters from VM to CPU0 (idle PC, ...) */
    cpu0->idle_pc = vm->idle_pc;
@@ -1922,7 +1953,7 @@ int c7200_init_platform(c7200_t *router)
       return(-1);
 
    /* Initialize RAM */
-   dev_ram_init(vm,"ram",vm->ram_mmap,0x00000000ULL,vm->ram_size*1048576);
+   vm_ram_init(vm,0x00000000ULL);
 
    /* Initialize ROM */
    if (!vm->rom_filename) {
@@ -1930,7 +1961,8 @@ int c7200_init_platform(c7200_t *router)
       dev_rom_init(vm,"rom",C7200_ROM_ADDR,vm->rom_size*1048576);
    } else {
       /* use alternate ROM */
-      dev_ram_init(vm,"rom",TRUE,C7200_ROM_ADDR,vm->rom_size*1048576);
+      dev_ram_init(vm,"rom",TRUE,TRUE,NULL,
+                   C7200_ROM_ADDR,vm->rom_size*1048576);
    }
 
    /* PCI IO space */
@@ -1961,10 +1993,6 @@ int c7200_init_platform(c7200_t *router)
       c7200_pa_add_binding(router,"C7200-IO-FE",0);
       c7200_pa_init(router,0);
    }
-
-   /* Enable NVRAM operations to load/store configs */
-   vm->nvram_extract_config = c7200_nvram_extract_config;
-   vm->nvram_push_config = c7200_nvram_push_config;
 
    /* Verify the check list */
    if (c7200_checklist(router) == -1)
@@ -1997,7 +2025,8 @@ int c7200_boot_ios(c7200_t *router)
 
    /* Load IOS image */
    if (mips64_load_elf_image(vm->boot_cpu,vm->ios_image,
-                             &vm->ios_entry_point) < 0) 
+                             (vm->ghost_status == VM_GHOST_RAM_USE),
+                             &vm->ios_entry_point) < 0)
    {
       vm_error(vm,"failed to load Cisco IOS image '%s'.\n",vm->ios_image);
       return(-1);
@@ -2013,8 +2042,12 @@ int c7200_boot_ios(c7200_t *router)
           vm->boot_cpu->pc,vm->boot_cpu->idle_pc,vm->jit_use ? "on":"off");
    
    /* Start main CPU */
-   vm->status = VM_STATUS_RUNNING;
-   cpu_start(vm->boot_cpu);
+   if (vm->ghost_status != VM_GHOST_RAM_GENERATE) {
+      vm->status = VM_STATUS_RUNNING;
+      cpu_start(vm->boot_cpu);
+   } else {
+      vm->status = VM_STATUS_SHUTDOWN;
+   }
    return(0);
 }
 
@@ -2042,7 +2075,7 @@ int c7200_init_instance(c7200_t *router)
    rom_entry_point = (m_uint32_t)MIPS_ROM_PC;
    
    if ((vm->rom_filename != NULL) &&
-       (mips64_load_elf_image(cpu0,vm->rom_filename,&rom_entry_point) < 0))
+       (mips64_load_elf_image(cpu0,vm->rom_filename,0,&rom_entry_point) < 0))
    {
       vm_error(vm,"unable to load alternate ROM '%s', "
                "fallback to embedded ROM.\n\n",vm->rom_filename);

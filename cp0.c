@@ -334,57 +334,80 @@ static char *get_page_size_str(char *buffer,size_t len,m_uint32_t page_mask)
    return buffer;
 }
 
+/* Get the VPN2 mask */
+static forced_inline m_uint64_t cp0_get_vpn2_mask(cpu_mips_t *cpu)
+{
+   if (cpu->addr_mode == 64)
+      return(MIPS_TLB_VPN2_MASK_64);
+   else
+      return(MIPS_TLB_VPN2_MASK_32);
+}
+
 /* TLB lookup */
 int cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
-   m_uint64_t v0_addr,v1_addr;
+   m_uint64_t vpn_addr,vpn2_mask;
+   m_uint64_t page_mask,hi_addr;
    m_uint32_t page_size,pca;
    tlb_entry_t *entry;
+   u_int asid;
    int i;
+
+   vpn2_mask = cp0_get_vpn2_mask(cpu);
+   vpn_addr = vaddr & vpn2_mask;
+   asid = cp0->reg[MIPS_CP0_TLB_HI] & MIPS_TLB_ASID_MASK;
 
    for(i=0;i<cp0->tlb_entries;i++) {
       entry = &cp0->tlb[i];
 
-      page_size = get_page_size(entry->mask);
-      v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
-      v1_addr = v0_addr + page_size;
+      page_mask = ~(entry->mask + 0x1FFF);
+      hi_addr = entry->hi & vpn2_mask;
 
-      /* virtual address in entry 0 ? */
-      if ((entry->lo0 & MIPS_TLB_V_MASK) && 
-          (vaddr >= v0_addr) && (vaddr < v1_addr)) 
+      if (((vpn_addr & page_mask) == hi_addr) &&
+          ((entry->hi & MIPS_TLB_G_MASK) ||
+           ((entry->hi & MIPS_TLB_ASID_MASK) == asid)))
       {
-         res->vaddr = v0_addr;
-         res->paddr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
-         res->paddr &= cpu->addr_bus_mask;
-         res->len   = page_size;
+         page_size = get_page_size(entry->mask);
 
-         pca = (entry->lo0 & MIPS_TLB_C_MASK);
-         pca >>= MIPS_TLB_C_SHIFT;
-         res->cached = mips64_cca_cached(pca);
+         if ((vaddr & page_size) == 0) {
+            /* Even Page */
+            if (entry->lo0 & MIPS_TLB_V_MASK) {
+               res->vaddr = vaddr & page_mask;
+               res->paddr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
+               res->paddr &= cpu->addr_bus_mask;
+               res->len   = page_size;
 
-         res->tlb_index = i;
-         return(TRUE);
-      }
+               pca = (entry->lo0 & MIPS_TLB_C_MASK);
+               pca >>= MIPS_TLB_C_SHIFT;
+               res->cached = mips64_cca_cached(pca);
+            
+               res->tlb_index = i;
+               return(TRUE);
+            }
+         } else {
+            /* Odd Page */
+            if (entry->lo1 & MIPS_TLB_V_MASK) {
+               res->vaddr = (vaddr & page_mask) + page_size;
+               res->paddr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
+               res->paddr &= cpu->addr_bus_mask;
+               res->len   = page_size;
 
-      /* virtual address in entry 1 ? */
-      if ((entry->lo1 & MIPS_TLB_V_MASK) && 
-          (vaddr >= v1_addr) && ((vaddr - v1_addr) < page_size)) 
-      {
-         res->vaddr = v1_addr;
-         res->paddr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
-         res->paddr &= cpu->addr_bus_mask;
-         res->len   = page_size;
+               pca = (entry->lo1 & MIPS_TLB_C_MASK);
+               pca >>= MIPS_TLB_C_SHIFT;
+               res->cached = mips64_cca_cached(pca);
+               
+               res->tlb_index = i;
+               return(TRUE);
+            }
+         }
 
-         pca = (entry->lo1 & MIPS_TLB_C_MASK);
-         pca >>= MIPS_TLB_C_SHIFT;
-         res->cached = mips64_cca_cached(pca);
-
-         res->tlb_index = i;
-         return(TRUE);
+         /* Invalid entry */
+         return(FALSE);
       }
    }
 
+   /* No matching entry */
    return(FALSE);
 }
 
@@ -406,7 +429,7 @@ void cp0_map_tlb_to_mts(cpu_mips_t *cpu,int index)
    entry = &cpu->cp0.tlb[index];
 
    page_size = get_page_size(entry->mask);
-   v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
+   v0_addr = entry->hi & cp0_get_vpn2_mask(cpu);
    v1_addr = v0_addr + page_size;
 
    if (entry->lo0 & MIPS_TLB_V_MASK) {
@@ -442,7 +465,7 @@ void cp0_unmap_tlb_to_mts(cpu_mips_t *cpu,int index)
    entry = &cpu->cp0.tlb[index];
 
    page_size = get_page_size(entry->mask);
-   v0_addr = entry->hi & MIPS_TLB_VPN2_MASK;
+   v0_addr = entry->hi & cp0_get_vpn2_mask(cpu);
    v1_addr = v0_addr + page_size;
 
    if (entry->lo0 & MIPS_TLB_V_MASK)
@@ -465,20 +488,22 @@ void cp0_map_all_tlb_to_mts(cpu_mips_t *cpu)
 fastcall void cp0_exec_tlbp(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
-   m_uint64_t hi_reg,asid,vpn2;
+   m_uint64_t hi_reg,asid;
+   m_uint64_t vpn2,vpn2_mask;
    tlb_entry_t *entry;
    int i;
   
+   vpn2_mask = cp0_get_vpn2_mask(cpu);
    hi_reg = cp0->reg[MIPS_CP0_TLB_HI];
    asid = hi_reg & MIPS_TLB_ASID_MASK;
-   vpn2 = hi_reg & MIPS_TLB_VPN2_MASK;
+   vpn2 = hi_reg & vpn2_mask;
 
    cp0->reg[MIPS_CP0_INDEX] = 0xffffffff80000000ULL;
    
    for(i=0;i<cp0->tlb_entries;i++) {
       entry = &cp0->tlb[i];
 
-      if (((entry->hi & MIPS_TLB_VPN2_MASK) == vpn2) &&
+      if (((entry->hi & vpn2_mask) == vpn2) &&
           ((entry->hi & MIPS_TLB_G_MASK) || 
            ((entry->hi & MIPS_TLB_ASID_MASK) == asid)))
       {
@@ -607,7 +632,7 @@ void tlb_dump_entry(cpu_mips_t *cpu,u_int index)
    entry = &cpu->cp0.tlb[index];
 
    /* virtual Address */
-   printf(" %2d: vaddr=0x%8.8llx ", index, entry->hi & MIPS_TLB_VPN2_MASK);
+   printf(" %2d: vaddr=0x%8.8llx ", index, entry->hi & cp0_get_vpn2_mask(cpu));
 
    /* global or ASID */
    if (entry->hi & MIPS_TLB_G_MASK)

@@ -680,7 +680,8 @@ void *insn_block_execute(cpu_mips_t *cpu)
    if (pthread_create(&timer_irq_thread,NULL,
                       (void *)mips64_timer_irq_run,cpu)) 
    {
-      fprintf(stderr,"VM '%s': unable to create Timer IRQ thread for CPU%u.\n",
+      fprintf(stderr,
+              "VM '%s': unable to create Timer IRQ thread for CPU%u.\n",
               cpu->vm->name,cpu->id);
       cpu_stop(cpu);
       return NULL;

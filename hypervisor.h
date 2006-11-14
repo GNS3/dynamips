@@ -93,6 +93,15 @@ extern int hypervisor_c7200_init(void);
 /* Hypervisor C3600 initialization */
 extern int hypervisor_c3600_init(void);
 
+/* Hypervisor C2691 initialization */
+extern int hypervisor_c2691_init(void);
+
+/* Hypervisor C3725 initialization */
+extern int hypervisor_c3725_init(void);
+
+/* Hypervisor C3745 initialization */
+extern int hypervisor_c3745_init(void);
+
 /* Send a reply */
 int hypervisor_send_reply(hypervisor_conn_t *conn,int code,int done,
                           char *format,...);
