@@ -309,7 +309,7 @@ struct insn_tag *insn_fetch_and_emit(cpu_mips_t *cpu,insn_block_t *block,
    if (delay_slot != 2)
       block->mips_trans_pos++;
 
-#if DEBUG_PERF_COUNTER
+#if DEBUG_INSN_PERF_CNT
    mips64_inc_perf_counter(block);
 #endif
 
@@ -696,6 +696,9 @@ void *insn_block_execute(cpu_mips_t *cpu)
       if (unlikely(cpu->state != MIPS_CPU_RUNNING))
          break;
 
+#if DEBUG_BLOCK_PERF_CNT
+      cpu->perf_counter++;
+#endif
       /* Handle virtual idle loop */
       if (unlikely(cpu->pc == cpu->idle_pc)) {
          if (++cpu->idle_count == cpu->idle_max) {

@@ -107,12 +107,12 @@ dev_c2691_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 
    switch(offset) {
       /*
-       * Platform type ? 
-       * (other values than 0 cause crashes or lot of errors).
+       * Platform type ?
+       * 0x04 and 0x05 seem to work.
        */
       case 0x36:
           if (op_type == MTS_READ)
-             *data = 0x0000;
+             *data = 0x04 << 5;
           break;
 
       /* Mainboard EEPROM */

@@ -14,7 +14,7 @@ HAS_PCAP?=1
 
 # Current dynamips release
 VERSION_TRAIN=0.2.6
-VERSION_SUB=-RC3
+VERSION_SUB=-RC4
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -223,7 +223,7 @@ package:
 .PHONY: packdev
 packdev:
 	@mkdir -p distrib/$(PACKAGE_DEV)
-	@$(CP) $(FILE_LIST) distrib/$(PACKAGE_DEV)
+	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE_DEV)
 	@cd distrib ; $(TAR) czf $(ARCHIVE_DEV) $(PACKAGE_DEV)
 
 .SUFFIXES: .c .h .S .l .y .o

@@ -288,8 +288,10 @@ dev_c3620_c3640_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
             d->io_mask = *data;
          break;
 
-      /* ??? */
-      /* 0: 3640, 4 << 5: 3620, 3 << 5: 3660 */
+      /* 
+       * Platform type ?
+       * 0: 3640, 4 << 5: 3620, 3 << 5: 3660 
+       */
       case 0x30000:
          if (op_type == MTS_READ) {
             switch(c3600_chassis_get_id(d->router)) {

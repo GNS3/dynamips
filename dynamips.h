@@ -24,7 +24,8 @@
 #define DEBUG_MTS_ACC_AE       1   /* address error exception */
 #define DEBUG_MTS_DEV          0   /* debugging for device access */
 #define DEBUG_MTS_STATS        1   /* MTS64 cache performance */
-#define DEBUG_PERF_COUNTER     0   /* Performance counter */
+#define DEBUG_INSN_PERF_CNT    0   /* Instruction performance counter */
+#define DEBUG_BLOCK_PERF_CNT   0   /* Block performance counter */
 #define DEBUG_TLB_ACTIVITY     0 
 #define DEBUG_SYSCALL          0
 #define DEBUG_CACHE            0

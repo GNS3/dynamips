@@ -1111,7 +1111,7 @@ int main(int argc,char *argv[])
          exit(EXIT_FAILURE);
       }
 
-#if DEBUG_PERF_COUNTER
+#if (DEBUG_INSN_PERF_CNT > 0) || (DEBUG_BLOCK_PERF_CNT > 0)
       {
          m_uint64_t prev = 0,delta;
          while(vm->status == VM_STATUS_RUNNING) {

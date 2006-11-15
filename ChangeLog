@@ -1759,3 +1759,16 @@
   - Correct handling of VPN2 mask for TLB lookup.
   - bugfix: support of c3745 was missing in the hypervisor.
   - Merged a patch from Akim Dreyer for Debian support.
+  - 0.2.6-RC3 release.
+	
+15-Nov-2006
+-----------
+  - C2691/C3725: fixed a crash occuring on some IOS images due to incorrect
+    platform type.
+  - Modified performance counter to have stats for instructions or blocks
+    (cannot be used simultaneously).
+  - "beq" jump code (x86) was incorrectly using non-local jump.
+  - Bugfix: incorrect number of arguments for hypervisor commands related
+    to ghost file handling.
+  - 0.2.6-RC4 release.
+

@@ -700,7 +700,7 @@ static int mips64_emit_BEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    insn_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
-   mips64_set_jump(cpu,b,new_pc,0);
+   mips64_set_jump(cpu,b,new_pc,1);
 
    x86_patch(test1,b->jit_ptr);
    x86_patch(test2,b->jit_ptr);
