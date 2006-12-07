@@ -1772,3 +1772,11 @@
     to ghost file handling.
   - 0.2.6-RC4 release.
 
+07-Dec-2006
+-----------
+  - Merged of patch from Thomas Pani to list VM TCP console ports (required
+    for gDynagen).
+  - NM-16ESW: fixed (again) BPDU handling (incorrect VLAN tagging with non
+    trunk ports). Backport from 0.2.7 train.
+  - NM-16ESW: fixed MAC addresses used to detect BPDU packets (IS-IS hellos
+    were considered as BPDU).

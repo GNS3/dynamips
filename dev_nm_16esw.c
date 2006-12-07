@@ -31,7 +31,7 @@
 #define DEBUG_UNKNOWN    0
 #define DEBUG_MII        0
 #define DEBUG_MEM        0
-#define DEBUG_REG        1
+#define DEBUG_REG        0
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
 #define DEBUG_FORWARD    0
@@ -2058,6 +2058,20 @@ static int bcm5600_forward_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    return(TRUE);
 }
 
+/* Determine if the specified MAC address matches a BPDU */
+static inline int bcm5600_is_bpdu(n_eth_addr_t *m)
+{
+   /* PVST+ */
+   if (!memcmp(m,"\x01\x00\x0c\xcc\xcc\xcd",6))
+      return(TRUE);
+
+   /* Classical 802.1D */
+   if (!memcmp(m,"\x01\x80\xc2\x00\x00",5) && !(m->eth_addr_byte[5] & 0xF0))
+      return(TRUE);
+
+   return(FALSE);
+}
+
 /* Handle a received packet */
 static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
 {
@@ -2077,18 +2091,35 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    /* Analyze the Ethernet header */
    eth_hdr = (n_eth_dot1q_hdr_t *)p->pkt;
 
+   /* Determine VLAN */
+   if (ntohs(eth_hdr->type) != N_ETH_PROTO_DOT1Q) {
+      p->orig_vlan = -1;
+      p->real_vlan = port_entry[0] & BCM5600_PTABLE_VLAN_TAG_MASK;
+
+     /* TODO: 802.1p/CoS remarking */
+     if (port_entry[4] & BCM5600_PTABLE_RPE_FLAG) {
+     }
+   } else {
+      p->orig_vlan = p->real_vlan = ntohs(eth_hdr->vlan_id) & 0xFFF;
+   }
+
+   /* Check that this VLAN exists */
+   if (!(p->vlan_entry = bcm5600_vtable_get_entry_by_vlan(d,p->real_vlan)))
+      return(FALSE);
+
    /* Check for the reserved addresses (BPDU for spanning-tree) */
-   if (!memcmp(&eth_hdr->daddr,"\x01\x80\xc2\x00\x00",5) ||
-       !memcmp(&eth_hdr->daddr,"\x01\x00\x0c\xcc\xcc\xcd",6))
-   {
+   if (bcm5600_is_bpdu(&eth_hdr->daddr)) {
 #if DEBUG_RECEIVE
       BCM_LOG(d,"Received a BPDU packet:\n");
       mem_dump(d->vm->log_fd,p->pkt,p->pkt_len);
 #endif
-      p->orig_vlan = 0;
       p->egress_bitmap |= 1 << d->cpu_port;
       return(bcm5600_forward_pkt(d,p));
    }
+
+   /* Check that this port is a member of this VLAN */
+   if (!(p->vlan_entry[1] & (1 << p->ingress_port)))
+      return(FALSE);
 
    /* Discard packet ? */
    discard = port_entry[0] & BCM5600_PTABLE_PRT_DIS_MASK;
@@ -2112,29 +2143,6 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    /* Mirroring on Ingress ? */
    if (port_entry[1] & BCM5600_PTABLE_MI_FLAG)
       bcm5600_mirror_pkt(d,p,0);
-
-   /* Determine VLAN */
-   if (ntohs(eth_hdr->type) != N_ETH_PROTO_DOT1Q) {
-      p->orig_vlan = -1;
-      p->real_vlan = port_entry[0] & BCM5600_PTABLE_VLAN_TAG_MASK;
-
-     if (!(p->vlan_entry = bcm5600_vtable_get_entry_by_vlan(d,p->real_vlan)))
-        return(FALSE);
-
-     /* TODO: 802.1p/CoS remarking */
-     if (port_entry[4] & BCM5600_PTABLE_RPE_FLAG) {
-     }
-   } else {
-      p->orig_vlan = p->real_vlan = ntohs(eth_hdr->vlan_id) & 0xFFF;
-
-      /* Check that this VLAN exists */
-      if (!(p->vlan_entry = bcm5600_vtable_get_entry_by_vlan(d,p->real_vlan)))
-         return(FALSE);
-
-      /* Check that this port is a member of this VLAN */
-      if (!(p->vlan_entry[1] & (1 << p->ingress_port)))
-         return(FALSE);
-   }
 
 #if DEBUG_RECEIVE
    BCM_LOG(d,"%s: received a packet on VLAN %u\n",

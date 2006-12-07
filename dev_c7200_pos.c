@@ -31,7 +31,7 @@
 
 /* Debugging flags */
 #define DEBUG_ACCESS    0
-#define DEBUG_UNKNOWN   1
+#define DEBUG_UNKNOWN   0
 #define DEBUG_TRANSMIT  0
 #define DEBUG_RECEIVE   0
 

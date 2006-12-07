@@ -635,6 +635,27 @@ static int cmd_vm_list(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Show console TCP port info about VM object */
+static void cmd_show_vm_list_con_ports(registry_entry_t *entry,void *opt,
+                                       int *err)
+{
+   hypervisor_conn_t *conn = opt;
+   vm_instance_t *vm = entry->data;
+
+   if (vm->vtty_con_type == VTTY_TYPE_TCP)
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%s (%d)",
+                            vm->name,vm->vtty_con_tcp_port);
+}
+
+/* VM console TCP port list */
+static int cmd_vm_list_con_ports(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   int err = 0;
+   registry_foreach_type(OBJ_TYPE_VM,cmd_show_vm_list_con_ports,conn,&err);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* VM commands */
 static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_debug_level", 2, 2, cmd_set_debug_level, NULL },
@@ -667,6 +688,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
    { "send_aux_msg", 2, 2, cmd_send_aux_msg, NULL },
    { "list", 0, 0, cmd_vm_list, NULL },
+   { "list_con_ports", 0, 0, cmd_vm_list_con_ports, NULL },
    { NULL, -1, -1, NULL, NULL },
 };
 

@@ -31,6 +31,9 @@ cpu_mips_t *cpu_group_find_id(cpu_group_t *group,u_int id)
 {
    cpu_mips_t *cpu;
 
+   if (!group)
+      return NULL;
+
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       if (cpu->id == id)
          return cpu;
@@ -58,6 +61,9 @@ int cpu_group_find_highest_id(cpu_group_t *group,u_int *highest_id)
 /* Add a CPU in a CPU group */
 int cpu_group_add(cpu_group_t *group,cpu_mips_t *cpu)
 {
+   if (!group)
+      return(-1);
+
    /* check that we don't already have a CPU with this id */
    if (cpu_group_find_id(group,cpu->id) != NULL) {
       fprintf(stderr,"cpu_group_add: CPU%u already present in group.\n",
