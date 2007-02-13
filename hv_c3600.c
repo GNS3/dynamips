@@ -23,8 +23,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "dynamips.h"
+#include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "dev_c3600.h"
 #include "dev_vtty.h"

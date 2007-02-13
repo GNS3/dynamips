@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor routines.
@@ -32,13 +32,15 @@
 #include "parser.h"
 #include "net.h"
 #include "registry.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
 #include "dev_c2691.h"
 #include "dev_c3725.h"
 #include "dev_c3745.h"
+#include "dev_c2600.h"
 #include "hypervisor.h"
 #include "net_io.h"
 #include "net_io_bridge.h"
@@ -139,6 +141,7 @@ static int cmd_save_config(hypervisor_conn_t *conn,int argc,char *argv[])
    c2691_save_config_all(fd);
    c3725_save_config_all(fd);
    c3745_save_config_all(fd);
+   c2600_save_config_all(fd);
 
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -555,6 +558,7 @@ int hypervisor_tcp_server(int tcp_port)
    hypervisor_c2691_init();
    hypervisor_c3725_init();
    hypervisor_c3745_init();
+   hypervisor_c2600_init();
 
    signal(SIGPIPE,sigpipe_handler);
 

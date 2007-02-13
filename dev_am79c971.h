@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -7,12 +7,12 @@
 #define __DEV_AM79C971_H__
 
 #include <sys/types.h>
+
 #include "utils.h"
-#include "mips64.h"
 #include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "net_io.h"
-#include "vm.h"
 
 /* Interface type */
 #define AM79C971_TYPE_100BASE_TX  1  /* 100baseTX */

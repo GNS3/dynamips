@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -8,18 +8,21 @@
 
 #include <sys/types.h>
 #include "utils.h"
-#include "mips64.h"
 #include "cpu.h"
 #include "net_io.h"
 #include "vm.h"
 
 /* Device Flags */
-#define VDEVICE_FLAG_NO_MTS_MMAP  0x01 /* Prevent MMAPed access by MTS */
-#define VDEVICE_FLAG_CACHING      0x02 /* Device does support caching */
-#define VDEVICE_FLAG_REMAP        0x04 /* Physical address remapping */
-#define VDEVICE_FLAG_SYNC         0x08 /* Forced sync */
+#define VDEVICE_FLAG_NO_MTS_MMAP  0x01  /* Prevent MMAPed access by MTS */
+#define VDEVICE_FLAG_CACHING      0x02  /* Device does support caching */
+#define VDEVICE_FLAG_REMAP        0x04  /* Physical address remapping */
+#define VDEVICE_FLAG_SYNC         0x08  /* Forced sync */
+#define VDEVICE_FLAG_SPARSE       0x10  /* Sparse device */
+#define VDEVICE_FLAG_GHOST        0x20  /* Ghost device */
 
-typedef void *(*dev_handler_t)(cpu_mips_t *cpu,struct vdevice *dev,
+#define VDEVICE_PTE_DIRTY  0x01
+
+typedef void *(*dev_handler_t)(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data);
 
@@ -34,6 +37,7 @@ struct vdevice {
    int flags;
    int fd;
    dev_handler_t handler;
+   m_iptr_t *sparse_map;
    struct vdevice *next,**pprev;
 };
 
@@ -42,7 +46,7 @@ struct vdevice {
 
 /* device access function */
 static forced_inline 
-void *dev_access_fast(cpu_mips_t *cpu,u_int dev_id,m_uint32_t offset,
+void *dev_access_fast(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
                       u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct vdevice *dev = cpu->vm->dev_array[dev_id];
@@ -85,7 +89,7 @@ void dev_show(struct vdevice *dev);
 void dev_show_list(vm_instance_t *vm);
 
 /* device access function */
-void *dev_access(cpu_mips_t *cpu,u_int dev_id,m_uint32_t offset,
+void *dev_access(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
                  u_int op_size,u_int op_type,m_uint64_t *data);
 
 /* Synchronize memory for a memory-mapped (mmap) device */
@@ -96,17 +100,28 @@ struct vdevice *dev_remap(char *name,struct vdevice *orig,
                           m_uint64_t paddr,m_uint32_t len);
 
 /* Create a RAM device */
-struct vdevice *dev_create_ram(vm_instance_t *vm,char *name,char *filename,
+struct vdevice *dev_create_ram(vm_instance_t *vm,char *name,
+                               int sparse,char *filename,
                                m_uint64_t paddr,m_uint32_t len);
 
 /* Create a ghosted RAM device */
 struct vdevice *
-dev_create_ghost_ram(vm_instance_t *vm,char *name,char *filename,
+dev_create_ghost_ram(vm_instance_t *vm,char *name,int sparse,char *filename,
                      m_uint64_t paddr,m_uint32_t len);
 
 /* Create a memory alias */
 struct vdevice *dev_create_ram_alias(vm_instance_t *vm,char *name,char *orig,
                                      m_uint64_t paddr,m_uint32_t len);
+
+/* Initialize a sparse device */
+int dev_sparse_init(struct vdevice *dev);
+
+/* Shutdown sparse device structures */
+int dev_sparse_shutdown(struct vdevice *dev);
+
+/* Get an host address for a sparse device */
+m_iptr_t dev_sparse_get_host_addr(vm_instance_t *vm,struct vdevice *dev,
+                                  m_uint64_t paddr,u_int op_type,int *cow);
 
 /* Create a dummy console */
 int dev_create_dummy_console(vm_instance_t *vm);
@@ -115,16 +130,18 @@ int dev_create_dummy_console(vm_instance_t *vm);
 int dev_zero_init(vm_instance_t *vm,char *name,
                   m_uint64_t paddr,m_uint32_t len);
 
+/* Initialized a byte-swap device */
+int dev_bswap_init(vm_instance_t *vm,char *name,
+                   m_uint64_t paddr,m_uint32_t len,m_uint64_t remap_addr);
+
 /* Initialize a RAM zone */
 int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,int delete_file,
-                 char *alternate_name,m_uint64_t paddr,m_uint32_t len);
+                 char *alternate_name,int sparse,
+                 m_uint64_t paddr,m_uint32_t len);
 
 /* Initialize a ghosted RAM zone */
-int dev_ram_ghost_init(vm_instance_t *vm,char *name,char *filename,
+int dev_ram_ghost_init(vm_instance_t *vm,char *name,int sparse,char *filename,
                        m_uint64_t paddr,m_uint32_t len);
-
-/* Initialize a ROM zone */
-int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len);
 
 /* Create the NVRAM device */
 int dev_nvram_init(vm_instance_t *vm,char *name,
@@ -159,6 +176,10 @@ int dev_dec21150_init(struct pci_bus *pci_bus,int pci_device,
 int dev_dec21152_init(struct pci_bus *pci_bus,int pci_device,
                       struct pci_bus *sec_bus);
 
+/* dev_dec21154_init() */
+int dev_dec21154_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus);
+
 /* dev_pericom_init() */
 int dev_pericom_init(struct pci_bus *pci_bus,int pci_device,
                       struct pci_bus *sec_bus);
@@ -170,6 +191,10 @@ int dev_ti2050b_init(struct pci_bus *pci_bus,int pci_device,
 /* Create an AP1011 Sturgeon HyperTransport-PCI Bridge */
 int dev_ap1011_init(struct pci_bus *pci_bus,int pci_device,
                     struct pci_bus *sec_bus);
+
+/* dev_plx6520cb_init() */
+int dev_plx6520cb_init(struct pci_bus *pci_bus,int pci_device,
+                       struct pci_bus *sec_bus);
 
 /* dev_clpd6729_init() */
 int dev_clpd6729_init(vm_instance_t *vm,
@@ -190,6 +215,9 @@ int dev_c7200_sram_init(vm_instance_t *vm,char *name,
 vm_obj_t *dev_pcmcia_disk_init(vm_instance_t *vm,char *name,
                                m_uint64_t paddr,m_uint32_t len,
                                u_int disk_size,int mode);
+
+/* Get the device associated with a PCMCIA disk object */
+struct vdevice *dev_pcmcia_disk_get_device(vm_obj_t *obj);
 
 /* Create SB-1 system control devices */
 int dev_sb1_init(vm_instance_t *vm);

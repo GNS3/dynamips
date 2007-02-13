@@ -1,16 +1,15 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
-#ifndef __AMD64_TRANS_H__
-#define __AMD64_TRANS_H__
+#ifndef __MIPS64_AMD64_TRANS_H__
+#define __MIPS64_AMD64_TRANS_H__
 
 #include "utils.h"
 #include "amd64-codegen.h"
-#include "mips64.h"
+#include "cpu.h"
 #include "dynamips.h"
-#include "cp0.h"
 #include "mips64_exec.h"
 
 #define JIT_SUPPORT 1
@@ -27,21 +26,21 @@ static forced_inline void atomic_and(m_uint32_t *v,m_uint32_t m)
 }
 
 /* Wrappers to amd64-codegen functions */
-#define insn_block_set_patch amd64_patch
-#define insn_block_set_jump  amd64_jump_code
+#define mips64_jit_tcb_set_patch amd64_patch
+#define mips64_jit_tcb_set_jump  amd64_jump_code
 
 /* MIPS instruction array */
-extern struct insn_tag mips64_insn_tags[];
+extern struct mips64_insn_tag mips64_insn_tags[];
 
 /* Push epilog for an amd64 instruction block */
-static forced_inline void insn_block_push_epilog(insn_block_t *block)
+static forced_inline void mips64_jit_tcb_push_epilog(mips64_jit_tcb_t *block)
 {
    amd64_ret(block->jit_ptr);
 }
 
 /* Execute JIT code */
 static forced_inline
-void insn_block_exec_jit_code(cpu_mips_t *cpu,insn_block_t *block)
+void mips64_jit_tcb_exec(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
 {
    insn_tblock_fptr jit_code;
    m_uint32_t offset;
@@ -80,26 +79,5 @@ static inline void amd64_patch(u_char *code,u_char *target)
    else
       x86_patch(code,target);
 }
-
-/* Set the Pointer Counter (PC) register */
-void mips64_set_pc(insn_block_t *b,m_uint64_t new_pc);
-
-/* Set the Return Address (RA) register */
-void mips64_set_ra(insn_block_t *b,m_uint64_t ret_pc);
-
-/* Virtual Breakpoint */
-void mips64_emit_breakpoint(insn_block_t *b);
-
-/* Emit unhandled instruction code */
-int mips64_emit_invalid_delay_slot(insn_block_t *b);
-
-/* 
- * Increment count register and trigger the timer IRQ if value in compare 
- * register is the same.
- */
-void mips64_inc_cp0_count_reg(insn_block_t *b);
-
-/* Increment the number of executed instructions (performance debugging) */
-void mips64_inc_perf_counter(insn_block_t *b);
 
 #endif

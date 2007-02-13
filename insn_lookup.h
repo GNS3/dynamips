@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * MIPS Instruction Lookup Tables.
@@ -10,8 +10,6 @@
 
 #include "utils.h"
 #include "hash.h"
-#include "mips64.h"
-#include "dynamips.h"
 
 /* Forward declaration for instruction lookup table */
 typedef struct insn_lookup insn_lookup_t;

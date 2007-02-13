@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -9,7 +9,7 @@
 #include "utils.h"
 
 /* MIPS instruction recognition */
-struct insn_exec_tag {
+struct mips64_insn_exec_tag {
    char *name;
    fastcall int (*exec)(cpu_mips_t *,mips_insn_t);
    m_uint32_t mask,value;
@@ -33,9 +33,9 @@ void mips64_dump_insn_block(cpu_mips_t *cpu,m_uint64_t pc,u_int count,
                             size_t insn_name_size);
 
 /* Single-step execution */
-void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
+fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
 
 /* Run MIPS code in step-by-step mode */
-void *mips64_exec_run_cpu(cpu_mips_t *cpu);
+void *mips64_exec_run_cpu(cpu_gen_t *cpu);
 
 #endif

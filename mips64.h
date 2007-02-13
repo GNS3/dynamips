@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -196,6 +196,7 @@
 #define MIPS_MIN_PAGE_SHIFT    12
 #define MIPS_MIN_PAGE_SIZE     (1 << MIPS_MIN_PAGE_SHIFT)
 #define MIPS_MIN_PAGE_IMASK    (MIPS_MIN_PAGE_SIZE - 1)
+#define MIPS_MIN_PAGE_MASK     0xfffffffffffff000ULL
 
 /* Addressing mode: Kernel, Supervisor and User */
 #define MIPS_MODE_KERNEL  00
@@ -232,11 +233,6 @@
 #define MIPS64_XKPHYS_PHYS_MASK    (MIPS64_XKPHYS_PHYS_SIZE - 1)
 #define MIPS64_XKPHYS_CCA_SHIFT    59
 
-/* Macros for CPU structure access */
-#define REG_OFFSET(reg)       (OFFSET(cpu_mips_t,gpr[(reg)]))
-#define CP0_REG_OFFSET(c0reg) (OFFSET(cpu_mips_t,cp0.reg[(c0reg)]))
-#define MEMOP_OFFSET(op)      (OFFSET(cpu_mips_t,mem_op_fn[(op)]))
-
 /* Initial Program Counter and Stack pointer for ROM */
 #define MIPS_ROM_PC  0xffffffffbfc00000ULL
 #define MIPS_ROM_SP  0xffffffff80004000ULL
@@ -258,6 +254,9 @@
 /* Enable the 64 TLB entries for R7000 CPU */
 #define MIPS64_R7000_TLB64_ENABLE   0x20000000
 
+/* Number of instructions per page */
+#define MIPS_INSN_PER_PAGE (MIPS_MIN_PAGE_SIZE/sizeof(mips_insn_t))
+
 /* MIPS CPU Identifiers */
 #define MIPS_PRID_R4600    0x00002012
 #define MIPS_PRID_R4700    0x00002112
@@ -265,13 +264,6 @@
 #define MIPS_PRID_R7000    0x00002721
 #define MIPS_PRID_R527x    0x00002812
 #define MIPS_PRID_BCM1250  0x00040102
-
-/* Virtual CPU states */
-enum {
-   MIPS_CPU_RUNNING = 0,
-   MIPS_CPU_HALTED,
-   MIPS_CPU_SUSPENDED,
-};
 
 /* Memory operations */
 enum {
@@ -309,24 +301,8 @@ enum {
    MIPS_MEMOP_MAX,
 };
 
-/* 6 bits are reserved for device ID (see the memory subsystem) */
-#define MIPS64_DEVICE_MAX  (1 << 6)
-
-/* Number of recorded memory accesses (power of two) */
-#define MEMLOG_COUNT   16
-
 /* Maximum number of breakpoints */
 #define MIPS64_MAX_BREAKPOINTS  8
-
-typedef struct memlog_access memlog_access_t;
-struct memlog_access {
-   m_uint64_t pc;
-   m_uint64_t vaddr;
-   m_uint64_t data;
-   m_uint32_t data_valid;
-   m_uint32_t op_size;
-   m_uint32_t op_type;
-};
 
 /* MIPS CPU type */
 typedef struct cpu_mips cpu_mips_t;
@@ -361,48 +337,13 @@ typedef struct {
    m_uint64_t reg[MIPS64_CP1_REG_NR];
 }mips_cp1_t;
 
-/* MTS64 entry */
-typedef struct mts64_entry mts64_entry_t;
-struct mts64_entry {
-   m_uint64_t start;
-   m_iptr_t   action;
-   m_uint32_t mask;
-   m_uint32_t phys_page;
-   mts64_entry_t **pself;
-   mts64_entry_t *next,**pprev;
-};
-
-/* MTS32 entry */
-typedef struct mts32_entry mts32_entry_t;
-struct mts32_entry {
-   m_uint32_t start;
-   m_iptr_t   action;
-   m_uint32_t mask;
-   m_uint32_t phys_page;
-   mts32_entry_t **pself;
-   mts32_entry_t *next,**pprev;
-};
-
-/* MTS chunk forward declaration */
-typedef struct mts64_chunk mts64_chunk_t;
-typedef struct mts32_chunk mts32_chunk_t;
-
-/* Maximum results for idle pc */
-#define MIPS64_IDLE_PC_MAX_RES  10
-
-/* Idle PC hash item */
-struct mips64_idle_pc {
-   m_uint64_t pc;
-   u_int count;
-};
-
 /* MIPS CPU definition */
-struct cpu_mips {  
-   /* MTS 1st level array */
-   void *mts_l1_ptr;
-
+struct cpu_mips {
    /* MTS32/MTS64 caches */
-   void **mts_cache;
+   union {
+      mts32_entry_t *mts32_cache;
+      mts64_entry_t *mts64_cache;
+   }mts_u;
 
    /* Virtual version of CP0 Compare Register */
    m_uint32_t cp0_virt_cnt_reg,cp0_virt_cmp_reg;
@@ -413,7 +354,7 @@ struct cpu_mips {
    m_uint64_t lo,hi,ret_pc;
    
    /* Code page translation cache */
-   insn_block_t **exec_phys_map;
+   mips64_jit_tcb_t **exec_phys_map;
 
    /* Virtual address to physical page translation */
    fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
@@ -438,9 +379,8 @@ struct cpu_mips {
    m_uint64_t irq_count,timer_irq_count,irq_fp_count;
    pthread_mutex_t irq_lock;
 
-   /* Current and free lists of instruction blocks */
-   insn_block_t *insn_block_list,*insn_block_last;
-   insn_block_t *insn_block_free_list;
+   /* Current and free lists of translated code blocks */
+   mips64_jit_tcb_t *tcb_list,*tcb_last,*tcb_free_list;
 
    /* Executable page area */
    void *exec_page_area;
@@ -449,14 +389,8 @@ struct cpu_mips {
    insn_exec_page_t *exec_page_free_list;
    insn_exec_page_t *exec_page_array;
 
-   /* "Idle" loop management */
+   /* Idle PC value */
    volatile m_uint64_t idle_pc;
-   u_int idle_count,idle_max,idle_sleep_time;
-   pthread_mutex_t idle_mutex;
-   pthread_cond_t idle_cond;
-
-   /* IRQ disable flag */
-   volatile u_int irq_disable;
 
    /* Timer IRQs */
    volatile u_int timer_irq_pending;
@@ -464,19 +398,14 @@ struct cpu_mips {
    u_int timer_irq_check_itv;
    u_int timer_drift;
 
+   /* IRQ disable flag */
+   volatile u_int irq_disable;
+
    /* IRQ idling preemption */
    u_int irq_idle_preempt[8];
 
-   /* CPU identifier for MP systems */
-   u_int id;
-
-   /* CPU states */
-   volatile u_int state,prev_state;
-   volatile m_uint64_t seq_state;
-
-   /* Thread running this CPU */
-   pthread_t cpu_thread;
-   int cpu_thread_running;
+   /* Generic CPU instance pointer */
+   cpu_gen_t *gen;
 
    /* VM instance */
    vm_instance_t *vm;
@@ -492,23 +421,10 @@ struct cpu_mips {
    void (*mts_unmap)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
                      m_uint32_t val,int tlb_index);
 
-   void (*mts_rebuild)(cpu_mips_t *cpu);
-
    void (*mts_shutdown)(cpu_mips_t *cpu);
-
-   /* Show MTS statistics */
-   void (*mts_show_stats)(cpu_mips_t *cpu);
-
-   /* MTS chunk list */
-   void *mts_chunk_list;
-   void *mts_chunk_free_list;
-   void *mts_entry_free_list;
 
    /* MTS cache statistics */
    m_uint64_t mts_misses,mts_lookups;
-
-   /* Reverse map for MTS64 */
-   void *mts_rmap[MIPS64_TLB_MAX_ENTRIES];
 
    /* JIT flush method */
    u_int jit_flush_method;
@@ -529,24 +445,13 @@ struct cpu_mips {
    /* Performance counter (number of instructions executed by CPU) */
    m_uint64_t perf_counter;
 
-   /* Memory access log for fault debugging */
-   u_int memlog_pos;
-   memlog_access_t memlog_array[MEMLOG_COUNT];
-
    /* Breakpoints */
    m_uint64_t breakpoints[MIPS64_MAX_BREAKPOINTS];
    u_int breakpoints_enabled;
 
-   /* Idle PC proposal */
-   struct mips64_idle_pc idle_pc_prop[MIPS64_IDLE_PC_MAX_RES];
-   u_int idle_pc_prop_count;
-
    /* Symtrace */
    int sym_trace;
    rbtree_tree *sym_tree;
-
-   /* Next CPU in group */
-   cpu_mips_t *next;
 };
 
 #define MIPS64_IRQ_LOCK(cpu)   pthread_mutex_lock(&(cpu)->irq_lock)
@@ -570,17 +475,20 @@ void mips64_delete(cpu_mips_t *cpu);
 /* Set the CPU PRID register */
 void mips64_set_prid(cpu_mips_t *cpu,m_uint32_t prid);
 
-/* Virtual idle loop */
-void mips64_idle_loop(cpu_mips_t *cpu);
-
-/* Break idle wait state */
-void mips64_idle_break_wait(cpu_mips_t *cpu);
+/* Set idle PC value */
+void mips64_set_idle_pc(cpu_gen_t *cpu,m_uint64_t addr);
 
 /* Timer IRQ */
 void *mips64_timer_irq_run(cpu_mips_t *cpu);
 
 /* Determine an "idling" PC */
-int mips64_get_idling_pc(cpu_mips_t *cpu);
+int mips64_get_idling_pc(cpu_gen_t *cpu);
+
+/* Set an IRQ (VM IRQ standard routing) */
+void mips64_vm_set_irq(vm_instance_t *vm,u_int irq);
+
+/* Clear an IRQ (VM IRQ standard routing) */
+void mips64_vm_clear_irq(vm_instance_t *vm,u_int irq);
 
 /* Update the IRQ flag */
 void mips64_update_irq_flag(cpu_mips_t *cpu);
@@ -634,16 +542,19 @@ fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);
 
 /* Add a virtual breakpoint */
-int mips64_add_breakpoint(cpu_mips_t *cpu,m_uint64_t pc);
+int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 
 /* Remove a virtual breakpoint */
-void mips64_remove_breakpoint(cpu_mips_t *cpu,m_uint64_t pc);
+void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 
 /* Debugging for register-jump to address 0 */
 fastcall void mips64_debug_jr0(cpu_mips_t *cpu);
 
+/* Set a register */
+void mips64_reg_set(cpu_gen_t *cpu,u_int reg,m_uint64_t val);
+
 /* Dump registers of a MIPS64 processor */
-void mips64_dump_regs(cpu_mips_t *cpu);
+void mips64_dump_regs(cpu_gen_t *cpu);
 
 /* Dump a memory block */
 void mips64_dump_memory(cpu_mips_t *cpu,m_uint64_t vaddr,u_int count);

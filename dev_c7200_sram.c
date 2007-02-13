@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Packet SRAM. This is a fast memory zone for packets on NPE150/NPE200.
@@ -11,7 +11,8 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -33,7 +34,7 @@ struct sram_data {
 
    /* Byte-swapped device */
    char *bs_dev_name;
-   struct vdevice *bs_dev;
+   vm_obj_t *bs_obj;
 
    /* PCI device */
    struct pci_device *pci_dev;
@@ -42,44 +43,6 @@ struct sram_data {
    char *filename;
 };
 
-/*
- * SRAM byte swapped access.
- */
-static void *dev_sram_bs_access(cpu_mips_t *cpu,struct vdevice *dev,
-                                m_uint32_t offset,u_int op_size,u_int op_type,
-                                m_uint64_t *data)
-{
-   void *ptr = (u_char *)dev->host_addr + offset;
-
-   switch(op_size) {
-      case 1:
-         return(ptr);
-
-      case 2:
-         if (op_type == MTS_READ)
-            *data = swap16(htovm16(*(m_uint16_t *)ptr));
-         else
-            *(m_uint16_t *)ptr = vmtoh16(swap16(*data));
-         break;
-
-      case 4:
-         if (op_type == MTS_READ)
-            *data = swap32(htovm32(*(m_uint32_t *)ptr));
-         else
-            *(m_uint32_t *)ptr = vmtoh32(swap32(*data));
-         break;
-
-      case 8:
-         if (op_type == MTS_READ)
-            *data = swap64(htovm64(*(m_uint64_t *)ptr));
-         else
-            *(m_uint64_t *)ptr = vmtoh64(swap64(*data));
-         break;
-   }
-
-   return NULL;
-}
-
 /* Shutdown an SRAM device */
 void dev_c7200_sram_shutdown(vm_instance_t *vm,struct sram_data *d)
 {
@@ -87,14 +50,15 @@ void dev_c7200_sram_shutdown(vm_instance_t *vm,struct sram_data *d)
       /* Remove the PCI device */
       pci_dev_remove(d->pci_dev);
 
-      /* Remove the alias, the byte-swapped and the main device */
+      /* Remove the byte-swapped device */
+      vm_object_remove(vm,d->bs_obj);
+
+      /* Remove the alias and the main device */
       dev_remove(vm,d->alias_dev);
-      dev_remove(vm,d->bs_dev);
       dev_remove(vm,d->dev);
 
       /* Free devices */
       free(d->alias_dev);
-      free(d->bs_dev);
       free(d->dev);
       
       /* Free device names */
@@ -144,7 +108,7 @@ int dev_c7200_sram_init(vm_instance_t *vm,char *name,
    alias_paddr = 0x100000000ULL + paddr;
    
    /* create the standard RAM zone */
-   if (!(d->dev = dev_create_ram(vm,name,d->filename,paddr,len))) {
+   if (!(d->dev = dev_create_ram(vm,name,FALSE,d->filename,paddr,len))) {
       fprintf(stderr,"dev_c7200_sram_init: unable to create '%s' file.\n",
               d->filename);
       return(-1);
@@ -170,18 +134,11 @@ int dev_c7200_sram_init(vm_instance_t *vm,char *name,
       return(-1);
    }
 
-   if (!(d->bs_dev = dev_create(d->bs_dev_name))) {
+   if (dev_bswap_init(vm,d->bs_dev_name,paddr+0x800000,len,paddr) == -1) {
       fprintf(stderr,"dev_c7200_sram_init: unable to create BS device.\n");
       return(-1);
    }
-
-   d->bs_dev->phys_addr = paddr + 0x800000;
-   d->bs_dev->phys_len  = len;
-   d->bs_dev->handler   = dev_sram_bs_access;
-   d->bs_dev->host_addr = (m_iptr_t)d->dev->host_addr;
-   d->bs_dev->flags     = VDEVICE_FLAG_NO_MTS_MMAP|VDEVICE_FLAG_CACHING;
-   d->bs_dev->flags    |= VDEVICE_FLAG_REMAP;
-   vm_bind_device(vm,d->bs_dev);
-   vm_object_add(vm,&d->vm_obj);
+   
+   d->bs_obj = vm_object_find(vm,d->bs_dev_name);
    return(0);
 }    

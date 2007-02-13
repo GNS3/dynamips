@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) AMD Am79c971 Module.
+ * Cisco router simulation platform.
  * Copyright (C) 2006 Christophe Fillot.  All rights reserved.
  *
  * AMD Am79c971 FastEthernet chip emulation.
@@ -15,7 +15,8 @@
 #include <assert.h>
 
 #include "utils.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -334,7 +335,7 @@ static int am79c971_fetch_init_block(struct am79c971_data *d)
 }
 
 /* RDP (Register Data Port) access */
-static void am79c971_rdp_access(cpu_mips_t *cpu,struct am79c971_data *d,
+static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
                                 u_int op_type,m_uint64_t *data)
 {
    m_uint32_t mask;
@@ -442,7 +443,7 @@ static void am79c971_rdp_access(cpu_mips_t *cpu,struct am79c971_data *d,
 }
 
 /* BDP (BCR Data Port) access */
-static void am79c971_bdp_access(cpu_mips_t *cpu,struct am79c971_data *d,
+static void am79c971_bdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
                                 u_int op_type,m_uint64_t *data)
 {
    u_int mii_phy,mii_reg;
@@ -492,7 +493,7 @@ static void am79c971_bdp_access(cpu_mips_t *cpu,struct am79c971_data *d,
 /*
  * dev_am79c971_access()
  */
-void *dev_am79c971_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_am79c971_access(cpu_gen_t *cpu,struct vdevice *dev,
                           m_uint32_t offset,u_int op_size,u_int op_type,
                           m_uint64_t *data)
 {
@@ -504,10 +505,10 @@ void *dev_am79c971_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read  access to offset=0x%x, pc=0x%llx, size=%u\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,d->name,"write access to offset=0x%x, pc=0x%llx, "
-              "val=0x%llx, size=%u\n",offset,cpu->pc,*data,op_size);
+              "val=0x%llx, size=%u\n",offset,cpu_get_pc(cpu),*data,op_size);
    }
 #endif
 
@@ -892,7 +893,7 @@ static int am79c971_handle_txring(struct am79c971_data *d)
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_am79c971_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_am79c971_read(cpu_gen_t *cpu,struct pci_device *dev,
                                     int reg)
 {   
    struct am79c971_data *d = dev->priv_data;
@@ -918,7 +919,7 @@ static m_uint32_t pci_am79c971_read(cpu_mips_t *cpu,struct pci_device *dev,
  *
  * Write a PCI register.
  */
-static void pci_am79c971_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_am79c971_write(cpu_gen_t *cpu,struct pci_device *dev,
                                int reg,m_uint32_t value)
 {
    struct am79c971_data *d = dev->priv_data;

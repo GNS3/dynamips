@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -7,12 +7,12 @@
 #define __DEV_DEC21140_H__
 
 #include <sys/types.h>
+
 #include "utils.h"
-#include "mips64.h"
+#include "vm.h"
 #include "cpu.h"
 #include "device.h"
 #include "net_io.h"
-#include "vm.h"
 
 /* Generic DEC21140 initialization code */
 struct dec21140_data *dev_dec21140_init(vm_instance_t *vm,char *name,

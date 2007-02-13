@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Galileo GT64010/GT64120A/GT96100A system controller.
@@ -18,7 +18,8 @@
 
 #include "utils.h"
 #include "net.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -386,9 +387,9 @@ static void gt_dma_handle_ctrl(struct gt_data *gt_data,int chan_id)
       *data = swap32(gt_data->dma[ch].reg_name);
 
 /* Handle a DMA channel */
-static int gt_dma_access(cpu_mips_t *cpu,struct vdevice *dev,
-                            m_uint32_t offset,u_int op_size,u_int op_type,
-                            m_uint64_t *data)
+static int gt_dma_access(cpu_gen_t *cpu,struct vdevice *dev,
+                         m_uint32_t offset,u_int op_size,u_int op_type,
+                         m_uint64_t *data)
 {
    struct gt_data *gt_data = dev->priv_data;
 
@@ -458,7 +459,7 @@ static int gt_dma_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * dev_gt64010_access()
  */
-void *dev_gt64010_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_gt64010_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct gt_data *gt_data = dev->priv_data;
@@ -566,10 +567,10 @@ void *dev_gt64010_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"GT64010","read from addr 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"GT64010","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx\n",offset,*data,cpu->pc);
+                    "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }
@@ -580,7 +581,7 @@ void *dev_gt64010_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 /*
  * dev_gt64120_access()
  */
-void *dev_gt64120_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_gt64120_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct gt_data *gt_data = dev->priv_data;
@@ -696,10 +697,10 @@ void *dev_gt64120_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"GT64120","read from addr 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"GT64120","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx\n",offset,*data,cpu->pc);
+                    "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }
@@ -803,7 +804,7 @@ static void gt_mii_write(struct gt_data *d)
 }
 
 /* Handle registers of Ethernet ports */
-static int gt_eth_access(cpu_mips_t *cpu,struct vdevice *dev,
+static int gt_eth_access(cpu_gen_t *cpu,struct vdevice *dev,
                          m_uint32_t offset,u_int op_size,u_int op_type,
                          m_uint64_t *data)
 {
@@ -1037,11 +1038,11 @@ static int gt_eth_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,"GT96100/ETH",
                     "read access to unknown register 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"GT96100/ETH",
                     "write access to unknown register 0x%x, value=0x%llx, "
-                    "pc=0x%llx\n",offset,*data,cpu->pc);
+                    "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }
@@ -1055,7 +1056,7 @@ static int gt_eth_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * dev_gt96100_access()
  */
-void *dev_gt96100_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct gt_data *gt_data = dev->priv_data;
@@ -1221,10 +1222,10 @@ void *dev_gt96100_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"GT96100","read from addr 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"GT96100","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx\n",offset,*data,cpu->pc);
+                    "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }
@@ -1772,7 +1773,7 @@ int dev_gt64010_init(vm_instance_t *vm,char *name,
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_gt64120_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_gt64120_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {   
    switch (reg) {
@@ -1833,7 +1834,7 @@ int dev_gt64120_init(vm_instance_t *vm,char *name,
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_gt96100_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_gt96100_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {   
    switch (reg) {

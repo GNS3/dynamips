@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Utility functions.
@@ -440,4 +440,15 @@ m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count)
       sum = (sum & 0xffff) + (sum >> 16);
 
    return(~sum);
+}
+
+/* Byte-swap a memory block */
+void mem_bswap32(void *ptr,size_t len)
+{
+   m_uint32_t *p = ptr;
+   size_t count = len >> 2;
+   int i;
+
+   for(i=0;i<count;i++,p++)
+      *p = swap32(*p);
 }

@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * PCI devices.
@@ -15,11 +15,11 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
-#include "vm.h"
 
 #define DEBUG_PCI 1
 
@@ -109,7 +109,7 @@ struct pci_device *pci_dev_lookup(struct pci_bus *pci_bus_root,
 }
 
 /* Handle the address register access */
-void pci_dev_addr_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
+void pci_dev_addr_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
                           u_int op_type,int swap,m_uint64_t *data)
 {
    if (op_type == MTS_WRITE)
@@ -126,14 +126,14 @@ void pci_dev_addr_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
  *
  * The data is read/written at address 0xcfc.
  */
-void pci_dev_data_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
+void pci_dev_data_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
                           u_int op_type,int swap,m_uint64_t *data)
 {   
    struct pci_device *dev;
    int bus,device,function,reg;
 
    if (op_type == MTS_READ)
-      *data = 0;
+      *data = 0x0;
 
    /*
     * http://www.mega-tokyo.com/osfaq2/index.php/PciSectionOfPentiumVme
@@ -158,11 +158,12 @@ void pci_dev_data_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
    if (op_type == MTS_READ) {
       cpu_log(cpu,"PCI","read request at pc=0x%llx: "
               "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
-              cpu->pc, bus, device, function, reg);
+              cpu_get_pc(cpu), bus, device, function, reg);
    } else {
       cpu_log(cpu,"PCI","write request (data=0x%8.8x) at pc=0x%llx: "
               "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
-              pci_swap(*data,swap), cpu->pc, bus, device, function, reg);
+              pci_swap(*data,swap), cpu_get_pc(cpu), 
+              bus, device, function, reg);
    }
 #endif
 
@@ -170,11 +171,12 @@ void pci_dev_data_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
       if (op_type == MTS_READ) {
          cpu_log(cpu,"PCI","read request for unknown device at pc=0x%llx "
                  "(bus=%d,device=%d,function=%d,reg=0x%2.2x).\n",
-                 cpu->pc, bus, device, function, reg);
+                 cpu_get_pc(cpu), bus, device, function, reg);
       } else {
          cpu_log(cpu,"PCI","write request (data=0x%8.8x) for unknown device "
                  "at pc=0x%llx (bus=%d,device=%d,function=%d,reg=0x%2.2x).\n",
-                 pci_swap(*data,swap), cpu->pc, bus, device, function, reg);
+                 pci_swap(*data,swap), cpu_get_pc(cpu), 
+                 bus, device, function, reg);
       }
 
       /* Returns an invalid device ID */
@@ -425,7 +427,7 @@ void pci_bus_remove(struct pci_bus *pci_bus)
 }
 
 /* Read a configuration register of a PCI bridge */
-static m_uint32_t pci_bridge_read_reg(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_bridge_read_reg(cpu_gen_t *cpu,struct pci_device *dev,
                                       int reg)
 {
    struct pci_bridge *bridge = dev->priv_data;
@@ -447,7 +449,7 @@ static m_uint32_t pci_bridge_read_reg(cpu_mips_t *cpu,struct pci_device *dev,
 }
 
 /* Write a configuration register of a PCI bridge */
-static void pci_bridge_write_reg(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_bridge_write_reg(cpu_gen_t *cpu,struct pci_device *dev,
                                  int reg,m_uint32_t value)
 {
    struct pci_bridge *bridge = dev->priv_data;

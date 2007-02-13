@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Cirrus Logic PD6729 PCI-to-PCMCIA host adapter.
@@ -13,7 +13,8 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -50,7 +51,7 @@ struct clpd6729_data {
 };
 
 /* Handle access to a base register */
-static void clpd6729_base_reg_access(cpu_mips_t *cpu,struct clpd6729_data *d,
+static void clpd6729_base_reg_access(cpu_gen_t *cpu,struct clpd6729_data *d,
                                      u_int op_type,m_uint64_t *data)
 {
    u_int slot_id,reg;
@@ -58,10 +59,10 @@ static void clpd6729_base_reg_access(cpu_mips_t *cpu,struct clpd6729_data *d,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"CLPD6729","reading reg 0x%2.2x at pc=0x%llx\n",
-              d->base_index,cpu->pc);
+              d->base_index,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,"CLPD6729","writing reg 0x%2.2x, data=0x%llx at pc=0x%llx\n",
-              d->base_index,*data,cpu->pc);
+              d->base_index,*data,cpu_get_pc(cpu));
    }
 #endif
 
@@ -107,7 +108,7 @@ static void clpd6729_base_reg_access(cpu_mips_t *cpu,struct clpd6729_data *d,
       case CLPD6729_REG_EXT_INDEX:
          if (op_type == MTS_WRITE) {
             cpu_log(cpu,"CLPD6729","ext reg index 0x%2.2llx at pc=0x%llx\n",
-                    *data,cpu->pc);
+                    *data,cpu_get_pc(cpu));
          }
          break;
 
@@ -127,7 +128,7 @@ static void clpd6729_base_reg_access(cpu_mips_t *cpu,struct clpd6729_data *d,
 /*
  * dev_clpd6729_io_access()
  */
-static void *dev_clpd6729_io_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *dev_clpd6729_io_access(cpu_gen_t *cpu,struct vdevice *dev,
                                     m_uint32_t offset,u_int op_size,
                                     u_int op_type,m_uint64_t *data)
 {
@@ -136,10 +137,10 @@ static void *dev_clpd6729_io_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,dev->name,"reading at offset 0x%x, pc=0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,dev->name,"writing at offset 0x%x, pc=0x%llx, data=0x%llx\n",
-              offset,cpu->pc,*data);
+              offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -217,13 +218,27 @@ int dev_clpd6729_init(vm_instance_t *vm,
 
    vm_object_add(vm,&d->vm_obj);
 
+#if 1
    /* PCMCIA disk test */
    if (vm->pcmcia_disk_size[0])
-      d->slot_obj[0] = dev_pcmcia_disk_init(vm,"disk0",0x40000000ULL,0x4000000,
+      d->slot_obj[0] = dev_pcmcia_disk_init(vm,"disk0",0x40000000ULL,0x200000,
                                             vm->pcmcia_disk_size[0],0);
 
    if (vm->pcmcia_disk_size[1])
-      d->slot_obj[1] = dev_pcmcia_disk_init(vm,"disk1",0x44000000ULL,0x4000000,
+      d->slot_obj[1] = dev_pcmcia_disk_init(vm,"disk1",0x44000000ULL,0x200000,
                                             vm->pcmcia_disk_size[1],0);
+#endif
+
+#if 0
+   /* PCMCIA disk test */
+   if (vm->pcmcia_disk_size[0])
+      d->slot_obj[0] = dev_pcmcia_disk_init(vm,"disk0",0xd8000000ULL,0x200000,
+                                            vm->pcmcia_disk_size[0],0);
+
+   if (vm->pcmcia_disk_size[1])
+      d->slot_obj[1] = dev_pcmcia_disk_init(vm,"disk1",0xdc000000ULL,0x200000,
+                                            vm->pcmcia_disk_size[1],0);
+#endif
+
    return(0);
 }

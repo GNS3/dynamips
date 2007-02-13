@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor ATM switch routines.
@@ -23,8 +23,6 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "dynamips.h"
 #include "utils.h"
 #include "net.h"
 #include "atm.h"

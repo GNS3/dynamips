@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router Simulation Platform.
  * Copyright (C) 2005-2006 Christophe Fillot.  All rights reserved.
  *
  * EEPROM types:
@@ -22,7 +22,8 @@
 #include <pthread.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -578,7 +579,7 @@ static int m32_action_req(struct m32_data *d,m_uint32_t action)
 }
 
 /* Munich32 general access function */
-static void *m32_gen_access(struct m32_data *d,cpu_mips_t *cpu,
+static void *m32_gen_access(struct m32_data *d,cpu_gen_t *cpu,
                             m_uint32_t offset,u_int op_size,u_int op_type,
                             m_uint64_t *data)
 {
@@ -641,7 +642,7 @@ static void *m32_gen_access(struct m32_data *d,cpu_mips_t *cpu,
 /*
  *  pa_4b_access()
  */
-void *pa_4b_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *pa_4b_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                    u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct pa_4b_data *d = dev->priv_data;
@@ -654,10 +655,11 @@ void *pa_4b_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
    if (offset >= MUNICH32_MEM_SIZE) {
       if (op_type == MTS_READ) {
          cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx "
-                 "(op_size=%u)\n",offset,cpu->pc,op_size);
+                 "(op_size=%u)\n",offset,cpu_get_pc(cpu),op_size);
       } else {
          cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-                 "val = 0x%llx (op_size=%u)\n",offset,cpu->pc,*data,op_size);
+                 "val = 0x%llx (op_size=%u)\n",
+                 offset,cpu_get_pc(cpu),*data,op_size);
       }
    }
 #endif
@@ -741,7 +743,7 @@ void *pa_4b_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 /*
  * pci_munich32_read()
  */
-static m_uint32_t pci_munich32_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_munich32_read(cpu_gen_t *cpu,struct pci_device *dev,
                                     int reg)
 {   
    struct pa_4b_data *d = dev->priv_data;
@@ -760,7 +762,7 @@ static m_uint32_t pci_munich32_read(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_munich32_write()
  */
-static void pci_munich32_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_munich32_write(cpu_gen_t *cpu,struct pci_device *dev,
                                int reg,m_uint32_t value)
 {
    struct pa_4b_data *d = dev->priv_data;

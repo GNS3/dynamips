@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Virtual Machines.
@@ -10,12 +10,42 @@
 
 #include <pthread.h>
 
-#include "mips64.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "cpu.h"
 #include "dev_vtty.h"
 
+#define VM_PAGE_SHIFT  12
+#define VM_PAGE_SIZE   (1 << VM_PAGE_SHIFT)
+#define VM_PAGE_IMASK  (VM_PAGE_SIZE - 1)
+#define VM_PAGE_MASK   (~(VM_PAGE_IMASK))
+
+/* Number of pages in chunk area */
+#define VM_CHUNK_AREA_SIZE  256
+
+/* VM memory chunk */
+typedef struct vm_chunk vm_chunk_t;
+struct vm_chunk {
+   void *area;
+   u_int page_alloc,page_total;
+   vm_chunk_t *next;
+};
+
+/* VM ghost pool entry */
+typedef struct vm_ghost_image vm_ghost_image_t;
+struct vm_ghost_image {
+   char *filename;
+   u_int ref_count;
+   int fd;
+   off_t file_size;
+   u_char *area_ptr;
+   vm_ghost_image_t *next;
+};
+
+/* Maximum number of devices per VM */
+#define VM_DEVICE_MAX  (1 << 6)
+
+/* Size of the PCI bus pool */
 #define VM_PCI_POOL_SIZE  32
 
 /* VM instance status */
@@ -33,6 +63,8 @@ enum {
    VM_TYPE_C2691,
    VM_TYPE_C3725,
    VM_TYPE_C3745,
+   VM_TYPE_C2600,
+   VM_TYPE_PPC32_TEST,
 };
 
 /* Ghost RAM status */
@@ -66,7 +98,8 @@ struct vm_instance {
    int status;                     /* Instance status */
    int instance_id;                /* Instance Identifier */
    char *lock_file;                /* Lock file */
-   char *log_file;                 /* Log file */
+   char *log_file;                 /* Log filename */
+   int log_file_enabled;           /* Logging enabled */
    u_int ram_size,rom_size;        /* RAM and ROM size in Mb */
    u_int iomem_size;               /* IOMEM size in Mb */
    u_int nvram_size;               /* NVRAM size in Kb */
@@ -85,17 +118,25 @@ struct vm_instance {
    FILE *lock_fd,*log_fd;          /* Lock/Log file descriptors */
    int debug_level;                /* Debugging Level */
    int jit_use;                    /* CPUs use JIT */
+   int sparse_mem;                 /* Use sparse virtual memory */
+
+   /* Memory chunks */
+   vm_chunk_t *chunks;
 
    /* Basic hardware: system CPU, PCI busses and PCI I/O space */
    cpu_group_t *cpu_group;
-   cpu_mips_t *boot_cpu;
+   cpu_gen_t *boot_cpu;
    struct pci_bus *pci_bus[2];
    struct pci_bus *pci_bus_pool[VM_PCI_POOL_SIZE];
    struct pci_io_data *pci_io_space;
 
    /* Memory mapped devices */
    struct vdevice *dev_list;
-   struct vdevice *dev_array[MIPS64_DEVICE_MAX];
+   struct vdevice *dev_array[VM_DEVICE_MAX];
+
+   /* IRQ routing */
+   void (*set_irq)(vm_instance_t *vm,u_int irq);
+   void (*clear_irq)(vm_instance_t *vm,u_int irq);
 
    /* Filename for ghosted RAM */
    char *ghost_ram_filename;
@@ -124,6 +165,9 @@ struct vm_instance {
    ssize_t (*nvram_extract_config)(vm_instance_t *vm,char **buffer);
    int (*nvram_push_config)(vm_instance_t *vm,char *buffer,size_t len);
 
+   /* Chassis cookie (for c2600 and maybe other routers */
+   m_uint16_t chassis_cookie[64];
+
    /* Specific hardware data */
    void *hw_data;
 
@@ -136,8 +180,23 @@ struct vm_instance {
 #define VM_C2691(vm) ((c2691_t *)vm->hw_data)
 #define VM_C3725(vm) ((c3725_t *)vm->hw_data)
 #define VM_C3745(vm) ((c3745_t *)vm->hw_data)
+#define VM_C2600(vm) ((c2600_t *)vm->hw_data)
 
 extern int vm_file_naming_type;
+
+/* Set an IRQ for a VM */
+static inline void vm_set_irq(vm_instance_t *vm,u_int irq)
+{
+   if (vm->set_irq != NULL)
+      vm->set_irq(vm,irq);
+}
+
+/* Clear an IRQ for a VM */
+static inline void vm_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   if (vm->clear_irq != NULL)
+      vm->clear_irq(vm,irq);
+}
 
 /* Initialize a VM object */
 void vm_object_init(vm_obj_t *obj);
@@ -237,6 +296,18 @@ int vm_stop(vm_instance_t *vm);
 
 /* Monitor an instance periodically */
 void vm_monitor(vm_instance_t *vm);
+
+/* Allocate an host page */
+void *vm_alloc_host_page(vm_instance_t *vm);
+
+/* Free an host page */
+void vm_free_host_page(vm_instance_t *vm,void *ptr);
+
+/* Get a ghost image */
+int vm_ghost_image_get(char *filename,u_char **ptr,int *fd);
+
+/* Release a ghost image */
+int vm_ghost_image_release(int fd);
 
 /* Open a VM file and map it in memory */
 int vm_mmap_open_file(vm_instance_t *vm,char *name,

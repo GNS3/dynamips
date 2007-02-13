@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) NVRAM with Calendar Module.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Dallas DS1216 chip emulation:
@@ -18,7 +18,8 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -44,7 +45,7 @@ static m_uint8_t u8_to_bcd(m_uint8_t val)
 }
 
 /* Get the current time (p.8) */
-static m_uint64_t get_current_time(cpu_mips_t *cpu)
+static m_uint64_t get_current_time(cpu_gen_t *cpu)
 {
    m_uint64_t res;
    struct tm *tmx;
@@ -67,7 +68,7 @@ static m_uint64_t get_current_time(cpu_mips_t *cpu)
 /*
  * dev_nvram_access()
  */
-void *dev_nvram_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_nvram_access(cpu_gen_t *cpu,struct vdevice *dev,
                        m_uint32_t offset,u_int op_size,u_int op_type,
                        m_uint64_t *data)
 {
@@ -75,11 +76,12 @@ void *dev_nvram_access(cpu_mips_t *cpu,struct vdevice *dev,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ)
-      cpu_log(cpu,dev->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+      cpu_log(cpu,dev->name,"read  access to offset=0x%x, pc=0x%llx\n",
+              offset,cpu_get_pc(cpu));
    else
-      cpu_log(cpu,dev->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+      cpu_log(cpu,dev->name,
+              "write access to vaddr=0x%x, pc=0x%llx, val=0x%llx\n",
+              offset,cpu_get_pc(cpu),*data);
 #endif
 
    switch(offset) {

@@ -11,7 +11,7 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"

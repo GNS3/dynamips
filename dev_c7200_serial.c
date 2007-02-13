@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Serial Interfaces (Mueslix).
@@ -24,7 +24,8 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"

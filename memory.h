@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -38,8 +38,8 @@
 #define MTS_ACC_U   0x00000006   /* Unexistent */
 
 /* Hash table size for MTS64 (default: [shift:16,bits:12]) */
-#define MTS64_HASH_SHIFT   15
-#define MTS64_HASH_BITS    15
+#define MTS64_HASH_SHIFT   12
+#define MTS64_HASH_BITS    14
 #define MTS64_HASH_SIZE    (1 << MTS64_HASH_BITS)
 #define MTS64_HASH_MASK    (MTS64_HASH_SIZE - 1)
 
@@ -47,8 +47,8 @@
 #define MTS64_HASH(vaddr)  (((vaddr) >> MTS64_HASH_SHIFT) & MTS64_HASH_MASK)
 
 /* Hash table size for MTS32 (default: [shift:15,bits:15]) */
-#define MTS32_HASH_SHIFT   15
-#define MTS32_HASH_BITS    15
+#define MTS32_HASH_SHIFT   12
+#define MTS32_HASH_BITS    14
 #define MTS32_HASH_SIZE    (1 << MTS32_HASH_BITS)
 #define MTS32_HASH_MASK    (MTS32_HASH_SIZE - 1)
 
@@ -73,14 +73,15 @@ struct mts32_chunk {
    u_int count;
 };
 
+/* Record a memory access */
+void memlog_rec_access(cpu_gen_t *cpu,m_uint64_t vaddr,m_uint64_t data,
+                       m_uint32_t op_size,m_uint32_t op_type);
+
 /* Show the last memory accesses */
-void memlog_dump(cpu_mips_t *cpu);
+void memlog_dump(cpu_gen_t *cpu);
 
-/* Shutdown MTS subsystem */
-void mts_shutdown(cpu_mips_t *cpu);
-
-/* Set the address mode */
-int mts_set_addr_mode(cpu_mips_t *cpu,u_int addr_mode);
+/* Update the data obtained by a read access */
+void memlog_update_read(cpu_gen_t *cpu,m_iptr_t raddr);
 
 /* Copy a memory block from VM physical RAM to real host */
 void physmem_copy_from_vm(vm_instance_t *vm,void *real_buffer,
@@ -101,6 +102,12 @@ m_uint16_t physmem_copy_u16_from_vm(vm_instance_t *vm,m_uint64_t paddr);
 
 /* Copy a 16-bit word to the VM physical RAM from real host */
 void physmem_copy_u16_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint16_t val);
+
+/* Copy a byte from the VM physical RAM to real host */
+m_uint8_t physmem_copy_u8_from_vm(vm_instance_t *vm,m_uint64_t paddr);
+
+/* Copy a 16-bit word to the VM physical RAM from real host */
+void physmem_copy_u8_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint8_t val);
 
 /* DMA transfer operation */
 void physmem_dma_transfer(vm_instance_t *vm,m_uint64_t src,m_uint64_t dst,

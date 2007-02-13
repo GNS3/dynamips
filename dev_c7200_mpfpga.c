@@ -1,15 +1,16 @@
 /* 
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
- * Cisco C7200 (Predator) Midplane FPGA.
+ * Cisco c7200 Midplane FPGA.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -18,7 +19,7 @@
 
 #define DEBUG_UNKNOWN  1
 #define DEBUG_ACCESS   0
-#define DEBUG_OIR      0
+#define DEBUG_OIR      1
 
 /*
  * Definitions for Port Adapter Status.
@@ -156,7 +157,7 @@ static void pa_update_status_reg(struct mpfpga_data *d)
 
    /* PA Power. Bay 0 is always powered */
    res |= PCI_BAY0_5V_OK | PCI_BAY0_3V_OK;
-   
+
    /* We fake power on bays defined by the final user */
    if (c7200_pa_check_eeprom(d->router,1))
       res |= PCI_BAY1_5V_OK | PCI_BAY1_3V_OK;
@@ -182,7 +183,7 @@ static void pa_update_status_reg(struct mpfpga_data *d)
 /*
  * dev_mpfpga_access()
  */
-void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
@@ -198,11 +199,11 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"MP_FPGA","reading reg 0x%x at pc=0x%llx (size=%u)\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,"MP_FPGA",
               "writing reg 0x%x at pc=0x%llx, data=0x%llx (size=%u)\n",
-              offset,cpu->pc,*data,op_size);
+              offset,cpu_get_pc(cpu),*data,op_size);
    }
 #endif
 
@@ -239,7 +240,7 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ)
             *data = 0x66666600 & d->pa_status_reg;
 
-         mips64_clear_irq(cpu,C7200_PA_MGMT_IRQ);
+         vm_clear_irq(d->router->vm,C7200_PA_MGMT_IRQ);
          break;
 
       case 0x48:  /* ??? (test) */
@@ -258,13 +259,14 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
 #if DEBUG_OIR
             cpu_log(cpu,"MP_FPGA","reading reg 0x%x at pc=0x%llx, val=0x%x\n",
-                    offset,cpu->pc,d->router->oir_status);
+                    offset,cpu_get_pc(cpu),d->router->oir_status);
 #endif
             *data = d->router->oir_status;
+            vm_clear_irq(d->router->vm,C7200_OIR_IRQ);
          } else {
 #if DEBUG_OIR
             cpu_log(cpu,"MP_FPGA","writing reg 0x%x at pc=0x%llx "
-                    "(data=0x%llx)\n",offset,cpu->pc,*data);
+                    "(data=0x%llx)\n",offset,cpu_get_pc(cpu),*data);
 #endif
             d->router->oir_status &= ~(*data);
             vm_clear_irq(d->router->vm,C7200_OIR_IRQ);                    
@@ -278,13 +280,14 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
       case 0x78:
          if (op_type == MTS_READ) {
 #if DEBUG_OIR
-            cpu_log(cpu,"MP_FPGA","reading 0x78 at pc=0x%llx\n",cpu->pc);
+            cpu_log(cpu,"MP_FPGA","reading 0x78 at pc=0x%llx\n",
+                    cpu_get_pc(cpu));
 #endif
             *data = 0x00;
          } else {
 #if DEBUG_OIR
             cpu_log(cpu,"MP_FPGA","writing reg 0x78 at pc=0x%llx "
-                  "(data=0x%llx)\n",cpu->pc,*data);
+                  "(data=0x%llx)\n",cpu_get_pc(cpu),*data);
 #endif
          }
          break;
@@ -327,10 +330,10 @@ void *dev_c7200_mpfpga_access(cpu_mips_t *cpu,struct vdevice *dev,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"MP_FPGA","read from addr 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"MP_FPGA","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx\n",offset,*data,cpu->pc);
+                    "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }

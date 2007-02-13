@@ -1,5 +1,5 @@
 /* 
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Texas Instruments PCI205B PCI bridge.
@@ -9,7 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"

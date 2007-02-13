@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * MIPS64 Step-by-step execution.
@@ -16,18 +16,15 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
-#include "rbtree.h"
-#include "mips64.h"
-#include "dynamips.h"
-#include "vm.h"
-#include "memory.h"
 #include "cpu.h"
-#include "cp0.h"
+#include "vm.h"
 #include "mips64_exec.h"
+#include "memory.h"
 #include "insn_lookup.h"
+#include "dynamips.h"
 
 /* Forward declaration of instruction array */
-static struct insn_exec_tag mips64_exec_tags[];
+static struct mips64_insn_exec_tag mips64_exec_tags[];
 static insn_lookup_t *ilt = NULL;
 
 /* ILT */
@@ -36,12 +33,12 @@ static forced_inline void *mips64_exec_get_insn(int index)
    return(&mips64_exec_tags[index]);
 }
 
-static int mips64_exec_chk_lo(struct insn_exec_tag *tag,int value)
+static int mips64_exec_chk_lo(struct mips64_insn_exec_tag *tag,int value)
 {
    return((value & tag->mask) == (tag->value & 0xFFFF));
 }
 
-static int mips64_exec_chk_hi(struct insn_exec_tag *tag,int value)
+static int mips64_exec_chk_hi(struct mips64_insn_exec_tag *tag,int value)
 {
    return((value & (tag->mask >> 16)) == (tag->value >> 16));
 }
@@ -54,7 +51,7 @@ void mips64_exec_create_ilt(void)
    for(i=0,count=0;mips64_exec_tags[i].exec;i++)
       count++;
 
-   ilt = ilt_create(count,
+   ilt = ilt_create(count+1,
                     (ilt_get_insn_cbk_t)mips64_exec_get_insn,
                     (ilt_check_cbk_t)mips64_exec_chk_lo,
                     (ilt_check_cbk_t)mips64_exec_chk_hi);
@@ -84,7 +81,7 @@ int mips64_dump_insn(char *buffer,size_t buf_size,size_t insn_name_size,
 {
    char insn_name[64],insn_format[32],*name;
    int base,rs,rd,rt,sa,offset,imm;
-   struct insn_exec_tag *tag;
+   struct mips64_insn_exec_tag *tag;
    m_uint64_t new_pc;
    int index;
 
@@ -330,10 +327,10 @@ static forced_inline int
 mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
 {
    register fastcall int (*exec)(cpu_mips_t *,mips_insn_t) = NULL;
-   struct insn_exec_tag *tag;
+   struct mips64_insn_exec_tag *tag;
    int index;
 
-#if DEBUG_PERF_COUNTER
+#if DEBUG_INSN_PERF_CNT
    cpu->perf_counter++;
 #endif
    
@@ -364,12 +361,12 @@ mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
 
    printf("MIPS64: unknown opcode 0x%8.8x at pc = 0x%llx\n",
           instruction,cpu->pc);
-   mips64_dump_regs(cpu);
+   mips64_dump_regs(cpu->gen);
    return(0);
 }
 
 /* Single-step execution */
-void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
+fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
 {
    int res;
 
@@ -380,36 +377,37 @@ void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
 }
 
 /* Run MIPS code in step-by-step mode */
-void *mips64_exec_run_cpu(cpu_mips_t *cpu)
+void *mips64_exec_run_cpu(cpu_gen_t *gen)
 {   
+   cpu_mips_t *cpu = CPU_MIPS64(gen);
    pthread_t timer_irq_thread;
-   mips_insn_t insn;
    int timer_irq_check = 0;
+   mips_insn_t insn;
    int res;
 
    if (pthread_create(&timer_irq_thread,NULL,
                       (void *)mips64_timer_irq_run,cpu))
    {
       fprintf(stderr,"VM '%s': unable to create Timer IRQ thread for CPU%u.\n",
-              cpu->vm->name,cpu->id);
-      cpu_stop(cpu);
+              cpu->vm->name,gen->id);
+      cpu_stop(gen);
       return NULL;
    }
 
-   cpu->cpu_thread_running = TRUE;
+   gen->cpu_thread_running = TRUE;
 
  start_cpu:
-   cpu->idle_count = 0;
+   gen->idle_count = 0;
 
    for(;;) {
-      if (unlikely(cpu->state != MIPS_CPU_RUNNING))
+      if (unlikely(gen->state != CPU_STATE_RUNNING))
          break;
 
       /* Handle virtual idle loop */
       if (unlikely(cpu->pc == cpu->idle_pc)) {
-         if (++cpu->idle_count == cpu->idle_max) {
-            mips64_idle_loop(cpu);
-            cpu->idle_count = 0;
+         if (++gen->idle_count == gen->idle_max) {
+            cpu_idle_loop(gen);
+            gen->idle_count = 0;
          }
       }
 
@@ -438,25 +436,25 @@ void *mips64_exec_run_cpu(cpu_mips_t *cpu)
       res = mips64_exec_single_instruction(cpu,insn);
 
       /* Normal flow ? */
-      if (likely(!res)) cpu->pc += 4;
+      if (likely(!res)) cpu->pc += sizeof(mips_insn_t);
    }
 
    if (!cpu->pc) {
-      cpu_stop(cpu);
-      cpu_log(cpu,"SLOW_EXEC","PC=0, halting CPU.\n");
+      cpu_stop(gen);
+      cpu_log(gen,"SLOW_EXEC","PC=0, halting CPU.\n");
    }
 
    /* Check regularly if the CPU has been restarted */
-   while(cpu->cpu_thread_running) {
-      cpu->seq_state++;
+   while(gen->cpu_thread_running) {
+      gen->seq_state++;
 
-      switch(cpu->state) {
-         case MIPS_CPU_RUNNING:
-            cpu->state = MIPS_CPU_RUNNING;
+      switch(gen->state) {
+         case CPU_STATE_RUNNING:
+            gen->state = CPU_STATE_RUNNING;
             goto start_cpu;
 
-         case MIPS_CPU_HALTED:     
-            cpu->cpu_thread_running = FALSE;
+         case CPU_STATE_HALTED:     
+            gen->cpu_thread_running = FALSE;
             pthread_join(timer_irq_thread,NULL);
             break;
       }
@@ -1086,7 +1084,7 @@ static fastcall int mips64_exec_CFC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_cfc0(cpu,rt,rd);
+   mips64_cp0_exec_cfc0(cpu,rt,rd);
    return(0);
 }
 
@@ -1096,7 +1094,7 @@ static fastcall int mips64_exec_CTC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_ctc0(cpu,rt,rd);
+   mips64_cp0_exec_ctc0(cpu,rt,rd);
    return(0);
 }
 
@@ -1160,7 +1158,7 @@ static fastcall int mips64_exec_DMFC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_dmfc0(cpu,rt,rd);
+   mips64_cp0_exec_dmfc0(cpu,rt,rd);
    return(0);
 }
 
@@ -1180,7 +1178,7 @@ static fastcall int mips64_exec_DMTC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_dmtc0(cpu,rt,rd);
+   mips64_cp0_exec_dmtc0(cpu,rt,rd);
    return(0);
 }
 
@@ -1544,7 +1542,7 @@ static fastcall int mips64_exec_MFC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_mfc0(cpu,rt,rd);
+   mips64_cp0_exec_mfc0(cpu,rt,rd);
    return(0);
 }
 
@@ -1592,7 +1590,7 @@ static fastcall int mips64_exec_MTC0(cpu_mips_t *cpu,mips_insn_t insn)
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   cp0_exec_mtc0(cpu,rt,rd);
+   mips64_cp0_exec_mtc0(cpu,rt,rd);
    return(0);
 }
 
@@ -2030,28 +2028,28 @@ static fastcall int mips64_exec_TEQI(cpu_mips_t *cpu,mips_insn_t insn)
 /* TLBP */
 static fastcall int mips64_exec_TLBP(cpu_mips_t *cpu,mips_insn_t insn)
 {
-   cp0_exec_tlbp(cpu);
+   mips64_cp0_exec_tlbp(cpu);
    return(0);
 }
 
 /* TLBR */
 static fastcall int mips64_exec_TLBR(cpu_mips_t *cpu,mips_insn_t insn)
 {
-   cp0_exec_tlbr(cpu);
+   mips64_cp0_exec_tlbr(cpu);
    return(0);
 }
 
 /* TLBWI */
 static fastcall int mips64_exec_TLBWI(cpu_mips_t *cpu,mips_insn_t insn)
 {
-   cp0_exec_tlbwi(cpu);
+   mips64_cp0_exec_tlbwi(cpu);
    return(0);
 }
 
 /* TLBWR */
 static fastcall int mips64_exec_TLBWR(cpu_mips_t *cpu,mips_insn_t insn)
 {
-   cp0_exec_tlbwr(cpu);
+   mips64_cp0_exec_tlbwr(cpu);
    return(0);
 }
 
@@ -2078,7 +2076,7 @@ static fastcall int mips64_exec_XORI(cpu_mips_t *cpu,mips_insn_t insn)
 }
 
 /* MIPS instruction array */
-static struct insn_exec_tag mips64_exec_tags[] = {
+static struct mips64_insn_exec_tag mips64_exec_tags[] = {
    { "li"     , mips64_exec_LI      , 0xffe00000 , 0x24000000, 1, 16 },
    { "move"   , mips64_exec_MOVE    , 0xfc1f07ff , 0x00000021, 1, 15 },
    { "b"      , mips64_exec_B       , 0xffff0000 , 0x10000000, 0, 10 },

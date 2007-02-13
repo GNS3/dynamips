@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor routines.
@@ -101,6 +101,9 @@ extern int hypervisor_c3725_init(void);
 
 /* Hypervisor C3745 initialization */
 extern int hypervisor_c3745_init(void);
+
+/* Hypervisor C2600 initialization */
+extern int hypervisor_c2600_init(void);
 
 /* Send a reply */
 int hypervisor_send_reply(hypervisor_conn_t *conn,int code,int done,

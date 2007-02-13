@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor routines for VM debugging.
@@ -23,8 +23,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "cp0.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "device.h"
 #include "dev_c7200.h"
@@ -37,48 +37,48 @@
 static int cmd_show_cpu_regs(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
    if ((cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]))) != NULL)
-      mips64_dump_regs(cpu);
+      cpu->reg_dump(cpu);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
 
-/* Show CPU TLB */
-static int cmd_show_cpu_tlb(hypervisor_conn_t *conn,int argc,char *argv[])
+/* Show CPU MMU info */
+static int cmd_show_cpu_mmu(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
    if ((cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]))) != NULL)
-      tlb_dump(cpu);
+      cpu->mmu_dump(cpu);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
 
-/* Set a CPU register*/
+/* Set a CPU register */
 static int cmd_set_cpu_reg(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    int reg_index;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
    cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
-   reg_index = cp0_get_reg_index(argv[2]);
+   reg_index = atoi(argv[2]);
                            
    if (!cpu || (reg_index < 1)) {
       vm_release(vm);
@@ -87,7 +87,7 @@ static int cmd_set_cpu_reg(hypervisor_conn_t *conn,int argc,char *argv[])
    }
 
    /* Set register value */
-   cpu->gpr[reg_index] = strtoull(argv[3],NULL,0);
+   cpu->reg_set(cpu,reg_index,strtoull(argv[3],NULL,0));
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -99,7 +99,7 @@ static int cmd_add_cpu_breakpoint(hypervisor_conn_t *conn,
                                   int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    m_uint64_t addr;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
@@ -112,7 +112,7 @@ static int cmd_add_cpu_breakpoint(hypervisor_conn_t *conn,
    }
 
    addr = strtoull(argv[2],NULL,0);
-   mips64_add_breakpoint(cpu,addr);
+   cpu->add_breakpoint(cpu,addr);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -124,7 +124,7 @@ static int cmd_remove_cpu_breakpoint(hypervisor_conn_t *conn,
                                      int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    m_uint64_t addr;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
@@ -137,7 +137,7 @@ static int cmd_remove_cpu_breakpoint(hypervisor_conn_t *conn,
    }
 
    addr = strtoull(argv[2],NULL,0);
-   mips64_remove_breakpoint(cpu,addr);
+   cpu->remove_breakpoint(cpu,addr);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -148,20 +148,11 @@ static int cmd_remove_cpu_breakpoint(hypervisor_conn_t *conn,
 static int cmd_pmem_w32(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
    m_uint64_t addr;
    m_uint32_t value;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
-
-   cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
-                           
-   if (!cpu) {
-      vm_release(vm);
-      hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"No CPU found.");
-      return(-1);
-   }
 
    /* Write word */
    addr  = strtoull(argv[2],NULL,0);
@@ -177,20 +168,11 @@ static int cmd_pmem_w32(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_pmem_r32(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
    m_uint64_t addr;
    m_uint32_t value;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
-
-   cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
-                           
-   if (!cpu) {
-      vm_release(vm);
-      hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"No CPU found.");
-      return(-1);
-   }
 
    /* Write word */
    addr  = strtoull(argv[2],NULL,0);
@@ -205,20 +187,11 @@ static int cmd_pmem_r32(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_pmem_w16(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
    m_uint64_t addr;
    m_uint16_t value;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
-
-   cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
-                           
-   if (!cpu) {
-      vm_release(vm);
-      hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"No CPU found.");
-      return(-1);
-   }
 
    /* Write word */
    addr  = strtoull(argv[2],NULL,0);
@@ -234,20 +207,11 @@ static int cmd_pmem_w16(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_pmem_r16(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
    m_uint64_t addr;
    m_uint16_t value;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
-
-   cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
-                           
-   if (!cpu) {
-      vm_release(vm);
-      hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"No CPU found.");
-      return(-1);
-   }
 
    /* Write word */
    addr  = strtoull(argv[2],NULL,0);
@@ -261,7 +225,7 @@ static int cmd_pmem_r16(hypervisor_conn_t *conn,int argc,char *argv[])
 /* VM debug commands */
 static hypervisor_cmd_t vm_cmd_array[] = {
    { "show_cpu_regs", 2, 2, cmd_show_cpu_regs, NULL },
-   { "show_cpu_tlb", 2, 2, cmd_show_cpu_tlb, NULL },
+   { "show_cpu_mmu", 2, 2, cmd_show_cpu_mmu, NULL },
    { "set_cpu_reg", 4, 4, cmd_set_cpu_reg, NULL },
    { "add_cpu_breakpoint", 3, 3, cmd_add_cpu_breakpoint, NULL },
    { "remove_cpu_breakpoint", 3, 3, cmd_remove_cpu_breakpoint, NULL },

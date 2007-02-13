@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * AP1011 - Sturgeon HyperTransport-PCI Bridge.
@@ -11,7 +11,8 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -24,7 +25,7 @@
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_ap1011_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_ap1011_read(cpu_gen_t *cpu,struct pci_device *dev,
                                   int reg)
 {
    switch (reg) {

@@ -1,5 +1,5 @@
 /*
- * Cisco 3600 simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor C2691 routines.
@@ -23,8 +23,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "dynamips.h"
+#include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "dev_c2691.h"
 #include "dev_vtty.h"

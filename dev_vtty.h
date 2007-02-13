@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Virtual console TTY.
@@ -98,6 +98,9 @@ int vtty_get_char(vtty_t *vtty);
 
 /* print a character to vtty */
 void vtty_put_char(vtty_t *vtty, char ch);
+
+/* Put a buffer to vtty */
+void vtty_put_buffer(vtty_t *vtty,char *buf,size_t len);
 
 /* Flush VTTY output */
 void vtty_flush(vtty_t *vtty);

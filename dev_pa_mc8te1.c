@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005-2006 Christophe Fillot.  All rights reserved.
  *
  * PA-MC-8TE1 card. Doesn't work at this time.
@@ -13,7 +13,8 @@
 #include <pthread.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -65,7 +66,7 @@ struct pa_mc_data {
 /*
  * dev_ssram_access
  */
-static void *dev_ssram_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *dev_ssram_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
@@ -81,10 +82,11 @@ static void *dev_ssram_access(cpu_mips_t *cpu,struct vdevice *dev,
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,
               "read  access to offset = 0x%x, pc = 0x%llx (size=%u)\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx (size=%u)\n",offset,cpu->pc,*data,op_size);
+              "val = 0x%llx (size=%u)\n",
+              offset,cpu_get_pc(cpu),*data,op_size);
    }
 #endif
 
@@ -140,7 +142,7 @@ static void plx9054_doorbell_callback(struct plx_data *plx_data,
 /*
  * pa_mc8te1_access()
  */
-static void *pa_mc8te1_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *pa_mc8te1_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
@@ -152,10 +154,10 @@ static void *pa_mc8te1_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -166,11 +168,12 @@ static void *pa_mc8te1_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -181,7 +184,7 @@ static void *pa_mc8te1_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * pci_pos_read()
  */
-static m_uint32_t pci_pos_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
+static m_uint32_t pci_pos_read(cpu_gen_t *cpu,struct pci_device *dev,int reg)
 {
    struct pa_mc_data *d = dev->priv_data;
 
@@ -200,7 +203,7 @@ static m_uint32_t pci_pos_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
 /*
  * pci_pos_write()
  */
-static void pci_pos_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_pos_write(cpu_gen_t *cpu,struct pci_device *dev,
                           int reg,m_uint32_t value)
 {
    struct pa_mc_data *d = dev->priv_data;

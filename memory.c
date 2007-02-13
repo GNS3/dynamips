@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -14,22 +14,20 @@
 #include <fcntl.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
-#include "cpu.h"
-#include "cp0.h"
-#include "vm.h"
 
 /* Record a memory access */
-void memlog_rec_access(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint64_t data,
+void memlog_rec_access(cpu_gen_t *cpu,m_uint64_t vaddr,m_uint64_t data,
                        m_uint32_t op_size,m_uint32_t op_type)
 {
    memlog_access_t *acc;
 
    acc = &cpu->memlog_array[cpu->memlog_pos];
-   acc->pc      = cpu->pc;
+   acc->iaddr   = cpu_get_pc(cpu);
    acc->vaddr   = vaddr;
    acc->data    = data;
    acc->op_size = op_size;
@@ -40,7 +38,7 @@ void memlog_rec_access(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint64_t data,
 }
 
 /* Show the latest memory accesses */
-void memlog_dump(cpu_mips_t *cpu)
+void memlog_dump(cpu_gen_t *cpu)
 {
    memlog_access_t *acc;
    char s_data[64];
@@ -51,7 +49,7 @@ void memlog_dump(cpu_mips_t *cpu)
       pos &= (MEMLOG_COUNT-1);
       acc = &cpu->memlog_array[pos];
 
-      if (cpu->pc) {
+      if (cpu_get_pc(cpu)) {
          if (acc->data_valid)
             snprintf(s_data,sizeof(s_data),"0x%llx",acc->data);
          else
@@ -59,7 +57,7 @@ void memlog_dump(cpu_mips_t *cpu)
 
          printf("CPU%u: pc=0x%8.8llx, vaddr=0x%8.8llx, "
                 "size=%u, type=%s, data=%s\n",
-                cpu->id,acc->pc,acc->vaddr,acc->op_size,
+                cpu->id,acc->iaddr,acc->vaddr,acc->op_size,
                 (acc->op_type == MTS_READ) ? "read " : "write",
                 s_data);
       }
@@ -67,7 +65,7 @@ void memlog_dump(cpu_mips_t *cpu)
 }
 
 /* Update the data obtained by a read access */
-void memlog_update_read(cpu_mips_t *cpu,m_iptr_t raddr)
+void memlog_update_read(cpu_gen_t *cpu,m_iptr_t raddr)
 {
    memlog_access_t *acc;
 
@@ -94,539 +92,73 @@ void memlog_update_read(cpu_mips_t *cpu,m_iptr_t raddr)
    }
 }
 
-/* MTS access with special access mask */
-void mts_access_special(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t mask,
-                        u_int op_code,u_int op_type,u_int op_size,
-                        m_uint64_t *data,u_int *exc)
-{
-   switch(mask) {
-      case MTS_ACC_U:
-#if DEBUG_MTS_ACC_U
-         if (op_type == MTS_READ)
-            cpu_log(cpu,"MTS","read  access to undefined address 0x%llx at "
-                    "pc=0x%llx (size=%u)\n",vaddr,cpu->pc,op_size);
-         else
-            cpu_log(cpu,"MTS","write access to undefined address 0x%llx at "
-                    "pc=0x%llx, value=0x%8.8llx (size=%u)\n",
-                    vaddr,cpu->pc,*data,op_size);
-#endif
-         if (op_type == MTS_READ)
-            *data = 0;
-         break;
-
-      case MTS_ACC_T:
-         if (op_code != MIPS_MEMOP_LOOKUP) {
-#if DEBUG_MTS_ACC_T
-            cpu_log(cpu,"MTS","TLB exception for address 0x%llx at pc=0x%llx "
-                    "(%s access, size=%u)\n",
-                    vaddr,cpu->pc,(op_type == MTS_READ) ? 
-                    "read":"write",op_size);
-            mips64_dump_regs(cpu);
-#if MEMLOG_ENABLE
-            memlog_dump(cpu);
-#endif
-#endif
-            cpu->cp0.reg[MIPS_CP0_BADVADDR] = vaddr;
-
-            if (op_type == MTS_READ)
-               mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_TLB_LOAD,0);
-            else
-               mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_TLB_SAVE,0);
-         }
-         
-         *exc = 1;
-         break;
-
-      case MTS_ACC_AE:
-         if (op_code != MIPS_MEMOP_LOOKUP) {
-#if DEBUG_MTS_ACC_AE
-            cpu_log(cpu,"MTS","AE exception for address 0x%llx at pc=0x%llx "
-                    "(%s access)\n",
-                    vaddr,cpu->pc,(op_type == MTS_READ) ? "read":"write");
-#endif
-            cpu->cp0.reg[MIPS_CP0_BADVADDR] = vaddr;
-
-            if (op_type == MTS_READ)
-               mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_ADDR_LOAD,0);
-            else
-               mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_ADDR_SAVE,0);
-         }
-
-         *exc = 1;
-         break;
-   }
-}
-
-/* === MTS for 64-bit address space ======================================= */
-#define MTS_ADDR_SIZE      64
-#define MTS_PROTO(name)    mts64_##name
-#define MTS_PROTO_UP(name) MTS64_##name
-
-#include "mips_mts.c"
-
-/* === MTS for 32-bit address space ======================================= */
-#define MTS_ADDR_SIZE      32
-#define MTS_PROTO(name)    mts32_##name
-#define MTS_PROTO_UP(name) MTS32_##name
-
-#include "mips_mts.c"
-
-/* === Specific operations for MTS64 ====================================== */
-
-/* MTS64 slow lookup */
-static forced_inline 
-mts64_entry_t *mts64_slow_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                 u_int op_code,u_int op_size,
-                                 u_int op_type,m_uint64_t *data,
-                                 u_int *exc)
-{
-   m_uint32_t hash_bucket,zone,sub_zone,cca;
-   mts64_entry_t *entry,new_entry;
-   mts_map_t map;
-
-   map.tlb_index = -1;
-   hash_bucket = MTS64_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-   zone = vaddr >> 40;
-
-#if DEBUG_MTS_STATS
-   cpu->mts_misses++;
-#endif
-
-   switch(zone) {
-      case 0x000000:   /* xkuseg */
-      case 0x400000:   /* xksseg */
-      case 0xc00000:   /* xkseg */
-         /* trigger TLB exception if no matching entry found */
-         if (!cp0_tlb_lookup(cpu,vaddr,&map))
-            goto err_tlb;
-
-         if (!mts64_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-
-      case 0xffffff:
-         sub_zone  = (vaddr >> 29) & 0x7FF;
-
-         switch(sub_zone) {
-            case 0x7fc:   /* ckseg0 */
-               map.vaddr  = sign_extend(MIPS_KSEG0_BASE,32);
-               map.paddr  = 0;
-               map.len    = MIPS_KSEG0_SIZE;
-               map.cached = TRUE;
-               if (!mts64_map(cpu,vaddr,&map,&new_entry))
-                  goto err_undef;
-               break;
-
-            case 0x7fd:   /* ckseg1 */
-               map.vaddr  = sign_extend(MIPS_KSEG1_BASE,32);
-               map.paddr  = 0;
-               map.len    = MIPS_KSEG1_SIZE;
-               map.cached = FALSE;
-               if (!mts64_map(cpu,vaddr,&map,&new_entry))
-                  goto err_undef;
-               break;
-
-            case 0x7fe:   /* cksseg */
-            case 0x7ff:   /* ckseg3 */
-               /* trigger TLB exception if no matching entry found */
-               if (!cp0_tlb_lookup(cpu,vaddr,&map))
-                  goto err_tlb;
-
-               if (!mts64_map(cpu,vaddr,&map,&new_entry))
-                  goto err_undef;
-               break;
-
-            default:
-               /* Invalid zone: generate Address Error (AE) exception */
-               goto err_address;
-         }
-         break;
-   
-         /* xkphys */
-      case 0x800000:
-      case 0x880000:
-      case 0x900000:
-      case 0x980000:
-      case 0xa00000:
-      case 0xa80000:
-      case 0xb00000:
-      case 0xb80000:
-         cca = (vaddr >> MIPS64_XKPHYS_CCA_SHIFT) & 0x03;
-         map.cached = mips64_cca_cached(cca);
-         map.vaddr  = vaddr & MIPS64_XKPHYS_ZONE_MASK;
-         map.paddr  = 0;
-         map.len    = MIPS64_XKPHYS_PHYS_SIZE;
-         if (!mts64_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-
-      default:
-         /* Invalid zone: generate Address Error (AE) exception */
-         goto err_address;
-   }
-
-   /* Get a new entry if necessary */
-   if (!entry) {
-      entry = mts64_alloc_entry(cpu);
-      entry->pself = entry->pprev = NULL;
-      entry->next = NULL;
-
-      /* Store the entry in hash table for future use */
-      cpu->mts_cache[hash_bucket] = entry;
-   } else {
-      /* Remove the entry from the reverse map list */
-      if (entry->pprev) {
-         if (entry->next)
-            entry->next->pprev = entry->pprev;
-
-         *(entry->pprev) = entry->next;
-      }
-   }
-
-   /* Add this entry to the reverse map list */
-   if (map.tlb_index != -1) {
-      entry->pself = (mts64_entry_t **)&cpu->mts_cache[hash_bucket];
-      entry->next  = cpu->mts_rmap[map.tlb_index];
-      entry->pprev = (mts64_entry_t **)&cpu->mts_rmap[map.tlb_index];
-      if (entry->next)
-         entry->next->pprev = &entry->next;
-      cpu->mts_rmap[map.tlb_index] = entry;
-   }
-
-   /* Fill the new entry or replace the previous */
-   entry->phys_page = new_entry.phys_page;
-   entry->start  = new_entry.start;
-   entry->mask   = new_entry.mask;
-   entry->action = new_entry.action;
-   return entry;
-
- err_undef:
-   mts_access_special(cpu,vaddr,MTS_ACC_U,op_code,op_type,op_size,data,exc);
-   return NULL;
- err_address:
-   mts_access_special(cpu,vaddr,MTS_ACC_AE,op_code,op_type,op_size,data,exc);
-   return NULL;
- err_tlb:
-   mts_access_special(cpu,vaddr,MTS_ACC_T,op_code,op_type,op_size,data,exc);
-   return NULL;
-}
-
-/* MTS64 access */
-static forced_inline void *mts64_access(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                        u_int op_code,u_int op_size,
-                                        u_int op_type,m_uint64_t *data,
-                                        u_int *exc)
-{
-   m_uint32_t hash_bucket;
-   mts64_entry_t *entry;
-   m_iptr_t haddr;
-   u_int dev_id;
-
-#if MEMLOG_ENABLE
-   /* Record the memory access */
-   memlog_rec_access(cpu,vaddr,*data,op_size,op_type);
-#endif
-
-   *exc = 0;
-   hash_bucket = MTS64_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-
-#if DEBUG_MTS_STATS
-   cpu->mts_lookups++;
-#endif
-
-   /* Slow lookup if nothing found in cache */
-   if (unlikely((!entry) || 
-       unlikely((vaddr & sign_extend(entry->mask,32)) != entry->start))) 
-   {
-      entry = mts64_slow_lookup(cpu,vaddr,op_code,op_size,op_type,data,exc);
-      if (!entry) return NULL;
-   }
-
-   /* Device access */
-   if (unlikely(entry->action & MTS_DEV_MASK)) {
-      dev_id = (entry->action & MTS_DEVID_MASK) >> MTS_DEVID_SHIFT;
-      haddr = entry->action & MTS_DEVOFF_MASK;
-      haddr += vaddr - entry->start;
-
-#if DEBUG_MTS_DEV
-      cpu_log(cpu,"MTS64",
-              "device access: vaddr=0x%llx, pc=0x%llx, dev_offset=0x%x\n",
-              vaddr,cpu->pc,haddr);
-#endif
-      return(dev_access_fast(cpu,dev_id,haddr,op_size,op_type,data));
-   }
-
-   /* Raw memory access */
-   haddr = entry->action & MTS_ADDR_MASK;
-   haddr += vaddr - entry->start;
-#if MEMLOG_ENABLE
-   memlog_update_read(cpu,haddr);
-#endif
-   return((void *)haddr);
-}
-
-/* MTS64 virtual address to physical page translation */
-static fastcall int mts64_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                    m_uint32_t *phys_page)
-{   
-   m_uint32_t hash_bucket,offset;
-   mts64_entry_t *entry;
-   m_uint64_t data = 0;
-   u_int exc = 0;
-   
-   hash_bucket = MTS64_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-
-   /* Slow lookup if nothing found in cache */
-   if (unlikely((!entry) || 
-       unlikely((vaddr & sign_extend(entry->mask,32)) != entry->start))) 
-   {
-      entry = mts64_slow_lookup(cpu,vaddr,MIPS_MEMOP_LOOKUP,4,MTS_READ,
-                                &data,&exc);
-      if (!entry)
-         return(-1);
-   }
-
-   offset = vaddr - entry->start;
-   *phys_page = entry->phys_page + (offset >> MIPS_MIN_PAGE_SHIFT);
-   return(0);
-}
-
-/* === Specific operations for MTS32 ====================================== */
-
-/* MTS32 slow lookup */
-static forced_inline 
-mts32_entry_t *mts32_slow_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                 u_int op_code,u_int op_size,
-                                 u_int op_type,m_uint64_t *data,
-                                 u_int *exc)
-{
-   m_uint32_t hash_bucket,zone;
-   mts32_entry_t *entry,new_entry;
-   mts_map_t map;
-
-   map.tlb_index = -1;
-   hash_bucket = MTS32_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-   zone = (vaddr >> 29) & 0x7;
-
-#if DEBUG_MTS_STATS
-   cpu->mts_misses++;
-#endif
-
-   switch(zone) {
-      case 0x00 ... 0x03:   /* kuseg */
-         /* trigger TLB exception if no matching entry found */
-         if (!cp0_tlb_lookup(cpu,vaddr,&map))
-            goto err_tlb;
-
-         if (!mts32_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-
-      case 0x04:   /* kseg0 */
-         map.vaddr  = sign_extend(MIPS_KSEG0_BASE,32);
-         map.paddr  = 0;
-         map.len    = MIPS_KSEG0_SIZE;
-         map.cached = TRUE;
-         if (!mts32_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-
-      case 0x05:   /* kseg1 */
-         map.vaddr  = sign_extend(MIPS_KSEG1_BASE,32);
-         map.paddr  = 0;
-         map.len    = MIPS_KSEG1_SIZE;
-         map.cached = FALSE;
-         if (!mts32_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-
-      case 0x06:   /* ksseg */
-      case 0x07:   /* kseg3 */
-         /* trigger TLB exception if no matching entry found */
-         if (!cp0_tlb_lookup(cpu,vaddr,&map))
-            goto err_tlb;
-
-         if (!mts32_map(cpu,vaddr,&map,&new_entry))
-            goto err_undef;
-         break;
-   }
-
-   /* Get a new entry if necessary */
-   if (!entry) {
-      entry = mts32_alloc_entry(cpu);
-      entry->pself = entry->pprev = NULL;
-      entry->next = NULL;
-
-      /* Store the entry in hash table for future use */
-      cpu->mts_cache[hash_bucket] = entry;
-   } else {
-      /* Remove the entry from the reverse map list */
-      if (entry->pprev) {
-         if (entry->next)
-            entry->next->pprev = entry->pprev;
-
-         *(entry->pprev) = entry->next;
-      }
-   }
-
-   /* Add this entry to the reverse map list */
-   if (map.tlb_index != -1) {
-      entry->pself = (mts32_entry_t **)&cpu->mts_cache[hash_bucket];
-      entry->next  = cpu->mts_rmap[map.tlb_index];
-      entry->pprev = (mts32_entry_t **)&cpu->mts_rmap[map.tlb_index];
-      if (entry->next)
-         entry->next->pprev = &entry->next;
-      cpu->mts_rmap[map.tlb_index] = entry;
-   }
-
-   /* Fill the new entry or replace the previous */
-   entry->phys_page = new_entry.phys_page;
-   entry->start  = new_entry.start;
-   entry->mask   = new_entry.mask;
-   entry->action = new_entry.action;
-   return entry;
-
- err_undef:
-   mts_access_special(cpu,vaddr,MTS_ACC_U,op_code,op_type,op_size,data,exc);
-   return NULL;
- err_address:
-   mts_access_special(cpu,vaddr,MTS_ACC_AE,op_code,op_type,op_size,data,exc);
-   return NULL;
- err_tlb:
-   mts_access_special(cpu,vaddr,MTS_ACC_T,op_code,op_type,op_size,data,exc);
-   return NULL;
-}
-
-/* MTS32 access */
-static forced_inline void *mts32_access(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                        u_int op_code,u_int op_size,
-                                        u_int op_type,m_uint64_t *data,
-                                        u_int *exc)
-{
-   m_uint32_t hash_bucket;
-   mts32_entry_t *entry;
-   m_iptr_t haddr;
-   u_int dev_id;
-
-#if MEMLOG_ENABLE
-   /* Record the memory access */
-   memlog_rec_access(cpu,vaddr,*data,op_size,op_type);
-#endif
-
-   *exc = 0;
-   hash_bucket = MTS32_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-
-#if DEBUG_MTS_STATS
-   cpu->mts_lookups++;
-#endif
-
-   /* Slow lookup if nothing found in cache */
-   if (unlikely((!entry) || unlikely((vaddr & entry->mask) != entry->start))) {
-      entry = mts32_slow_lookup(cpu,vaddr,op_code,op_size,op_type,data,exc);
-      if (!entry) return NULL;
-   }
-
-   /* Device access */
-   if (unlikely(entry->action & MTS_DEV_MASK)) {
-      dev_id = (entry->action & MTS_DEVID_MASK) >> MTS_DEVID_SHIFT;
-      haddr = entry->action & MTS_DEVOFF_MASK;
-      haddr += (m_uint32_t)vaddr - entry->start;
-
-#if DEBUG_MTS_DEV
-      cpu_log(cpu,"MTS32",
-              "device access: vaddr=0x%llx, pc=0x%llx, dev_offset=0x%x\n",
-              vaddr,cpu->pc,haddr);
-#endif
-      return(dev_access_fast(cpu,dev_id,haddr,op_size,op_type,data));
-   }
-
-   /* Raw memory access */
-   haddr = entry->action & MTS_ADDR_MASK;
-   haddr += (m_uint32_t)vaddr - entry->start;
-#if MEMLOG_ENABLE
-   memlog_update_read(cpu,haddr);
-#endif
-   return((void *)haddr);
-}
-
-/* MTS32 virtual address to physical page translation */
-static fastcall int mts32_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                    m_uint32_t *phys_page)
-{   
-   m_uint32_t hash_bucket,offset;
-   mts32_entry_t *entry;
-   m_uint64_t data = 0;
-   u_int exc = 0;
-   
-   hash_bucket = MTS32_HASH(vaddr);
-   entry = cpu->mts_cache[hash_bucket];
-
-   /* Slow lookup if nothing found in cache */
-   if (unlikely((!entry) || unlikely((vaddr & entry->mask) != entry->start))) {
-      entry = mts32_slow_lookup(cpu,vaddr,MIPS_MEMOP_LOOKUP,4,MTS_READ,
-                                &data,&exc);
-      if (!entry)
-         return(-1);
-   }
-
-   offset = vaddr - entry->start;
-   *phys_page = entry->phys_page + (offset >> MIPS_MIN_PAGE_SHIFT);
-   return(0);
-}
-
-/* ======================================================================== */
-
-/* Shutdown MTS subsystem */
-void mts_shutdown(cpu_mips_t *cpu)
-{
-   if (cpu->mts_shutdown != NULL)
-      cpu->mts_shutdown(cpu);
-}
-
-/* Set the address mode */
-int mts_set_addr_mode(cpu_mips_t *cpu,u_int addr_mode)
-{
-   if (cpu->addr_mode != addr_mode) {
-      mts_shutdown(cpu);
-      
-      switch(addr_mode) {
-         case 32:
-            mts32_init(cpu);
-            mts32_init_memop_vectors(cpu);
-            break;
-         case 64:
-            mts64_init(cpu);
-            mts64_init_memop_vectors(cpu);
-            break;
-         default:
-            fprintf(stderr,
-                    "mts_set_addr_mode: internal error (addr_mode=%u)\n",
-                    addr_mode);
-            exit(EXIT_FAILURE);
-      }
-   }
-
-   return(0);
-}
 
 /* === Operations on physical memory ====================================== */
+
+/* Get host pointer for the physical address */
+static inline void *physmem_get_hptr(vm_instance_t *vm,m_uint64_t paddr,
+                                     u_int op_size,u_int op_type,
+                                     m_uint64_t *data)
+{
+   struct vdevice *dev;
+   m_uint32_t offset;
+   void *ptr;
+   int cow;
+
+   if (!(dev = dev_lookup(vm,paddr,FALSE)))
+      return NULL;
+
+   if (dev->flags & VDEVICE_FLAG_SPARSE) {
+      ptr = (void *)dev_sparse_get_host_addr(vm,dev,paddr,op_type,&cow);
+      if (!ptr) return NULL;
+
+      return(ptr + (paddr & VM_PAGE_IMASK));
+   }
+
+   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
+      return((void *)dev->host_addr + (paddr - dev->phys_addr));
+
+   if (op_size == 0)
+      return NULL;
+
+   offset = paddr - dev->phys_addr;
+   return(dev->handler(vm->boot_cpu,dev,offset,op_size,op_type,data));
+}
 
 /* Copy a memory block from VM physical RAM to real host */
 void physmem_copy_from_vm(vm_instance_t *vm,void *real_buffer,
                           m_uint64_t paddr,size_t len)
 {
-   struct vdevice *vm_ram;
+   m_uint64_t dummy;
+   m_uint32_t r;
    u_char *ptr;
 
-   if ((vm_ram = dev_lookup(vm,paddr,FALSE)) != NULL) {
-      assert(vm_ram->host_addr != 0);
-      ptr = (u_char *)vm_ram->host_addr + (paddr - vm_ram->phys_addr);
-      memcpy(real_buffer,ptr,len);
+   while(len > 0) {
+      r = m_min(VM_PAGE_SIZE - (paddr & VM_PAGE_IMASK), len);
+      ptr = physmem_get_hptr(vm,paddr,0,MTS_READ,&dummy);
+      
+      if (likely(ptr != NULL)) {
+         memcpy(real_buffer,ptr,r);
+      } else {
+         r = m_min(len,4);
+         switch(r) {
+            case 4:
+               *(m_uint32_t *)real_buffer = 
+                  htovm32(physmem_copy_u32_from_vm(vm,paddr));
+               break;
+            case 2:
+               *(m_uint16_t *)real_buffer =
+                  htovm16(physmem_copy_u16_from_vm(vm,paddr));
+               break;
+            case 1:
+               *(m_uint8_t *)real_buffer = physmem_copy_u8_from_vm(vm,paddr);
+               break;
+         }
+      }
+
+      real_buffer += r;
+      paddr += r;
+      len -= r;
    }
 }
 
@@ -634,130 +166,132 @@ void physmem_copy_from_vm(vm_instance_t *vm,void *real_buffer,
 void physmem_copy_to_vm(vm_instance_t *vm,void *real_buffer,
                         m_uint64_t paddr,size_t len)
 {
-   struct vdevice *vm_ram;
+   m_uint64_t dummy;
+   m_uint32_t r;
    u_char *ptr;
 
-   if ((vm_ram = dev_lookup(vm,paddr,FALSE)) != NULL) {
-      assert(vm_ram->host_addr != 0);
-      ptr = (u_char *)vm_ram->host_addr + (paddr - vm_ram->phys_addr);
-      memcpy(ptr,real_buffer,len);
+   while(len > 0) {
+      r = m_min(VM_PAGE_SIZE - (paddr & VM_PAGE_IMASK), len);
+      ptr = physmem_get_hptr(vm,paddr,0,MTS_WRITE,&dummy);
+      
+      if (likely(ptr != NULL)) {
+         memcpy(ptr,real_buffer,r);
+      } else {
+         r = m_min(len,4);
+         switch(r) {
+            case 4:
+               physmem_copy_u32_to_vm(vm,paddr,
+                                      htovm32(*(m_uint32_t *)real_buffer));
+               break;
+            case 2:
+               physmem_copy_u16_to_vm(vm,paddr,
+                                      htovm16(*(m_uint16_t *)real_buffer));
+               break;
+            case 1:
+               physmem_copy_u8_to_vm(vm,paddr,*(m_uint8_t *)real_buffer);
+               break;
+         }
+      }
+
+      real_buffer += r;
+      paddr += r;
+      len -= r;
    }
 }
 
 /* Copy a 32-bit word from the VM physical RAM to real host */
 m_uint32_t physmem_copy_u32_from_vm(vm_instance_t *vm,m_uint64_t paddr)
 {
-   struct vdevice *dev;
-   m_uint32_t offset;
-   m_uint64_t tmp;
-   void *ptr;
+   m_uint64_t tmp = 0;
+   m_uint32_t *ptr;
 
-   if (unlikely((dev = dev_lookup(vm,paddr,FALSE)) == NULL))
-      return(0);
+   if ((ptr = physmem_get_hptr(vm,paddr,4,MTS_READ,&tmp)) != NULL)
+      return(vmtoh32(*ptr));
 
-   offset = paddr - dev->phys_addr;
-
-   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      ptr = (u_char *)dev->host_addr + offset;
-   else {
-      ptr = dev->handler(vm->boot_cpu,dev,offset,4,MTS_READ,&tmp);
-      if (!ptr) return(tmp);
-   }
-   
-   return(vmtoh32(*(m_uint32_t *)ptr));
+   return(tmp);
 }
 
 /* Copy a 32-bit word to the VM physical RAM from real host */
 void physmem_copy_u32_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t val)
 {
-   struct vdevice *dev;
-   m_uint32_t offset;
-   m_uint64_t tmp;
-   void *ptr;
+   m_uint64_t tmp = val;
+   m_uint32_t *ptr;
 
-   if (unlikely((dev = dev_lookup(vm,paddr,FALSE)) == NULL))
-      return;
-
-   offset = paddr - dev->phys_addr;
-
-   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      ptr = (u_char *)dev->host_addr + offset;
-   else {
-      tmp = val;
-      ptr = dev->handler(vm->boot_cpu,dev,offset,4,MTS_WRITE,&tmp);
-      if (!ptr) return;
-   }
-   
-   *(m_uint32_t *)ptr = htovm32(val);
+   if ((ptr = physmem_get_hptr(vm,paddr,4,MTS_WRITE,&tmp)) != NULL)   
+      *ptr = htovm32(val);
 }
 
 /* Copy a 16-bit word from the VM physical RAM to real host */
 m_uint16_t physmem_copy_u16_from_vm(vm_instance_t *vm,m_uint64_t paddr)
 {
-   struct vdevice *dev;
-   m_uint32_t offset;
-   m_uint64_t tmp;
-   void *ptr;
+   m_uint64_t tmp = 0;
+   m_uint16_t *ptr;
 
-   if (unlikely((dev = dev_lookup(vm,paddr,FALSE)) == NULL))
-      return(0);
+   if ((ptr = physmem_get_hptr(vm,paddr,2,MTS_READ,&tmp)) != NULL)
+      return(vmtoh16(*ptr));
 
-   offset = paddr - dev->phys_addr;
-
-   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      ptr = (u_char *)dev->host_addr + offset;
-   else {
-      ptr = dev->handler(vm->boot_cpu,dev,offset,2,MTS_READ,&tmp);
-      if (!ptr) return(tmp);
-   }
-   
-   return(vmtoh16(*(m_uint16_t *)ptr));
+   return(tmp);
 }
 
 /* Copy a 16-bit word to the VM physical RAM from real host */
 void physmem_copy_u16_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint16_t val)
 {
-   struct vdevice *dev;
-   m_uint32_t offset;
-   m_uint64_t tmp;
-   void *ptr;
+   m_uint64_t tmp = val;
+   m_uint16_t *ptr;
 
-   if (unlikely((dev = dev_lookup(vm,paddr,FALSE)) == NULL))
-      return;
+   if ((ptr = physmem_get_hptr(vm,paddr,2,MTS_WRITE,&tmp)) != NULL)   
+      *ptr = htovm16(val);
+}
 
-   offset = paddr - dev->phys_addr;
+/* Copy a byte from the VM physical RAM to real host */
+m_uint8_t physmem_copy_u8_from_vm(vm_instance_t *vm,m_uint64_t paddr)
+{
+   m_uint64_t tmp = 0;
+   m_uint8_t *ptr;
 
-   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      ptr = (u_char *)dev->host_addr + offset;
-   else {
-      tmp = val;
-      ptr = dev->handler(vm->boot_cpu,dev,offset,2,MTS_WRITE,&tmp);
-      if (!ptr) return;
-   }
-   
-   *(m_uint16_t *)ptr = htovm16(val);
+   if ((ptr = physmem_get_hptr(vm,paddr,1,MTS_READ,&tmp)) != NULL)
+      return(*ptr);
+
+   return(tmp);
+}
+
+/* Copy a 16-bit word to the VM physical RAM from real host */
+void physmem_copy_u8_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint8_t val)
+{
+   m_uint64_t tmp = val;
+   m_uint8_t *ptr;
+
+   if ((ptr = physmem_get_hptr(vm,paddr,1,MTS_WRITE,&tmp)) != NULL)   
+      *ptr = val;
 }
 
 /* DMA transfer operation */
 void physmem_dma_transfer(vm_instance_t *vm,m_uint64_t src,m_uint64_t dst,
                           size_t len)
 {
-   struct vdevice *src_dev,*dst_dev;
+   m_uint64_t dummy;
    u_char *sptr,*dptr;
+   size_t clen,sl,dl;
 
-   src_dev = dev_lookup(vm,src,FALSE);
-   dst_dev = dev_lookup(vm,dst,FALSE);
+   while(len > 0) {
+      sptr = physmem_get_hptr(vm,src,0,MTS_READ,&dummy);
+      dptr = physmem_get_hptr(vm,dst,0,MTS_WRITE,&dummy);
 
-   if ((src_dev != NULL) && (dst_dev != NULL)) {
-      assert(src_dev->host_addr != 0);
-      assert(dst_dev->host_addr != 0);
-      
-      sptr = (u_char *)src_dev->host_addr + (src - src_dev->phys_addr);
-      dptr = (u_char *)dst_dev->host_addr + (dst - dst_dev->phys_addr);
-      memcpy(dptr,sptr,len);
-   } else {
-      vm_log(vm,"DMA","unable to transfer from 0x%llx to 0x%llx (len=%lu)\n",
-             src,dst,(u_long)len);
+      if (!sptr || !dptr) {
+         vm_log(vm,"DMA","unable to transfer from 0x%llx to 0x%llx\n",src,dst);
+         return;
+      }
+
+      sl = VM_PAGE_SIZE - (src & VM_PAGE_IMASK);
+      dl = VM_PAGE_SIZE - (dst & VM_PAGE_IMASK);
+      clen = m_min(sl,dl);
+      clen = m_min(clen,len);
+
+      memcpy(dptr,sptr,clen);
+
+      src += clen;
+      dst += clen;
+      len -= clen;
    }
 }
 

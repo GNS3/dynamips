@@ -1,8 +1,8 @@
 /* 
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
- * Cisco C7200 (Predator) DEC21050/DEC21150 PCI bridges.
+ * DEC21050/DEC21150 PCI bridges.
  * This is just a fake device.
  */
 
@@ -10,7 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -21,6 +22,8 @@
 #define PCI_PRODUCT_DEC_21052  0x0021
 #define PCI_PRODUCT_DEC_21150  0x0023
 #define PCI_PRODUCT_DEC_21152  0x0024
+#define PCI_PRODUCT_DEC_21154  0x0026
+
 
 /*
  * dev_dec21050_init()
@@ -74,6 +77,20 @@ int dev_dec21152_init(struct pci_bus *pci_bus,int pci_device,
    
    dev = pci_bridge_create_dev(pci_bus,"dec21152",
                                PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21152,
+                               pci_device,0,sec_bus,NULL,NULL);
+   return((dev != NULL) ? 0 : -1);
+}
+
+/*
+ * dev_dec21154_init()
+ */
+int dev_dec21154_init(struct pci_bus *pci_bus,int pci_device,
+                      struct pci_bus *sec_bus)
+{
+   struct pci_device *dev;
+   
+   dev = pci_bridge_create_dev(pci_bus,"dec21154",
+                               PCI_VENDOR_DEC,PCI_PRODUCT_DEC_21154,
                                pci_device,0,sec_bus,NULL,NULL);
    return((dev != NULL) ? 0 : -1);
 }

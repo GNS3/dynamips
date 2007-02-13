@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router) simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Network Input/Output Abstraction Layer.
@@ -206,6 +206,14 @@ ssize_t netio_send(netio_desc_t *nio,void *pkt,size_t len)
          return(-1);
    }
 
+   /* Apply the bidirectional filter */
+   if (nio->both_filter != NULL) {
+      res = nio->both_filter->pkt_handler(nio,pkt,len,nio->both_filter_data);
+
+      if (res == NETIO_FILTER_ACTION_DROP)
+         return(-1);
+   }
+
    return(nio->send(nio->dptr,pkt,len));
 }
 
@@ -230,6 +238,14 @@ ssize_t netio_recv(netio_desc_t *nio,void *pkt,size_t max_len)
    /* Apply the RX filter */
    if (nio->rx_filter != NULL) {
       res = nio->rx_filter->pkt_handler(nio,pkt,len,nio->rx_filter_data);
+
+      if (res == NETIO_FILTER_ACTION_DROP)
+         return(-1);
+   }
+
+   /* Apply the bidirectional filter */
+   if (nio->both_filter != NULL) {
+      res = nio->both_filter->pkt_handler(nio,pkt,len,nio->both_filter_data);
 
       if (res == NETIO_FILTER_ACTION_DROP)
          return(-1);
@@ -1327,6 +1343,7 @@ static int netio_free(void *data,void *arg)
    if (nio) {
       netio_filter_unbind(nio,NETIO_FILTER_DIR_RX);
       netio_filter_unbind(nio,NETIO_FILTER_DIR_TX);
+      netio_filter_unbind(nio,NETIO_FILTER_DIR_BOTH);
 
       switch(nio->type) {
          case NETIO_TYPE_UNIX:

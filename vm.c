@@ -1,10 +1,8 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Virtual machine abstraction.
- *
- * TODO: IRQ Routing.
  */
 
 #include <stdio.h>
@@ -20,15 +18,29 @@
 #include "device.h"
 #include "pci_dev.h"
 #include "pci_io.h"
+#include "cpu.h"
+#include "mips64_jit.h"
 #include "vm.h"
 #include "dev_vtty.h"
 
-#include ARCH_INC_FILE
+#include MIPS64_ARCH_INC_FILE
 
 #define DEBUG_VM  1
 
+#define VM_GLOCK()   pthread_mutex_lock(&vm_global_lock)
+#define VM_GUNLOCK() pthread_mutex_unlock(&vm_global_lock)
+
 /* Type of VM file naming (0=use VM name, 1=use instance ID) */
 int vm_file_naming_type = 0;
+
+/* Pool of ghost images */
+static vm_ghost_image_t *vm_ghost_pool = NULL;
+
+/* Global lock for VM manipulation */
+static pthread_mutex_t vm_global_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Free all chunks used by a VM */
+static void vm_chunk_free_all(vm_instance_t *vm);
 
 /* Initialize a VM object */
 void vm_object_init(vm_obj_t *obj)
@@ -130,6 +142,12 @@ char *vm_get_type(vm_instance_t *vm)
      case VM_TYPE_C3745:
          machine = "c3745";
          break;
+     case VM_TYPE_C2600:
+         machine = "c2600";
+         break;
+     case VM_TYPE_PPC32_TEST:
+         machine = "ppc32_test";
+         break;
       default:
          machine = "unknown";
          break;
@@ -159,6 +177,12 @@ char *vm_get_platform_type(vm_instance_t *vm)
       case VM_TYPE_C3745:
          machine = "C3745";
          break;
+      case VM_TYPE_C2600:
+         machine = "C2600";
+         break;
+     case VM_TYPE_PPC32_TEST:
+         machine = "PPC32_TEST";
+         break;
       default:
          machine = "VM";
          break;
@@ -185,6 +209,9 @@ u_int vm_get_mac_addr_msb(vm_instance_t *vm)
 
       case VM_TYPE_C3745:
          return(0xC4);
+
+      case VM_TYPE_C2600:
+         return(0xC8);
 
       default:
          return(0xC6);
@@ -280,9 +307,11 @@ void vm_log(vm_instance_t *vm,char *module,char *format,...)
 { 
    va_list ap;
 
-   va_start(ap,format);
-   vm_flog(vm,module,format,ap);
-   va_end(ap);
+   if (vm->log_fd) {
+      va_start(ap,format);
+      vm_flog(vm,module,format,ap);
+      va_end(ap);
+   }
 }
 
 /* Close the log file */
@@ -301,17 +330,19 @@ int vm_close_log(vm_instance_t *vm)
 /* Create the log file */
 int vm_create_log(vm_instance_t *vm)
 {
-   vm_close_log(vm);
+   if (vm->log_file_enabled) {
+      vm_close_log(vm);
 
-   if (!(vm->log_file = vm_build_filename(vm,"log.txt")))
-      return(-1);
+      if (!(vm->log_file = vm_build_filename(vm,"log.txt")))
+         return(-1);
 
-   if (!(vm->log_fd = fopen(vm->log_file,"w"))) {
-      fprintf(stderr,"VM %s: unable to create log file '%s'\n",
-              vm->name,vm->log_file);
-      free(vm->log_file);
-      vm->log_file = NULL;
-      return(-1);
+      if (!(vm->log_fd = fopen(vm->log_file,"w"))) {
+         fprintf(stderr,"VM %s: unable to create log file '%s'\n",
+                 vm->name,vm->log_file);
+         free(vm->log_file);
+         vm->log_file = NULL;
+         return(-1);
+      }
    }
 
    return(0);
@@ -348,6 +379,7 @@ vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
    vm->vtty_con_type  = VTTY_TYPE_TERM;
    vm->vtty_aux_type  = VTTY_TYPE_NONE;
    vm->timer_irq_check_itv = VM_TIMER_IRQ_CHECK_ITV;
+   vm->log_file_enabled = TRUE;
 
    if (!(vm->name = strdup(name))) {
       fprintf(stderr,"VM %s: unable to store instance name!\n",name);
@@ -421,6 +453,10 @@ int vm_hardware_shutdown(vm_instance_t *vm)
       }
    }     
 
+   /* Remove the IRQ routing vectors */
+   vm->set_irq = NULL;
+   vm->clear_irq = NULL;
+
    /* Delete the VTTY for Console and AUX ports */   
    vm_log(vm,"VM","deleting VTTY.\n");
    vm_delete_vtty(vm);
@@ -447,6 +483,9 @@ void vm_free(vm_instance_t *vm)
 
       /* Remove the lock file */
       vm_release_lock(vm,TRUE);
+
+      /* Free all chunks */
+      vm_chunk_free_all(vm);
 
       /* Free various elements */
       free(vm->ghost_ram_filename);
@@ -478,12 +517,14 @@ int vm_ram_init(vm_instance_t *vm,m_uint64_t paddr)
 
    len = vm->ram_size * 1048576;
 
-   if (vm->ghost_status == VM_GHOST_RAM_USE)
-      return(dev_ram_ghost_init(vm,"ram",vm->ghost_ram_filename,paddr,len));
+   if (vm->ghost_status == VM_GHOST_RAM_USE) {
+      return(dev_ram_ghost_init(vm,"ram",vm->sparse_mem,vm->ghost_ram_filename,
+                                paddr,len));
+   }
 
    return(dev_ram_init(vm,"ram",vm->ram_mmap,
                        (vm->ghost_status != VM_GHOST_RAM_GENERATE),
-                       vm->ghost_ram_filename,paddr,len));
+                       vm->ghost_ram_filename,vm->sparse_mem,paddr,len));
 }
 
 /* Initialize VTTY */
@@ -518,11 +559,11 @@ int vm_bind_device(vm_instance_t *vm,struct vdevice *dev)
     * Add this device to the device array. The index in the device array
     * is used by the MTS subsystem.
     */
-   for(i=0;i<MIPS64_DEVICE_MAX;i++)
+   for(i=0;i<VM_DEVICE_MAX;i++)
       if (!vm->dev_array[i])
          break;
 
-   if (i == MIPS64_DEVICE_MAX) {
+   if (i == VM_DEVICE_MAX) {
       fprintf(stderr,"VM%u: vm_bind_device: device table full.\n",
               vm->instance_id);
       return(-1);
@@ -560,7 +601,7 @@ int vm_unbind_device(vm_instance_t *vm,struct vdevice *dev)
    *(dev->pprev) = dev->next;
 
    /* Remove the device from the device array */
-   for(i=0;i<MIPS64_DEVICE_MAX;i++)
+   for(i=0;i<VM_DEVICE_MAX;i++)
       if (vm->dev_array[i] == dev) {
          vm->dev_array[i] = NULL;
          break;
@@ -600,34 +641,12 @@ int vm_map_device(vm_instance_t *vm,struct vdevice *dev,m_uint64_t base_addr)
    return(0);
 }
 
-/* Set an IRQ for a VM */
-void vm_set_irq(vm_instance_t *vm,u_int irq)
-{
-   if (vm->boot_cpu->irq_disable) {
-      vm->boot_cpu->irq_pending = 0;
-      return;
-   }
-
-   /* TODO: IRQ routing */
-   mips64_set_irq(vm->boot_cpu,irq);
-
-   if (vm->boot_cpu->irq_idle_preempt[irq])
-      mips64_idle_break_wait(vm->boot_cpu);
-}
-
-/* Clear an IRQ for a VM */
-void vm_clear_irq(vm_instance_t *vm,u_int irq)
-{
-   /* TODO: IRQ routing */
-   mips64_clear_irq(vm->boot_cpu,irq);
-}
-
 /* Suspend a VM instance */
 int vm_suspend(vm_instance_t *vm)
 {
    if (vm->status == VM_STATUS_RUNNING) {
       cpu_group_save_state(vm->cpu_group);
-      cpu_group_set_state(vm->cpu_group,MIPS_CPU_SUSPENDED);
+      cpu_group_set_state(vm->cpu_group,CPU_STATE_SUSPENDED);
       vm->status = VM_STATUS_SUSPENDED;
    }
    return(0);
@@ -656,6 +675,188 @@ void vm_monitor(vm_instance_t *vm)
 {
    while(vm->status != VM_STATUS_SHUTDOWN)         
       usleep(200000);
+}
+
+/* Create a new chunk */
+static vm_chunk_t *vm_chunk_create(vm_instance_t *vm)
+{
+   vm_chunk_t *chunk;
+   size_t area_len;
+   
+   if (!(chunk = malloc(sizeof(*chunk))))
+      return NULL;
+
+   area_len = VM_CHUNK_AREA_SIZE * VM_PAGE_SIZE;
+
+   if (!(chunk->area = m_memalign(VM_PAGE_SIZE,area_len))) {
+      free(chunk);
+      return NULL;
+   }
+
+   chunk->page_alloc = 0;
+   chunk->page_total = VM_CHUNK_AREA_SIZE;
+
+   chunk->next = vm->chunks;
+   vm->chunks = chunk;
+   return chunk;
+}
+
+/* Free a chunk */
+static void vm_chunk_free(vm_chunk_t *chunk)
+{
+   free(chunk->area);
+   free(chunk);
+}
+
+/* Free all chunks used by a VM */
+static void vm_chunk_free_all(vm_instance_t *vm)
+{
+   vm_chunk_t *chunk,*next;
+
+   for(chunk=vm->chunks;chunk;chunk=next) {
+      next = chunk->next;
+      vm_chunk_free(chunk);
+   }
+
+   vm->chunks = NULL;
+}
+
+/* Allocate an host page */
+void *vm_alloc_host_page(vm_instance_t *vm)
+{
+   vm_chunk_t *chunk = vm->chunks;
+   void *ptr;
+
+   if (!chunk || (chunk->page_alloc == chunk->page_total)) {
+      chunk = vm_chunk_create(vm);
+      if (!chunk) return NULL;
+   }
+
+   ptr = chunk->area + (chunk->page_alloc * VM_PAGE_SIZE);
+   chunk->page_alloc++;
+   return(ptr);
+}
+
+/* Free resources used by a ghost image */
+static void vm_ghost_image_free(vm_ghost_image_t *img)
+{
+   if (img) {
+      if (img->fd != -1) {
+         close(img->fd);
+
+         if (img->area_ptr != NULL)
+            munmap(img->area_ptr,img->file_size);
+      }
+
+      free(img->filename);
+      free(img);
+   }
+}
+
+/* Find a specified ghost image in the pool */
+static vm_ghost_image_t *vm_ghost_image_find(char *filename)
+{
+   vm_ghost_image_t *img;
+
+   for(img=vm_ghost_pool;img;img=img->next)
+      if (!strcmp(img->filename,filename))
+         return img;
+
+   return NULL;
+}
+
+/* Load a new ghost image */
+static vm_ghost_image_t *vm_ghost_image_load(char *filename)
+{
+   vm_ghost_image_t *img;
+
+   if (!(img = calloc(1,sizeof(*img))))
+      return NULL;
+
+   img->fd = -1;
+
+   if (!(img->filename = strdup(filename))) {
+      vm_ghost_image_free(img);
+      return NULL;
+   }
+
+   img->fd = memzone_open_file(img->filename,&img->area_ptr,&img->file_size);
+
+   if (img->fd == -1) {
+      vm_ghost_image_free(img);
+      return NULL;
+   }
+
+   m_log("GHOST","loaded ghost image %s (fd=%d) at addr=%p (size=0x%llx)\n",
+         img->filename,img->fd,img->area_ptr,(long long)img->file_size);
+         
+   return img;
+}
+
+/* Get a ghost image */
+int vm_ghost_image_get(char *filename,u_char **ptr,int *fd)
+{
+   vm_ghost_image_t *img;
+
+   VM_GLOCK();
+
+   /* Do we already have this image in the pool ? */
+   if ((img = vm_ghost_image_find(filename)) != NULL) {
+      img->ref_count++;
+      *ptr = img->area_ptr;
+      *fd  = img->fd;
+      VM_GUNLOCK();
+      return(0);
+   }
+
+   /* Load the ghost file and add it into the pool */
+   if (!(img = vm_ghost_image_load(filename))) {
+      VM_GUNLOCK();
+      fprintf(stderr,"Unable to load ghost image %s\n",filename);
+      return(-1);
+   }
+   
+   img->ref_count = 1;
+   *ptr = img->area_ptr;
+   *fd  = img->fd;
+
+   img->next = vm_ghost_pool;
+   vm_ghost_pool = img;   
+   VM_GUNLOCK();
+   return(0);
+}
+
+/* Release a ghost image */
+int vm_ghost_image_release(int fd)
+{
+   vm_ghost_image_t **img,*next;
+
+   VM_GLOCK();
+
+   for(img=&vm_ghost_pool;*img;img=&(*img)->next) {
+      if ((*img)->fd == fd) {
+         assert((*img)->ref_count > 0);
+
+         (*img)->ref_count--;
+
+         if ((*img)->ref_count == 0) {
+            m_log("GHOST","unloaded ghost image %s (fd=%d) at "
+                  "addr=%p (size=0x%llx)\n",
+                  (*img)->filename,(*img)->fd,(*img)->area_ptr,
+                  (long long)(*img)->file_size);
+
+            next = (*img)->next;
+            vm_ghost_image_free(*img);
+            *img = next;
+         }
+
+         VM_GUNLOCK();
+         return(0);
+      }
+   }
+   
+   VM_GUNLOCK();
+   return(-1);
 }
 
 /* Open a VM file and map it in memory */

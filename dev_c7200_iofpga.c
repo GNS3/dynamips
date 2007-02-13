@@ -1,12 +1,12 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
- * Cisco C7200 (Predator) I/O FPGA:
+ * Cisco 7200 I/O FPGA:
  *   - Simulates a NMC93C46 Serial EEPROM as CPU and Midplane EEPROM.
  *   - Simulates a DALLAS DS1620 for Temperature Sensors.
  *   - Simulates voltage sensors.
- *   - Simulates console and AUX ports.
+ *   - Simulates console and AUX ports (SCN2681).
  */
 
 #include <stdio.h>
@@ -20,7 +20,8 @@
 #include <pthread.h>
 
 #include "ptask.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -123,6 +124,9 @@ struct iofpga_data {
 
    /* Voltages */
    u_int mux;
+
+   /* NPE-G2 environmental part */
+   m_uint32_t envm_r0,envm_r1,envm_r2;
 };
 
 #define IOFPGA_LOCK(d)   pthread_mutex_lock(&(d)->lock)
@@ -268,6 +272,69 @@ static void temp_write_data(struct iofpga_data *d,u_char val)
    }
 }
 
+/* NPE-G2 environmental monitor reading */
+static m_uint32_t g2_envm_read(struct iofpga_data *d)
+{
+   m_uint32_t val = 0;
+   m_uint32_t p1;
+
+   p1 = ((d->envm_r2 & 0xFF) << 8) | d->envm_r0 >> 3;
+   
+   switch(p1) {
+      case 0x2a00:     /* CPU Die Temperature */
+         val = 0x3000;
+         break;
+      case 0x4c00:     /* +3.30V */
+         val = 0x2a9;
+         break;
+      case 0x4c01:     /* +1.50V */
+         val = 0x135;
+         break;
+      case 0x4c02:     /* +2.50V */
+         val = 0x204;
+         break;
+      case 0x4c03:     /* +1.80V */
+         val = 0x173;
+         break;
+      case 0x4c04:     /* +1.20V */
+         val = 0xF7;
+         break;
+      case 0x4c05:     /* VDD_CPU */
+         val = 0x108;
+         break;
+      case 0x4800:     /* VDD_MEM */
+         val = 0x204;
+         break;
+      case 0x4801:     /* VTT */
+         val = 0xF9;
+         break;
+      case 0x4802:     /* +3.45V */
+         val = 0x2c8;
+         break;
+      case 0x4803:     /* -11.95V*/
+         val = 0x260;
+         break;
+      case 0x4804:     /* ? */
+         val = 0x111;
+         break;
+      case 0x4805:     /* ? */
+         val = 0x111;
+         break;
+      case 0x4806:     /* +5.15V */
+         val = 0x3F8;
+         break;
+      case 0x4807:     /* +12.15V */
+         val = 0x33D;
+         break;
+#if DEBUG_UNKNOWN
+      default:
+         vm_log(d->router->vm,"IO_FPGA","p1 = 0x%8.8x\n",p1);
+#endif
+   }
+
+   return(htonl(val));
+}
+
 /* Console port input */
 static void tty_con_input(vtty_t *vtty)
 {
@@ -319,7 +386,7 @@ static int tty_trigger_dummy_irq(struct iofpga_data *d,void *arg)
 /*
  * dev_c7200_iofpga_access()
  */
-void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
@@ -332,10 +399,11 @@ void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
-      cpu_log(cpu,"IO_FPGA","reading reg 0x%x at pc=0x%llx\n",offset,cpu->pc);
+      cpu_log(cpu,"IO_FPGA","reading reg 0x%x at pc=0x%llx\n",
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,"IO_FPGA","writing reg 0x%x at pc=0x%llx, data=0x%llx\n",
-              offset,cpu->pc,*data);
+              offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -355,10 +423,19 @@ void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
       case 0x338:
          break;
 
-      /* NPE-G1 test - has influence on slot 0 / flash / pcmcia ... */
+      /* 
+       * NPE-G1/NPE-G2 - has influence on slot 0 / flash / pcmcia ... 
+       * Bit 24: 1=I/O slot present
+       * Lower 16 bits: FPGA version (displayed by "sh c7200")
+       */
       case 0x390:
-         if (op_type == MTS_READ)
-            *data = 0x0FFF0000; //0xFFFF0000;
+         if (op_type == MTS_READ) {
+            *data = 0x0102;
+            
+            /* If we have an I/O slot, we use the I/O slot DUART */
+            if (c7200_pa_check_eeprom(d->router,0))
+               *data |= 0x01000000;
+         }
          break;
 
       /* I/O control register */
@@ -368,8 +445,7 @@ void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
             vm_log(vm,"IO_FPGA","setting value 0x%llx in io_ctrl_reg\n",*data);
 #endif
             d->io_ctrl_reg = *data;
-         }
-         else {
+         } else {
             *data = d->io_ctrl_reg;
             *data |= NVRAM_PACKED;              /* Packed NVRAM */
          }
@@ -584,14 +660,45 @@ void *dev_c7200_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
          }
          break;
 
+      /* NPE-G2 environmental monitor reading */
+      case 0x3c0:
+         if (op_type == MTS_READ)
+            *data = 0;
+         break;
+
+      case 0x3c4:
+         if (op_type == MTS_WRITE)
+            d->envm_r0 = ntohl(*data);
+         break;
+
+      case 0x3c8:
+         if (op_type == MTS_WRITE) {
+            d->envm_r1 = ntohl(*data);
+         } else {
+            *data = g2_envm_read(d);
+         }
+         break;
+
+      case 0x3cc:
+         if (op_type == MTS_WRITE)
+            d->envm_r2 = ntohl(*data);
+         break;
+
+      /* PCMCIA status ? */
+      case 0x3d6:
+         if (op_type == MTS_READ)
+            *data = 0x33;
+         break;
+
 #if DEBUG_UNKNOWN
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"IO_FPGA","read from addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,"IO_FPGA","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -670,14 +777,20 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
    d->dev.handler   = dev_c7200_iofpga_access;
    d->dev.priv_data = d;
 
-   /* Set console and AUX port notifying functions */
-   vm->vtty_con->priv_data = d;
-   vm->vtty_aux->priv_data = d;
-   vm->vtty_con->read_notifier = tty_con_input;
-   vm->vtty_aux->read_notifier = tty_aux_input;
+   /* If we have an I/O slot, we use the I/O slot DUART */
+   if (c7200_pa_check_eeprom(d->router,0)) {
+      vm_log(vm,"CONSOLE","console managed by I/O board\n");
 
-   /* Trigger periodically a dummy IRQ to flush buffers */
-   d->duart_irq_tid = ptask_add((ptask_callback)tty_trigger_dummy_irq,d,NULL);
+      /* Set console and AUX port notifying functions */
+      vm->vtty_con->priv_data = d;
+      vm->vtty_aux->priv_data = d;
+      vm->vtty_con->read_notifier = tty_con_input;
+      vm->vtty_aux->read_notifier = tty_aux_input;
+
+      /* Trigger periodically a dummy IRQ to flush buffers */
+      d->duart_irq_tid = ptask_add((ptask_callback)tty_trigger_dummy_irq,
+                                   d,NULL);
+   }
 
    /* Map this device to the VM */
    vm_bind_device(vm,&d->dev);

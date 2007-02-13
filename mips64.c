@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * XXX TODO: proper context save/restore for CPUs.
@@ -16,10 +16,11 @@
 #include <assert.h>
 
 #include "rbtree.h"
-#include "mips64.h"
-#include "dynamips.h"
-#include "cp0.h"
+#include "cpu.h"
+#include "mips64_mem.h"
 #include "mips64_exec.h"
+#include "mips64_jit.h"
+#include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 
@@ -67,8 +68,8 @@ int mips64_reset(cpu_mips_t *cpu)
    memset(&cpu->cp0.tlb,0,MIPS64_TLB_MAX_ENTRIES*sizeof(tlb_entry_t));
 
    /* Restart the MTS subsystem */
-   mts_set_addr_mode(cpu,64);
-   cpu->mts_rebuild(cpu);
+   mips64_set_addr_mode(cpu,64);
+   cpu->gen->mts_rebuild(cpu->gen);
 
    /* Flush JIT structures */
    mips64_jit_flush(cpu,0);
@@ -78,14 +79,13 @@ int mips64_reset(cpu_mips_t *cpu)
 /* Initialize a MIPS64 processor */
 int mips64_init(cpu_mips_t *cpu)
 {
-   cpu->state = MIPS_CPU_SUSPENDED;
    cpu->addr_bus_mask = 0xFFFFFFFFFFFFFFFFULL;
    cpu->cp0.reg[MIPS_CP0_PRID] = MIPS_PRID_R4600;
    cpu->cp0.tlb_entries = MIPS64_TLB_STD_ENTRIES;
 
    /* Initialize idle timer */
-   cpu->idle_max = 1500;
-   cpu->idle_sleep_time = 30000;
+   cpu->gen->idle_max = 1500;
+   cpu->gen->idle_sleep_time = 30000;
 
    /* Timer IRQ parameters (default frequency: 250 Hz <=> 4ms period) */
    cpu->timer_irq_check_itv = 1000;
@@ -98,8 +98,18 @@ int mips64_init(cpu_mips_t *cpu)
    pthread_mutex_init(&cpu->irq_lock,NULL);
 
    /* Idle loop mutex and condition */
-   pthread_mutex_init(&cpu->idle_mutex,NULL);
-   pthread_cond_init(&cpu->idle_cond,NULL);
+   pthread_mutex_init(&cpu->gen->idle_mutex,NULL);
+   pthread_cond_init(&cpu->gen->idle_cond,NULL);
+
+   /* Set the CPU methods */
+   cpu->gen->reg_set =  (void *)mips64_reg_set;
+   cpu->gen->reg_dump = (void *)mips64_dump_regs;
+   cpu->gen->mmu_dump = (void *)mips64_tlb_dump;
+   cpu->gen->mmu_raw_dump = (void *)mips64_tlb_raw_dump;
+   cpu->gen->add_breakpoint = (void *)mips64_add_breakpoint;
+   cpu->gen->remove_breakpoint = (void *)mips64_remove_breakpoint;
+   cpu->gen->set_idle_pc = (void *)mips64_set_idle_pc;
+   cpu->gen->get_idling_pc = (void *)mips64_get_idling_pc;
 
    /* Set the startup parameters */
    mips64_reset(cpu);
@@ -110,9 +120,8 @@ int mips64_init(cpu_mips_t *cpu)
 void mips64_delete(cpu_mips_t *cpu)
 {
    if (cpu) {
-      mts_shutdown(cpu);
+      mips64_mem_shutdown(cpu);
       mips64_jit_shutdown(cpu);
-      free(cpu);
    }
 }
 
@@ -125,26 +134,10 @@ void mips64_set_prid(cpu_mips_t *cpu,m_uint32_t prid)
       cpu->cp0.tlb_entries = MIPS64_TLB_MAX_ENTRIES;
 }
 
-/* Virtual idle loop */
-void mips64_idle_loop(cpu_mips_t *cpu)
+/* Set idle PC value */
+void mips64_set_idle_pc(cpu_gen_t *cpu,m_uint64_t addr)
 {
-   struct timespec t_spc;
-   m_tmcnt_t expire;
-
-   expire = m_gettime_usec() + cpu->idle_sleep_time;
-
-   pthread_mutex_lock(&cpu->idle_mutex);
-   t_spc.tv_sec = expire / 1000000;
-   t_spc.tv_nsec = (expire % 1000000) * 1000;
-   pthread_cond_timedwait(&cpu->idle_cond,&cpu->idle_mutex,&t_spc);
-   pthread_mutex_unlock(&cpu->idle_mutex);
-}
-
-/* Break idle wait state */
-void mips64_idle_break_wait(cpu_mips_t *cpu)
-{
-   pthread_cond_signal(&cpu->idle_cond);
-   cpu->idle_count = 0;
+   CPU_MIPS64(cpu)->idle_pc = addr;
 }
 
 /* Timer IRQ */
@@ -161,7 +154,7 @@ void *mips64_timer_irq_run(cpu_mips_t *cpu)
    threshold = cpu->timer_irq_freq * 10;
    expire = m_gettime_usec() + interval;
 
-   while(cpu->state != MIPS_CPU_HALTED) {
+   while(cpu->gen->state != CPU_STATE_HALTED) {
       pthread_mutex_lock(&umutex);
       t_spc.tv_sec = expire / 1000000;
       t_spc.tv_nsec = (expire % 1000000) * 1000;
@@ -169,7 +162,7 @@ void *mips64_timer_irq_run(cpu_mips_t *cpu)
       pthread_mutex_unlock(&umutex);
 
       if (likely(!cpu->irq_disable) && 
-          likely(cpu->state == MIPS_CPU_RUNNING)) 
+          likely(cpu->gen->state == CPU_STATE_RUNNING)) 
       {
          cpu->timer_irq_pending++;
 
@@ -201,17 +194,18 @@ struct mips64_idle_pc_hash {
 };
 
 /* Determine an "idling" PC */
-int mips64_get_idling_pc(cpu_mips_t *cpu)
+int mips64_get_idling_pc(cpu_gen_t *cpu)
 {
+   cpu_mips_t *mcpu = CPU_MIPS64(cpu);
    struct mips64_idle_pc_hash **pc_hash,*p;
-   struct mips64_idle_pc *res;
+   struct cpu_idle_pc *res;
    u_int h_index,res_count;
    m_uint64_t cur_pc;
    int i;
 
    cpu->idle_pc_prop_count = 0;
 
-   if (cpu->idle_pc != 0) {
+   if (mcpu->idle_pc != 0) {
       printf("\nYou already use an idle PC, using the calibration would give "
              "incorrect results.\n");
       return(-1);
@@ -219,14 +213,14 @@ int mips64_get_idling_pc(cpu_mips_t *cpu)
 
    printf("\nPlease wait while gathering statistics...\n");
 
-   pc_hash = calloc(IDLE_HASH_SIZE,sizeof(struct mips64_idle_pc *));
+   pc_hash = calloc(IDLE_HASH_SIZE,sizeof(struct mips64_idle_pc_hash *));
 
    /* Disable IRQ */
-   cpu->irq_disable = TRUE;
+   mcpu->irq_disable = TRUE;
 
    /* Take 1000 measures, each mesure every 10ms */
    for(i=0;i<1000;i++) {
-      cur_pc = cpu->pc;
+      cur_pc = mcpu->pc;
       h_index = (cur_pc >> 2) & (IDLE_HASH_SIZE-1);
 
       for(p=pc_hash[h_index];p;p=p->next)
@@ -256,7 +250,7 @@ int mips64_get_idling_pc(cpu_mips_t *cpu)
             res->pc    = p->pc;
             res->count = p->count;
 
-            if (cpu->idle_pc_prop_count >= MIPS64_IDLE_PC_MAX_RES)
+            if (cpu->idle_pc_prop_count >= CPU_IDLE_PC_MAX_RES)
                goto done;
          }
    }
@@ -279,8 +273,35 @@ int mips64_get_idling_pc(cpu_mips_t *cpu)
    }
 
    /* Re-enable IRQ */
-   cpu->irq_disable = FALSE;
+   mcpu->irq_disable = FALSE;
    return(0);
+}
+
+/* Set an IRQ (VM IRQ standard routing) */
+void mips64_vm_set_irq(vm_instance_t *vm,u_int irq)
+{
+   cpu_mips_t *boot_cpu;
+
+   boot_cpu = CPU_MIPS64(vm->boot_cpu);
+
+   if (boot_cpu->irq_disable) {
+      boot_cpu->irq_pending = 0;
+      return;
+   }
+
+   mips64_set_irq(boot_cpu,irq);
+
+   if (boot_cpu->irq_idle_preempt[irq])
+      cpu_idle_break_wait(vm->boot_cpu);
+}
+
+/* Clear an IRQ (VM IRQ standard routing) */
+void mips64_vm_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   cpu_mips_t *boot_cpu;
+
+   boot_cpu = CPU_MIPS64(vm->boot_cpu);
+   mips64_clear_irq(boot_cpu,irq);
 }
 
 /* Update the IRQ flag (inline) */
@@ -433,7 +454,7 @@ fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
 fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 {
    printf("MIPS64: BREAK instruction (code=%u)\n",code);
-   mips64_dump_regs(cpu);
+   mips64_dump_regs(cpu->gen);
 
    /* XXX TODO: Branch Delay slot */
    mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_BP,0);
@@ -492,64 +513,74 @@ fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 /* Virtual breakpoint */
 fastcall void mips64_run_breakpoint(cpu_mips_t *cpu)
 {
-   cpu_log(cpu,"BREAKPOINT",
+   cpu_log(cpu->gen,"BREAKPOINT",
            "Virtual breakpoint reached at PC=0x%llx\n",cpu->pc);
 
    printf("[[[ Virtual Breakpoint reached at PC=0x%llx RA=0x%llx]]]\n",
           cpu->pc,cpu->gpr[MIPS_GPR_RA]);
 
-   mips64_dump_regs(cpu);
-   memlog_dump(cpu);
+   mips64_dump_regs(cpu->gen);
+   memlog_dump(cpu->gen);
 }
 
 /* Add a virtual breakpoint */
-int mips64_add_breakpoint(cpu_mips_t *cpu,m_uint64_t pc)
+int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc)
 {
+   cpu_mips_t *mcpu = CPU_MIPS64(cpu);
    int i;
 
    for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
-      if (!cpu->breakpoints[i])
+      if (!mcpu->breakpoints[i])
          break;
 
    if (i == MIPS64_MAX_BREAKPOINTS)
       return(-1);
 
-   cpu->breakpoints[i] = pc;
-   cpu->breakpoints_enabled = TRUE;
+   mcpu->breakpoints[i] = pc;
+   mcpu->breakpoints_enabled = TRUE;
    return(0);
 }
 
 /* Remove a virtual breakpoint */
-void mips64_remove_breakpoint(cpu_mips_t *cpu,m_uint64_t pc)
-{
+void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc)
+{   
+   cpu_mips_t *mcpu = CPU_MIPS64(cpu);
    int i,j;
 
    for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
-      if (cpu->breakpoints[i] == pc)
+      if (mcpu->breakpoints[i] == pc)
       {
          for(j=i;j<MIPS64_MAX_BREAKPOINTS-1;j++)
-            cpu->breakpoints[j] = cpu->breakpoints[j+1];
+            mcpu->breakpoints[j] = mcpu->breakpoints[j+1];
 
-         cpu->breakpoints[MIPS64_MAX_BREAKPOINTS-1] = 0;
+         mcpu->breakpoints[MIPS64_MAX_BREAKPOINTS-1] = 0;
       }
 
    for(i=0;i<MIPS64_MAX_BREAKPOINTS;i++)
-      if (cpu->breakpoints[i] != 0)
+      if (mcpu->breakpoints[i] != 0)
          return;
 
-   cpu->breakpoints_enabled = TRUE;
+   mcpu->breakpoints_enabled = FALSE;
 }
 
 /* Debugging for register-jump to address 0 */
 fastcall void mips64_debug_jr0(cpu_mips_t *cpu)
 {
    printf("MIPS64: cpu %p jumping to address 0...\n",cpu);
-   mips64_dump_regs(cpu);
+   mips64_dump_regs(cpu->gen);
+}
+
+/* Set a register */
+void mips64_reg_set(cpu_gen_t *cpu,u_int reg,m_uint64_t val)
+{
+   if (reg < MIPS64_GPR_NR)
+      CPU_MIPS64(cpu)->gpr[reg] = val;
 }
 
 /* Dump registers of a MIPS64 processor */
-void mips64_dump_regs(cpu_mips_t *cpu)
-{  
+void mips64_dump_regs(cpu_gen_t *cpu)
+{ 
+   cpu_mips_t *mcpu = CPU_MIPS64(cpu);
    mips_insn_t *ptr,insn;
    char buffer[80];
    int i;
@@ -558,19 +589,19 @@ void mips64_dump_regs(cpu_mips_t *cpu)
 
    for(i=0;i<MIPS64_GPR_NR/2;i++) {
       printf("  %s ($%2d) = 0x%16.16llx   %s ($%2d) = 0x%16.16llx\n",
-             mips64_gpr_reg_names[i*2], i*2, cpu->gpr[i*2],
-             mips64_gpr_reg_names[(i*2)+1], (i*2)+1, cpu->gpr[(i*2)+1]);
+             mips64_gpr_reg_names[i*2], i*2, mcpu->gpr[i*2],
+             mips64_gpr_reg_names[(i*2)+1], (i*2)+1, mcpu->gpr[(i*2)+1]);
    }
 
-   printf("  lo = 0x%16.16llx, hi = 0x%16.16llx\n", cpu->lo, cpu->hi);
-   printf("  pc = 0x%16.16llx, ll_bit = %u\n", cpu->pc, cpu->ll_bit);
+   printf("  lo = 0x%16.16llx, hi = 0x%16.16llx\n", mcpu->lo, mcpu->hi);
+   printf("  pc = 0x%16.16llx, ll_bit = %u\n", mcpu->pc, mcpu->ll_bit);
 
    /* Fetch the current instruction */ 
-   ptr = cpu->mem_op_lookup(cpu,cpu->pc);
+   ptr = mcpu->mem_op_lookup(mcpu,mcpu->pc);
    if (ptr) {
       insn = vmtoh32(*ptr);
 
-      if (mips64_dump_insn(buffer,sizeof(buffer),1,cpu->pc,insn) != -1)
+      if (mips64_dump_insn(buffer,sizeof(buffer),1,mcpu->pc,insn) != -1)
          printf("  Instruction: %s\n",buffer);
    }
 
@@ -578,16 +609,18 @@ void mips64_dump_regs(cpu_mips_t *cpu)
 
    for(i=0;i<MIPS64_CP0_REG_NR/2;i++) {
       printf("  %-10s ($%2d) = 0x%16.16llx   %-10s ($%2d) = 0x%16.16llx\n",
-             mips64_cp0_reg_names[i*2], i*2, cp0_get_reg(cpu,i*2),
-             mips64_cp0_reg_names[(i*2)+1], (i*2)+1, cp0_get_reg(cpu,(i*2)+1));
+             mips64_cp0_reg_names[i*2], i*2, 
+             mips64_cp0_get_reg(mcpu,i*2),
+             mips64_cp0_reg_names[(i*2)+1], (i*2)+1,
+             mips64_cp0_get_reg(mcpu,(i*2)+1));
    }
 
    printf("\n  IRQ count: %llu, IRQ false positives: %llu, "
           "IRQ Pending: %u\n",
-          cpu->irq_count,cpu->irq_fp_count,cpu->irq_pending);
+          mcpu->irq_count,mcpu->irq_fp_count,mcpu->irq_pending);
 
    printf("  Timer IRQ count: %llu, pending: %u, timer drift: %u\n\n",
-          cpu->timer_irq_count,cpu->timer_irq_pending,cpu->timer_drift);
+          mcpu->timer_irq_count,mcpu->timer_irq_pending,mcpu->timer_drift);
 
    printf("\n");
 }
@@ -732,7 +765,7 @@ int mips64_restore_state(cpu_mips_t *cpu,char *filename)
       }
 
       /* cp0 register ? */
-      if ((index = cp0_get_reg_index(buffer)) != -1) {
+      if ((index = mips64_cp0_get_reg_index(buffer)) != -1) {
          cpu->cp0.reg[index] = mips64_hex_u64(value,NULL);
          continue;
       }
@@ -790,10 +823,10 @@ int mips64_restore_state(cpu_mips_t *cpu,char *filename)
       }
    }
 
-   cp0_map_all_tlb_to_mts(cpu);
+   mips64_cp0_map_all_tlb_to_mts(cpu);
 
-   mips64_dump_regs(cpu);
-   tlb_dump(cpu);
+   mips64_dump_regs(cpu->gen);
+   mips64_tlb_dump(cpu->gen);
 
    fclose(fd);
    return(0);
@@ -804,6 +837,7 @@ int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
 {   
    struct stat file_info;
    size_t len,clen;
+   m_uint32_t remain;
    void *haddr;
    FILE *bfd;
 
@@ -837,10 +871,15 @@ int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
       else
          clen = len;
 
+      remain = MIPS_MIN_PAGE_SIZE;
+      remain -= (vaddr - (vaddr & MIPS_MIN_PAGE_MASK));
+      
+      clen = m_min(clen,remain);
+
       if (fread((u_char *)haddr,clen,1,bfd) != 1)
          break;
       
-      vaddr += MIPS_MIN_PAGE_SIZE;
+      vaddr += clen;
       len -= clen;
    }
    
@@ -853,6 +892,7 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
                           m_uint32_t *entry_point)
 {
    m_uint64_t vaddr;
+   m_uint32_t remain;
    void *haddr;
    Elf32_Ehdr *ehdr;
    Elf32_Shdr *shdr;
@@ -935,12 +975,15 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
             else
                clen = len;
 
-            clen = fread((u_char *)haddr,clen,1,bfd);
+            remain = PPC32_MIN_PAGE_SIZE;
+            remain -= (vaddr - (vaddr & PPC32_MIN_PAGE_MASK));
 
-            if (clen != 1)
+            clen = m_min(clen,remain);
+
+            if (fread((u_char *)haddr,clen,1,bfd) < 1)
                break;
 
-            vaddr += MIPS_MIN_PAGE_SIZE;
+            vaddr += clen;
             len -= clen;
          }
       }
@@ -1017,7 +1060,7 @@ int mips64_sym_load_file(cpu_mips_t *cpu,char *filename)
    FILE *fd;
 
    if (!cpu->sym_tree && (mips64_sym_create_tree(cpu) == -1)) {
-      fprintf(stderr,"CPU%u: Unable to create symbol tree.\n",cpu->id);
+      fprintf(stderr,"CPU%u: Unable to create symbol tree.\n",cpu->gen->id);
       return(-1);
    }
 

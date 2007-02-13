@@ -1,6 +1,8 @@
 /*
- * Cisco C7200 (Predator) ROM emulation
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
+ *
+ * ROM Emulation.
  */
 
 #include <stdio.h>
@@ -9,17 +11,25 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 
-/* Embedded ROM */
-m_uint8_t microcode[] = {
-#include "microcode_dump.inc"
+/* Embedded MIPS64 ROM */
+m_uint8_t mips64_microcode[] = {
+#include "mips64_microcode_dump.inc"
 };
 
-ssize_t microcode_len = sizeof(microcode);
+ssize_t mips64_microcode_len = sizeof(mips64_microcode);
+
+/* Embedded PPC32 ROM */
+m_uint8_t ppc32_microcode[] = {
+#include "ppc32_microcode_dump.inc"
+};
+
+ssize_t ppc32_microcode_len = sizeof(ppc32_microcode);
 
 /* ROM private data */
 struct rom_data {
@@ -32,7 +42,7 @@ struct rom_data {
 /*
  * dev_rom_access()
  */
-void *dev_rom_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_rom_access(cpu_gen_t *cpu,struct vdevice *dev,
                      m_uint32_t offset,u_int op_size,u_int op_type,
                      m_uint64_t *data)
 {
@@ -65,7 +75,8 @@ void dev_rom_shutdown(vm_instance_t *vm,struct rom_data *d)
 }
 
 /* Initialize a ROM zone */
-int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len)
+int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len,
+                 m_uint8_t *rom_data,ssize_t rom_data_size)
 {
    struct rom_data *d;
 
@@ -76,8 +87,8 @@ int dev_rom_init(vm_instance_t *vm,char *name,m_uint64_t paddr,m_uint32_t len)
    }
 
    memset(d,0,sizeof(*d));
-   d->rom_ptr  = microcode;
-   d->rom_size = sizeof(microcode);
+   d->rom_ptr  = rom_data;
+   d->rom_size = rom_data_size;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = name;

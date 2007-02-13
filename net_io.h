@@ -1,8 +1,8 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
- * Network interaction.
+ * Network I/O Layer.
  */
 
 #ifndef __NET_IO_H__
@@ -182,8 +182,8 @@ struct netio_desc {
    void (*save_cfg)(netio_desc_t *nio,FILE *fd);
 
    /* Packet filters */
-   netio_pktfilter_t *rx_filter,*tx_filter;
-   void *rx_filter_data,*tx_filter_data;
+   netio_pktfilter_t *rx_filter,*tx_filter,*both_filter;
+   void *rx_filter_data,*tx_filter_data,*both_filter_data;
 
    /* Next pointer (for RX listener) */
    netio_desc_t *rxl_next;

@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -7,12 +7,12 @@
 #define __DEV_MUESLIX_H__
 
 #include <sys/types.h>
+
 #include "utils.h"
-#include "mips64.h"
 #include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "net_io.h"
-#include "vm.h"
 
 /* Number of channels (4 interfaces) */
 #define MUESLIX_NR_CHANNELS  4

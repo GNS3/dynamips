@@ -13,7 +13,8 @@
 #include <pthread.h>
 
 #include "ptask.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -85,7 +86,7 @@ static const struct nmc93c46_group eeprom_nm_group = {
  * dev_c2691_iofpga_access()
  */
 static void *
-dev_c2691_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
+dev_c2691_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                         m_uint32_t offset,u_int op_size,u_int op_type,
                         m_uint64_t *data)
 {
@@ -97,11 +98,11 @@ dev_c2691_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"IO_FPGA","reading reg 0x%x at pc=0x%llx (size=%u)\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,"IO_FPGA",
               "writing reg 0x%x at pc=0x%llx, data=0x%llx (size=%u)\n",
-              offset,cpu->pc,*data,op_size);
+              offset,cpu_get_pc(cpu),*data,op_size);
    }
 #endif
 
@@ -277,11 +278,12 @@ dev_c2691_iofpga_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,"IO_FPGA",
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,"IO_FPGA",
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }

@@ -1772,11 +1772,319 @@
     to ghost file handling.
   - 0.2.6-RC4 release.
 
-07-Dec-2006
+17-Nov-2006
 -----------
-  - Merged of patch from Thomas Pani to list VM TCP console ports (required
+  - Major code cleanup to make devices independent from the virtual processors.
+  - Generic CPU stuff.
+
+20-Nov-2006
+-----------
+  - Merged of patch from Thomas Pani to list VM TCP console ports (required 
     for gDynagen).
   - NM-16ESW: fixed (again) BPDU handling (incorrect VLAN tagging with non
-    trunk ports). Backport from 0.2.7 train.
-  - NM-16ESW: fixed MAC addresses used to detect BPDU packets (IS-IS hellos
-    were considered as BPDU).
+    trunk ports).
+  - Very minimal PowerPC definitions. Only non-JIT mode at this time.
+  - PPC: added "crorc", "cror", "crnor", "crnand", "crandc", "crand".
+  - PPC: added "and", "andc", "andi", "andis", "creqv", "crxor".
+  - PPC: added "eqv", "isync", "mfmsr", "mtmsr", "nand", "nor", "or", "orc".
+  - PPC: added "ori", "oris", "sync", "xor", "xori", "xoris", "mfcr".
+  - PPC: added "addi", "addis".
+
+21-Nov-2006
+-----------
+  - PPC: added "cmp", "cmpl", "cmpi", "cmpli", "extsb", "extsh".
+  - PPC: added "add", "add.", "and.", "andc.", "extsb.", "extsh.".
+  - PPC: added a dummy memory access function (does nothing yet).
+  - PPC: added "lbz", "lbzu", "lbzux", "lbzx".
+  - PPC: added "lhz", "lhzu", "lhzux", "lhzx".
+  - PPC: added "lwz", "lwzu", "lwzux", "lwzx".
+  - PPC: added "stb", "stbu", "stbux", "stbx".
+  - PPC: added "sth", "sthu", "sthux", "sthx".
+  - PPC: added "stw", "stwu", "stwux", "stwx".
+  - PPC: added "xor.", "b", "ba", "bl", "bla".
+  - bugfix: hypervisor commands specific to CPU crashed if the VM was not
+    started (noticed by Greg).
+
+22-Nov-2006
+-----------
+  - PPC: added "addo", "addo.", "addc", "addc.", "addco", "addco."
+  - PPC: added "addic", "addic.", "adde", "adde.", "addeo", "addeo."
+  - PPC: added "neg", "neg.", "nego", "nego.", "nand.", "nor.", "or.", "orc."
+  - PPC: added "slw", "slw.", "srw", "srw."
+
+23-Nov-2006
+-----------
+  - PPC: added "rlwimi", "rlwimi.", "rlwinm", "rlwinm.", "rlwnm", "rlwnm."
+
+24-Nov-2006
+-----------
+  - PPC: added "mulhw", "mulhw.", "mulhwu", "mulhwu.", "mulli".
+  - PPC: added "mullw", "mullw.", "mullwo", "mullwo."
+  - PPC: added "subf", "subf.", "subfo", "subfo."
+  - PPC: added "bc", "bca", "bcl", "bcla", "bclr", "bclrl".
+  - PPC: added minimal memory operation glue code.
+	
+25-Nov-2006
+-----------
+  - PPC: added dump functions for MMU registers.
+  - PPC: added support for BAT registers.
+	
+26-Nov-2006
+-----------
+  - PPC: fixed branch offset computation.
+  - PPC: added a dummy virtual machines for tests.
+  - PPC: fixed bclrx opcodes.
+  - PPC: added "mflr", "mtlr".
+
+27-Nov-2006
+-----------
+  - PPC: fixes in comparison functions.
+  - PPC: added "subfc", "subfc.", "subfco", "subfco."
+
+28-Nov-2006
+-----------
+  - PPC: added "subfic", "mfctr".
+  - PPC: fixed a lot of bugs.
+
+29-Nov-2006
+-----------
+  - PPC: added "rfi", "lha", "lhau", "lhaux", "lhax", "addze", "addme".
+  - PPC: fixed "mtcrf".
+	
+30-Nov-2006
+-----------
+  - Added IRQ routing vectors for virtual machines.
+
+01-Dec-2006
+-----------
+  - Playing with NPE-G2, just for fun.
+	
+02-Dec-2006
+-----------
+  - NPE-G2: environmental monitor is now working!
+	
+03-Dec-2006
+-----------
+  - PPC: added an empty MV64460 controller (need the datasheet).
+  - PPC: added "lmw" instruction, fixed "stmw".
+  - PPC: added "cntlzw".
+
+05-Dec-2006
+-----------
+  - NPE-G2: analyzed midplane data: this is similar to other NPE.
+  - Added a basic PLX6520CB PCI bridge.
+  - NPE-G2: added appropriate PCI bridges and PCI busses for Port Adapters.
+
+06-Dec-2006
+-----------
+  - NPE-G2: added PCI I/O space.
+  - NPE-G2: added CLPD6729, it is now possible to use PCMCIA ATA disks.
+
+08-Dec-2006
+-----------
+  - MV64460: added ugly experimental SDMA support to have a console for the
+    NPE-G2 (using the GT96100A datasheet). This code must be rewritten.
+  - MV64460/NPE-G2: playing with the various IRQs.
+	
+09-Dec-2006
+-----------
+  - PPC: added idle-pc support.
+
+10-Dec-2006
+-----------
+  - PPC: added virtual breakpoint support.
+
+15-Dec-2006
+-----------
+  - PPC: added functions to manually set up page tables.
+  - MV64460: added more interrupt definitions (with help of GT96100A manual).
+
+19-Dec-2006
+-----------
+  - MV64460: fixed interrupt loss problem.
+	
+20-Dec-2006
+-----------
+  - Basic port of the microcode for the PowerPC platforms. IOS now starts
+    normally (like the MIPS64 platforms).
+
+21-Dec-2006
+-----------
+  - NPE-G2: found OIR IRQ.
+  - MV64460: added more definitions (for SDMA).
+  - Cleanup of MIPS64 JIT code (better naming).
+
+22-Dec-2006
+-----------
+  - PPC32: added the minimal JIT core infrastructure.
+  - PPC32-JIT: added unknown opcode handling.
+  - PPC32-JIT: added some instructions.
+
+23-24-Dec-2006
+--------------
+  - PPC32-JIT: added more instructions.
+	
+26-Dec-2006
+-----------
+  - PPC32-JIT: continuing...
+	
+27-Dec-2006
+-----------
+  - PPC32-JIT: added fast memory operations.
+
+28-Dec-2006
+-----------
+  - Added PPC32 nojit support.
+  - PPC32: better checking for IRQs.
+
+29-Dec-2006
+-----------
+  - PPC32-JIT: added "amd64" support.
+  - PPC32: added "lwbrx" and "stwbrx" instructions.
+
+30-Dec-2006
+-----------
+  - PPC32: added "tw"/"twi" instructions.
+  - PPC32: added TLB support for PowerPC 405.
+  - PPC32: added "tlbre", "tlbwe", "iccci", "dccci", "mfdcr", "mtdcr" for
+    PowerPC 405.
+  - Fixed a bug with ILT tables (incorrect count - last entry was missing).
+	
+31-Dec-2006
+-----------
+  - PPC32: added "dcbst" instruction.
+
+05-Jan-2007
+-----------
+  - NPE-G2: correct handling of DUART interrupt with I/O card.
+
+07-Jan-2007
+-----------
+  - NPE-G2: correct console selection (NPE or I/O board) depending on slot 0.
+  - PPC32: fixup for decrementer interrupt.
+  - Generic CPU MTS rebuild (mips64/ppc32).
+  - Split of memory.c / mips64_mem.c. memory.c will only contain generic 
+    functions independent of the CPU model.
+  - Memlogger is now independent of CPU type (untested).
+
+08-Jan-2007
+-----------
+  - Rewrite of the MTS subsystem to have less overhead with inlined 
+    operations -> better performance.
+	
+09-Jan-2007
+-----------
+  - Finished the MTS rewrite (amd64, statistics).
+  - NPE-G2: added a 64 Mb bootflash (needs to be tested).
+
+10-Jan-2007
+-----------
+  - PPC32: added clean loading of BAT registers.
+  - Fixed device remapping.
+
+12-Jan-2007
+-----------
+  - PPC32: added "lswi", "stswi", "lswx", "stswx".
+
+13-Jan-2007
+-----------
+  - PPC32: fixed carry evaluation for "srawi" instruction.
+
+15-Jan-2007
+-----------
+  - Playing with c2600 to see if support can be added.
+
+17-Jan-2007
+-----------
+  - C2600: adding skeleton code, added NM selection. However, unable
+    to get a positive result for "sh diag 0".
+	
+19-Jan-2007
+-----------
+  - Experimenting with sparse memory to reduce virtual memory use in
+    hypervisor mode.
+	
+20-Jan-2007
+-----------
+  - Continuing on sparse memory work.
+	
+21-Jan-2007
+-----------
+  - C2600: added mainboard basic support.
+  - MPC860: added a basic IDMA support.
+  - C2600: first packet exchange :)
+
+22-Jan-2007
+-----------
+  - C2600: added basic mainboard drivers for integrated Ethernet ports.
+  - C2600: added IRQ preemption for network interrupt and DUART.
+  - Fixed use of sparse memory with ghost files.
+  - Added a command line option to test sparse memory ("--sparse-mem").
+  - Added locking for shared ghost images.
+
+24-Jan-2007
+-----------
+  - Validation of dynagen 0.8.3 with sparse memory and ghost image enabled.
+  - MIPS64: fixed a bug of the JIT which incorrectly handled jump instructions 
+    with a delay slot in another page.
+
+25-Jan-2007
+-----------
+  - C2600: added NVRAM configuration import/export and appropriate config
+    register setting if NVRAM is empty at startup.
+  - C2600: added a basic bootflash support.
+
+26-Jan-2007
+-----------
+  - C2600: io-mem size support.
+
+31-Jan-2007
+-----------
+  - i8254x: added skeleton code (for PA-2FE-TX).
+
+01-Feb-2007
+-----------
+  - i8254x: added MDIO code.
+
+04-Feb-2006
+-----------
+  - C2600: added "set_chassis" hypervisor command.
+  - C2600: possible chassis/mainboards now displayed at command line help.
+	
+05-Feb-2007
+-----------
+  - Fixed a bug when handling packet discard flag on NM-16ESW (seems to be
+    only valid for native packets).
+
+06-Feb-2007
+-----------
+  - Working on i8254x TX part. Problem with TX ring wrapping.
+	
+08-Feb-2007
+-----------
+  - Added packet capture to NIO filters, with PCAP output (Greg Anuzelli).
+  - i82543: RX and TX parts are now basically working (of course, no IP/TCP
+    checksum offloading, but this doesn't seem to be used).
+
+09-Feb-2007
+-----------
+  - C7200: added C7200-IO-2FE card, based on Intel i82543 chips.
+  - C7200: added PA-GE interface, but TX part is broken.
+  - i8254x: TDH/TDT and RDH/RDT registers are located at a different address.
+    PA-GE is now working.
+
+12-Feb-2007
+-----------
+  - i8254x: delayed RX IRQ.
+  - MIPS64: fixed (again) TLB lookup for entries in ksseg and kseg3.
+  - Added a "byte-swapping" device.
+	
+13-Feb-2007
+-----------
+  - i8254x: added byte-swapped data transfer.
+  - PA-POS-OC3: applied byte-swapped data transfer for TX ring (RX ring
+    doesn't seem to need this - strange).
+
+14-Feb-2007
+-----------
+  - C7200: added C7200-IO-GE+E, based on Intel i82543 chips.

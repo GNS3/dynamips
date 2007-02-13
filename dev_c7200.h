@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Generic Cisco 7200 routines and definitions (EEPROM,...).
@@ -29,6 +29,7 @@
 #include "device.h"
 #include "pci_dev.h"
 #include "nmc93c46.h"
+#include "dev_mv64460.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -46,6 +47,9 @@
 
 /* 6 slots + 1 I/O card */
 #define C7200_MAX_PA_BAYS  7
+
+/* C7200 Timer IRQ (virtual) */
+#define C7200_VTIMER_IRQ 0
 
 /* C7200 DUART Interrupt */
 #define C7200_DUART_IRQ  5
@@ -66,18 +70,34 @@
 #define C7200_BASE_RAM_LIMIT  256
 
 /* C7200 common device addresses */
-#define C7200_GT64K_ADDR        0x14000000ULL
-#define C7200_GT64K_SEC_ADDR    0x15000000ULL
-#define C7200_BOOTFLASH_ADDR    0x1a000000ULL
-#define C7200_NVRAM_ADDR        0x1e000000ULL
-#define C7200_NPEG1_NVRAM_ADDR  0x1e400000ULL
-#define C7200_MPFPGA_ADDR       0x1e800000ULL
-#define C7200_IOFPGA_ADDR       0x1e840000ULL
-#define C7200_BITBUCKET_ADDR    0x1f000000ULL
-#define C7200_ROM_ADDR          0x1fc00000ULL
-#define C7200_IOMEM_ADDR        0x20000000ULL
-#define C7200_SRAM_ADDR         0x4b000000ULL
-#define C7200_PCI_IO_ADDR       0x100000000ULL
+#define C7200_GT64K_ADDR         0x14000000ULL
+#define C7200_GT64K_SEC_ADDR     0x15000000ULL
+#define C7200_BOOTFLASH_ADDR     0x1a000000ULL
+#define C7200_NVRAM_ADDR         0x1e000000ULL
+#define C7200_MPFPGA_ADDR        0x1e800000ULL
+#define C7200_IOFPGA_ADDR        0x1e840000ULL
+#define C7200_BITBUCKET_ADDR     0x1f000000ULL
+#define C7200_ROM_ADDR           0x1fc00000ULL
+#define C7200_IOMEM_ADDR         0x20000000ULL
+#define C7200_SRAM_ADDR          0x4b000000ULL
+#define C7200_BSWAP_ADDR         0xc0000000ULL
+#define C7200_PCI_IO_ADDR        0x100000000ULL
+
+/* NPE-G1 specific info */
+#define C7200_G1_NVRAM_ADDR      0x1e400000ULL
+
+/* NPE-G2 specific info */
+#define C7200_G2_BSWAP_ADDR      0xc0000000ULL
+#define C7200_G2_BOOTFLASH_ADDR  0xe8000000ULL
+#define C7200_G2_PCI_IO_ADDR     0xf0000000ULL
+#define C7200_G2_MV64460_ADDR    0xf1000000ULL
+#define C7200_G2_MPFPGA_ADDR     0xfe000000ULL
+#define C7200_G2_IOFPGA_ADDR     0xfe040000ULL
+#define C7200_G2_NVRAM_ADDR      0xff000000ULL
+#define C7200_G2_ROM_ADDR        0xfff00000ULL
+
+/* NVRAM size for NPE-G2: 2 Mb */
+#define C7200_G2_NVRAM_SIZE      (2 * 1048576)
 
 /* Reserved space for ROM in NVRAM */
 #define C7200_NVRAM_ROM_RES_SIZE  2048
@@ -87,6 +107,12 @@
 
 /* C7200 ELF Platform ID */
 #define C7200_ELF_MACHINE_ID  0x19
+
+/* NPE families */
+enum {
+   C7200_NPE_FAMILY_MIPS = 0,
+   C7200_NPE_FAMILY_PPC,
+};
 
 /* C7200 router */
 typedef struct c7200_router c7200_t;
@@ -143,10 +169,12 @@ struct c7200_pa_bay {
 /* C7200 NPE Driver */
 struct c7200_npe_driver {
    char *npe_type;
+   int npe_family;
    c7200_npe_init_fn npe_init;
    int max_ram_size;
    int supported;
    m_uint64_t nvram_addr;
+   int iocard_required;
    int clpd6729_pci_bus;
    int clpd6729_pci_dev;
    int dec21140_pci_bus;
@@ -162,6 +190,9 @@ struct c7200_router {
 
    /* Associated VM instance */
    vm_instance_t *vm;
+
+   /* MV64460 device for NPE-G2 */
+   struct mv64460_data *mv64460_sysctr;
 
    /* NPE and PA information */
    struct c7200_npe_driver *npe_driver;
@@ -295,12 +326,6 @@ void c7200_show_hardware(c7200_t *router);
 /* Initialize default parameters for a C7200 */
 void c7200_init_defaults(c7200_t *router);
 
-/* Initialize the C7200 Platform */
-int c7200_init_platform(c7200_t *router);
-
-/* Boot the IOS image */
-int c7200_boot_ios(c7200_t *router);
-
 /* Initialize a Cisco 7200 instance */
 int c7200_init_instance(c7200_t *router);
 
@@ -323,8 +348,12 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 int dev_c7200_mpfpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 
 /* PA drivers */
-extern struct c7200_pa_driver dev_c7200_io_fe_driver;
+extern struct c7200_pa_driver dev_c7200_iocard_fe_driver;
+extern struct c7200_pa_driver dev_c7200_iocard_2fe_driver;
+extern struct c7200_pa_driver dev_c7200_iocard_ge_e_driver;
 extern struct c7200_pa_driver dev_c7200_pa_fe_tx_driver;
+extern struct c7200_pa_driver dev_c7200_pa_2fe_tx_driver;
+extern struct c7200_pa_driver dev_c7200_pa_ge_driver;
 extern struct c7200_pa_driver dev_c7200_pa_4e_driver;
 extern struct c7200_pa_driver dev_c7200_pa_8e_driver;
 extern struct c7200_pa_driver dev_c7200_pa_4t_driver;

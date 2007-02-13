@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -100,11 +100,24 @@ typedef m_uint64_t m_tmcnt_t;
 
 /* Forward declarations */
 typedef struct vm_instance vm_instance_t;
-typedef struct insn_block insn_block_t;
+typedef struct mips64_jit_tcb mips64_jit_tcb_t;
+typedef struct ppc32_jit_tcb ppc32_jit_tcb_t;
+
+/* Translated block function pointer */
+typedef void (*insn_tblock_fptr)(void);
+
+/* Host executable page */
 typedef struct insn_exec_page insn_exec_page_t;
+struct insn_exec_page {
+   u_char *ptr;
+   insn_exec_page_t *next;
+};
 
 /* MIPS instruction */
 typedef m_uint32_t mips_insn_t;
+
+/* PowerPC instruction */
+typedef m_uint32_t ppc_insn_t;
 
 /* Max and min macro */
 #define m_max(a,b) (((a) > (b)) ? (a) : (b))
@@ -140,6 +153,31 @@ typedef struct {
    m_uint32_t tlb_index;
 }mts_map_t;
 
+/* Invalid VTLB entry */
+#define MTS_INV_ENTRY_MASK  0x00000001
+
+/* MTS entry flags */
+#define MTS_FLAG_DEV  0x000000001   /* Virtual device used */
+#define MTS_FLAG_COW  0x000000002   /* Copy-On-Write */
+
+/* Virtual TLB entry (32-bit MMU) */
+typedef struct mts32_entry mts32_entry_t;
+struct mts32_entry {
+   m_uint32_t gvpa;   /* Guest Virtual Page Address */
+   m_uint32_t gppa;   /* Guest Physical Page Address */
+   m_iptr_t   hpa;    /* Host Page Address */
+   m_uint32_t flags;  /* Flags */
+}__attribute__ ((aligned(16)));
+
+/* Virtual TLB entry (64-bit MMU) */
+typedef struct mts64_entry mts64_entry_t;
+struct mts64_entry {
+   m_uint64_t gvpa;   /* Guest Virtual Page Address */
+   m_uint64_t gppa;   /* Guest Physical Page Address */
+   m_iptr_t   hpa;    /* Host Page Address */
+   m_uint32_t flags;  /* Flags */
+}__attribute__ ((aligned(16)));
+
 /* Global logfile */
 extern FILE *log_file;
 
@@ -162,6 +200,13 @@ static inline int check_bit(u_int old,u_int new,u_int bit)
 static forced_inline m_int64_t sign_extend(m_int64_t x,int len)
 {
    len = 64 - len;
+   return (x << len) >> len;
+}
+
+/* Sign-extension (32-bit) */
+static forced_inline m_int32_t sign_extend_32(m_int32_t x,int len)
+{
+   len = 32 - len;
    return (x << len) >> len;
 }
 
@@ -310,5 +355,8 @@ int memzone_open_file(char *filename,u_char **ptr,off_t *fsize);
 
 /* Compute NVRAM checksum */
 m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count);
+
+/* Byte-swap a memory block */
+void mem_bswap32(void *ptr,size_t len);
 
 #endif

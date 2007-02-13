@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -7,7 +7,6 @@
 #define	__PCI_DEV_H__
 
 #include "utils.h"
-//#include "pcireg.h"
 
 #define	PCI_BUS_ADDR  0xcf8
 #define	PCI_BUS_DATA  0xcfc
@@ -28,8 +27,8 @@ typedef struct pci_device pci_dev_t;
 
 /* PCI function prototypes */
 typedef void (*pci_init_t)(pci_dev_t *dev);
-typedef m_uint32_t (*pci_reg_read_t)(cpu_mips_t *cpu,pci_dev_t *dev,int reg);
-typedef void (*pci_reg_write_t)(cpu_mips_t *cpu,pci_dev_t *dev,int reg,
+typedef m_uint32_t (*pci_reg_read_t)(cpu_gen_t *cpu,pci_dev_t *dev,int reg);
+typedef void (*pci_reg_write_t)(cpu_gen_t *cpu,pci_dev_t *dev,int reg,
                                 m_uint32_t value);
 /* PCI device */
 struct pci_device {
@@ -113,11 +112,11 @@ struct pci_device *pci_dev_lookup(struct pci_bus *pci_bus_root,
                                   int bus,int device,int function);
 
 /* Handle the address register access */
-void pci_dev_addr_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
+void pci_dev_addr_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
                           u_int op_type,int swap,m_uint64_t *data);
 
 /* Handle the data register access */
-void pci_dev_data_handler(cpu_mips_t *cpu,struct pci_bus *pci_bus,
+void pci_dev_data_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
                           u_int op_type,int swap,m_uint64_t *data);
 
 /* Add a PCI bridge */

@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Serial Interfaces (Mueslix).
@@ -36,7 +36,8 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -216,7 +217,7 @@ static inline int dev_mueslix_is_rx_tx_enabled(struct mueslix_data *d,u_int id)
 /*
  * Access to channel registers.
  */
-void dev_mueslix_chan_access(cpu_mips_t *cpu,struct mueslix_channel *channel,
+void dev_mueslix_chan_access(cpu_gen_t *cpu,struct mueslix_channel *channel,
                              m_uint32_t offset,u_int op_size,u_int op_type,
                              m_uint64_t *data)
 {
@@ -318,7 +319,7 @@ static void tpu_cm1_handle_cmd(struct mueslix_data *d,u_int cmd)
 /*
  * dev_mueslix_access()
  */
-void *dev_mueslix_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_mueslix_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct mueslix_data *d = dev->priv_data;
@@ -329,10 +330,10 @@ void *dev_mueslix_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #if DEBUG_ACCESS >= 2
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read  access to offset=0x%x, pc=0x%llx, size=%u\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,d->name,"write access to offset=0x%x, pc=0x%llx, "
-              "val=0x%llx, size=%u\n",offset,cpu->pc,*data,op_size);
+              "val=0x%llx, size=%u\n",offset,cpu_get_pc(cpu),*data,op_size);
    }
 #endif
 
@@ -415,7 +416,7 @@ void *dev_mueslix_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #if DEBUG_ACCESS
             cpu_log(cpu,d->name,
                     "channel_enable_mask = 0x%5.5llx at pc=0x%llx\n",
-                    *data,cpu->pc);
+                    *data,cpu_get_pc(cpu));
 #endif
             d->channel_enable_mask = *data;
          }
@@ -448,7 +449,7 @@ void *dev_mueslix_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #if DEBUG_ACCESS
          if (op_type == MTS_WRITE) {
             cpu_log(cpu,d->name,"cmd_reg = 0x%5.5llx at pc=0x%llx\n",
-                    *data,cpu->pc);
+                    *data,cpu_get_pc(cpu));
          }
 #endif
          switch(d->chip_mode) {
@@ -475,11 +476,12 @@ void *dev_mueslix_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -825,7 +827,7 @@ static int dev_mueslix_handle_txring(struct mueslix_channel *channel)
 }
 
 /* pci_mueslix_read() */
-static m_uint32_t pci_mueslix_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_mueslix_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {   
    struct mueslix_data *d = dev->priv_data;
@@ -841,7 +843,7 @@ static m_uint32_t pci_mueslix_read(cpu_mips_t *cpu,struct pci_device *dev,
 }
 
 /* pci_mueslix_write() */
-static void pci_mueslix_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_mueslix_write(cpu_gen_t *cpu,struct pci_device *dev,
                               int reg,m_uint32_t value)
 {   
    struct mueslix_data *d = dev->priv_data;

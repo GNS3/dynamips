@@ -14,9 +14,8 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
-#include "mips64.h"
-#include "dynamips.h"
-#include "memory.h"
+#include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "dev_c3600_bay.h"
 

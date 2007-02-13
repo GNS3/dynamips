@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -12,9 +12,20 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
-#include "amd64_trans.h"
-#include "cp0.h"
+#include "cpu.h"
+#include "mips64_jit.h"
+#include "mips64_amd64_trans.h"
+#include "mips64_cp0.h"
 #include "memory.h"
+
+/* Macros for CPU structure access */
+#define REG_OFFSET(reg)       (OFFSET(cpu_mips_t,gpr[(reg)]))
+#define CP0_REG_OFFSET(c0reg) (OFFSET(cpu_mips_t,cp0.reg[(c0reg)]))
+#define MEMOP_OFFSET(op)      (OFFSET(cpu_mips_t,mem_op_fn[(op)]))
+
+#define DECLARE_INSN(name) \
+   static int mips64_emit_##name(cpu_mips_t *cpu,mips64_jit_tcb_t *b, \
+                                 mips_insn_t insn)
 
 /* Set an IRQ */
 void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq)
@@ -36,7 +47,7 @@ void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq)
 }
 
 /* Load a 64 bit immediate value */
-static inline void mips64_load_imm(insn_block_t *b,u_int reg,
+static inline void mips64_load_imm(mips64_jit_tcb_t *b,u_int reg,
                                    m_uint64_t value)
 {
    if (value > 0xffffffffULL)
@@ -46,7 +57,7 @@ static inline void mips64_load_imm(insn_block_t *b,u_int reg,
 }
 
 /* Set the Pointer Counter (PC) register */
-void mips64_set_pc(insn_block_t *b,m_uint64_t new_pc)
+void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc)
 {
    mips64_load_imm(b,AMD64_RAX,new_pc);
    amd64_mov_membase_reg(b->jit_ptr,
@@ -55,7 +66,7 @@ void mips64_set_pc(insn_block_t *b,m_uint64_t new_pc)
 }
 
 /* Set the Return Address (RA) register */
-void mips64_set_ra(insn_block_t *b,m_uint64_t ret_pc)
+void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc)
 {
    mips64_load_imm(b,AMD64_RAX,ret_pc);
    amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,
@@ -64,8 +75,8 @@ void mips64_set_ra(insn_block_t *b,m_uint64_t ret_pc)
 }
 
 /* Set Jump */
-static void mips64_set_jump(cpu_mips_t *cpu,insn_block_t *b,m_uint64_t new_pc,
-                            int local_jump)
+static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+                            m_uint64_t new_pc,int local_jump)
 {      
    int return_to_caller = FALSE;
    u_char *jump_ptr;
@@ -73,11 +84,11 @@ static void mips64_set_jump(cpu_mips_t *cpu,insn_block_t *b,m_uint64_t new_pc,
    if (cpu->sym_trace && !local_jump)
       return_to_caller = TRUE;
 
-   if (!return_to_caller && insn_block_local_addr(b,new_pc,&jump_ptr)) {      
+   if (!return_to_caller && mips64_jit_tcb_local_addr(b,new_pc,&jump_ptr)) {
       if (jump_ptr) {
          amd64_jump_code(b->jit_ptr,jump_ptr);
       } else {
-         insn_block_record_patch(b,b->jit_ptr,new_pc);
+         mips64_jit_tcb_record_patch(b,b->jit_ptr,new_pc);
          amd64_jump32(b->jit_ptr,0);
       }
    } else {
@@ -85,31 +96,39 @@ static void mips64_set_jump(cpu_mips_t *cpu,insn_block_t *b,m_uint64_t new_pc,
       mips64_set_pc(b,new_pc);
 
       /* address is in another block, for now, returns to caller */
-      insn_block_push_epilog(b);
+      mips64_jit_tcb_push_epilog(b);
    }
 }
 
 /* Basic C call */
 static forced_inline 
-void mips64_emit_basic_c_call(insn_block_t *b,void *f)
+void mips64_emit_basic_c_call(mips64_jit_tcb_t *b,void *f)
 {
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RCX,f);
    amd64_call_reg(b->jit_ptr,AMD64_RCX);
 }
 
 /* Emit a simple call to a C function without any parameter */
-static void mips64_emit_c_call(insn_block_t *b,void *f)
+static void mips64_emit_c_call(mips64_jit_tcb_t *b,void *f)
 {   
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RCX,f);
    amd64_call_reg(b->jit_ptr,AMD64_RCX);
 }
 
+/* Single-step operation */
+void mips64_emit_single_step(mips64_jit_tcb_t *b,mips_insn_t insn)
+{
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,insn);
+   mips64_emit_basic_c_call(b,mips64_exec_single_step);
+}
+
 /* Fast memory operation prototype */
-typedef void (*memop_fast_access)(insn_block_t *b,int target);
+typedef void (*memop_fast_access)(mips64_jit_tcb_t *b,int target);
 
 /* Fast LW */
-static void mips64_memop_fast_lw(insn_block_t *b,int target)
+static void mips64_memop_fast_lw(mips64_jit_tcb_t *b,int target)
 {
    amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RBX,0,AMD64_RSI,0,4);
    amd64_bswap32(b->jit_ptr,X86_EAX);
@@ -120,7 +139,7 @@ static void mips64_memop_fast_lw(insn_block_t *b,int target)
 }
 
 /* Fast SW */
-static void mips64_memop_fast_sw(insn_block_t *b,int target)
+static void mips64_memop_fast_sw(mips64_jit_tcb_t *b,int target)
 {
    /* Load value from register */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(target),4);
@@ -129,166 +148,66 @@ static void mips64_memop_fast_sw(insn_block_t *b,int target)
 }
 
 /* Fast memory operation (64-bit) */
-static void mips64_emit_memop_fast64(insn_block_t *b,int op,
-                                     int base,int offset,
-                                     int target,int keep_ll_bit,
-                                     memop_fast_access op_handler)
-{   
-   m_uint64_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*test3;
-   u_char *p_exception,*p_exit;
-
-   /* RDI = CPU instance */
-   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
-
-   /* RSI = GPR[base] + sign-extended offset */
-   mips64_load_imm(b,AMD64_RSI,val);
-   amd64_alu_reg_membase(b->jit_ptr,X86_ADD,
-                         AMD64_RSI,AMD64_RDI,REG_OFFSET(base));
-
-   /* RBX = mts64_entry index */
-   amd64_mov_reg_reg(b->jit_ptr,AMD64_RBX,AMD64_RSI,8);
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHR,AMD64_RBX,MTS64_HASH_SHIFT);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,MTS64_HASH_MASK);
-
-   /* RCX = mts_cache */
-   amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
-                         AMD64_R15,OFFSET(cpu_mips_t,mts_cache),8);
-
-   /* RAX = mts64_entry */
-   amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RCX,0,AMD64_RBX,3,8);
-
-   /* Do we have a non-null entry ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,8);
-   test1 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-
-   /* RCX = start */
-   amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
-                         AMD64_RAX,OFFSET(mts64_entry_t,start),8);  
-   
-   /* RDX = mask (sign-extended), RBX = action */
-   amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,
-                         AMD64_RAX,OFFSET(mts64_entry_t,mask),4);
-   amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
-                         AMD64_RAX,OFFSET(mts64_entry_t,action),8);
-   amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RDX,X86_EDX);
-   amd64_alu_reg_reg(b->jit_ptr,X86_AND,AMD64_RDX,AMD64_RSI);
-
-   /* Virtual Address in the good range ? */
-   amd64_alu_reg_reg(b->jit_ptr,X86_CMP,AMD64_RDX,AMD64_RCX);
-   test2 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
-
-   /* Device access ? */
-   amd64_mov_reg_reg(b->jit_ptr,AMD64_R8,AMD64_RBX,8);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_R8,MTS_DEV_MASK);
-   test3 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
-
-   /* === Fast access === */
-   amd64_alu_reg_reg(b->jit_ptr,X86_SUB,AMD64_RSI,AMD64_RCX);
-
-   /* Memory access */
-   op_handler(b,target);
-
-   p_exit = b->jit_ptr;
-   amd64_jump8(b->jit_ptr,0);
-
-   /* === Slow lookup === */
-   amd64_patch(test1,b->jit_ptr);
-   amd64_patch(test2,b->jit_ptr);
-   amd64_patch(test3,b->jit_ptr);
-
-   /* Save PC for exception handling */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
-
-   /* RDX = target register */
-   amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
-
-   /* Call memory access function */
-   amd64_call_membase(b->jit_ptr,AMD64_RDI,MEMOP_OFFSET(op));
-
-   /* Exception ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
-   p_exception = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   insn_block_push_epilog(b);
-
-   amd64_patch(p_exit,b->jit_ptr);
-   amd64_patch(p_exception,b->jit_ptr);
-}
-
-/* Fast memory operation (32-bit) */
-static void mips64_emit_memop_fast32(insn_block_t *b,int op,
-                                     int base,int offset,
+static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
+                                     int opcode,int base,int offset,
                                      int target,int keep_ll_bit,
                                      memop_fast_access op_handler)
 {   
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*test3;
-   u_char *p_exception,*p_exit;
+   u_char *test1,*test2,*p_exception,*p_exit;
 
-   /* RDI = CPU instance */
-   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   test2 = NULL;
 
-   /* ESI = GPR[base] + sign-extended offset */
-   amd64_mov_reg_imm(b->jit_ptr,X86_ESI,val);
-   amd64_alu_reg_membase_size(b->jit_ptr,X86_ADD,
-                              X86_ESI,AMD64_RDI,REG_OFFSET(base),4);
+   /* RSI = GPR[base] + sign-extended offset */
+   mips64_load_imm(b,AMD64_RSI,val);
+   amd64_alu_reg_membase(b->jit_ptr,X86_ADD,
+                         AMD64_RSI,AMD64_R15,REG_OFFSET(base));
 
-   /* EBX = mts32_entry index */
+   /* RBX = mts64_entry index */
    amd64_mov_reg_reg_size(b->jit_ptr,X86_EBX,X86_ESI,4);
    amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS64_HASH_SHIFT,4);
    amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS64_HASH_MASK,4);
 
-   /* RCX = mts_cache */
+   /* RCX = mts32 entry */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
-                         AMD64_R15,OFFSET(cpu_mips_t,mts_cache),8);
+                         AMD64_R15,
+                         OFFSET(cpu_mips_t,mts_u.mts64_cache),8);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,5);  /* TO FIX */
+   amd64_alu_reg_reg(b->jit_ptr,X86_ADD,AMD64_RCX,AMD64_RBX);
 
-   /* RAX = mts32_entry */
-   amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RCX,0,AMD64_RBX,3,8);
+   /* Compare virtual page address (EAX = vpage) */
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RAX,AMD64_RSI,8);
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,MIPS_MIN_PAGE_MASK);
 
-   /* Do we have a non-null entry ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,8);
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_CMP,AMD64_RAX,AMD64_RCX,
+                              OFFSET(mts64_entry_t,gvpa),8);
    test1 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   x86_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
 
-   /* ECX = start */
-   amd64_mov_reg_membase(b->jit_ptr,X86_ECX,
-                         AMD64_RAX,OFFSET(mts32_entry_t,start),4);  
-   
-   /* EDX = mask, RBX = action */
-   amd64_mov_reg_membase(b->jit_ptr,X86_EDX,
-                         AMD64_RAX,OFFSET(mts32_entry_t,mask),4);
+   /* Test if we are writing to a COW page */
+   if (write_op) {
+      amd64_test_membase_imm_size(b->jit_ptr,
+                                  AMD64_RCX,OFFSET(mts64_entry_t,flags),
+                                  MTS_FLAG_COW,4);
+      test2 = b->jit_ptr;
+      amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+   }
+
+   /* ESI = offset in page, RBX = Host Page Address */
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,X86_ESI,MIPS_MIN_PAGE_IMASK);
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
-                         AMD64_RAX,OFFSET(mts32_entry_t,action),8);
-   amd64_alu_reg_reg_size(b->jit_ptr,X86_AND,X86_EDX,X86_ESI,4);
-
-   /* Virtual Address in the good range ? */
-   amd64_alu_reg_reg_size(b->jit_ptr,X86_CMP,X86_EDX,X86_ECX,4);
-   test2 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
-
-   /* Device access ? */
-   amd64_mov_reg_reg(b->jit_ptr,AMD64_R8,AMD64_RBX,8);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_R8,MTS_DEV_MASK);
-   test3 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
-
-   /* === Fast access === */
-   amd64_alu_reg_reg_size(b->jit_ptr,X86_SUB,X86_ESI,X86_ECX,4);
+                         AMD64_RCX,OFFSET(mts64_entry_t,hpa),8);
 
    /* Memory access */
    op_handler(b,target);
 
    p_exit = b->jit_ptr;
    amd64_jump8(b->jit_ptr,0);
+   if (test2)
+      amd64_patch(test2,b->jit_ptr);
 
    /* === Slow lookup === */
    amd64_patch(test1,b->jit_ptr);
-   amd64_patch(test2,b->jit_ptr);
-   amd64_patch(test3,b->jit_ptr);
 
    /* Save PC for exception handling */
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
@@ -299,39 +218,130 @@ static void mips64_emit_memop_fast32(insn_block_t *b,int op,
    /* RDX = target register */
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
 
+   /* RDI = CPU instance */
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
    /* Call memory access function */
-   amd64_call_membase(b->jit_ptr,AMD64_RDI,MEMOP_OFFSET(op));
+   amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
 
    /* Exception ? */
    amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
    p_exception = b->jit_ptr;
    amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
+
+   amd64_patch(p_exit,b->jit_ptr);
+   amd64_patch(p_exception,b->jit_ptr);
+}
+
+/* Fast memory operation (32-bit) */
+static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
+                                     int opcode,int base,int offset,
+                                     int target,int keep_ll_bit,
+                                     memop_fast_access op_handler)
+{   
+   m_uint32_t val = sign_extend(offset,16);
+   u_char *test1,*test2,*p_exception,*p_exit;
+
+   test2 = NULL;
+
+   /* ESI = GPR[base] + sign-extended offset */
+   amd64_mov_reg_imm(b->jit_ptr,X86_ESI,val);
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_ADD,
+                              X86_ESI,AMD64_R15,REG_OFFSET(base),4);
+
+   /* RBX = mts32_entry index */
+   amd64_mov_reg_reg_size(b->jit_ptr,X86_EBX,X86_ESI,4);
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS32_HASH_SHIFT,4);
+   amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS32_HASH_MASK,4);
+
+   /* RCX = mts32 entry */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
+                         AMD64_R15,
+                         OFFSET(cpu_mips_t,mts_u.mts32_cache),8);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,5);  /* TO FIX */
+   amd64_alu_reg_reg(b->jit_ptr,X86_ADD,AMD64_RCX,AMD64_RBX);
+
+   /* Compare virtual page address (EAX = vpage) */
+   amd64_mov_reg_reg(b->jit_ptr,X86_EAX,X86_ESI,4);
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,X86_EAX,MIPS_MIN_PAGE_MASK);
+
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_CMP,X86_EAX,AMD64_RCX,
+                              OFFSET(mts32_entry_t,gvpa),4);
+   test1 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   /* Test if we are writing to a COW page */
+   if (write_op) {
+      amd64_test_membase_imm_size(b->jit_ptr,
+                                  AMD64_RCX,OFFSET(mts32_entry_t,flags),
+                                  MTS_FLAG_COW,4);
+      test2 = b->jit_ptr;
+      amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
+   }
+
+   /* ESI = offset in page, RBX = Host Page Address */
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,X86_ESI,MIPS_MIN_PAGE_IMASK);
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
+                         AMD64_RCX,OFFSET(mts32_entry_t,hpa),8);
+
+   /* Memory access */
+   op_handler(b,target);
+
+   p_exit = b->jit_ptr;
+   amd64_jump8(b->jit_ptr,0);
+
+   /* === Slow lookup === */
+   amd64_patch(test1,b->jit_ptr);
+   if (test2)
+      amd64_patch(test2,b->jit_ptr);
+
+   /* Save PC for exception handling */
+   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+
+   /* Sign-extend virtual address */
+   amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RSI,X86_ESI);
+
+   /* RDX = target register */
+   amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
+
+   /* RDI = CPU instance */
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   /* Call memory access function */
+   amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
+
+   /* Exception ? */
+   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
+   p_exception = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   mips64_jit_tcb_push_epilog(b);
 
    amd64_patch(p_exit,b->jit_ptr);
    amd64_patch(p_exception,b->jit_ptr);
 }
 
 /* Fast memory operation */
-static void mips64_emit_memop_fast(cpu_mips_t *cpu,insn_block_t *b,int op,
+static void mips64_emit_memop_fast(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+                                   int write_op,int opcode,
                                    int base,int offset,
                                    int target,int keep_ll_bit,
                                    memop_fast_access op_handler)
 {
    switch(cpu->addr_mode) {
       case 32:
-         mips64_emit_memop_fast32(b,op,base,offset,target,keep_ll_bit,
-                                  op_handler);
+         mips64_emit_memop_fast32(b,write_op,opcode,base,offset,target,
+                                  keep_ll_bit,op_handler);
          break;
       case 64:
-         mips64_emit_memop_fast64(b,op,base,offset,target,keep_ll_bit,
-                                  op_handler);
+         mips64_emit_memop_fast64(b,write_op,opcode,base,offset,target,
+                                  keep_ll_bit,op_handler);
          break;
    }
 }
 
 /* Memory operation */
-static void mips64_emit_memop(insn_block_t *b,int op,int base,int offset,
+static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
                               int target,int keep_ll_bit)
 {
    m_uint64_t val = sign_extend(offset,16);
@@ -364,12 +374,12 @@ static void mips64_emit_memop(insn_block_t *b,int op,int base,int offset,
    amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
    test1 = b->jit_ptr;
    amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    amd64_patch(test1,b->jit_ptr);
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(insn_block_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void *f)
 {
    /* update pc */
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
@@ -387,7 +397,7 @@ static void mips64_emit_cp_xfr_op(insn_block_t *b,int rt,int rd,void *f)
 }
 
 /* Virtual Breakpoint */
-void mips64_emit_breakpoint(insn_block_t *b)
+void mips64_emit_breakpoint(mips64_jit_tcb_t *b)
 {
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_c_call(b,mips64_run_breakpoint);
@@ -401,11 +411,11 @@ static fastcall void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
    printf("MIPS64: unhandled opcode 0x%8.8x at 0x%llx (ra=0x%llx)\n",
           opcode,cpu->pc,cpu->gpr[MIPS_GPR_RA]);
 
-   mips64_dump_regs(cpu);
+   mips64_dump_regs(cpu->gen);
 }
 
 /* Emit unhandled instruction code */
-static int mips64_emit_unknown(cpu_mips_t *cpu,insn_block_t *b,
+static int mips64_emit_unknown(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
                                mips_insn_t opcode)
 {  
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,opcode);
@@ -421,14 +431,14 @@ static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
    printf("MIPS64: invalid instruction in delay slot at 0x%llx (ra=0x%llx)\n",
           cpu->pc,cpu->gpr[MIPS_GPR_RA]);
 
-   mips64_dump_regs(cpu);
+   mips64_dump_regs(cpu->gen);
 
    /* Halt the virtual CPU */
    cpu->pc = 0;
 }
 
 /* Emit unhandled instruction code */
-int mips64_emit_invalid_delay_slot(insn_block_t *b)
+int mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b)
 {  
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_c_call(b,mips64_invalid_delay_slot);
@@ -439,7 +449,7 @@ int mips64_emit_invalid_delay_slot(insn_block_t *b)
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-void mips64_inc_cp0_count_reg(insn_block_t *b)
+void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b)
 {   
    amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,cp0_virt_cnt_reg));
 
@@ -469,7 +479,7 @@ void mips64_inc_cp0_count_reg(insn_block_t *b)
 }
 
 /* Check if there are pending IRQ */
-void mips64_check_pending_irq(insn_block_t *b)
+void mips64_check_pending_irq(mips64_jit_tcb_t *b)
 {
    u_char *test1;
 
@@ -487,19 +497,19 @@ void mips64_check_pending_irq(insn_block_t *b)
    /* Trigger the IRQ */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_basic_c_call(b,mips64_trigger_irq);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
 
    amd64_patch(test1,b->jit_ptr);
 }
 
 /* Increment the number of executed instructions (performance debugging) */
-void mips64_inc_perf_counter(insn_block_t *b)
+void mips64_inc_perf_counter(mips64_jit_tcb_t *b)
 { 
    amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,perf_counter));
 }
 
 /* ADD */
-static int mips64_emit_ADD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ADD)
 {	
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -515,7 +525,7 @@ static int mips64_emit_ADD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ADDI */
-static int mips64_emit_ADDI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ADDI)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -534,7 +544,7 @@ static int mips64_emit_ADDI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ADDIU */
-static int mips64_emit_ADDIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ADDIU)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -554,7 +564,7 @@ static int mips64_emit_ADDIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ADDU */
-static int mips64_emit_ADDU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ADDU)
 {	
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -570,7 +580,7 @@ static int mips64_emit_ADDU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* AND */
-static int mips64_emit_AND(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(AND)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -584,7 +594,7 @@ static int mips64_emit_AND(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ANDI */
-static int mips64_emit_ANDI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ANDI)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -600,7 +610,7 @@ static int mips64_emit_ANDI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* B (Branch, virtual instruction) */
-static int mips64_emit_B(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(B)
 {
    int offset = bits(insn,0,15);
    m_uint64_t new_pc;
@@ -610,7 +620,7 @@ static int mips64_emit_B(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    new_pc += sign_extend(offset << 2,18);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -618,7 +628,7 @@ static int mips64_emit_B(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BAL (Branch and Link, virtual instruction) */
-static int mips64_emit_BAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BAL)
 {
    int offset = bits(insn,0,15);
    m_uint64_t new_pc;
@@ -631,7 +641,7 @@ static int mips64_emit_BAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,0);
@@ -639,7 +649,7 @@ static int mips64_emit_BAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BEQ (Branch On Equal) */
-static int mips64_emit_BEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BEQ)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -661,7 +671,7 @@ static int mips64_emit_BEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -669,12 +679,12 @@ static int mips64_emit_BEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BEQL (Branch On Equal Likely) */
-static int mips64_emit_BEQL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BEQL)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -696,7 +706,7 @@ static int mips64_emit_BEQL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -706,7 +716,7 @@ static int mips64_emit_BEQL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BEQZ (Branch On Equal Zero) */
-static int mips64_emit_BEQZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BEQZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -726,7 +736,7 @@ static int mips64_emit_BEQZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NZ, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -734,12 +744,12 @@ static int mips64_emit_BEQZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BNEZ (Branch On Not Equal Zero) */
-static int mips64_emit_BNEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BNEZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -759,7 +769,7 @@ static int mips64_emit_BNEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_Z, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -767,12 +777,12 @@ static int mips64_emit_BNEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BGEZ (Branch On Greater or Equal Than Zero) */
-static int mips64_emit_BGEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BGEZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -790,7 +800,7 @@ static int mips64_emit_BGEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_S, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -798,12 +808,12 @@ static int mips64_emit_BGEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BGEZAL (Branch On Greater or Equal Than Zero And Link) */
-static int mips64_emit_BGEZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BGEZAL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -824,7 +834,7 @@ static int mips64_emit_BGEZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_S, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -832,13 +842,12 @@ static int mips64_emit_BGEZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BGEZALL (Branch On Greater or Equal Than Zero And Link Likely) */
-static int mips64_emit_BGEZALL(cpu_mips_t *cpu,insn_block_t *b,
-                               mips_insn_t insn)
+DECLARE_INSN(BGEZALL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -859,7 +868,7 @@ static int mips64_emit_BGEZALL(cpu_mips_t *cpu,insn_block_t *b,
    amd64_branch32(b->jit_ptr, X86_CC_S, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -869,7 +878,7 @@ static int mips64_emit_BGEZALL(cpu_mips_t *cpu,insn_block_t *b,
 }
 
 /* BGEZL (Branch On Greater or Equal Than Zero Likely) */
-static int mips64_emit_BGEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BGEZL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -887,7 +896,7 @@ static int mips64_emit_BGEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_S, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -897,7 +906,7 @@ static int mips64_emit_BGEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BGTZ (Branch On Greater Than Zero) */
-static int mips64_emit_BGTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BGTZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -917,7 +926,7 @@ static int mips64_emit_BGTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_LE, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -925,12 +934,12 @@ static int mips64_emit_BGTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BGTZL (Branch On Greater Than Zero Likely) */
-static int mips64_emit_BGTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BGTZL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -950,7 +959,7 @@ static int mips64_emit_BGTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_LE, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -960,7 +969,7 @@ static int mips64_emit_BGTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BLEZ (Branch On Less or Equal Than Zero) */
-static int mips64_emit_BLEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BLEZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -980,7 +989,7 @@ static int mips64_emit_BLEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_GT, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -988,12 +997,12 @@ static int mips64_emit_BLEZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BLEZL (Branch On Less or Equal Than Zero Likely) */
-static int mips64_emit_BLEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BLEZL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -1013,7 +1022,7 @@ static int mips64_emit_BLEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_GT, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1023,7 +1032,7 @@ static int mips64_emit_BLEZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BLTZ (Branch On Less Than Zero) */
-static int mips64_emit_BLTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BLTZ)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -1041,7 +1050,7 @@ static int mips64_emit_BLTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NS, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1049,12 +1058,12 @@ static int mips64_emit_BLTZ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BLTZAL (Branch On Less Than Zero And Link) */
-static int mips64_emit_BLTZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BLTZAL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -1075,7 +1084,7 @@ static int mips64_emit_BLTZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NS, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1083,13 +1092,12 @@ static int mips64_emit_BLTZAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BLTZALL (Branch On Less Than Zero And Link Likely) */
-static int mips64_emit_BLTZALL(cpu_mips_t *cpu,insn_block_t *b,
-                               mips_insn_t insn)
+DECLARE_INSN(BLTZALL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -1110,7 +1118,7 @@ static int mips64_emit_BLTZALL(cpu_mips_t *cpu,insn_block_t *b,
    amd64_branch32(b->jit_ptr, X86_CC_NS, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1120,7 +1128,7 @@ static int mips64_emit_BLTZALL(cpu_mips_t *cpu,insn_block_t *b,
 }
 
 /* BLTZL (Branch On Less Than Zero Likely) */
-static int mips64_emit_BLTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BLTZL)
 {
    int rs = bits(insn,21,25);
    int offset = bits(insn,0,15);
@@ -1138,7 +1146,7 @@ static int mips64_emit_BLTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_NS, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1148,7 +1156,7 @@ static int mips64_emit_BLTZL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BNE (Branch On Not Equal) */
-static int mips64_emit_BNE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BNE)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1170,7 +1178,7 @@ static int mips64_emit_BNE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_E, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,2);
+   mips64_jit_fetch_and_emit(cpu,b,2);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1178,12 +1186,12 @@ static int mips64_emit_BNE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_patch(test1,b->jit_ptr);
 
    /* if the branch is not taken, we have to execute the delay slot too */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
    return(0);
 }
 
 /* BNEL (Branch On Not Equal Likely) */
-static int mips64_emit_BNEL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BNEL)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1205,7 +1213,7 @@ static int mips64_emit_BNEL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    amd64_branch32(b->jit_ptr, X86_CC_E, 0, 1);
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1215,19 +1223,19 @@ static int mips64_emit_BNEL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* BREAK */
-static int mips64_emit_BREAK(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(BREAK)
 {	
    u_int code = bits(insn,6,25);
 
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,code);
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_basic_c_call(b,mips64_exec_break);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    return(0);
 }
 
 /* CACHE */
-static int mips64_emit_CACHE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(CACHE)
 {        
    int base   = bits(insn,21,25);
    int op     = bits(insn,16,20);
@@ -1238,27 +1246,27 @@ static int mips64_emit_CACHE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* CFC0 */
-static int mips64_emit_CFC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(CFC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_cfc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_cfc0);
    return(0);
 }
 
 /* CTC0 */
-static int mips64_emit_CTC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(CTC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_ctc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_ctc0);
    return(0);
 }
 
 /* DADDIU */
-static int mips64_emit_DADDIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DADDIU)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -1273,7 +1281,7 @@ static int mips64_emit_DADDIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DADDU: rd = rs + rt */
-static int mips64_emit_DADDU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DADDU)
 {	
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1287,7 +1295,7 @@ static int mips64_emit_DADDU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DIV */
-static int mips64_emit_DIV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DIV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1315,7 +1323,7 @@ static int mips64_emit_DIV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DIVU */
-static int mips64_emit_DIVU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DIVU)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1343,17 +1351,17 @@ static int mips64_emit_DIVU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DMFC0 */
-static int mips64_emit_DMFC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DMFC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_dmfc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_dmfc0);
    return(0);
 }
 
 /* DMFC1 */
-static int mips64_emit_DMFC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DMFC1)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1363,17 +1371,17 @@ static int mips64_emit_DMFC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DMTC0 */
-static int mips64_emit_DMTC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DMTC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_dmtc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_dmtc0);
    return(0);
 }
 
 /* DMTC1 */
-static int mips64_emit_DMTC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DMTC1)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1383,7 +1391,7 @@ static int mips64_emit_DMTC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSLL */
-static int mips64_emit_DSLL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSLL)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1396,7 +1404,7 @@ static int mips64_emit_DSLL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSLL32 */
-static int mips64_emit_DSLL32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSLL32)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1409,7 +1417,7 @@ static int mips64_emit_DSLL32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSLLV */
-static int mips64_emit_DSLLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSLLV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1425,7 +1433,7 @@ static int mips64_emit_DSLLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRA */
-static int mips64_emit_DSRA(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRA)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1438,7 +1446,7 @@ static int mips64_emit_DSRA(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRA32 */
-static int mips64_emit_DSRA32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRA32)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1451,7 +1459,7 @@ static int mips64_emit_DSRA32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRAV */
-static int mips64_emit_DSRAV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRAV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1467,7 +1475,7 @@ static int mips64_emit_DSRAV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRL */
-static int mips64_emit_DSRL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRL)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1480,7 +1488,7 @@ static int mips64_emit_DSRL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRL32 */
-static int mips64_emit_DSRL32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRL32)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1493,7 +1501,7 @@ static int mips64_emit_DSRL32(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSRLV */
-static int mips64_emit_DSRLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSRLV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1509,7 +1517,7 @@ static int mips64_emit_DSRLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* DSUBU: rd = rs - rt */
-static int mips64_emit_DSUBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(DSUBU)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1523,17 +1531,17 @@ static int mips64_emit_DSUBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ERET */
-static int mips64_emit_ERET(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ERET)
 {
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_basic_c_call(b,mips64_exec_eret);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    return(0);
 }
 
 /* J (Jump) */
-static int mips64_emit_J(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(J)
 {
    u_int instr_index = bits(insn,0,25);
    m_uint64_t new_pc;
@@ -1544,7 +1552,7 @@ static int mips64_emit_J(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    new_pc |= instr_index << 2;
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,1);
@@ -1552,7 +1560,7 @@ static int mips64_emit_J(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* JAL (Jump And Link) */
-static int mips64_emit_JAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(JAL)
 {
    u_int instr_index = bits(insn,0,25);
    m_uint64_t new_pc;
@@ -1566,7 +1574,7 @@ static int mips64_emit_JAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc in cpu structure */
    mips64_set_jump(cpu,b,new_pc,0);
@@ -1574,7 +1582,7 @@ static int mips64_emit_JAL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* JALR (Jump and Link Register) */
-static int mips64_emit_JALR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(JALR)
 {
    int rs = bits(insn,21,25);
    int rd = bits(insn,11,15);
@@ -1602,19 +1610,19 @@ static int mips64_emit_JALR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 #endif
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc */
    amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,pc),
                          AMD64_R14,8);
 
    /* returns to the caller which will determine the next path */
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    return(0);
 }
 
 /* JR (Jump Register) */
-static int mips64_emit_JR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(JR)
 {
    int rs = bits(insn,21,25);
 
@@ -1635,7 +1643,7 @@ static int mips64_emit_JR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 #endif
 
    /* insert the instruction in the delay slot */
-   insn_fetch_and_emit(cpu,b,1);
+   mips64_jit_fetch_and_emit(cpu,b,1);
 
    /* set the new pc */
    amd64_mov_membase_reg(b->jit_ptr,
@@ -1643,12 +1651,12 @@ static int mips64_emit_JR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
                          AMD64_R14,8);
 
    /* returns to the caller which will determine the next path */
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    return(0);
 }
 
 /* LB (Load Byte) */
-static int mips64_emit_LB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LB)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1659,7 +1667,7 @@ static int mips64_emit_LB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LBU (Load Byte Unsigned) */
-static int mips64_emit_LBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LBU)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1670,7 +1678,7 @@ static int mips64_emit_LBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LD (Load Double-Word) */
-static int mips64_emit_LD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LD)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1681,7 +1689,7 @@ static int mips64_emit_LD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LDC1 (Load Double-Word to Coprocessor 1) */
-static int mips64_emit_LDC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LDC1)
 {
    int base   = bits(insn,21,25);
    int ft     = bits(insn,16,20);
@@ -1692,7 +1700,7 @@ static int mips64_emit_LDC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LDL (Load Double-Word Left) */
-static int mips64_emit_LDL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LDL)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1703,7 +1711,7 @@ static int mips64_emit_LDL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LDR (Load Double-Word Right) */
-static int mips64_emit_LDR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LDR)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1714,7 +1722,7 @@ static int mips64_emit_LDR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LH (Load Half-Word) */
-static int mips64_emit_LH(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LH)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1725,7 +1733,7 @@ static int mips64_emit_LH(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LHU (Load Half-Word Unsigned) */
-static int mips64_emit_LHU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LHU)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1736,7 +1744,7 @@ static int mips64_emit_LHU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LI (virtual) */
-static int mips64_emit_LI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LI)
 {
    int rt  = bits(insn,16,20);
    int imm = bits(insn,0,15);
@@ -1748,7 +1756,7 @@ static int mips64_emit_LI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LL (Load Linked) */
-static int mips64_emit_LL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LL)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1759,7 +1767,7 @@ static int mips64_emit_LL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LUI */
-static int mips64_emit_LUI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LUI)
 {
    int rt  = bits(insn,16,20);
    int imm = bits(insn,0,15);
@@ -1778,14 +1786,14 @@ static int mips64_emit_LUI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LW (Load Word) */
-static int mips64_emit_LW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LW)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_LW,base,offset,rt,TRUE,
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LW,base,offset,rt,TRUE,
                              mips64_memop_fast_lw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_LW,base,offset,rt,TRUE);
@@ -1794,7 +1802,7 @@ static int mips64_emit_LW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LWL (Load Word Left) */
-static int mips64_emit_LWL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LWL)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1805,7 +1813,7 @@ static int mips64_emit_LWL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LWR (Load Word Right) */
-static int mips64_emit_LWR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LWR)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1816,7 +1824,7 @@ static int mips64_emit_LWR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* LWU (Load Word Unsigned) */
-static int mips64_emit_LWU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(LWU)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -1827,17 +1835,17 @@ static int mips64_emit_LWU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MFC0 */
-static int mips64_emit_MFC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MFC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_mfc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_mfc0);
    return(0);
 }
 
 /* MFC1 */
-static int mips64_emit_MFC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MFC1)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1847,7 +1855,7 @@ static int mips64_emit_MFC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MFHI */
-static int mips64_emit_MFHI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MFHI)
 {
    int rd = bits(insn,11,15);
 
@@ -1858,7 +1866,7 @@ static int mips64_emit_MFHI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MFLO */
-static int mips64_emit_MFLO(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MFLO)
 {
    int rd = bits(insn,11,15);
 
@@ -1871,7 +1879,7 @@ static int mips64_emit_MFLO(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MOVE (virtual instruction, real: ADDU) */
-static int mips64_emit_MOVE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MOVE)
 {	
    int rs = bits(insn,21,25);
    int rd = bits(insn,11,15);
@@ -1883,17 +1891,17 @@ static int mips64_emit_MOVE(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MTC0 */
-static int mips64_emit_MTC0(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MTC0)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
 
-   mips64_emit_cp_xfr_op(b,rt,rd,cp0_exec_mtc0);
+   mips64_emit_cp_xfr_op(b,rt,rd,mips64_cp0_exec_mtc0);
    return(0);
 }
 
 /* MTC1 */
-static int mips64_emit_MTC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MTC1)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -1903,7 +1911,7 @@ static int mips64_emit_MTC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MTHI */
-static int mips64_emit_MTHI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MTHI)
 {
    int rs = bits(insn,21,25);
 
@@ -1915,7 +1923,7 @@ static int mips64_emit_MTHI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MTLO */
-static int mips64_emit_MTLO(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MTLO)
 {
    int rs = bits(insn,21,25);
 
@@ -1927,7 +1935,7 @@ static int mips64_emit_MTLO(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MUL */
-static int mips64_emit_MUL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MUL)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1948,7 +1956,7 @@ static int mips64_emit_MUL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MULT */
-static int mips64_emit_MULT(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MULT)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -1974,7 +1982,7 @@ static int mips64_emit_MULT(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MULTU */
-static int mips64_emit_MULTU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(MULTU)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2000,13 +2008,13 @@ static int mips64_emit_MULTU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* NOP */
-static int mips64_emit_NOP(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(NOP)
 {
    return(0);
 }
 
 /* NOR */
-static int mips64_emit_NOR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(NOR)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2021,7 +2029,7 @@ static int mips64_emit_NOR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* OR */
-static int mips64_emit_OR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(OR)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2035,7 +2043,7 @@ static int mips64_emit_OR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* ORI */
-static int mips64_emit_ORI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(ORI)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -2051,21 +2059,21 @@ static int mips64_emit_ORI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* PREF */
-static int mips64_emit_PREF(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(PREF)
 {
    amd64_nop(b->jit_ptr);
    return(0);
 }
 
 /* PREFI */
-static int mips64_emit_PREFI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(PREFI)
 {
    amd64_nop(b->jit_ptr);
    return(0);
 }
 
 /* SB (Store Byte) */
-static int mips64_emit_SB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SB)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2076,7 +2084,7 @@ static int mips64_emit_SB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SC (Store Conditional) */
-static int mips64_emit_SC(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SC)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2087,7 +2095,7 @@ static int mips64_emit_SC(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SD (Store Double-Word) */
-static int mips64_emit_SD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SD)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2098,7 +2106,7 @@ static int mips64_emit_SD(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SDL (Store Double-Word Left) */
-static int mips64_emit_SDL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SDL)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2109,7 +2117,7 @@ static int mips64_emit_SDL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SDR (Store Double-Word Right) */
-static int mips64_emit_SDR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SDR)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2120,7 +2128,7 @@ static int mips64_emit_SDR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SDC1 (Store Double-Word from Coprocessor 1) */
-static int mips64_emit_SDC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SDC1)
 {
    int base   = bits(insn,21,25);
    int ft     = bits(insn,16,20);
@@ -2131,7 +2139,7 @@ static int mips64_emit_SDC1(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SH (Store Half-Word) */
-static int mips64_emit_SH(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SH)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2142,7 +2150,7 @@ static int mips64_emit_SH(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLL */
-static int mips64_emit_SLL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLL)
 {	
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -2157,7 +2165,7 @@ static int mips64_emit_SLL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLLV */
-static int mips64_emit_SLLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLLV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2175,7 +2183,7 @@ static int mips64_emit_SLLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLT */
-static int mips64_emit_SLT(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLT)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2204,7 +2212,7 @@ static int mips64_emit_SLT(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLTI */
-static int mips64_emit_SLTI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLTI)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2234,7 +2242,7 @@ static int mips64_emit_SLTI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLTU */
-static int mips64_emit_SLTU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLTU)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2263,7 +2271,7 @@ static int mips64_emit_SLTU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SLTIU */
-static int mips64_emit_SLTIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SLTIU)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2293,7 +2301,7 @@ static int mips64_emit_SLTIU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SRA */
-static int mips64_emit_SRA(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SRA)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -2308,7 +2316,7 @@ static int mips64_emit_SRA(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SRAV */
-static int mips64_emit_SRAV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SRAV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2326,7 +2334,7 @@ static int mips64_emit_SRAV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SRL */
-static int mips64_emit_SRL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SRL)
 {
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
@@ -2341,7 +2349,7 @@ static int mips64_emit_SRL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SRLV */
-static int mips64_emit_SRLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SRLV)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2359,7 +2367,7 @@ static int mips64_emit_SRLV(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SUB */
-static int mips64_emit_SUB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SUB)
 {	
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2376,7 +2384,7 @@ static int mips64_emit_SUB(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SUBU */
-static int mips64_emit_SUBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SUBU)
 {	
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2392,14 +2400,14 @@ static int mips64_emit_SUBU(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SW (Store Word) */
-static int mips64_emit_SW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SW)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
    if (cpu->fast_memop) {
-      mips64_emit_memop_fast(cpu,b,MIPS_MEMOP_SW,base,offset,rt,FALSE,
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SW,base,offset,rt,FALSE,
                              mips64_memop_fast_sw);
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_SW,base,offset,rt,FALSE);
@@ -2408,7 +2416,7 @@ static int mips64_emit_SW(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SWL (Store Word Left) */
-static int mips64_emit_SWL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SWL)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2419,7 +2427,7 @@ static int mips64_emit_SWL(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SWR (Store Word Right) */
-static int mips64_emit_SWR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SWR)
 {
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
@@ -2430,24 +2438,23 @@ static int mips64_emit_SWR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* SYNC */
-static int mips64_emit_SYNC(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(SYNC)
 {
    return(0);
 }
 
 /* SYSCALL */
-static int mips64_emit_SYSCALL(cpu_mips_t *cpu,insn_block_t *b,
-                               mips_insn_t insn)
+DECLARE_INSN(SYSCALL)
 {
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_basic_c_call(b,mips64_exec_syscall);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
    return(0);
 }
 
 /* TEQ (Trap If Equal) */
-static int mips64_emit_TEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TEQ)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2465,7 +2472,7 @@ static int mips64_emit_TEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    /* Generate trap exception */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
 
    /* end */
    amd64_patch(test1,b->jit_ptr);
@@ -2473,7 +2480,7 @@ static int mips64_emit_TEQ(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* TEQI (Trap If Equal Immediate) */
-static int mips64_emit_TEQI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TEQI)
 {
    int rs  = bits(insn,21,25);
    int imm = bits(insn,0,15);
@@ -2493,7 +2500,7 @@ static int mips64_emit_TEQI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
    /* Generate trap exception */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
-   insn_block_push_epilog(b);
+   mips64_jit_tcb_push_epilog(b);
 
    /* end */
    amd64_patch(test1,b->jit_ptr);
@@ -2501,43 +2508,43 @@ static int mips64_emit_TEQI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* TLBP */
-static int mips64_emit_TLBP(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TLBP)
 {
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
-   mips64_emit_basic_c_call(b,cp0_exec_tlbp);
+   mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbp);
    return(0);
 }
 
 /* TLBR */
-static int mips64_emit_TLBR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TLBR)
 {  
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
-   mips64_emit_basic_c_call(b,cp0_exec_tlbr);
+   mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbr);
    return(0);
 }
 
 /* TLBWI */
-static int mips64_emit_TLBWI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TLBWI)
 {   
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
-   mips64_emit_basic_c_call(b,cp0_exec_tlbwi);
+   mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwi);
    return(0);
 }
 
 /* TLBWR */
-static int mips64_emit_TLBWR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(TLBWR)
 {   
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
-   mips64_emit_basic_c_call(b,cp0_exec_tlbwr);
+   mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwr);
    return(0);
 }
 
 /* XOR */
-static int mips64_emit_XOR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(XOR)
 {
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
@@ -2551,7 +2558,7 @@ static int mips64_emit_XOR(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* XORI */
-static int mips64_emit_XORI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
+DECLARE_INSN(XORI)
 {
    int rs  = bits(insn,21,25);
    int rt  = bits(insn,16,20);
@@ -2567,7 +2574,7 @@ static int mips64_emit_XORI(cpu_mips_t *cpu,insn_block_t *b,mips_insn_t insn)
 }
 
 /* MIPS instruction array */
-struct insn_tag mips64_insn_tags[] = {
+struct mips64_insn_tag mips64_insn_tags[] = {
    { mips64_emit_LI      , 0xffe00000 , 0x24000000, 1 },   /* virtual */
    { mips64_emit_MOVE    , 0xfc1f07ff , 0x00000021, 1 },   /* virtual */
    { mips64_emit_B       , 0xffff0000 , 0x10000000, 0 },   /* virtual */

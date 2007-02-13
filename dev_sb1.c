@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005 Christophe Fillot (cf@utc.fr)
  *
  * SB-1 system control devices.
@@ -15,7 +15,8 @@
 #include <fcntl.h>
 #include <pthread.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -35,7 +36,7 @@ struct sb1_data {
 /*
  * dev_sb1_access()
  */
-void *dev_sb1_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_sb1_access(cpu_gen_t *cpu,struct vdevice *dev,
                      m_uint32_t offset,u_int op_size,u_int op_type,
                      m_uint64_t *data)
 {
@@ -60,10 +61,10 @@ void *dev_sb1_access(cpu_mips_t *cpu,struct vdevice *dev,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"SB1","read from addr 0x%x, pc=0x%llx\n",
-                    offset,cpu->pc);
+                    offset,cpu_get_pc(cpu));
          } else {
             cpu_log(cpu,"SB1","write to addr 0x%x, value=0x%llx, pc=0x%llx\n",
-                    offset,*data,cpu->pc);
+                    offset,*data,cpu_get_pc(cpu));
          }
 #endif
    }

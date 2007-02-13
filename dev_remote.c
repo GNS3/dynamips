@@ -1,6 +1,8 @@
 /*
- * Cisco C7200 (Predator) Remote Control Module.
+ * Cisco router simulation platform.
  * Copyright (C) 2006 Christophe Fillot.  All rights reserved.
+ *
+ * Remote control module.
  */
 
 #include <stdio.h>
@@ -14,8 +16,8 @@
 #include <assert.h>
 
 #include "utils.h"
-#include "mips64.h"
-#include "cp0.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -23,12 +25,12 @@
 #include "net_io.h"
 #include "registry.h"
 #include "ptask.h"
-#include "vm.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
 #include "dev_c2691.h"
 #include "dev_c3725.h"
 #include "dev_c3745.h"
+#include "dev_c2600.h"
 
 #define DEBUG_ACCESS 0
 
@@ -39,15 +41,18 @@ struct remote_data {
 
    char buffer[512];
    u_int buf_pos;
+
+   u_int cookie_pos;
 };
 
 /*
  * dev_remote_control_access()
  */
-void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
                                 m_uint32_t offset,u_int op_size,u_int op_type,
                                 m_uint64_t *data)
 {
+   vm_instance_t *vm = cpu->vm;
    struct remote_data *d = dev->priv_data;
    struct vdevice *storage_dev;
    size_t len;
@@ -57,10 +62,11 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
-      cpu_log(cpu,"REMOTE","reading reg 0x%x at pc=0x%llx\n",offset,cpu->pc);
+      cpu_log(cpu,"REMOTE","reading reg 0x%x at pc=0x%llx\n",
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,"REMOTE","writing reg 0x%x at pc=0x%llx, data=0x%llx\n",
-              offset,cpu->pc,*data);
+              offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -80,13 +86,13 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
       /* Display CPU registers */
       case 0x008:
          if (op_type == MTS_WRITE)
-            mips64_dump_regs(cpu);
+            cpu->reg_dump(cpu);
          break;
 
-      /* Display CPU TLB */
+      /* Display CPU memory info */
       case 0x00c:
          if (op_type == MTS_WRITE)
-            tlb_dump(cpu);
+            cpu->mmu_dump(cpu);
          break;
 
       /* Reserved/Unused */
@@ -96,43 +102,43 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
       /* RAM size */
       case 0x014: 
          if (op_type == MTS_READ)
-            *data = cpu->vm->ram_size;
+            *data = vm->ram_size;
          break;
 
       /* ROM size */
       case 0x018: 
          if (op_type == MTS_READ)
-            *data = cpu->vm->rom_size;
+            *data = vm->rom_size;
          break;
 
       /* NVRAM size */
       case 0x01c: 
          if (op_type == MTS_READ)
-            *data = cpu->vm->nvram_size;
+            *data = vm->nvram_size;
          break;             
 
       /* IOMEM size */
       case 0x020:
         if (op_type == MTS_READ)
-            *data = cpu->vm->iomem_size;
+            *data = vm->iomem_size;
          break;
 
       /* Config Register */
       case 0x024:
          if (op_type == MTS_READ)
-            *data = cpu->vm->conf_reg;
+            *data = vm->conf_reg;
          break;
 
       /* ELF entry point */
       case 0x028: 
          if (op_type == MTS_READ)
-            *data = cpu->vm->ios_entry_point;
+            *data = vm->ios_entry_point;
          break;      
 
       /* ELF machine id */
       case 0x02c:
          if (op_type == MTS_READ)
-            *data = cpu->vm->elf_machine_id;
+            *data = vm->elf_machine_id;
          break;
 
       /* Restart IOS Image */
@@ -142,16 +148,16 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
 
       /* Stop the virtual machine */
       case 0x034:
-         cpu->vm->status = VM_STATUS_SHUTDOWN;
+         vm->status = VM_STATUS_SHUTDOWN;
          break;
 
       /* Debugging/Log message: /!\ physical address */
       case 0x038:
          if (op_type == MTS_WRITE) {
-            len = physmem_strlen(cpu->vm,*data);
+            len = physmem_strlen(vm,*data);
             if (len < sizeof(d->buffer)) {
-               physmem_copy_from_vm(cpu->vm,d->buffer,*data,len+1);
-               vm_log(cpu->vm,"ROM",d->buffer);
+               physmem_copy_from_vm(vm,d->buffer,*data,len+1);
+               vm_log(vm,"ROM",d->buffer);
             }
          }
          break;
@@ -163,7 +169,7 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
             d->buffer[d->buf_pos] = 0;
 
             if (d->buffer[d->buf_pos-1] == '\n') {
-               vm_log(cpu->vm,"ROM","%s",d->buffer);
+               vm_log(vm,"ROM","%s",d->buffer);
                d->buf_pos = 0;
             }
          } else
@@ -173,42 +179,61 @@ void *dev_remote_control_access(cpu_mips_t *cpu,struct vdevice *dev,
       /* Console output */
       case 0x040:
          if (op_type == MTS_WRITE)
-            vtty_put_char(cpu->vm->vtty_con,(char)*data);
+            vtty_put_char(vm->vtty_con,(char)*data);
          break;
 
       /* NVRAM address */
       case 0x044:
          if (op_type == MTS_READ) {
-            if ((storage_dev = dev_get_by_name(cpu->vm,"nvram")))
+            if ((storage_dev = dev_get_by_name(vm,"nvram")))
                *data = storage_dev->phys_addr;
 
-            if ((storage_dev = dev_get_by_name(cpu->vm,"ssa")))
+            if ((storage_dev = dev_get_by_name(vm,"ssa")))
                *data = storage_dev->phys_addr;
+
+            if (cpu->type == CPU_TYPE_MIPS64)
+               *data += MIPS_KSEG1_BASE;
          }
          break;
 
       /* IO memory size for Smart-Init (C3600, others ?) */
       case 0x048:
          if (op_type == MTS_READ) {
-            switch(cpu->vm->type) {
+            switch(vm->type) {
                case VM_TYPE_C3600:
-                  *data = VM_C3600(cpu->vm)->nm_iomem_size;
+                  *data = VM_C3600(vm)->nm_iomem_size;
                   break;
                case VM_TYPE_C2691:
-                  *data = VM_C2691(cpu->vm)->nm_iomem_size;
+                  *data = VM_C2691(vm)->nm_iomem_size;
                   break;
                case VM_TYPE_C3725:
-                  *data = VM_C3725(cpu->vm)->nm_iomem_size;
+                  *data = VM_C3725(vm)->nm_iomem_size;
                   break;
                case VM_TYPE_C3745:
-                  *data = VM_C3745(cpu->vm)->nm_iomem_size;
+                  *data = VM_C3745(vm)->nm_iomem_size;
+                  break;
+               case VM_TYPE_C2600:
+                  *data = VM_C2600(vm)->nm_iomem_size;
                   break;
                default:
                   *data = 0;
             }
          }
          break;
+
+      /* Cookie position selector */
+      case 0x04c:
+         if (op_type == MTS_READ)
+            *data = d->cookie_pos;
+         else
+            d->cookie_pos = *data;
+         break;
          
+      /* Cookie data */
+      case 0x050:
+         if ((op_type == MTS_READ) && (d->cookie_pos < 64))
+            *data = vm->chassis_cookie[d->cookie_pos];
+         break;
    }
 
    return NULL;

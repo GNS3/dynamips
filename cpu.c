@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Management of CPU groups (for MP systems).
@@ -17,19 +17,23 @@
 #include <fcntl.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "dynamips.h"
 #include "cpu.h"
 #include "memory.h"
 #include "device.h"
-#include "cp0.h"
+#include "mips64.h"
+#include "mips64_cp0.h"
 #include "mips64_exec.h"
+#include "mips64_jit.h"
+#include "ppc32.h"
+#include "ppc32_exec.h"
+#include "ppc32_jit.h"
+#include "dynamips.h"
 #include "vm.h"
 
 /* Find a CPU in a group given its ID */
-cpu_mips_t *cpu_group_find_id(cpu_group_t *group,u_int id)
+cpu_gen_t *cpu_group_find_id(cpu_group_t *group,u_int id)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!group)
       return NULL;
@@ -44,7 +48,7 @@ cpu_mips_t *cpu_group_find_id(cpu_group_t *group,u_int id)
 /* Find the highest CPU ID in a CPU group */
 int cpu_group_find_highest_id(cpu_group_t *group,u_int *highest_id)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    u_int max_id = 0;
 
    if (!group || group->cpu_list)
@@ -59,7 +63,7 @@ int cpu_group_find_highest_id(cpu_group_t *group,u_int *highest_id)
 }
 
 /* Add a CPU in a CPU group */
-int cpu_group_add(cpu_group_t *group,cpu_mips_t *cpu)
+int cpu_group_add(cpu_group_t *group,cpu_gen_t *cpu)
 {
    if (!group)
       return(-1);
@@ -92,7 +96,7 @@ cpu_group_t *cpu_group_create(char *name)
 /* Delete a CPU group */
 void cpu_group_delete(cpu_group_t *group)
 {  
-   cpu_mips_t *cpu,*next;
+   cpu_gen_t *cpu,*next;
 
    if (group != NULL) {
       for(cpu=group->cpu_list;cpu;cpu=next) {
@@ -107,7 +111,7 @@ void cpu_group_delete(cpu_group_t *group)
 /* Rebuild the MTS subsystem for a CPU group */
 int cpu_group_rebuild_mts(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu->mts_rebuild(cpu);
@@ -116,7 +120,7 @@ int cpu_group_rebuild_mts(cpu_group_t *group)
 }
 
 /* Log a message for a CPU */
-void cpu_log(cpu_mips_t *cpu,char *module,char *format,...)
+void cpu_log(cpu_gen_t *cpu,char *module,char *format,...)
 {
    char buffer[256];
    va_list ap;
@@ -128,30 +132,52 @@ void cpu_log(cpu_mips_t *cpu,char *module,char *format,...)
 }
 
 /* Create a new CPU */
-cpu_mips_t *cpu_create(vm_instance_t *vm,u_int id)
+cpu_gen_t *cpu_create(vm_instance_t *vm,u_int type,u_int id)
 {
    void *(*cpu_run_fn)(void *);
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(cpu = malloc(sizeof(*cpu))))
       return NULL;
 
    memset(cpu,0,sizeof(*cpu));
    cpu->vm = vm;
-
-   /* by default, use a standard initialization (CPU exec is suspended) */
-   mips64_init(cpu);
    cpu->id = id;
-   cpu->state = MIPS_CPU_SUSPENDED;
+   cpu->type = type;
+   cpu->state = CPU_STATE_SUSPENDED;
 
-   cpu_run_fn = (void *)insn_block_execute;
-#if __GNUC__ > 2
-   if (!cpu->vm->jit_use) {
-      cpu_run_fn = (void *)mips64_exec_run_cpu;
-   } else {
-      mips64_jit_init(cpu);
+   switch(cpu->type) {
+      case CPU_TYPE_MIPS64:
+         CPU_MIPS64(cpu)->vm = vm;
+         CPU_MIPS64(cpu)->gen = cpu;
+         mips64_init(CPU_MIPS64(cpu));
+
+         cpu_run_fn = (void *)mips64_jit_run_cpu;
+
+         if (!cpu->vm->jit_use)
+            cpu_run_fn = (void *)mips64_exec_run_cpu;
+         else
+            mips64_jit_init(CPU_MIPS64(cpu));
+         break;
+
+      case CPU_TYPE_PPC32:
+         CPU_PPC32(cpu)->vm = vm;
+         CPU_PPC32(cpu)->gen = cpu;
+         ppc32_init(CPU_PPC32(cpu));
+
+         cpu_run_fn = (void *)ppc32_jit_run_cpu;
+
+         if (!cpu->vm->jit_use)
+            cpu_run_fn = (void *)ppc32_exec_run_cpu;
+         else
+            ppc32_jit_init(CPU_PPC32(cpu));
+         break;
+
+      default:
+         fprintf(stderr,"CPU type %u is not supported yet\n",cpu->type);
+         abort();
+         break;
    }
-#endif
 
    /* create the CPU thread execution */
    if (pthread_create(&cpu->cpu_thread,NULL,cpu_run_fn,cpu) != 0) {
@@ -164,7 +190,7 @@ cpu_mips_t *cpu_create(vm_instance_t *vm,u_int id)
 }
 
 /* Delete a CPU */
-void cpu_delete(cpu_mips_t *cpu)
+void cpu_delete(cpu_gen_t *cpu)
 {
    if (cpu) {
       /* Stop activity of this CPU */
@@ -172,32 +198,42 @@ void cpu_delete(cpu_mips_t *cpu)
       pthread_join(cpu->cpu_thread,NULL);
 
       /* Free resources */
-      mips64_delete(cpu);
+      switch(cpu->type) {
+         case CPU_TYPE_MIPS64:
+            mips64_delete(CPU_MIPS64(cpu));
+            break;
+
+         case CPU_TYPE_PPC32:
+            ppc32_delete(CPU_PPC32(cpu));
+            break;
+      }
+
+      free(cpu);
    }
 }
 
 /* Start a CPU */
-void cpu_start(cpu_mips_t *cpu)
+void cpu_start(cpu_gen_t *cpu)
 {
    if (cpu) {
       cpu_log(cpu,"CPU_STATE","Starting CPU (old state=%u)...\n",cpu->state);
-      cpu->state = MIPS_CPU_RUNNING;
+      cpu->state = CPU_STATE_RUNNING;
    }
 }
 
 /* Stop a CPU */
-void cpu_stop(cpu_mips_t *cpu)
+void cpu_stop(cpu_gen_t *cpu)
 {
    if (cpu) {
       cpu_log(cpu,"CPU_STATE","Halting CPU (old state=%u)...\n",cpu->state);
-      cpu->state = MIPS_CPU_HALTED;
+      cpu->state = CPU_STATE_HALTED;
    }
 }
 
 /* Start all CPUs of a CPU group */
 void cpu_group_start_all_cpu(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu_start(cpu);
@@ -206,7 +242,7 @@ void cpu_group_start_all_cpu(cpu_group_t *group)
 /* Stop all CPUs of a CPU group */
 void cpu_group_stop_all_cpu(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu_stop(cpu);
@@ -215,7 +251,7 @@ void cpu_group_stop_all_cpu(cpu_group_t *group)
 /* Set a state of all CPUs of a CPU group */
 void cpu_group_set_state(cpu_group_t *group,u_int state)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu->state = state;
@@ -224,13 +260,13 @@ void cpu_group_set_state(cpu_group_t *group,u_int state)
 /* Returns TRUE if all CPUs in a CPU group are inactive */
 static int cpu_group_check_activity(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    for(cpu=group->cpu_list;cpu;cpu=cpu->next) {
       if (!cpu->cpu_thread_running)
          continue;
 
-      if ((cpu->state == MIPS_CPU_RUNNING) || !cpu->seq_state)
+      if ((cpu->state == CPU_STATE_RUNNING) || !cpu->seq_state)
          return(FALSE);
    }
 
@@ -240,7 +276,7 @@ static int cpu_group_check_activity(cpu_group_t *group)
 /* Synchronize on CPUs (all CPUs must be inactive) */
 int cpu_group_sync_state(cpu_group_t *group)
 {   
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    m_tmcnt_t t1,t2;
 
    /* Check that CPU activity is really suspended */
@@ -264,7 +300,7 @@ int cpu_group_sync_state(cpu_group_t *group)
 /* Save state of all CPUs */
 int cpu_group_save_state(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu->prev_state = cpu->state;
@@ -275,10 +311,32 @@ int cpu_group_save_state(cpu_group_t *group)
 /* Restore state of all CPUs */
 int cpu_group_restore_state(cpu_group_t *group)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    
    for(cpu=group->cpu_list;cpu;cpu=cpu->next)
       cpu->state = cpu->prev_state;
 
    return(TRUE);
+}
+
+/* Virtual idle loop */
+void cpu_idle_loop(cpu_gen_t *cpu)
+{
+   struct timespec t_spc;
+   m_tmcnt_t expire;
+
+   expire = m_gettime_usec() + cpu->idle_sleep_time;
+
+   pthread_mutex_lock(&cpu->idle_mutex);
+   t_spc.tv_sec = expire / 1000000;
+   t_spc.tv_nsec = (expire % 1000000) * 1000;
+   pthread_cond_timedwait(&cpu->idle_cond,&cpu->idle_mutex,&t_spc);
+   pthread_mutex_unlock(&cpu->idle_mutex);
+}
+
+/* Break idle wait state */
+void cpu_idle_break_wait(cpu_gen_t *cpu)
+{
+   pthread_cond_signal(&cpu->idle_cond);
+   cpu->idle_count = 0;
 }

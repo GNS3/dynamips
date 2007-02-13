@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * PLX PCI9060/PCI9054 - PCI bus master interface chip.
@@ -12,7 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -86,7 +87,7 @@ static void plx_map_space(struct plx_data *d,u_int id)
 }
 
 /* PLX device common access routine */
-void *dev_plx_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_plx_access(cpu_gen_t *cpu,struct vdevice *dev,
                      m_uint32_t offset,u_int op_size,u_int op_type,
                      m_uint64_t *data)
 {
@@ -130,11 +131,12 @@ void *dev_plx_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->name,
                     "read from unhandled addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->name,
                     "write to handled addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
    }
 
@@ -142,7 +144,7 @@ void *dev_plx_access(cpu_mips_t *cpu,struct vdevice *dev,
 }
 
 /* PLX9054 access routine */
-void *dev_plx9054_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_plx9054_access(cpu_gen_t *cpu,struct vdevice *dev,
                          m_uint32_t offset,u_int op_size,u_int op_type,
                          m_uint64_t *data)
 {
@@ -172,7 +174,7 @@ void *dev_plx9054_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * pci_plx_read() - Common PCI read.
  */
-static m_uint32_t pci_plx_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
+static m_uint32_t pci_plx_read(cpu_gen_t *cpu,struct pci_device *dev,int reg)
 {   
    struct plx_data *d = dev->priv_data;
 
@@ -196,7 +198,7 @@ static m_uint32_t pci_plx_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
 /*
  * pci_plx_write() - Common PCI write.
  */
-static void pci_plx_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_plx_write(cpu_gen_t *cpu,struct pci_device *dev,
                           int reg,m_uint32_t value)
 {
    struct plx_data *d = dev->priv_data;
@@ -223,7 +225,7 @@ static void pci_plx_write(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_plx9054_read()
  */
-static m_uint32_t pci_plx9054_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_plx9054_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {   
    struct plx_data *d = dev->priv_data;
@@ -244,7 +246,7 @@ static m_uint32_t pci_plx9054_read(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_plx9054_write()
  */
-static void pci_plx9054_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_plx9054_write(cpu_gen_t *cpu,struct pci_device *dev,
                               int reg,m_uint32_t value)
 {
    struct plx_data *d = dev->priv_data;

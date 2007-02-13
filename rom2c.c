@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  */
 
@@ -21,7 +21,7 @@
 int main(int argc,char *argv[])
 {   
    unsigned char buffer[8];
-   m_uint32_t vaddr;
+   m_uint32_t vaddr,start;
    Elf32_Ehdr *ehdr;
    Elf32_Phdr *phdr;
    Elf *img_elf;
@@ -29,10 +29,12 @@ int main(int argc,char *argv[])
    int i,j,fd;
    FILE *bfd,*fd_out;
 
-   if (argc != 3) {
-      fprintf(stderr,"Usage: %s <input_file> <output_file>\n",argv[0]);
+   if (argc != 4) {
+      fprintf(stderr,"Usage: %s <input_file> <output_file> <addr>\n",argv[0]);
       exit(EXIT_FAILURE);
    }
+
+   start = strtoul(argv[3],NULL,0);
 
    if ((fd = open(argv[1],O_RDONLY)) == -1)
       return(-1);
@@ -77,7 +79,7 @@ int main(int argc,char *argv[])
       vaddr = (m_uint64_t)phdr->p_vaddr;
       len = phdr->p_filesz;
 
-      if (vaddr != 0xbfc00000)
+      if (vaddr != start)
          continue;
 
       while(len > 0)

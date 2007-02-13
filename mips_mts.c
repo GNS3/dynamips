@@ -5,8 +5,8 @@
  * Template code for MTS.
  */
 
-#define MTS_ENTRY  MTS_PROTO(entry_t)
-#define MTS_CHUNK  MTS_PROTO(chunk_t)
+#define MTS_ENTRY  MTS_NAME(entry_t)
+#define MTS_CACHE(cpu)  ( cpu->mts_u. MTS_NAME(cache) )
 
 /* Forward declarations */
 static forced_inline void *MTS_PROTO(access)(cpu_mips_t *cpu,m_uint64_t vaddr,
@@ -23,182 +23,70 @@ int MTS_PROTO(init)(cpu_mips_t *cpu)
    size_t len;
 
    /* Initialize the cache entries to 0 (empty) */
-   len = MTS_PROTO_UP(HASH_SIZE) * sizeof(MTS_ENTRY *);
-   if (!(cpu->mts_cache = malloc(len)))
+   len = MTS_NAME_UP(HASH_SIZE) * sizeof(MTS_ENTRY);
+   if (!(MTS_CACHE(cpu) = malloc(len)))
       return(-1);
 
-   memset(cpu->mts_cache,0,len);
+   memset(MTS_CACHE(cpu),0xFF,len);
    cpu->mts_lookups = 0;
    cpu->mts_misses  = 0;
-
-   /* Reset the TLB reverse map (used for selective invalidations) */
-   memset(cpu->mts_rmap,0,(cpu->cp0.tlb_entries * sizeof(MTS_ENTRY *)));
    return(0);
 }
 
 /* Free memory used by MTS */
 void MTS_PROTO(shutdown)(cpu_mips_t *cpu)
 {
-   MTS_CHUNK *chunk,*next;
-   int i;
-
-   /* Reset the reverse map */
-   for(i=0;i<cpu->cp0.tlb_entries;i++)
-      cpu->mts_rmap[i] = NULL;
-
    /* Free the cache itself */
-   free(cpu->mts_cache);
-   cpu->mts_cache = NULL;
-
-   /* Free the chunks */
-   for(chunk=cpu->mts_chunk_list;chunk;chunk=next) {
-      next = chunk->next;
-      free(chunk);
-   }
-
-   for(chunk=cpu->mts_chunk_free_list;chunk;chunk=next) {
-      next = chunk->next;
-      free(chunk);
-   }
-   
-   cpu->mts_chunk_list = cpu->mts_chunk_free_list = NULL;
-   cpu->mts_entry_free_list = NULL;
+   free(MTS_CACHE(cpu));
+   MTS_CACHE(cpu) = NULL;
 }
 
 /* Show MTS detailed information (debugging only!) */
-void MTS_PROTO(show_stats)(cpu_mips_t *cpu)
+void MTS_PROTO(show_stats)(cpu_gen_t *gen_cpu)
 {
-   MTS_CHUNK *chunk;
+   cpu_mips_t *cpu = CPU_MIPS64(gen_cpu);
 #if DEBUG_MTS_MAP_VIRT
    MTS_ENTRY *entry;
-   u_int i;
+   u_int i,count;
 #endif
-   u_int count;
 
-   printf("\nCPU%u: MTS%d statistics:\n",cpu->id,MTS_ADDR_SIZE);
+   printf("\nCPU%u: MTS%d statistics:\n",cpu->gen->id,MTS_ADDR_SIZE);
+
+#if DEBUG_MTS_MAP_VIRT
+   /* Valid hash entries */
+   for(count=0,i=0;i<MTS_NAME_UP(HASH_SIZE);i++) {
+      entry = &(MTS_CACHE(cpu)[i]);
+
+      if (!(entry->gvpa & MTS_INV_ENTRY_MASK)) {
+         printf("    %4u: vaddr=0x%8.8llx, paddr=0x%8.8llx, hpa=%p\n",
+                i,(m_uint64_t)entry->gvpa,(m_uint64_t)entry->gppa,
+                (void *)entry->hpa);
+         count++;
+      }
+   }
+
+   printf("   %u/%u valid hash entries.\n",count,MTS_NAME_UP(HASH_SIZE));
+#endif
 
    printf("   Total lookups: %llu, misses: %llu, efficiency: %g%%\n",
           cpu->mts_lookups, cpu->mts_misses,
           100 - ((double)(cpu->mts_misses*100)/
                  (double)cpu->mts_lookups));
-
-#if DEBUG_MTS_MAP_VIRT
-   /* Valid hash entries */
-   for(count=0,i=0;i<MTS_PROTO_UP(HASH_SIZE);i++) {
-      if ((entry = cpu->mts_cache[i]) != NULL) {
-         printf("    %4u: entry=%p, start=0x%16.16llx, "
-                "len=0x%8.8x, action=0x%8.8llx\n",
-                i,entry,(m_uint64_t)entry->start,entry->mask,
-                (m_uint64_t)entry->action);
-         count++;
-      }
-   }
-
-   printf("   %u/%u valid hash entries.\n",count,MTS_PROTO_UP(HASH_SIZE));
-#endif
-
-   /* Number of chunks */
-   for(count=0,chunk=cpu->mts_chunk_list;chunk;chunk=chunk->next)
-      count++;
-
-   printf("   Number of chunks: %u\n",count);
-
-#if DEBUG_MTS_MAP_VIRT
-   /* Reverse map */
-   for(i=0;i<MIPS64_TLB_MAX_ENTRIES;i++) {
-      for(count=0,entry=cpu->mts_rmap[i];entry;entry=entry->next)
-         count++;
-
-      if (count > 0)
-         printf("   tlb_rmap[%u]: %u entries\n",i,count);
-   }
-#endif
-}
-
-/* Allocate a new chunk */
-static int MTS_PROTO(alloc_chunk)(cpu_mips_t *cpu)
-{
-   MTS_CHUNK *chunk;
-
-   /* Try the free list first, then use standard allocation procedure */
-   if ((chunk = cpu->mts_chunk_free_list) != NULL) {
-      cpu->mts_chunk_free_list = chunk->next;
-   } else {
-      if (!(chunk = malloc(sizeof(*chunk))))
-         return(-1);
-   }
-
-   chunk->count = 0;
-   chunk->next = cpu->mts_chunk_list;
-   cpu->mts_chunk_list = chunk;
-   return(0);
-}
-
-/* Allocate a new entry */
-static MTS_ENTRY *MTS_PROTO(alloc_entry)(cpu_mips_t *cpu)
-{
-   MTS_CHUNK *chunk = cpu->mts_chunk_list;
-   MTS_ENTRY *entry;
-
-   /* First, try to allocate the entry from the free list */
-   if ((entry = cpu->mts_entry_free_list) != NULL) {
-      cpu->mts_entry_free_list = ((MTS_ENTRY *)cpu->mts_entry_free_list)->next;
-      return entry;
-   }
-
-   /* A new chunk is required */
-   if (!chunk || (chunk->count == MTS_PROTO_UP(CHUNK_SIZE))) {
-      if (MTS_PROTO(alloc_chunk)(cpu) == -1)
-         return NULL;
-
-      chunk = cpu->mts_chunk_list;
-   }
-
-   entry = &chunk->entry[chunk->count];
-   chunk->count++;
-   return entry;
 }
 
 /* Invalidate the complete MTS cache */
 void MTS_PROTO(invalidate_cache)(cpu_mips_t *cpu)
 {
-   MTS_CHUNK *chunk;
    size_t len;
-   u_int i;
 
-   len = MTS_PROTO_UP(HASH_SIZE) * sizeof(MTS_ENTRY *);
-   memset(cpu->mts_cache,0,len);
- 
-   /* Move all chunks to the free list */
-   while((chunk = cpu->mts_chunk_list) != NULL) {
-      cpu->mts_chunk_list = chunk->next;
-      chunk->next = cpu->mts_chunk_free_list;
-      cpu->mts_chunk_free_list = chunk;
-   }
-
-   /* Reset the free list of entries (since they are located in chunks) */
-   cpu->mts_entry_free_list = NULL;
-
-   /* Reset the reverse map */
-   for(i=0;i<cpu->cp0.tlb_entries;i++)
-      cpu->mts_rmap[i] = NULL;
+   len = MTS_NAME_UP(HASH_SIZE) * sizeof(MTS_ENTRY);
+   memset(MTS_CACHE(cpu),0xFF,len);
 }
 
 /* Invalidate partially the MTS cache, given a TLB entry index */
 void MTS_PROTO(invalidate_tlb_entry)(cpu_mips_t *cpu,u_int tlb_index)
 {
-   MTS_ENTRY *entry;
-
-   for(entry=cpu->mts_rmap[tlb_index];entry;entry=entry->next) {
-      *(entry->pself) = NULL;
-      if (!entry->next) {
-         entry->next = cpu->mts_entry_free_list;
-         break;
-      }
-   }
-
-   cpu->mts_entry_free_list = cpu->mts_rmap[tlb_index];
-   cpu->mts_rmap[tlb_index] = NULL;
+   MTS_PROTO(invalidate_cache)(cpu);
 } 
 
 /* 
@@ -206,38 +94,44 @@ void MTS_PROTO(invalidate_tlb_entry)(cpu_mips_t *cpu,u_int tlb_index)
  *
  * It is NOT inlined since it triggers a GCC bug on my config (x86, GCC 3.3.5)
  */
-static no_inline int MTS_PROTO(map)(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                    mts_map_t *map,MTS_ENTRY *entry)
+static no_inline MTS_ENTRY *
+MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
+               MTS_ENTRY *entry,MTS_ENTRY *alt_entry)
 {
    struct vdevice *dev;
-   m_uint64_t lk_addr;
-   m_uint32_t poffset;
+   m_uint32_t offset;
+   m_iptr_t host_ptr;
+   int cow;
 
-   lk_addr = map->paddr + (vaddr - map->vaddr);
+   if (!(dev = dev_lookup(cpu->vm,map->paddr,map->cached)))
+      return NULL;
 
-   if (!(dev = dev_lookup(cpu->vm,lk_addr,map->cached)))
-      return(FALSE);
+   if (dev->flags & VDEVICE_FLAG_SPARSE) {
+      host_ptr = dev_sparse_get_host_addr(cpu->vm,dev,map->paddr,op_type,&cow);
 
-   if (map->paddr > dev->phys_addr) {
-      poffset = map->paddr - dev->phys_addr;
-      entry->start     = map->vaddr;
-      entry->phys_page = map->paddr >> MIPS_MIN_PAGE_SHIFT;
-      entry->mask      = ~((m_min(map->len,dev->phys_len - poffset)) - 1);
-      entry->action    = poffset;
-   } else {
-      poffset = dev->phys_addr - map->paddr;
-      entry->start     = map->vaddr + poffset;
-      entry->phys_page = (map->paddr + poffset) >> MIPS_MIN_PAGE_SHIFT;
-      entry->mask      = ~((m_min(map->len - poffset,dev->phys_len)) - 1);
-      entry->action    = 0;
+      entry->gvpa  = map->vaddr;
+      entry->gppa  = map->paddr;
+      entry->hpa   = host_ptr;
+      entry->flags = (cow) ? MTS_FLAG_COW : 0;
+      return entry;
    }
 
-   if (!dev->host_addr || (dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      entry->action += (dev->id << MTS_DEVID_SHIFT) | MTS_DEV_MASK;
-   else
-      entry->action += dev->host_addr;
+   if (!dev->host_addr || (dev->flags & VDEVICE_FLAG_NO_MTS_MMAP)) {
+      offset = map->paddr - dev->phys_addr;
 
-   return(TRUE);
+      alt_entry->gvpa  = map->vaddr;
+      alt_entry->gppa  = map->paddr;
+      alt_entry->hpa   = (dev->id << MTS_DEVID_SHIFT) + offset;
+      alt_entry->flags = MTS_FLAG_DEV;
+      return alt_entry;
+   }
+
+   entry->gvpa  = map->vaddr;
+   entry->gppa  = map->paddr;
+   entry->hpa   = dev->host_addr + (map->paddr - dev->phys_addr);
+   entry->flags = 0;
+
+   return entry;
 }
 
 /* MTS lookup */
@@ -676,11 +570,12 @@ fastcall u_int MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 /* CACHE: Cache operation */
 fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 {
-   struct insn_block *block;
+   mips64_jit_tcb_t *block;
    m_uint32_t phys_page;
 
 #if DEBUG_CACHE
-   cpu_log(cpu,"MTS","CACHE: PC=0x%llx, vaddr=0x%llx, cache=%u, code=%u\n",
+   cpu_log(cpu->gen,
+           "MTS","CACHE: PC=0x%llx, vaddr=0x%llx, cache=%u, code=%u\n",
            cpu->pc, vaddr, op & 0x3, op >> 2);
 #endif
 
@@ -693,17 +588,17 @@ fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
                 ((cpu->pc - block->start_pc) >= MIPS_MIN_PAGE_SIZE))
             {
 #if DEBUG_CACHE
-               cpu_log(cpu,"MTS",
+               cpu_log(cpu->gen,"MTS",
                        "CACHE: removing compiled page at 0x%llx, pc=0x%llx\n",
                        block->start_pc,cpu->pc);
 #endif
                cpu->exec_phys_map[phys_page] = NULL;
-               insn_block_free(cpu,block,TRUE);
+               mips64_jit_tcb_free(cpu,block,TRUE);
             }
             else
             {
 #if DEBUG_CACHE
-               cpu_log(cpu,"MTS",
+               cpu_log(cpu->gen,"MTS",
                        "CACHE: trying to remove page 0x%llx with pc=0x%llx\n",
                        block->start_pc,cpu->pc);
 #endif
@@ -734,9 +629,9 @@ void MTS_PROTO(api_unmap)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
       MTS_PROTO(invalidate_cache)(cpu);
 }
 
-void MTS_PROTO(api_rebuild)(cpu_mips_t *cpu)
+void MTS_PROTO(api_rebuild)(cpu_gen_t *cpu)
 {
-   MTS_PROTO(invalidate_cache)(cpu);
+   MTS_PROTO(invalidate_cache)(CPU_MIPS64(cpu));
 }
 
 /* ======================================================================== */
@@ -753,9 +648,8 @@ void MTS_PROTO(init_memop_vectors)(cpu_mips_t *cpu)
    /* API vectors */
    cpu->mts_map     = MTS_PROTO(api_map);
    cpu->mts_unmap   = MTS_PROTO(api_unmap);
-   cpu->mts_rebuild = MTS_PROTO(api_rebuild);
 
-   /* memory lookup operation */
+   /* Memory lookup operation */
    cpu->mem_op_lookup = MTS_PROTO(lookup);
 
    /* Translation operation */
@@ -764,8 +658,11 @@ void MTS_PROTO(init_memop_vectors)(cpu_mips_t *cpu)
    /* Shutdown operation */
    cpu->mts_shutdown = MTS_PROTO(shutdown);
 
+   /* Rebuild MTS data structures */
+   cpu->gen->mts_rebuild = MTS_PROTO(api_rebuild);
+
    /* Show statistics */
-   cpu->mts_show_stats = MTS_PROTO(show_stats);
+   cpu->gen->mts_show_stats = MTS_PROTO(show_stats);
 
    /* Load Operations */
    cpu->mem_op_fn[MIPS_MEMOP_LB] = MTS_PROTO(lb);
@@ -809,6 +706,8 @@ void MTS_PROTO(init_memop_vectors)(cpu_mips_t *cpu)
 }
 
 #undef MTS_ADDR_SIZE
+#undef MTS_NAME
+#undef MTS_NAME_UP
 #undef MTS_PROTO
 #undef MTS_PROTO_UP
 #undef MTS_ENTRY

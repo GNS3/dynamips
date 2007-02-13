@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Hypervisor generic VM routines.
@@ -23,8 +23,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "mips64.h"
-#include "cp0.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "device.h"
 #include "dev_c7200.h"
@@ -44,10 +44,10 @@
 #include "hypervisor.h"
 
 /* Find the specified CPU */
-static cpu_mips_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
-                            u_int cpu_id)
+static cpu_gen_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
+                           u_int cpu_id)
 {
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    cpu = cpu_group_find_id(vm->cpu_group,cpu_id);
 
@@ -163,6 +163,21 @@ static int cmd_set_ram_mmap(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Enable/disable use of sparse memory */
+static int cmd_set_sparse_mem(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vm->sparse_mem = atoi(argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set the clock divisor */
 static int cmd_set_clock_divisor(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -200,7 +215,7 @@ static int cmd_set_idle_pc_online(hypervisor_conn_t *conn,
                                   int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -208,7 +223,7 @@ static int cmd_set_idle_pc_online(hypervisor_conn_t *conn,
    if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
       return(-1);
 
-   cpu->idle_pc = strtoull(argv[2],NULL,0);
+   cpu->set_idle_pc(cpu,strtoull(argv[2],NULL,0));
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -219,7 +234,7 @@ static int cmd_set_idle_pc_online(hypervisor_conn_t *conn,
 static int cmd_get_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
 {  
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    int i;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
@@ -228,7 +243,7 @@ static int cmd_get_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
    if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
       return(-1);
 
-   mips64_get_idling_pc(cpu);
+   cpu->get_idling_pc(cpu);
 
    for(i=0;i<cpu->idle_pc_prop_count;i++) {
       hypervisor_send_reply(conn,HSC_INFO_MSG,0,"0x%llx [%d]",
@@ -245,7 +260,7 @@ static int cmd_get_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_show_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
    int i;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
@@ -269,7 +284,7 @@ static int cmd_show_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_set_idle_max(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -289,7 +304,7 @@ static int cmd_set_idle_sleep_time(hypervisor_conn_t *conn,
                                    int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -309,7 +324,7 @@ static int cmd_show_timer_drift(hypervisor_conn_t *conn,
                                 int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -317,12 +332,14 @@ static int cmd_show_timer_drift(hypervisor_conn_t *conn,
    if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
       return(-1);
 
-   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
-                         cpu->timer_drift);
+   if (cpu->type == CPU_TYPE_MIPS64) {
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
+                            CPU_MIPS64(cpu)->timer_drift);
 
-   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
-                         cpu->timer_irq_pending);
-      
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
+                            CPU_MIPS64(cpu)->timer_irq_pending);      
+   }
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -539,7 +556,7 @@ static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_show_cpu_info(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   cpu_mips_t *cpu;
+   cpu_gen_t *cpu;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -547,8 +564,8 @@ static int cmd_show_cpu_info(hypervisor_conn_t *conn,int argc,char *argv[])
    cpu = cpu_group_find_id(vm->cpu_group,atoi(argv[1]));
 
    if (cpu) {
-      mips64_dump_regs(cpu);
-      tlb_dump(cpu);
+      cpu->reg_dump(cpu);
+      cpu->mmu_dump(cpu);
    }
 
    vm_release(vm);
@@ -664,6 +681,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_ram", 2, 2, cmd_set_ram, NULL },
    { "set_nvram", 2, 2, cmd_set_nvram, NULL },
    { "set_ram_mmap", 2, 2, cmd_set_ram_mmap, NULL },
+   { "set_sparse_mem", 2, 2, cmd_set_sparse_mem, NULL },
    { "set_clock_divisor", 2, 2, cmd_set_clock_divisor, NULL },
    { "set_exec_area", 2, 2, cmd_set_exec_area, NULL },
    { "set_disk0", 2, 2, cmd_set_disk0, NULL },

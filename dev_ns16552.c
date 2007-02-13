@@ -16,7 +16,8 @@
 #include <pthread.h>
 
 #include "ptask.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -108,7 +109,7 @@ static int tty_trigger_dummy_irq(struct ns16552_data *d,void *arg)
 /*
  * dev_ns16552_access()
  */
-void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct ns16552_data *d = dev->priv_data;
@@ -120,11 +121,11 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
-      cpu_log(cpu,"NS16552","read from 0x%x, pc=0x%llx, ra=0x%llx\n",
-              offset,cpu->pc,cpu->gpr[MIPS_GPR_RA]);
+      cpu_log(cpu,"NS16552","read from 0x%x, pc=0x%llx\n",
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,"NS16552","write to 0x%x, value=0x%llx, pc=0x%llx\n",
-              offset,*data,cpu->pc);
+              offset,*data,cpu_get_pc(cpu));
    }
 #endif
 
@@ -202,10 +203,12 @@ void *dev_ns16552_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       default:
          if (op_type == MTS_READ) {
             cpu_log(cpu,"NS16552","read from addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
-            cpu_log(cpu,"NS16552","write to addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+            cpu_log(cpu,
+                    "NS16552","write to addr 0x%x, value=0x%llx, "
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }

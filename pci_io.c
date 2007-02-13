@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * PCI I/O space.
@@ -11,7 +11,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -62,7 +63,7 @@ void pci_io_remove(struct pci_io_device *dev)
 /*
  * pci_io_access()
  */
-static void *pci_io_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *pci_io_access(cpu_gen_t *cpu,struct vdevice *dev,
                            m_uint32_t offset,u_int op_size,u_int op_type,
                            m_uint64_t *data)
 {
@@ -72,11 +73,11 @@ static void *pci_io_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"PCI_IO","read request at pc=0x%llx, offset=0x%x\n",
-              cpu->pc,offset);
+              cpu_get_pc(cpu),offset);
    } else {
       cpu_log(cpu,"PCI_IO",
               "write request (data=0x%llx) at pc=0x%llx, offset=0x%x\n",
-              *data,cpu->pc,offset);
+              *data,cpu_get_pc(cpu),offset);
    }
 #endif
 

@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) DEC21140 Module.
+ * Cisco router simlation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * DEC21140 FastEthernet chip emulation.
@@ -31,7 +31,8 @@
 
 #include "crc.h"
 #include "utils.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -395,7 +396,7 @@ static void mii_newbit(struct dec21140_data *d,int newbit)
 /*
  * dev_dec21140_access()
  */
-void *dev_dec21140_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_dec21140_access(cpu_gen_t *cpu,struct vdevice *dev,
                           m_uint32_t offset,u_int op_size,u_int op_type,
                           m_uint64_t *data)
 {
@@ -850,7 +851,7 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
  *
  * Read a PCI register.
  */
-static m_uint32_t pci_dec21140_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_dec21140_read(cpu_gen_t *cpu,struct pci_device *dev,
                                     int reg)
 {   
    struct dec21140_data *d = dev->priv_data;
@@ -876,7 +877,7 @@ static m_uint32_t pci_dec21140_read(cpu_mips_t *cpu,struct pci_device *dev,
  *
  * Write a PCI register.
  */
-static void pci_dec21140_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_dec21140_write(cpu_gen_t *cpu,struct pci_device *dev,
                                int reg,m_uint32_t value)
 {
    struct dec21140_data *d = dev->priv_data;

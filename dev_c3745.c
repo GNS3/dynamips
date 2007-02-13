@@ -12,13 +12,15 @@
 #include <sys/types.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 #include "pci_io.h"
 #include "dev_gt.h"
 #include "cisco_eeprom.h"
+#include "dev_rom.h"
 #include "dev_c3745.h"
 #include "dev_vtty.h"
 #include "registry.h"
@@ -1058,7 +1060,7 @@ static int c3745_init(c3745_t *router)
    int i;
 
    /* Set the processor type: R7000 */
-   mips64_set_prid(vm->boot_cpu,MIPS_PRID_R7000);
+   mips64_set_prid(CPU_MIPS64(vm->boot_cpu),MIPS_PRID_R7000);
 
    /* Initialize the Galileo GT-96100 PCI controller */
    if (c3745_init_gt96100(router) == -1)
@@ -1145,11 +1147,10 @@ void c3745_init_defaults(c3745_t *router)
 /* Initialize the C3745 Platform */
 int c3745_init_platform(c3745_t *router)
 {
-   extern m_uint8_t microcode[];
-   extern ssize_t microcode_len;
    vm_instance_t *vm = router->vm;
    struct c3745_nm_bay *nm_bay;
    cpu_mips_t *cpu;
+   cpu_gen_t *gen;
    vm_obj_t *obj;
    int i;
 
@@ -1163,14 +1164,20 @@ int c3745_init_platform(c3745_t *router)
    vm->cpu_group = cpu_group_create("System CPU");
 
    /* Initialize the virtual MIPS processor */
-   if (!(cpu = cpu_create(vm,0))) {
+   if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
       return(-1);
    }
 
+   cpu = CPU_MIPS64(gen);
+
    /* Add this CPU to the system CPU group */
-   cpu_group_add(vm->cpu_group,cpu);
-   vm->boot_cpu = cpu;
+   cpu_group_add(vm->cpu_group,gen);
+   vm->boot_cpu = gen;
+
+   /* Initialize the IRQ routing vectors */
+   vm->set_irq = mips64_vm_set_irq;
+   vm->clear_irq = mips64_vm_clear_irq;
 
    /* Mark the Network IO interrupt as high priority */
    cpu->irq_idle_preempt[C3745_NETIO_IRQ] = TRUE;
@@ -1187,7 +1194,7 @@ int c3745_init_platform(c3745_t *router)
    dev_remote_control_init(vm,0x16000000,0x1000);
 
    /* Specific Storage Area (SSA) */
-   dev_ram_init(vm,"ssa",TRUE,FALSE,NULL,0x16001000ULL,0x7000);
+   dev_ram_init(vm,"ssa",TRUE,FALSE,NULL,FALSE,0x16001000ULL,0x7000);
 
    /* IO FPGA */
    if (dev_c3745_iofpga_init(router,C3745_IOFPGA_ADDR,0x200000) == -1)
@@ -1210,7 +1217,7 @@ int c3745_init_platform(c3745_t *router)
    if (!(obj = dev_flash_init(vm,"rom",C3745_ROM_ADDR,vm->rom_size*1048576)))
       return(-1);
 
-   dev_flash_copy_data(obj,0,microcode,microcode_len);
+   dev_flash_copy_data(obj,0,mips64_microcode,mips64_microcode_len);
    c3745_nvram_check_empty_config(vm);
 
    /* Initialize the NS16552 DUART */
@@ -1251,6 +1258,7 @@ int c3745_init_platform(c3745_t *router)
 int c3745_boot_ios(c3745_t *router)
 {   
    vm_instance_t *vm = router->vm;
+   cpu_mips_t *cpu;
 
    if (!vm->boot_cpu)
       return(-1);
@@ -1265,10 +1273,11 @@ int c3745_boot_ios(c3745_t *router)
    }
 
    /* Reset the boot CPU */
-   mips64_reset(vm->boot_cpu);
+   cpu = CPU_MIPS64(vm->boot_cpu);
+   mips64_reset(cpu);
 
    /* Load IOS image */
-   if (mips64_load_elf_image(vm->boot_cpu,vm->ios_image,
+   if (mips64_load_elf_image(cpu,vm->ios_image,
                              (vm->ghost_status == VM_GHOST_RAM_USE),
                              &vm->ios_entry_point) < 0) 
    {
@@ -1279,11 +1288,11 @@ int c3745_boot_ios(c3745_t *router)
    /* Launch the simulation */
    printf("\nC3745 '%s': starting simulation (CPU0 PC=0x%llx), "
           "JIT %sabled.\n",
-          vm->name,vm->boot_cpu->pc,vm->jit_use ? "en":"dis");
+          vm->name,cpu->pc,vm->jit_use ? "en":"dis");
 
    vm_log(vm,"C3745_BOOT",
           "starting instance (CPU0 PC=0x%llx,idle_pc=0x%llx,JIT %s)\n",
-          vm->boot_cpu->pc,vm->boot_cpu->idle_pc,vm->jit_use ? "on":"off");
+          cpu->pc,cpu->idle_pc,vm->jit_use ? "on":"off");
 
    /* Start main CPU */
    if (vm->ghost_status != VM_GHOST_RAM_GENERATE) {
@@ -1320,7 +1329,7 @@ int c3745_init_instance(c3745_t *router)
    }
 
    /* Load ROM (ELF image or embedded) */
-   cpu0 = vm->boot_cpu;
+   cpu0 = CPU_MIPS64(vm->boot_cpu);
    rom_entry_point = (m_uint32_t)MIPS_ROM_PC;
 
    if ((vm->rom_filename != NULL) &&

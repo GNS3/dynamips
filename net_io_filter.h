@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * NetIO Packet Filters.
@@ -18,6 +18,12 @@
 /* Directions for filters */
 #define NETIO_FILTER_DIR_RX  0
 #define NETIO_FILTER_DIR_TX  1
+#define NETIO_FILTER_DIR_BOTH 2 
+
+struct netio_filter_capture {
+   pcap_t *desc;
+   pcap_dumper_t *dumper;
+};
 
 /* Find a filter */
 netio_pktfilter_t *netio_filter_find(char *name);

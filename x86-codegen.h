@@ -359,6 +359,7 @@ typedef union {
 		*(inst)++ = 0xcc;	\
 	} while (0)
 
+#define x86_clc(inst) do { *(inst)++ =(unsigned char)0xf8; } while (0)
 #define x86_cld(inst) do { *(inst)++ =(unsigned char)0xfc; } while (0)
 #define x86_stosb(inst) do { *(inst)++ =(unsigned char)0xaa; } while (0)
 #define x86_stosl(inst) do { *(inst)++ =(unsigned char)0xab; } while (0)
@@ -1036,7 +1037,7 @@ typedef union {
 #define x86_widen_reg(inst,dreg,reg,is_signed,is_half)	\
 	do {	\
 		unsigned char op = 0xb6;	\
-                g_assert (is_half ||  X86_IS_BYTE_REG (reg)); \
+                assert (is_half ||  X86_IS_BYTE_REG (reg)); \
 		*(inst)++ = (unsigned char)0x0f;	\
 		if ((is_signed)) op += 0x08;	\
 		if ((is_half)) op += 0x01;	\
@@ -1529,7 +1530,7 @@ typedef union {
 
 #define x86_set_reg(inst,cond,reg,is_signed)	\
 	do {	\
-                g_assert (X86_IS_BYTE_REG (reg)); \
+                assert (X86_IS_BYTE_REG (reg)); \
 		*(inst)++ = (unsigned char)0x0f;	\
 		if ((is_signed))	\
 			*(inst)++ = x86_cc_signed_map [(cond)] + 0x20;	\

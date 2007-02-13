@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * PA-A1 ATM interface based on TI1570 and PLX 9060-ES.
@@ -35,7 +35,8 @@
 
 #include "crc.h"
 #include "atm.h"
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -338,7 +339,7 @@ static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem);
 /*
  * dev_pa_a1_access()
  */
-void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_pa_a1_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                        u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct pa_a1_data *d = dev->priv_data;
@@ -349,10 +350,10 @@ void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"TI1570","read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,"TI1570","write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif   
 
@@ -384,10 +385,10 @@ void *dev_pa_a1_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #if DEBUG_UNKNOWN
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,d->name,"write to unknown addr 0x%x, value=0x%llx, "
-              "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+              "pc=0x%llx (size=%u)\n",offset,*data,cpu_get_pc(cpu),op_size);
    }
 #endif
    return NULL;
@@ -1428,7 +1429,7 @@ static int ti1570_handle_rx_cell(netio_desc_t *nio,
 /*
  * pci_ti1570_read()
  */
-static m_uint32_t pci_ti1570_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_ti1570_read(cpu_gen_t *cpu,struct pci_device *dev,
                                   int reg)
 {
    struct pa_a1_data *d = dev->priv_data;
@@ -1448,7 +1449,7 @@ static m_uint32_t pci_ti1570_read(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_ti1570_write()
  */
-static void pci_ti1570_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_ti1570_write(cpu_gen_t *cpu,struct pci_device *dev,
                              int reg,m_uint32_t value)
 {
    struct pa_a1_data *d = dev->priv_data;
@@ -1468,7 +1469,7 @@ static void pci_ti1570_write(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_plx9060es_read()
  */
-static m_uint32_t pci_plx9060es_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_plx9060es_read(cpu_gen_t *cpu,struct pci_device *dev,
                                      int reg)
 {
 #if DEBUG_ACCESS
@@ -1483,7 +1484,7 @@ static m_uint32_t pci_plx9060es_read(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * pci_plx9060es_write()
  */
-static void pci_plx9060es_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_plx9060es_write(cpu_gen_t *cpu,struct pci_device *dev,
                                 int reg,m_uint32_t value)
 {
 #if DEBUG_ACCESS

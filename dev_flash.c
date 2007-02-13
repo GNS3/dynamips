@@ -12,7 +12,8 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -34,7 +35,7 @@ struct flash_data {
 /*
  * dev_bootflash_access()
  */
-void *dev_flash_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_flash_access(cpu_gen_t *cpu,struct vdevice *dev,
                        m_uint32_t offset,u_int op_size,u_int op_type,
                        m_uint64_t *data)
 {
@@ -44,11 +45,11 @@ void *dev_flash_access(cpu_mips_t *cpu,struct vdevice *dev,
    if (op_type == MTS_READ) {
       cpu_log(cpu,dev->name,
               "read  access to offset=0x%x, pc=0x%llx (state=%u)\n",
-              offset,cpu->pc,d->state);
+              offset,cpu_get_pc(cpu),d->state);
    } else {
       cpu_log(cpu,dev->name,
               "write access to vaddr=0x%x, pc=0x%llx, val=0x%llx (state=%d)\n",
-              offset,cpu->pc,*data,d->state);
+              offset,cpu_get_pc(cpu),*data,d->state);
    }
 #endif
 

@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) Bootflash.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * Intel Flash SIMM emulation (28F008SA/28F016SA)
@@ -25,7 +25,8 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -47,7 +48,7 @@ struct bootflash_data {
 /*
  * dev_bootflash_access()
  */
-void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_bootflash_access(cpu_gen_t *cpu,struct vdevice *dev,
                            m_uint32_t offset,u_int op_size,u_int op_type,
                            m_uint64_t *data)
 {
@@ -57,13 +58,15 @@ void *dev_bootflash_access(cpu_mips_t *cpu,struct vdevice *dev,
    if (op_type == MTS_READ)
       cpu_log(cpu,dev->name,"read  access to offset = 0x%x, pc = 0x%llx "
               "(stat=%u,cui_cmd=0x%x)\n",
-              offset,cpu->pc,d->status,d->cui_cmd);
+              offset,cpu_get_pc(cpu),d->status,d->cui_cmd);
    else
       cpu_log(cpu,dev->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
 #endif
 
    if (op_type == MTS_READ) {
+      *data = 0;
+
       /* Read Array mode */
       if (d->status == 0)
          return(BPTR(d,offset));

@@ -1,5 +1,5 @@
 /*  
- * Cisco C3600 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Serial Network Modules.

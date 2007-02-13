@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * Cisco EEPROM manipulation functions.
@@ -91,6 +91,28 @@ static const m_uint16_t eeprom_pa_fe_tx_data[] = {
 };
 
 /* ====================================================================== */
+/* PA-2FE-TX: 2 FastEthernet Port Adapter EEPROM                          */
+/* ====================================================================== */
+static const m_uint16_t eeprom_pa_2fe_tx_data[] = {
+   0x04FF, 0x4002, 0x2441, 0x0100, 0xC18B, 0x5858, 0x5830, 0x3030,
+   0x3030, 0x3030, 0x3082, 0x4915, 0x2C04, 0x4241, 0x3003, 0x0081,
+   0x0000, 0x0000, 0x0400, 0x8000, 0x0000, 0x00CB, 0x9450, 0x412D,
+   0x3246, 0x452D, 0x4658, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020,
+   0x20C0, 0x4603, 0x2000, 0x20A0, 0x04FF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+};
+
+/* ====================================================================== */
+/* PA-GE: 1 GigabitEthernet Port Adapter EEPROM                           */
+/* ====================================================================== */
+static const m_uint16_t eeprom_pa_ge_data[] = {
+   0x0198, 0x0100, 0x0000, 0x0000, 0x000C, 0x4803, 0x0000, 0x0000,
+   0x5000, 0x0000, 0x9906, 0x0300, 0x0001, 0xFFFF, 0xFFFF, 0xFFFF,
+};
+
+/* ====================================================================== */
 /* PA-4E: 4 Ethernet Port Adapter EEPROM                                  */
 /* ====================================================================== */
 static const m_uint16_t eeprom_pa_4e_data[] = {
@@ -167,6 +189,9 @@ static const m_uint16_t eeprom_pa_mc8te1_data[] = {
 static const struct cisco_eeprom eeprom_pa_array[] = {
    { "PA-FE-TX", (m_uint16_t *)eeprom_pa_fe_tx_data, 
      sizeof(eeprom_pa_fe_tx_data)/2 },
+   { "PA-2FE-TX", (m_uint16_t *)eeprom_pa_2fe_tx_data, 
+     sizeof(eeprom_pa_2fe_tx_data)/2 },
+   { "PA-GE", (m_uint16_t *)eeprom_pa_ge_data, sizeof(eeprom_pa_ge_data)/2 },
    { "PA-4E", (m_uint16_t *)eeprom_pa_4e_data, sizeof(eeprom_pa_4e_data)/2 },
    { "PA-8E", (m_uint16_t *)eeprom_pa_8e_data, sizeof(eeprom_pa_8e_data)/2 },
    { "PA-4T+", eeprom_pa_4t_data, sizeof(eeprom_pa_4t_data)/2 },

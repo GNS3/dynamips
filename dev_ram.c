@@ -1,6 +1,8 @@
 /*
- * Cisco C7200 (Predator) RAM emulation
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
+ * 
+ * RAM emulation.
  */
 
 #include <stdio.h>
@@ -10,7 +12,8 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -44,7 +47,8 @@ void dev_ram_shutdown(vm_instance_t *vm,struct ram_data *d)
 
 /* Initialize a RAM zone */
 int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,int delete_file,
-                 char *alternate_name,m_uint64_t paddr,m_uint32_t len)
+                 char *alternate_name,int sparse,
+                 m_uint64_t paddr,m_uint32_t len)
 {
    struct ram_data *d;
 
@@ -74,7 +78,7 @@ int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,int delete_file,
       }
    }
 
-   if (!(d->dev = dev_create_ram(vm,name,d->filename,paddr,len))) {
+   if (!(d->dev = dev_create_ram(vm,name,sparse,d->filename,paddr,len))) {
       fprintf(stderr,"RAM: unable to create device.\n");
       goto err_dev_create;
    }
@@ -90,7 +94,7 @@ int dev_ram_init(vm_instance_t *vm,char *name,int use_mmap,int delete_file,
 }
 
 /* Initialize a ghosted RAM zone */
-int dev_ram_ghost_init(vm_instance_t *vm,char *name,char *filename,
+int dev_ram_ghost_init(vm_instance_t *vm,char *name,int sparse,char *filename,
                        m_uint64_t paddr,m_uint32_t len)
 {
    struct ram_data *d;
@@ -112,7 +116,9 @@ int dev_ram_ghost_init(vm_instance_t *vm,char *name,char *filename,
    d->vm_obj.data = d;
    d->vm_obj.shutdown = (vm_shutdown_t)dev_ram_shutdown;
 
-   if (!(d->dev = dev_create_ghost_ram(vm,name,d->filename,paddr,len))) {
+   if (!(d->dev = dev_create_ghost_ram(vm,name,sparse,d->filename,
+                                       paddr,len))) 
+   {
       fprintf(stderr,"RAM_ghost: unable to create device.\n");
       goto err_dev_create;
    }

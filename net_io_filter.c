@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * NetIO Filtering.
@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <pcap.h>
 
 #include "registry.h"
 #include "net.h"
@@ -69,11 +70,13 @@ int netio_filter_bind(netio_desc_t *nio,int direction,char *pf_name)
    if (direction == NETIO_FILTER_DIR_RX) {
       nio->rx_filter_data = NULL;
       nio->rx_filter = pf;
-   } else {
+   } else if (direction == NETIO_FILTER_DIR_TX) {
       nio->tx_filter_data = NULL;
       nio->tx_filter = pf;
+   } else {
+      nio->both_filter_data = NULL;
+      nio->both_filter = pf;
    }
-
    return(0);
 }
 
@@ -86,9 +89,12 @@ int netio_filter_unbind(netio_desc_t *nio,int direction)
    if (direction == NETIO_FILTER_DIR_RX) {
       opt = &nio->rx_filter_data;
       pf  = nio->rx_filter;
-   } else {
+   } else if (direction == NETIO_FILTER_DIR_TX) {
       opt = &nio->tx_filter_data;
       pf  = nio->tx_filter;
+   } else {
+      opt = &nio->both_filter_data;
+      pf  = nio->both_filter;
    }
 
    if (!pf)
@@ -107,9 +113,12 @@ int netio_filter_setup(netio_desc_t *nio,int direction,int argc,char *argv[])
    if (direction == NETIO_FILTER_DIR_RX) {
       opt = &nio->rx_filter_data;
       pf  = nio->rx_filter;
-   } else {
+   } else if (direction == NETIO_FILTER_DIR_TX) {
       opt = &nio->tx_filter_data;
       pf  = nio->tx_filter;
+   } else {
+      opt = &nio->both_filter_data;
+      pf  = nio->both_filter;
    }
 
    if (!pf)
@@ -117,6 +126,108 @@ int netio_filter_setup(netio_desc_t *nio,int direction,int argc,char *argv[])
 
    return(pf->setup(nio,opt,argc,argv));
 }
+
+/* ======================================================================== */
+/* Packet Capture ("capture")                                               */
+/* GFA                                                                      */
+/* ======================================================================== */
+
+/* Free resources used by filter */
+static void pf_capture_free(netio_desc_t *nio,void **opt)
+{
+   struct netio_filter_capture *c = *opt;
+
+   if (c != NULL) {
+      printf("NIO %s: ending packet capture.\n",nio->name);
+
+      /* Close dumper */
+      if (c->dumper)
+         pcap_dump_close(c->dumper);
+
+      /* Close PCAP descriptor */
+      if (c->desc)
+         pcap_close(c->desc);
+
+      free(c);
+      *opt = NULL;
+   }
+}
+
+/* Setup filter resources */
+static int pf_capture_setup(netio_desc_t *nio,void **opt,
+                            int argc,char *argv[])
+{
+   struct netio_filter_capture *c;
+   int link_type;
+   
+   /* We must have a link type and a filename */
+   if (argc != 2)
+      return(-1);
+
+   /* Free resources if something has already been done */
+   pf_capture_free(nio,opt);
+
+   /* Allocate structure to hold PCAP info */
+   if (!(c = malloc(sizeof(*c))))
+      return(-1);
+
+   if ((link_type = pcap_datalink_name_to_val(argv[0])) == -1) {
+      fprintf(stderr,"NIO %s: unknown link type %s, assuming Ethernet.\n",
+              nio->name,argv[0]); 
+      link_type = DLT_EN10MB;
+   }
+
+   /* Open a dead pcap descriptor */
+   if (!(c->desc = pcap_open_dead(link_type,8192))) {
+      fprintf(stderr,"NIO %s: pcap_open_dead failure\n",nio->name); 
+      goto pcap_open_err;
+   }
+
+   /* Open the output file */
+   if (!(c->dumper = pcap_dump_open(c->desc,argv[1]))) {
+      fprintf(stderr,"NIO %s: pcap_dump_open failure (file %s)\n",
+              nio->name,argv[0]); 
+      goto pcap_dump_err;
+   }
+
+   printf("NIO %s: capturing to file '%s'\n",nio->name,argv[1]);
+   *opt = c;
+   return(0);
+
+ pcap_dump_err:
+   pcap_close(c->desc);
+ pcap_open_err:
+   free(c);
+   return(-1);
+}
+
+/* Packet handler: write packets to a file in CAP format */
+static int pf_capture_pkt_handler(netio_desc_t *nio,void *pkt,size_t len,
+                                  void *opt)
+{
+   struct netio_filter_capture *c = opt;
+   struct pcap_pkthdr pkt_hdr;
+
+   if (c != NULL) {
+      gettimeofday(&pkt_hdr.ts,0);
+      pkt_hdr.caplen = len;
+      pkt_hdr.len = len;
+
+      pcap_dump((u_char *)c->dumper,&pkt_hdr,pkt);
+      pcap_dump_flush(c->dumper);
+   }
+
+   return(NETIO_FILTER_ACTION_PASS);
+}
+
+/* Packet capture */
+static netio_pktfilter_t pf_capture_def = {
+   "capture",
+   pf_capture_setup,
+   pf_capture_free,
+   pf_capture_pkt_handler,
+   NULL,
+};
 
 /* ======================================================================== */
 /* Frequency Dropping ("freq_drop").                                        */
@@ -198,4 +309,5 @@ static netio_pktfilter_t pf_freqdrop_def = {
 void netio_filter_load_all(void)
 {
    netio_filter_add(&pf_freqdrop_def);
+   netio_filter_add(&pf_capture_def);
 }

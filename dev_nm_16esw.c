@@ -1395,17 +1395,17 @@ static void bcm5600_handle_schan_cmd(struct nm_16esw_data *d,m_uint32_t cmd)
    switch(cmd) {
       case BCM5600_SCHAN_CMD_EXEC:
          bcm5600_handle_gen_cmd(d);
-         d->schan_cmd_res = 0xFFFFFFFF;
+         d->schan_cmd_res = 0x00008002;
          break;
 
       case BCM5600_SCHAN_CMD_READ_MII:
          bcm5600_mii_read(d);
-         d->schan_cmd_res = 0xFFFFFFFF;
+         d->schan_cmd_res = 0x00048000;
          break;
 
       case BCM5600_SCHAN_CMD_WRITE_MII:
          bcm5600_mii_write(d);
-         d->schan_cmd_res = 0xFFFFFFFF;
+         d->schan_cmd_res = 0x00048000;
          break;
 
       case BCM5600_SCHAN_CMD_LINKSCAN:
@@ -1423,7 +1423,7 @@ static void bcm5600_handle_schan_cmd(struct nm_16esw_data *d,m_uint32_t cmd)
 /*
  * dev_bcm5605_access()
  */
-void *dev_bcm5605_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
+void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct nm_16esw_data *d = dev->priv_data;
@@ -1434,10 +1434,11 @@ void *dev_bcm5605_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
-      BCM_LOG(d,"read  access to offset=0x%x, pc=0x%llx\n",offset,cpu->pc);
+      BCM_LOG(d,"read  access to offset=0x%x, pc=0x%llx\n",
+              offset,cpu_get_pc(cpu));
    } else {
       BCM_LOG(d,"write access to offset=0x%x, pc=0x%llx, val=0x%llx\n",
-              offset,cpu->pc,*data);
+              offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -1545,10 +1546,11 @@ void *dev_bcm5605_access(cpu_mips_t *cpu,struct vdevice *dev,m_uint32_t offset,
       default:
          if (op_type == MTS_READ) {
             BCM_LOG(d,"read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             BCM_LOG(d,"write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -2125,7 +2127,7 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    discard = port_entry[0] & BCM5600_PTABLE_PRT_DIS_MASK;
    discard >>= BCM5600_PTABLE_PRT_DIS_SHIFT;
 
-   if (discard) {
+   if ((p->orig_vlan == -1) && discard) {
       if (discard != 0x20) {
          printf("\n\n\n"
                 "-----------------------------------------------------------"
@@ -2361,7 +2363,7 @@ static int dev_bcm5600_handle_rxring(netio_desc_t *nio,
 }
 
 /* pci_bcm5605_read() */
-static m_uint32_t pci_bcm5605_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t pci_bcm5605_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {
    struct nm_16esw_data *d = dev->priv_data;
@@ -2375,7 +2377,7 @@ static m_uint32_t pci_bcm5605_read(cpu_mips_t *cpu,struct pci_device *dev,
 }
 
 /* pci_bcm5605_write() */
-static void pci_bcm5605_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_bcm5605_write(cpu_gen_t *cpu,struct pci_device *dev,
                               int reg,m_uint32_t value)
 {
    struct nm_16esw_data *d = dev->priv_data;

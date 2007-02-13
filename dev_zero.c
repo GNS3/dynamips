@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (C) 2005,2006 Christophe Fillot.  All rights reserved.
  *
  * Zeroed memory zone.
@@ -12,7 +12,8 @@
 #include <pthread.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -26,7 +27,7 @@ struct zero_data {
 /*
  * dev_zero_access()
  */
-void *dev_zero_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_zero_access(cpu_gen_t *cpu,struct vdevice *dev,
                       m_uint32_t offset,u_int op_size,u_int op_type,
                       m_uint64_t *data)
 {

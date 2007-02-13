@@ -1,5 +1,5 @@
 /*  
- * Cisco C7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * Cisco EEPROM manipulation functions.

@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) Simulation Platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * PCI configuration space for SB-1 processor.
@@ -11,7 +11,8 @@
 #include <time.h>
 #include <errno.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -39,7 +40,7 @@ struct sb1_pci_data {
  *
  * PCI Configuration (Bus 0, Device 0).
  */
-static m_uint32_t sb1_pci_cfg_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t sb1_pci_cfg_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {
    switch(reg) {
@@ -55,7 +56,7 @@ static m_uint32_t sb1_pci_cfg_read(cpu_mips_t *cpu,struct pci_device *dev,
  *
  * HyperTransport Configuration (Bus 0, Device 1).
  */
-static m_uint32_t sb1_ht_cfg_read(cpu_mips_t *cpu,struct pci_device *dev,
+static m_uint32_t sb1_ht_cfg_read(cpu_gen_t *cpu,struct pci_device *dev,
                                   int reg)
 {
    switch(reg) {
@@ -71,7 +72,7 @@ static m_uint32_t sb1_ht_cfg_read(cpu_mips_t *cpu,struct pci_device *dev,
 /*
  * dev_sb1_pci_access()
  */
-void *dev_sb1_pci_access(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_sb1_pci_access(cpu_gen_t *cpu,struct vdevice *dev,
                          m_uint32_t offset,u_int op_size,u_int op_type,
                          m_uint64_t *data)
 {
@@ -80,10 +81,10 @@ void *dev_sb1_pci_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ)
       cpu_log(cpu,dev->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    else
       cpu_log(cpu,dev->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
 #endif
 
    if (op_type == MTS_READ)

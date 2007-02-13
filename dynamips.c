@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
  *
  * Many thanks to Nicolas Szalay for his patch
@@ -20,16 +20,19 @@
 #include <assert.h>
 #include <getopt.h>
 
-#include ARCH_INC_FILE
-
 #include "dynamips.h"
-#include "mips64.h"
+#include "cpu.h"
 #include "mips64_exec.h"
+#include "mips64_jit.h"
+#include "ppc32_exec.h"
+#include "ppc32_jit.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
 #include "dev_c2691.h"
 #include "dev_c3725.h"
 #include "dev_c3745.h"
+#include "dev_c2600.h"
+#include "ppc32_vmtest.h"
 #include "dev_vtty.h"
 #include "ptask.h"
 #include "timer.h"
@@ -204,6 +207,18 @@ static void show_usage(int argc,char *argv[],int platform)
          def_disk1_size = C3745_DEFAULT_DISK1_SIZE;
          def_nm_iomem_size = C3745_DEFAULT_IOMEM_SIZE;
          break;
+      case VM_TYPE_C2600:
+         def_ram_size   = C2600_DEFAULT_RAM_SIZE;
+         def_rom_size   = C2600_DEFAULT_ROM_SIZE;
+         def_nvram_size = C2600_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = C2600_DEFAULT_CONF_REG;
+         def_clock_div  = C2600_DEFAULT_CLOCK_DIV;
+         def_disk0_size = C2600_DEFAULT_DISK0_SIZE;
+         def_disk1_size = C2600_DEFAULT_DISK1_SIZE;
+         def_nm_iomem_size = C3745_DEFAULT_IOMEM_SIZE;
+         break;
+      case VM_TYPE_PPC32_TEST:
+         def_ram_size   = PPC32_VMTEST_DEFAULT_RAM_SIZE;
       default:
          fprintf(stderr,"show_usage: invalid platform.\n");
          return;
@@ -235,6 +250,7 @@ static void show_usage(int argc,char *argv[],int platform)
           "  -X                 : Do not use a file to simulate RAM (faster)\n"
           "  -G <ghost_file>    : Use a ghost file to simulate RAM\n"
           "  -g <ghost_file>    : Generate a ghost RAM file\n"
+          "  --sparse-mem       : Use sparse memory\n"
           "  -R <rom_file>      : Load an alternate ROM (default: embedded)\n"
           "  -k <clock_div>     : Set the clock divisor (default: %d)\n"
           "\n"
@@ -292,6 +308,14 @@ static void show_usage(int argc,char *argv[],int platform)
          break;
 
       case VM_TYPE_C3745:
+         printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
+                "  -p <nm_desc>       : Define a Network Module\n"
+                "  -s <nm_nio>        : Bind a Network IO interface to a "
+                "Network Module\n",
+                def_nm_iomem_size);
+         break;
+
+      case VM_TYPE_C2600:
          printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
                 "  -p <nm_desc>       : Define a Network Module\n"
                 "  -s <nm_nio>        : Bind a Network IO interface to a "
@@ -388,6 +412,22 @@ static void show_usage(int argc,char *argv[],int platform)
          /* Show the possible NM drivers */
          c3745_nm_show_drivers();
          break;
+
+      case VM_TYPE_C2600:
+         printf("<nm_desc> format:\n"
+                "   \"slot:nm_driver\"\n"
+                "\n");
+
+         printf("<nm_nio> format:\n"
+                "   \"slot:port:netio_type{:netio_parameters}\"\n"
+                "\n");
+
+         /* Show the possible chassis types for C2600 platform */
+         c2600_mainboard_show_drivers();
+
+         /* Show the possible NM drivers */
+         c2600_nm_show_drivers();
+         break;
    }
    
    /* Show the possible NETIO types */
@@ -435,6 +475,10 @@ static int cli_get_platform_type(int argc,char *argv[])
          vm_type = VM_TYPE_C3725;
       else if (!strcmp(str,"3745"))
          vm_type = VM_TYPE_C3745;
+      else if (!strcmp(str,"2600"))
+         vm_type = VM_TYPE_C2600;
+      else if (!strcmp(str,"PPC32_TEST"))
+         vm_type = VM_TYPE_PPC32_TEST;
       else
          fprintf(stderr,"Invalid platform type '%s'\n",str);
    }
@@ -450,6 +494,7 @@ static int cli_get_platform_type(int argc,char *argv[])
 #define OPT_TIMER_ITV   0x104
 #define OPT_VM_DEBUG    0x105
 #define OPT_IOMEM_SIZE  0x106
+#define OPT_SPARSE_MEM  0x107
 
 static struct option cmd_line_lopts[] = {
    { "disk0"      , 1, NULL, OPT_DISK0_SIZE },
@@ -459,6 +504,7 @@ static struct option cmd_line_lopts[] = {
    { "timer-itv"  , 1, NULL, OPT_TIMER_ITV },
    { "vm-debug"   , 1, NULL, OPT_VM_DEBUG },
    { "iomem-size" , 1, NULL, OPT_IOMEM_SIZE },
+   { "sparse-mem" , 0, NULL, OPT_SPARSE_MEM },
    { NULL         , 0, NULL, 0 },
 };
 
@@ -623,15 +669,51 @@ static int cli_parse_c3745_options(vm_instance_t *vm,int option)
    return(0);
 }
 
+/* Parse specific options for the Cisco 2600 platform */
+static int cli_parse_c2600_options(vm_instance_t *vm,int option)
+{
+   c2600_t *router;
+
+   router = VM_C2600(vm);
+
+   switch(option) {
+      /* IO memory reserved for NMs (in percents!) */
+      case OPT_IOMEM_SIZE:
+         router->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* Mainboard type */
+      case 't':
+         c2600_mainboard_set_type(router,optarg);
+         break;
+
+      /* NM settings */
+      case 'p':
+         return(c2600_cmd_nm_create(router,optarg));
+
+      /* NM NIO settings */
+      case 's':
+         return(c2600_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
 /* Create a router instance */
 static vm_instance_t *cli_create_instance(char *name,int platform_type,
                                           int instance_id)
 {
+   vm_instance_t *vm;
    c7200_t *c7200;
    c3600_t *c3600;
    c2691_t *c2691;
    c3725_t *c3725;
    c3745_t *c3745;
+   c2600_t *c2600;
 
    switch(platform_type) {
       case VM_TYPE_C7200:
@@ -668,6 +750,20 @@ static vm_instance_t *cli_create_instance(char *name,int platform_type,
             return NULL;
          }
          return(c3745->vm);
+
+      case VM_TYPE_C2600:
+         if (!(c2600 = c2600_create_instance(name,instance_id))) {
+            fprintf(stderr,"C2600: unable to create instance!\n");
+            return NULL;
+         }
+         return(c2600->vm);
+
+      case VM_TYPE_PPC32_TEST:
+         if (!(vm = ppc32_vmtest_create_instance(name,instance_id))) {
+            fprintf(stderr,"PPC32_TEST: unable to create instance!\n");
+            return NULL;
+         }
+         return(vm);
 
       default:
          fprintf(stderr,"Unknown platform type '%d'!\n",platform_type);
@@ -784,6 +880,11 @@ static int parse_std_cmd_line(int argc,char *argv[],int *platform)
          case 'g':
             vm->ghost_ram_filename = strdup(optarg);
             vm->ghost_status = VM_GHOST_RAM_GENERATE;
+            break;
+
+         /* Use sparse memory */
+         case OPT_SPARSE_MEM:
+            vm->sparse_mem = TRUE;
             break;
 
          /* Alternate ROM */
@@ -927,6 +1028,9 @@ static int parse_std_cmd_line(int argc,char *argv[],int *platform)
               case VM_TYPE_C3745:
                   res = cli_parse_c3745_options(vm,option);
                   break;
+              case VM_TYPE_C2600:
+                  res = cli_parse_c2600_options(vm,option);
+                  break;
             }
 
             if (res == -1)
@@ -1014,6 +1118,8 @@ void dynamips_reset(void)
    c2691_delete_all_instances();
    c3725_delete_all_instances();
    c3745_delete_all_instances();
+   c2600_delete_all_instances();
+   ppc32_vmtest_delete_all_instances();
 
    /* Delete ATM and Frame-Relay switches + bridges */
    netio_bridge_delete_all();
@@ -1039,8 +1145,8 @@ int main(int argc,char *argv[])
    atexit(profiler_savestat);
 #endif
 
-   printf("Cisco 7200 Simulation Platform (version %s)\n",sw_version);
-   printf("Copyright (c) 2005,2006 Christophe Fillot.\n");
+   printf("Cisco Router Simulation Platform (version %s)\n",sw_version);
+   printf("Copyright (c) 2005-2007 Christophe Fillot.\n");
    printf("Build date: %s %s\n\n",__DATE__,__TIME__);
 
    /* Initialize timers */
@@ -1078,6 +1184,8 @@ int main(int argc,char *argv[])
    /* Create instruction lookup tables */
    mips64_jit_create_ilt();
    mips64_exec_create_ilt();
+   ppc32_jit_create_ilt();
+   ppc32_exec_create_ilt();
 
    setup_signals();
 
@@ -1102,6 +1210,12 @@ int main(int argc,char *argv[])
          case VM_TYPE_C3745:
             res = c3745_init_instance(VM_C3745(vm));
             break;
+         case VM_TYPE_C2600:
+            res = c2600_init_instance(VM_C2600(vm));
+            break;
+         case VM_TYPE_PPC32_TEST:
+            res = ppc32_vmtest_init_instance(vm);
+            break;
          default:
             res = -1;
       }
@@ -1113,10 +1227,11 @@ int main(int argc,char *argv[])
 
 #if (DEBUG_INSN_PERF_CNT > 0) || (DEBUG_BLOCK_PERF_CNT > 0)
       {
-         m_uint64_t prev = 0,delta;
+         m_uint64_t counter,prev = 0,delta;
          while(vm->status == VM_STATUS_RUNNING) {
-            delta = vm->boot_cpu->perf_counter - prev;
-            prev = vm->boot_cpu->perf_counter;
+            counter = cpu_get_perf_counter(vm->boot_cpu);
+            delta = counter - prev;
+            prev = counter;
             printf("delta = %llu\n",delta);
             sleep(1);
          }

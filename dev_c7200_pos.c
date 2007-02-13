@@ -1,6 +1,6 @@
 /*  
- * Cisco C7200 (Predator) Simulation Platform.
- * Copyright (C) 2005-2006 Christophe Fillot.  All rights reserved.
+ * Cisco router Simulation Platform.
+ * Copyright (c) 2005-2007 Christophe Fillot.  All rights reserved.
  *
  * EEPROM types:
  *   - 0x95: PA-POS-OC3SMI
@@ -19,7 +19,8 @@
 #include <pthread.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -31,7 +32,7 @@
 
 /* Debugging flags */
 #define DEBUG_ACCESS    0
-#define DEBUG_UNKNOWN   0
+#define DEBUG_UNKNOWN   1
 #define DEBUG_TRANSMIT  0
 #define DEBUG_RECEIVE   0
 
@@ -53,7 +54,6 @@
 #define POS_OC3_TXDESC_WRAP       0x40000000  /* Wrap ring */
 #define POS_OC3_TXDESC_CONT       0x08000000  /* Packet continues */
 #define POS_OC3_TXDESC_LEN_MASK   0x1fff
-#define POS_OC3_TXDESC_ADDR_MASK  0x3fffffff  /* Buffer address (?) */
 
 /* RX Descriptor */
 struct rx_desc {
@@ -100,9 +100,9 @@ struct pos_oc3_data {
 /*
  * pos_access()
  */
-static void *dev_pos_access(cpu_mips_t *cpu,struct vdevice *dev,
-                               m_uint32_t offset,u_int op_size,u_int op_type,
-                               m_uint64_t *data)
+static void *dev_pos_access(cpu_gen_t *cpu,struct vdevice *dev,
+                            m_uint32_t offset,u_int op_size,u_int op_type,
+                            m_uint64_t *data)
 {
    struct pos_oc3_data *d = dev->priv_data;
 
@@ -112,11 +112,11 @@ static void *dev_pos_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       if (offset != 0x404)
          cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-                 "val = 0x%llx\n",offset,cpu->pc,*data);
+                 "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -139,11 +139,12 @@ static void *dev_pos_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -154,7 +155,7 @@ static void *dev_pos_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * pos_rx_access()
  */
-static void *dev_pos_rx_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *dev_pos_rx_access(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data)
 {
@@ -166,10 +167,10 @@ static void *dev_pos_rx_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,d->name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -193,11 +194,12 @@ static void *dev_pos_rx_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->rx_name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->rx_name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -208,7 +210,7 @@ static void *dev_pos_rx_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * pos_tx_access()
  */
-static void *dev_pos_tx_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *dev_pos_tx_access(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data)
 {
@@ -220,10 +222,10 @@ static void *dev_pos_tx_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->tx_name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,d->tx_name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -247,11 +249,12 @@ static void *dev_pos_tx_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->tx_name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->tx_name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -262,7 +265,7 @@ static void *dev_pos_tx_access(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * pos_cs_access()
  */
-static void *dev_pos_cs_access(cpu_mips_t *cpu,struct vdevice *dev,
+static void *dev_pos_cs_access(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data)
 {
@@ -274,10 +277,10 @@ static void *dev_pos_cs_access(cpu_mips_t *cpu,struct vdevice *dev,
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->cs_name,"read  access to offset = 0x%x, pc = 0x%llx\n",
-              offset,cpu->pc);
+              offset,cpu_get_pc(cpu));
    } else {
       cpu_log(cpu,d->cs_name,"write access to vaddr = 0x%x, pc = 0x%llx, "
-              "val = 0x%llx\n",offset,cpu->pc,*data);
+              "val = 0x%llx\n",offset,cpu_get_pc(cpu),*data);
    }
 #endif
 
@@ -299,11 +302,12 @@ static void *dev_pos_cs_access(cpu_mips_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->cs_name,
                     "read from unknown addr 0x%x, pc=0x%llx (size=%u)\n",
-                    offset,cpu->pc,op_size);
+                    offset,cpu_get_pc(cpu),op_size);
          } else {
             cpu_log(cpu,d->cs_name,
                     "write to unknown addr 0x%x, value=0x%llx, "
-                    "pc=0x%llx (size=%u)\n",offset,*data,cpu->pc,op_size);
+                    "pc=0x%llx (size=%u)\n",
+                    offset,*data,cpu_get_pc(cpu),op_size);
          }
 #endif
    }
@@ -496,7 +500,8 @@ static void txdesc_set_next(struct pos_oc3_data *d,struct tx_desc *txd)
 static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
 {
    u_char pkt[POS_OC3_MAX_PKT_SIZE],*pkt_ptr;
-   m_uint32_t tx_start,clen,tot_len,addr;
+   m_uint32_t clen,tot_len,norm_len;
+   m_uint32_t tx_start,addr;
    struct tx_desc txd0,ctxd,*ptxd;
    int i,done = FALSE;
 
@@ -538,11 +543,9 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
       if (clen != 0) {
          addr = ptxd->tdes[1];
 
-         /* ugly hack, to allow this to work with SRAM platforms */
-         if ((addr & ~POS_OC3_TXDESC_ADDR_MASK) == 0xc0000000)
-            addr = ptxd->tdes[1] & POS_OC3_TXDESC_ADDR_MASK;
-
+         norm_len = normalize_size(clen,4,0);
          physmem_copy_from_vm(d->vm,pkt_ptr,addr,clen);
+         mem_bswap32(pkt_ptr,norm_len);
       }
 
       pkt_ptr += clen;
@@ -586,7 +589,7 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
 /*
  * pci_pos_read()
  */
-static m_uint32_t pci_pos_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
+static m_uint32_t pci_pos_read(cpu_gen_t *cpu,struct pci_device *dev,int reg)
 {
    struct pos_oc3_data *d = dev->priv_data;
 
@@ -605,7 +608,7 @@ static m_uint32_t pci_pos_read(cpu_mips_t *cpu,struct pci_device *dev,int reg)
 /*
  * pci_pos_write()
  */
-static void pci_pos_write(cpu_mips_t *cpu,struct pci_device *dev,
+static void pci_pos_write(cpu_gen_t *cpu,struct pci_device *dev,
                           int reg,m_uint32_t value)
 {
    struct pos_oc3_data *d = dev->priv_data;

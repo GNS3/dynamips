@@ -13,8 +13,8 @@ HAS_RFC2553?=1
 HAS_PCAP?=1
 
 # Current dynamips release
-VERSION_TRAIN=0.2.6
-VERSION_SUB=-RC5
+VERSION_TRAIN=0.2.7
+VERSION_SUB=-RC1
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -29,10 +29,14 @@ RM=rm
 TAR=tar
 CP=cp
 LEX=flex
-ARCH_INC_FILE=\"$(DYNAMIPS_ARCH)_trans.h\"
+MIPS64_ARCH_INC_FILE=\"mips64_$(DYNAMIPS_ARCH)_trans.h\"
+PPC32_ARCH_INC_FILE=\"ppc32_$(DYNAMIPS_ARCH)_trans.h\"
+
 CFLAGS+=-g -Wall -O3 -fomit-frame-pointer \
 	-DJIT_ARCH=\"$(DYNAMIPS_ARCH)\" \
-	-DARCH_INC_FILE=$(ARCH_INC_FILE) -DDYNAMIPS_VERSION=\"$(VERSION)\" \
+	-DMIPS64_ARCH_INC_FILE=$(MIPS64_ARCH_INC_FILE) \
+	-DPPC32_ARCH_INC_FILE=$(PPC32_ARCH_INC_FILE) \
+	-DDYNAMIPS_VERSION=\"$(VERSION)\" \
 	-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE \
 	-DHAS_RFC2553=$(HAS_RFC2553)
 
@@ -89,24 +93,31 @@ HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h \
 	crc.h base64.h net.h net_io.h net_io_bridge.h net_io_filter.h \
 	atm.h frame_relay.h eth_switch.h \
 	ptask.h timer.h hypervisor.h dynamips.h insn_lookup.h \
-	vm.h mips64.h mips64_exec.h cpu.h cp0.h memory.h device.h \
-	nmc93c46.h cisco_eeprom.h ds1620.h \
-	pci_dev.h pci_io.h dev_gt.h dev_plx.h \
-	dev_dec21140.h dev_am79c971.h dev_mueslix.h dev_nm_16esw.h \
+	vm.h cpu.h memory.h device.h \
+	mips64.h mips64_mem.h mips64_exec.h mips64_jit.h mips64_cp0.h \
+	ppc32.h ppc32_mem.h ppc32_exec.h ppc32_jit.h ppc32_vmtest.h \
+	nmc93c46.h cisco_eeprom.h ds1620.h dev_rom.h \
+	pci_dev.h pci_io.h dev_mpc860.h dev_gt.h dev_mv64460.h dev_plx.h \
+	dev_dec21140.h dev_am79c971.h dev_i8254x.h \
+	dev_mueslix.h dev_nm_16esw.h \
 	dev_vtty.h dev_c7200.h dev_c3600.h dev_c3600_bay.h \
-	dev_c2691.h dev_c3725.h dev_c3745.h
+	dev_c2691.h dev_c3725.h dev_c3745.h dev_c2600.h
 
 SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c timer.c \
 	crc.c base64.c net.c net_io.c net_io_bridge.c net_io_filter.c \
 	atm.c frame_relay.c eth_switch.c \
-	dynamips.c insn_lookup.c vm.c mips64.c mips64_jit.c mips64_exec.c \
-	cpu.c cp0.c memory.c device.c nmc93c46.c cisco_eeprom.c \
+	dynamips.c insn_lookup.c vm.c cpu.c \
+	mips64.c mips64_mem.c mips64_cp0.c mips64_jit.c mips64_exec.c \
+	ppc32.c ppc32_mem.c ppc32_jit.c ppc32_exec.c ppc32_vmtest.c \
+	memory.c device.c nmc93c46.c cisco_eeprom.c \
 	pci_dev.c pci_io.c \
-	dev_zero.c dev_vtty.c dev_ram.c dev_rom.c dev_nvram.c \
-	dev_bootflash.c dev_flash.c \
-	dev_remote.c dev_clpd6729.c dev_pcmcia_disk.c dev_gt.c \
+	dev_zero.c dev_bswap.c dev_vtty.c dev_ram.c dev_rom.c dev_nvram.c \
+	dev_bootflash.c dev_flash.c dev_mpc860.c \
+	dev_remote.c dev_clpd6729.c dev_pcmcia_disk.c dev_gt.c dev_mv64460.c \
 	dev_plx.c dev_dec21x50.c dev_pericom.c dev_ti2050b.c dev_ap1011.c \
-	dev_ns16552.c dev_dec21140.c dev_am79c971.c dev_mueslix.c \
+	dev_plx6520cb.c \
+	dev_ns16552.c dev_dec21140.c dev_am79c971.c dev_i8254x.c \
+	dev_mueslix.c \
 	dev_c3600.c dev_c3600_bay.c dev_c3600_iofpga.c \
 	dev_c3600_eth.c dev_c3600_serial.c \
 	dev_c7200.c dev_c7200_iofpga.c dev_c7200_mpfpga.c \
@@ -115,29 +126,30 @@ SOURCES=mempool.c registry.c rbtree.c hash.c utils.c parser.c ptask.c timer.c \
 	dev_c2691.c dev_c2691_iofpga.c dev_c2691_eth.c dev_c2691_serial.c \
 	dev_c3725.c dev_c3725_iofpga.c dev_c3725_eth.c dev_c3725_serial.c \
 	dev_c3745.c dev_c3745_iofpga.c dev_c3745_eth.c dev_c3745_serial.c \
+	dev_c2600.c dev_c2600_pci.c dev_c2600_iofpga.c dev_c2600_eth.c \
 	dev_nm_16esw.c dev_pa_a1.c dev_pa_mc8te1.c \
 	dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
 	hv_nio.c hv_nio_bridge.c hv_frsw.c hv_atmsw.c hv_ethsw.c \
 	hv_vm.c hv_vm_debug.c \
-	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c
+	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c hv_c2600.c
 
 # Profiling
 #SOURCES += profiler.c
 #CFLAGS += -p -DPROFILE -DPROFILE_FILE=\"$(PROG).profile\"
 
 ifeq ($(DYNAMIPS_ARCH),x86)
-HDR += x86-codegen.h x86_trans.h
-SOURCES += x86_trans.c
+HDR += x86-codegen.h mips64_x86_trans.h ppc32_x86_trans.h
+SOURCES += mips64_x86_trans.c ppc32_x86_trans.c
 endif
 
 ifeq ($(DYNAMIPS_ARCH),amd64)
-HDR += x86-codegen.h amd64-codegen.h amd64_trans.h
-SOURCES += amd64_trans.c
+HDR += x86-codegen.h amd64-codegen.h mips64_amd64_trans.h ppc32_amd64_trans.h
+SOURCES += mips64_amd64_trans.c ppc32_amd64_trans.c
 endif
 
 ifeq ($(DYNAMIPS_ARCH),nojit)
-HDR += nojit_trans.h
-SOURCES += nojit_trans.c
+HDR += mips64_nojit_trans.h ppc32_nojit_trans.h
+SOURCES += mips64_nojit_trans.c ppc32_nojit_trans.c
 endif
 
 # RAW Ethernet support for Linux
@@ -161,12 +173,17 @@ A_OBJS=$(ASMSRC:.S=.o)
 LEX_C=$(LEX_SOURCES:.l=.c)
 
 SUPPL=mips_mts.c Makefile ChangeLog COPYING README README.hypervisor TODO \
-	dynamips.1 nvram_export.1 hypervisor_mode.7 microcode debian/
+	dynamips.1 nvram_export.1 hypervisor_mode.7 \
+	mips64_microcode ppc32_microcode debian/
 
 FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
-	x86-codegen.h x86_trans.c x86_trans.h \
-	amd64-codegen.h amd64_trans.c amd64_trans.h \
-	nojit_trans.c nojit_trans.h \
+	x86-codegen.h amd64-codegen.h \
+	mips64_x86_trans.c mips64_x86_trans.h \
+	mips64_amd64_trans.c mips64_amd64_trans.h \
+	mips64_nojit_trans.c mips64_nojit_trans.h \
+	ppc32_x86_trans.c ppc32_x86_trans.h \
+	ppc32_amd64_trans.c ppc32_amd64_trans.h \
+	ppc32_nojit_trans.c ppc32_nojit_trans.h \
 	linux_eth.c linux_eth.h gen_eth.c gen_eth.h \
 	profiler.c profiler_resolve.pl bin2c.c rom2c.c \
 	nvram_export.c
@@ -174,7 +191,8 @@ FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 .PHONY: all
 all: $(PROG) nvram_export
 
-$(PROG): microcode_dump.inc $(LEX_C) $(C_OBJS) $(A_OBJS)
+$(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
+	$(LEX_C) $(C_OBJS) $(A_OBJS)
 	@echo "Linking $@"
 	@$(CC) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
 
@@ -182,9 +200,11 @@ rom2c$(BIN_EXT): rom2c.c
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) -o $@ rom2c.c $(LIBS)
 
-microcode_dump.inc: rom2c$(BIN_EXT) microcode
-	@$(CC) -Wall $(CFLAGS) -o $@ rom2c.c $(LIBS)
-	@./rom2c microcode microcode_dump.inc
+mips64_microcode_dump.inc: rom2c$(BIN_EXT) mips64_microcode
+	@./rom2c mips64_microcode mips64_microcode_dump.inc 0xbfc00000
+
+ppc32_microcode_dump.inc: rom2c$(BIN_EXT) ppc32_microcode
+	@./rom2c ppc32_microcode ppc32_microcode_dump.inc 0xfff00000
 
 asmdefs$(BIN_EXT): asmdefs.c mips64.h
 	@echo "Linking $@"

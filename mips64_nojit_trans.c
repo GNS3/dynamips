@@ -1,5 +1,5 @@
 /*
- * Cisco 7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Just an empty JIT template file for architectures not supported by the JIT
@@ -15,7 +15,9 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
-#include "nojit_trans.h"
+#include "cpu.h"
+#include "mips64_jit.h"
+#include "mips64_nojit_trans.h"
 
 /* Set an IRQ */
 void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq)
@@ -46,17 +48,17 @@ void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq)
    abort(); \
 }
 
-EMPTY(void insn_block_push_epilog(insn_block_t *block));
-EMPTY(void insn_block_exec_jit_code(cpu_mips_t *cpu,insn_block_t *block));
-EMPTY(void mips64_set_pc(insn_block_t *b,m_uint64_t new_pc));
-EMPTY(void mips64_set_ra(insn_block_t *b,m_uint64_t ret_pc));
-EMPTY(void mips64_emit_breakpoint(insn_block_t *b));
-EMPTY(void mips64_emit_invalid_delay_slot(insn_block_t *b));
-EMPTY(void mips64_inc_cp0_count_reg(insn_block_t *b));
-EMPTY(void mips64_check_pending_irq(insn_block_t *b));
-EMPTY(void mips64_inc_perf_counter(insn_block_t *b));
+EMPTY(void mips64_jit_tcb_push_epilog(mips64_jit_tcb_t *block));
+EMPTY(void mips64_jit_tcb_exec(cpu_mips_t *cpu,mips64_jit_tcb_t *block));
+EMPTY(void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc));
+EMPTY(void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc));
+EMPTY(void mips64_emit_breakpoint(mips64_jit_tcb_t *b));
+EMPTY(void mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b));
+EMPTY(void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b));
+EMPTY(void mips64_check_pending_irq(mips64_jit_tcb_t *b));
+EMPTY(void mips64_inc_perf_counter(mips64_jit_tcb_t *b));
 
 /* MIPS instruction array */
-struct insn_tag mips64_insn_tags[] = {
+struct mips64_insn_tag mips64_insn_tags[] = {
    { NULL, 0, 0, 0 },
 };

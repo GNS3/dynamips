@@ -1,5 +1,5 @@
 /*
- * Cisco C7200 (Predator) simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * PCMCIA ATA Flash emulation.
@@ -15,7 +15,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "mips64.h"
+#include "cpu.h"
+#include "vm.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
@@ -361,7 +362,7 @@ static void ata_handle_cmd(struct pcmcia_disk_data *d)
 /*
  * dev_pcmcia_disk_access_0()
  */
-void *dev_pcmcia_disk_access_0(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_pcmcia_disk_access_0(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data)
 {
@@ -374,11 +375,11 @@ void *dev_pcmcia_disk_access_0(cpu_mips_t *cpu,struct vdevice *dev,
    if (op_type == MTS_READ) {
       cpu_log(cpu,d->dev.name,
               "reading offset 0x%5.5x at pc=0x%llx (size=%u)\n",
-              offset,cpu->pc,op_size);
+              offset,cpu_get_pc(cpu),op_size);
    } else {
       cpu_log(cpu,d->dev.name,
               "writing offset 0x%5.5x, data=0x%llx at pc=0x%llx (size=%u)\n",
-              offset,*data,cpu->pc,op_size);
+              offset,*data,cpu_get_pc(cpu),op_size);
    }
 #endif
 
@@ -455,7 +456,7 @@ void *dev_pcmcia_disk_access_0(cpu_mips_t *cpu,struct vdevice *dev,
 /*
  * dev_pcmcia_disk_access_1()
  */
-void *dev_pcmcia_disk_access_1(cpu_mips_t *cpu,struct vdevice *dev,
+void *dev_pcmcia_disk_access_1(cpu_gen_t *cpu,struct vdevice *dev,
                                m_uint32_t offset,u_int op_size,u_int op_type,
                                m_uint64_t *data)
 {
@@ -617,4 +618,15 @@ vm_obj_t *dev_pcmcia_disk_init(vm_instance_t *vm,char *name,
  err_filename:
    free(d);
    return NULL;
+}
+
+/* Get the device associated with a PCMCIA disk object */
+struct vdevice *dev_pcmcia_disk_get_device(vm_obj_t *obj)
+{
+   struct pcmcia_disk_data *d;
+
+   if (!obj || !(d = obj->data))
+      return NULL;
+
+   return(&d->dev);
 }

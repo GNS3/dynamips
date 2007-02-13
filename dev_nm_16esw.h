@@ -7,12 +7,12 @@
 #define __DEV_NM_16ESW_H__
 
 #include <sys/types.h>
+
 #include "utils.h"
-#include "mips64.h"
 #include "cpu.h"
+#include "vm.h"
 #include "device.h"
 #include "net_io.h"
-#include "vm.h"
 #include "cisco_eeprom.h"
 
 /* Forward declaration for NM-16ESW private data */

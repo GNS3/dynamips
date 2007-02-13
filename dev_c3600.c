@@ -12,13 +12,14 @@
 #include <sys/types.h>
 #include <assert.h>
 
-#include "mips64.h"
+#include "cpu.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 #include "pci_io.h"
 #include "dev_gt.h"
 #include "cisco_eeprom.h"
+#include "dev_rom.h"
 #include "dev_c3600.h"
 #include "dev_c3600_bay.h"
 #include "dev_vtty.h"
@@ -1108,7 +1109,7 @@ static int c3620_init(c3600_t *router)
    int i;
 
    /* Set the processor type: R4700 */
-   mips64_set_prid(vm->boot_cpu,MIPS_PRID_R4700);
+   mips64_set_prid(CPU_MIPS64(vm->boot_cpu),MIPS_PRID_R4700);
 
    /* Initialize the Galileo GT-64010 PCI controller */
    if (c3600_init_gt64010(router) == -1)
@@ -1130,7 +1131,7 @@ static int c3640_init(c3600_t *router)
    int i;
 
    /* Set the processor type: R4700 */
-   mips64_set_prid(vm->boot_cpu,MIPS_PRID_R4700);
+   mips64_set_prid(CPU_MIPS64(vm->boot_cpu),MIPS_PRID_R4700);
 
    /* Initialize the Galileo GT-64010 PCI controller */
    if (c3600_init_gt64010(router) == -1)
@@ -1165,7 +1166,7 @@ static int c3660_init(c3600_t *router)
    int i;
 
    /* Set the processor type: R5271 */
-   mips64_set_prid(vm->boot_cpu,MIPS_PRID_R527x);
+   mips64_set_prid(CPU_MIPS64(vm->boot_cpu),MIPS_PRID_R527x);
 
    /* Initialize the Galileo GT-64120 PCI controller */
    if (c3600_init_gt64120(router) == -1)
@@ -1265,6 +1266,7 @@ int c3600_init_platform(c3600_t *router)
    vm_instance_t *vm = router->vm;
    struct c3600_nm_bay *nm_bay;
    cpu_mips_t *cpu;
+   cpu_gen_t *gen;
    int i;
 
    /* Copy config register setup into "active" config register */
@@ -1277,14 +1279,20 @@ int c3600_init_platform(c3600_t *router)
    vm->cpu_group = cpu_group_create("System CPU");
 
    /* Initialize the virtual MIPS processor */
-   if (!(cpu = cpu_create(vm,0))) {
+   if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
       return(-1);
    }
 
+   cpu = CPU_MIPS64(gen);
+
    /* Add this CPU to the system CPU group */
-   cpu_group_add(vm->cpu_group,cpu);
-   vm->boot_cpu = cpu;
+   cpu_group_add(vm->cpu_group,gen);
+   vm->boot_cpu = gen;
+
+   /* Initialize the IRQ routing vectors */
+   vm->set_irq = mips64_vm_set_irq;
+   vm->clear_irq = mips64_vm_clear_irq;
 
    /* Mark the Network IO interrupt as high priority */
    cpu->irq_idle_preempt[C3600_NETIO_IRQ] = TRUE;
@@ -1334,10 +1342,11 @@ int c3600_init_platform(c3600_t *router)
    /* Initialize ROM */
    if (!vm->rom_filename) {
       /* use embedded ROM */
-      dev_rom_init(vm,"rom",C3600_ROM_ADDR,vm->rom_size*1048576);
+      dev_rom_init(vm,"rom",C3600_ROM_ADDR,vm->rom_size*1048576,
+                   mips64_microcode,mips64_microcode_len);
    } else {
       /* use alternate ROM */
-      dev_ram_init(vm,"rom",TRUE,TRUE,NULL,
+      dev_ram_init(vm,"rom",TRUE,TRUE,NULL,FALSE,
                    C3600_ROM_ADDR,vm->rom_size*1048576);
    }
 
@@ -1371,6 +1380,7 @@ int c3600_init_platform(c3600_t *router)
 int c3600_boot_ios(c3600_t *router)
 {   
    vm_instance_t *vm = router->vm;
+   cpu_mips_t *cpu;
 
    if (!vm->boot_cpu)
       return(-1);
@@ -1385,10 +1395,11 @@ int c3600_boot_ios(c3600_t *router)
    }
 
    /* Reset the boot CPU */
-   mips64_reset(vm->boot_cpu);
+   cpu = CPU_MIPS64(vm->boot_cpu);
+   mips64_reset(cpu);
 
    /* Load IOS image */
-   if (mips64_load_elf_image(vm->boot_cpu,vm->ios_image,
+   if (mips64_load_elf_image(cpu,vm->ios_image,
                              (vm->ghost_status == VM_GHOST_RAM_USE),
                              &vm->ios_entry_point) < 0) 
    {
@@ -1399,11 +1410,11 @@ int c3600_boot_ios(c3600_t *router)
    /* Launch the simulation */
    printf("\nC3600 '%s': starting simulation (CPU0 PC=0x%llx), "
           "JIT %sabled.\n",
-          vm->name,vm->boot_cpu->pc,vm->jit_use ? "en":"dis");
+          vm->name,cpu->pc,vm->jit_use ? "en":"dis");
 
    vm_log(vm,"C3600_BOOT",
           "starting instance (CPU0 PC=0x%llx,idle_pc=0x%llx,JIT %s)\n",
-          vm->boot_cpu->pc,vm->boot_cpu->idle_pc,vm->jit_use ? "on":"off");
+          cpu->pc,cpu->idle_pc,vm->jit_use ? "on":"off");
 
    /* Start main CPU */
    if (vm->ghost_status != VM_GHOST_RAM_GENERATE) {
@@ -1440,7 +1451,7 @@ int c3600_init_instance(c3600_t *router)
    }
 
    /* Load ROM (ELF image or embedded) */
-   cpu0 = vm->boot_cpu;
+   cpu0 = CPU_MIPS64(vm->boot_cpu);
    rom_entry_point = (m_uint32_t)MIPS_ROM_PC;
 
    if ((vm->rom_filename != NULL) &&
