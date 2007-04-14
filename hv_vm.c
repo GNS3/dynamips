@@ -195,6 +195,22 @@ static int cmd_set_clock_divisor(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Enable/disable use of block direct jump (compatibility option) */
+static int cmd_set_blk_direct_jump(hypervisor_conn_t *conn,
+                                   int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   vm->exec_blk_direct_jump = atoi(argv[1]);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set the idle PC */
 static int cmd_set_idle_pc(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -683,6 +699,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_ram_mmap", 2, 2, cmd_set_ram_mmap, NULL },
    { "set_sparse_mem", 2, 2, cmd_set_sparse_mem, NULL },
    { "set_clock_divisor", 2, 2, cmd_set_clock_divisor, NULL },
+   { "set_blk_direct_jump", 2, 2, cmd_set_blk_direct_jump, NULL },
    { "set_exec_area", 2, 2, cmd_set_exec_area, NULL },
    { "set_disk0", 2, 2, cmd_set_disk0, NULL },
    { "set_disk1", 2, 2, cmd_set_disk1, NULL },

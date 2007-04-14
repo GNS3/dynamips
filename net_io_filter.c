@@ -26,7 +26,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+
+#ifdef GEN_ETH
 #include <pcap.h>
+#endif
 
 #include "registry.h"
 #include "net.h"
@@ -131,6 +134,7 @@ int netio_filter_setup(netio_desc_t *nio,int direction,int argc,char *argv[])
 /* Packet Capture ("capture")                                               */
 /* GFA                                                                      */
 /* ======================================================================== */
+#ifdef GEN_ETH
 
 /* Free resources used by filter */
 static void pf_capture_free(netio_desc_t *nio,void **opt)
@@ -229,6 +233,8 @@ static netio_pktfilter_t pf_capture_def = {
    NULL,
 };
 
+#endif
+
 /* ======================================================================== */
 /* Frequency Dropping ("freq_drop").                                        */
 /* ======================================================================== */
@@ -309,5 +315,7 @@ static netio_pktfilter_t pf_freqdrop_def = {
 void netio_filter_load_all(void)
 {
    netio_filter_add(&pf_freqdrop_def);
+#ifdef GEN_ETH
    netio_filter_add(&pf_capture_def);
+#endif
 }

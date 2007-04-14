@@ -19,12 +19,13 @@
 #include "memory.h"
 #include "device.h"
 #include "dev_vtty.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "dev_c2600.h"
 
 /* Debugging flags */
 #define DEBUG_UNKNOWN   1
 #define DEBUG_ACCESS    0
+#define DEBUG_NET_IRQ   0
 
 /* Definitions for Mainboard EEPROM */
 #define EEPROM_MB_DOUT  3
@@ -40,47 +41,80 @@
 
 #define C2691_NET_IRQ_CLEARING_DELAY  16
 
+/* Network IRQ distribution */
+static u_int net_irq_dist[C2600_MAX_NM_BAYS] = {
+   4,  /* reg 0x08, bits 4-5 */
+   0,  /* reg 0x08, bits 0-3 */
+};
+
 /* IO FPGA structure */
-struct iofpga_data {
+struct c2600_iofpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
    c2600_t *router;
    
-   /* 
-    * Used to introduce a "delay" before clearing the network interrupt
-    * on 3620/3640 platforms. Added due to a packet loss when using an 
-    * Ethernet NM on these platforms.
-    *
-    * Anyway, we should rely on the device information with appropriate IRQ
-    * routing.
-    */
-   int net_irq_clearing_count;
+   /* Network Interrupt status */
+   m_uint8_t net_irq_status;
 
-   /* Interrupt mask*/
+   /* Interrupt mask */
    m_uint16_t intr_mask;
 };
 
 /* Mainboard EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_mb_def = {
+static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
    EEPROM_MB_CLK, EEPROM_MB_CS,
    EEPROM_MB_DIN, EEPROM_MB_DOUT,
 };
 
 /* Mainboard EEPROM */
-static const struct nmc93c46_group eeprom_mb_group = {
-   1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+static const struct nmc93cX6_group eeprom_mb_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_nm_def = {
+static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
    EEPROM_NM_CLK, EEPROM_NM_CS,
    EEPROM_NM_DIN, EEPROM_NM_DOUT,
 };
 
 /* NM EEPROM */
-static const struct nmc93c46_group eeprom_nm_group = {
-   1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+static const struct nmc93cX6_group eeprom_nm_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
 };
+
+/* Update network interrupt status */
+static inline void dev_c2600_iofpga_net_update_irq(struct c2600_iofpga_data *d)
+{
+   if (d->net_irq_status) {
+      vm_set_irq(d->router->vm,C2600_NETIO_IRQ);
+   } else {
+      vm_clear_irq(d->router->vm,C2600_NETIO_IRQ);
+   }
+}
+
+/* Trigger a Network IRQ for the specified slot/port */
+void dev_c2600_iofpga_net_set_irq(struct c2600_iofpga_data *d,
+                                  u_int slot,u_int port)
+{
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","setting NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   d->net_irq_status |= 1 << (net_irq_dist[slot] + port);
+   dev_c2600_iofpga_net_update_irq(d);
+}
+
+/* Clear a Network IRQ for the specified slot/port */
+void dev_c2600_iofpga_net_clear_irq(struct c2600_iofpga_data *d,
+                                    u_int slot,u_int port)
+{
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","clearing NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   d->net_irq_status &= ~(1 << (net_irq_dist[slot] + port));
+   dev_c2600_iofpga_net_update_irq(d);
+}
 
 /*
  * dev_c2600_iofpga_access()
@@ -90,7 +124,7 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                         m_uint32_t offset,u_int op_size,u_int op_type,
                         m_uint64_t *data)
 {
-   struct iofpga_data *d = dev->priv_data;
+   struct c2600_iofpga_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -110,21 +144,19 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x04:
          if (op_type == MTS_READ)
             *data = 0x00;
-         //vm_clear_irq(cpu->vm,C2600_NETIO_IRQ);
          break;
 
       /* 
        * Network Interrupt.
        *
-       * Bit 0: slot 1.
+       * Bit 0-3: slot 1.
        * Bit 4: slot 0 (MB), port 0
        * Bit 5: slot 0 (MB), port 1
        * Other: AIM ? (error messages displayed)
        */
       case 0x08:
          if (op_type == MTS_READ)
-            *data = 0x31;
-         vm_clear_irq(cpu->vm,C2600_NETIO_IRQ);
+            *data = d->net_irq_status;
          break;
 
       case 0x10:
@@ -133,20 +165,27 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data = 0xFFFFFFFF;
          break;
 
-      /* Flash Related: 0x1y */
+      /* 
+       * Flash Related: 0x1y
+       * 
+       * Bit 1: card present in slot 0 / WIC 0.
+       * Bit 2: card present in slot 0 / WIC 1.
+       *
+       * Other bits unknown.
+       */
 #if 1
       case 0x0c:
          if (op_type == MTS_READ)
-            *data = 0x10;
+            *data = 0x10; //0x10;
          break;
 #endif
 
       /* NM EEPROM */
       case 0x1c:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->nm_eeprom_group,(u_int)(*data));
+            nmc93cX6_write(&d->router->nm_eeprom_group,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->nm_eeprom_group);
+            *data = nmc93cX6_read(&d->router->nm_eeprom_group);
          break;
 
 #if DEBUG_UNKNOWN
@@ -182,7 +221,8 @@ void c2600_init_eeprom_groups(c2600_t *router)
 }
 
 /* Shutdown the IO FPGA device */
-void dev_c2600_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
+static void 
+dev_c2600_iofpga_shutdown(vm_instance_t *vm,struct c2600_iofpga_data *d)
 {
    if (d != NULL) {
       /* Remove the device */
@@ -199,7 +239,7 @@ void dev_c2600_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
 int dev_c2600_iofpga_init(c2600_t *router,m_uint64_t paddr,m_uint32_t len)
 {
    vm_instance_t *vm = router->vm;
-   struct iofpga_data *d;
+   struct c2600_iofpga_data *d;
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {

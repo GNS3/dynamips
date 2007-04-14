@@ -21,6 +21,9 @@
 /* PPC instruction array */
 extern struct ppc32_insn_tag ppc32_insn_tags[];
 
+/* Virtual Breakpoint */
+void ppc32_emit_breakpoint(ppc32_jit_tcb_t *b);
+
 /* Push epilog for an x86 instruction block */
 void ppc32_jit_tcb_push_epilog(ppc32_jit_tcb_t *block);
 

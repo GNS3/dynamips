@@ -66,8 +66,28 @@
 #define DEC21140_CSR_NR  16
 
 /* CSR5: Status Register */
-#define DEC21140_CSR5_TI          0x00000001
-#define DEC21140_CSR5_RI          0x00000040
+#define DEC21140_CSR5_TI          0x00000001  /* TX Interrupt */
+#define DEC21140_CSR5_TPS         0x00000002  /* TX Process Stopped */
+#define DEC21140_CSR5_TU          0x00000004  /* TX Buffer Unavailable */
+#define DEC21140_CSR5_TJT         0x00000008  /* TX Jabber Timeout */
+#define DEC21140_CSR5_UNF         0x00000020  /* TX Underflow */
+#define DEC21140_CSR5_RI          0x00000040  /* RX Interrupt */
+#define DEC21140_CSR5_RU          0x00000080  /* RX Buffer Unavailable */
+#define DEC21140_CSR5_RPS         0x00000100  /* RX Process Stopped */
+#define DEC21140_CSR5_RWT         0x00000200  /* RX Watchdog Timeout */
+#define DEC21140_CSR5_GTE         0x00000800  /* Gen Purpose Timer Expired */
+#define DEC21140_CSR5_FBE         0x00002000  /* Fatal Bus Error */
+#define DEC21140_CSR5_AIS         0x00008000  /* Abnormal Interrupt Summary */
+#define DEC21140_CSR5_NIS         0x00010000  /* Normal Interrupt Summary */
+
+#define DEC21140_NIS_BITS \
+   (DEC21140_CSR5_TI|DEC21140_CSR5_RI|DEC21140_CSR5_TU)
+
+#define DEC21140_AIS_BITS \
+   (DEC21140_CSR5_TPS|DEC21140_CSR5_TJT|DEC21140_CSR5_UNF| \
+    DEC21140_CSR5_RU|DEC21140_CSR5_RPS|DEC21140_CSR5_RWT| \
+    DEC21140_CSR5_GTE|DEC21140_CSR5_FBE)
+
 #define DEC21140_CSR5_RS_SHIFT    17
 #define DEC21140_CSR5_TS_SHIFT    20
 
@@ -393,6 +413,36 @@ static void mii_newbit(struct dec21140_data *d,int newbit)
 #endif
 }
 
+/* Update the interrupt status */
+static inline void dev_dec21140_update_irq_status(struct dec21140_data *d)
+{
+   int trigger = FALSE;
+   m_uint32_t csr5;
+
+   /* Work on a temporary copy of csr5 */
+   csr5 = d->csr[5];
+   
+   /* Compute Interrupt Summary */
+   csr5 &= ~(DEC21140_CSR5_AIS|DEC21140_CSR5_NIS);
+
+   if (csr5 & DEC21140_NIS_BITS) {
+      csr5 |= DEC21140_CSR5_NIS;
+      trigger = TRUE;
+   }
+
+   if (csr5 & DEC21140_AIS_BITS) {
+      csr5 |= DEC21140_CSR5_AIS;
+      trigger = TRUE;
+   }
+
+   d->csr[5] = csr5;
+
+   if (trigger)
+      pci_dev_trigger_irq(d->vm,d->pci_dev);
+   else
+      pci_dev_clear_irq(d->vm,d->pci_dev);
+}
+
 /*
  * dev_dec21140_access()
  */
@@ -426,7 +476,7 @@ void *dev_dec21140_access(cpu_gen_t *cpu,struct vdevice *dev,
             if (d->csr[6] & DEC21140_CSR6_START_TX)
                *data |= 0x03 << DEC21140_CSR5_TS_SHIFT;
          
-            *data |= d->csr[5] & (DEC21140_CSR5_TI|DEC21140_CSR5_RI);
+            *data |= d->csr[5];
             break;
 
          case 8:
@@ -442,14 +492,18 @@ void *dev_dec21140_access(cpu_gen_t *cpu,struct vdevice *dev,
 #if DEBUG_CSR_REGS
       cpu_log(cpu,d->name,"write CSR%u value 0x%x\n",reg,(m_uint32_t)*data);
 #endif
-      d->csr[reg] = *data;
-
       switch(reg) {
          case 3:
+            d->csr[reg] = *data;
             d->rx_current = d->csr[reg];
             break;
          case 4:
+            d->csr[reg] = *data;
             d->tx_current = d->csr[reg];
+            break;
+         case 5:
+            d->csr[reg] &= ~(*data);
+            dev_dec21140_update_irq_status(d);
             break;
          case 9:
             /*
@@ -462,7 +516,9 @@ void *dev_dec21140_access(cpu_gen_t *cpu,struct vdevice *dev,
              *
              * Also it makes "sh contr f0/0" happy.
              */
-            if ((*data&~DEC21140_CSR9_TX_BIT) == (DEC21140_CSR9_MII_READ|
+            d->csr[reg] = *data;
+
+            if ((*data & ~DEC21140_CSR9_TX_BIT) == (DEC21140_CSR9_MII_READ|
                  DEC21140_CSR9_READ|DEC21140_CSR9_MDC_CLOCK)) {
                /*
                 * read, pop one bit from mii_outbits
@@ -480,6 +536,9 @@ void *dev_dec21140_access(cpu_gen_t *cpu,struct vdevice *dev,
                mii_newbit(d,(*data&DEC21140_CSR9_TX_BIT) ? 1 : 0);            
             }
             break;
+
+         default:
+            d->csr[reg] = *data;
       }
    }
 
@@ -647,9 +706,7 @@ static int dev_dec21140_receive_pkt(struct dec21140_data *d,
 
    /* Indicate that we have a frame ready */
    d->csr[5] |= DEC21140_CSR5_RI;
-
-   /* Generate IRQ on CPU */
-   pci_dev_trigger_irq(d->vm,d->pci_dev);
+   dev_dec21140_update_irq_status(d);
    return(TRUE);
 }
 
@@ -826,9 +883,9 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
    physmem_copy_u32_to_vm(d->vm,tx_start,0);
 
    /* Interrupt on completion ? */
-   if (!(txd0.tdes[1] & DEC21140_TXDESC_IC)) {
+   if (txd0.tdes[1] & DEC21140_TXDESC_IC) {
       d->csr[5] |= DEC21140_CSR5_TI;
-      pci_dev_trigger_irq(d->vm,d->pci_dev);
+      dev_dec21140_update_irq_status(d);
    }
    
    return(TRUE);

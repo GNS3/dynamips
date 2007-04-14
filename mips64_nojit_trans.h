@@ -27,25 +27,4 @@ void mips64_jit_tcb_push_epilog(mips64_jit_tcb_t *block);
 /* Execute JIT code */
 void mips64_jit_tcb_exec(cpu_mips_t *cpu,mips64_jit_tcb_t *block);
 
-/* Set the Pointer Counter (PC) register */
-void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc);
-
-/* Set the Return Address (RA) register */
-void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc);
-
-/* Virtual Breakpoint */
-void mips64_emit_breakpoint(mips64_jit_tcb_t *b);
-
-/* Emit unhandled instruction code */
-void mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b);
-
-/* 
- * Increment count register and trigger the timer IRQ if value in compare 
- * register is the same.
- */
-void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b);
-
-/* Increment the number of executed instructions (performance debugging) */
-void mips64_inc_perf_counter(mips64_jit_tcb_t *b);
-
 #endif

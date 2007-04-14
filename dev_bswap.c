@@ -43,8 +43,6 @@ static void *dev_bswap_access(cpu_gen_t *cpu,struct vdevice *dev,
 
    paddr = d->phys_base + offset;
 
-   //printf("access to paddr = 0x%llx\n",paddr);
-
    switch(op_size) {
       case 1:
          if (op_type == MTS_READ)

@@ -58,7 +58,7 @@ static int dev_c3725_nm_eth_init(c3725_t *router,char *name,u_int nm_bay,
       data->port[i] = dev_am79c971_init(router->vm,name,interface_type,
                                         router->nm_bay[nm_bay].pci_map,
                                         c3725_nm_get_pci_device(nm_bay),
-                                        C3725_NETIO_IRQ);
+                                        c3725_net_irq_for_slot_port(nm_bay,i));
    }
 
    /* Store device info into the router structure */
@@ -151,7 +151,7 @@ static int dev_c3725_nm_16esw_init(c3725_t *router,char *name,u_int nm_bay)
    data = dev_nm_16esw_init(router->vm,name,nm_bay,
                             router->nm_bay[nm_bay].pci_map,
                             c3725_nm_get_pci_device(nm_bay),
-                            C3725_NETIO_IRQ);
+                            c3725_net_irq_for_slot_port(nm_bay,0));
 
    /* Store device info into the router structure */
    return(c3725_nm_set_drvinfo(router,nm_bay,data));

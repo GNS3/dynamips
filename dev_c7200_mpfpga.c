@@ -1,6 +1,6 @@
 /* 
  * Cisco router simulation platform.
- * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
+ * Copyright (c) 2005-2007 Christophe Fillot (cf@utc.fr)
  *
  * Cisco c7200 Midplane FPGA.
  */
@@ -14,11 +14,12 @@
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "dev_c7200.h"
 
 #define DEBUG_UNKNOWN  1
 #define DEBUG_ACCESS   0
+#define DEBUG_NET_IRQ  0
 #define DEBUG_OIR      1
 
 /*
@@ -87,7 +88,7 @@
 #define BAY6_EEPROM_DOUT_BIT     22
 
 /* PA Bay EEPROM definitions */
-static const struct nmc93c46_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
+static const struct nmc93cX6_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
    /* Bay 0 */
    { BAY0_EEPROM_CLOCK_BIT , BAY0_EEPROM_SELECT_BIT,
      BAY0_EEPROM_DIN_BIT   , BAY0_EEPROM_DOUT_BIT,
@@ -125,8 +126,8 @@ static const struct nmc93c46_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
 };
 
 /* EEPROM group #1 (Bays 0, 1, 3, 4) */
-static const struct nmc93c46_group eeprom_bays_g1 = {
-   4, 0, "PA Bays (Group #1) EEPROM", FALSE,
+static const struct nmc93cX6_group eeprom_bays_g1 = {
+   EEPROM_TYPE_NMC93C46, 4, 0, "PA Bays (Group #1) EEPROM", FALSE,
 
    { &eeprom_bay_def[0], &eeprom_bay_def[1], 
      &eeprom_bay_def[3], &eeprom_bay_def[4],
@@ -134,24 +135,88 @@ static const struct nmc93c46_group eeprom_bays_g1 = {
 };
 
 /* EEPROM group #2 (Bays 2, 5, 6) */
-static const struct nmc93c46_group eeprom_bays_g2 = {
-   3, 0, "PA Bays (Group #2) EEPROM", FALSE,
+static const struct nmc93cX6_group eeprom_bays_g2 = {
+   EEPROM_TYPE_NMC93C46, 3, 0, "PA Bays (Group #2) EEPROM", FALSE,
 
    { &eeprom_bay_def[2], &eeprom_bay_def[5], &eeprom_bay_def[6] },
 };
 
+/* Network IRQ distribution */
+struct net_irq_distrib  {
+   u_int reg;
+   u_int offset;
+};
+
+static struct net_irq_distrib net_irq_dist[C7200_MAX_PA_BAYS] = {
+   { 0,  0 },  /* Slot 0: reg 0x10, 0x000000XX */
+   { 0,  8 },  /* Slot 1: reg 0x10, 0x0000XX00 */
+   { 1,  8 },  /* Slot 2: reg 0x18, 0x0000XX00 */
+   { 0, 24 },  /* Slot 3: reg 0x10, 0xXX000000 */
+   { 0, 16 },  /* Slot 4: reg 0x10, 0x00XX0000 */
+   { 1, 24 },  /* Slot 5: reg 0x18, 0xXX000000 */
+   { 1, 16 },  /* Slot 6: reg 0x18, 0x00XX0000 */
+};
+
 /* Midplane FPGA private data */
-struct mpfpga_data {
+struct c7200_mpfpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
 
    c7200_t *router;
    m_uint32_t pa_status_reg;
    m_uint32_t pa_ctrl_reg;
+
+   m_uint32_t net_irq_status[2];
+   m_uint32_t net_irq_mask[2];
 };
 
+/* Update network interrupt status */
+static inline void dev_c7200_mpfpga_net_update_irq(struct c7200_mpfpga_data *d)
+{
+   int status;
+
+   status = (d->net_irq_status[0] & d->net_irq_mask[0]) ||
+      (d->net_irq_status[1] & d->net_irq_mask[1]);
+   
+   if (status) {
+      vm_set_irq(d->router->vm,C7200_NETIO_IRQ);
+   } else {
+      vm_clear_irq(d->router->vm,C7200_NETIO_IRQ);
+   }
+}
+
+/* Trigger a Network IRQ for the specified slot/port */
+void dev_c7200_mpfpga_net_set_irq(struct c7200_mpfpga_data *d,
+                                  u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"MP_FPGA","setting NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   d->net_irq_status[irq_dist->reg] |= 1 << (irq_dist->offset + port);
+   dev_c7200_mpfpga_net_update_irq(d);
+}
+
+/* Clear a Network IRQ for the specified slot/port */
+void dev_c7200_mpfpga_net_clear_irq(struct c7200_mpfpga_data *d,
+                                    u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"MP_FPGA","clearing NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   d->net_irq_status[irq_dist->reg] &= ~(1 << (irq_dist->offset + port));
+   dev_c7200_mpfpga_net_update_irq(d);
+}
+
 /* Update Port Adapter Status */
-static void pa_update_status_reg(struct mpfpga_data *d)
+static void pa_update_status_reg(struct c7200_mpfpga_data *d)
 {
    m_uint32_t res = 0;
 
@@ -187,7 +252,7 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
-   struct mpfpga_data *d = dev->priv_data;
+   struct c7200_mpfpga_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -207,23 +272,42 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    }
 #endif
 
-   switch(offset) {      
-      case 0x10:  /* interrupt mask, should be done more efficiently */
+   switch(offset) {
+      /* Interrupt status for slots 0, 1, 3, 4 */
+      case 0x10:
       case 0x11:
       case 0x12:
       case 0x13:
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[0];
+         break;
+
+      /* Interrupt status for slots 2, 5, 6 */
+      case 0x18:
+      case 0x19:
+      case 0x1a:
+      case 0x1b:
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[1];
+         break;
+
+      /* Interrupt mask for slots 0, 1, 3, 4 */
+      case 0x20:
          if (op_type == MTS_READ) {
-            *data = 0xFFFFFFFF;
-            vm_clear_irq(d->router->vm,C7200_NETIO_IRQ);
+            *data = d->net_irq_mask[0];
+         } else {
+            d->net_irq_mask[0] = *data;
+            dev_c7200_mpfpga_net_update_irq(d);
          }
          break;
 
-      case 0x18:  /* interrupt mask, should be done more efficiently */
-      case 0x19:
-      case 0x1a:
+      /* Interrupt mask for slots 2, 5, 6 */
+      case 0x28:
          if (op_type == MTS_READ) {
-            *data = 0xFFFFFFFF;
-            vm_clear_irq(d->router->vm,C7200_NETIO_IRQ);
+            *data = d->net_irq_mask[1];
+         } else {
+            d->net_irq_mask[1] = *data;
+            dev_c7200_mpfpga_net_update_irq(d);
          }
          break;
 
@@ -311,16 +395,16 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       case 0x60:   /* EEPROM for PA in slots 0,1,3,4 */
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->pa_eeprom_g1,*data);
+            nmc93cX6_write(&d->router->pa_eeprom_g1,*data);
          else
-            *data = nmc93c46_read(&d->router->pa_eeprom_g1);
+            *data = nmc93cX6_read(&d->router->pa_eeprom_g1);
          break;
 
       case 0x68:   /* EEPROM for PA in slots 2,5,6 */
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->pa_eeprom_g2,*data);
+            nmc93cX6_write(&d->router->pa_eeprom_g2,*data);
          else
-            *data = nmc93c46_read(&d->router->pa_eeprom_g2);
+            *data = nmc93cX6_read(&d->router->pa_eeprom_g2);
          break;
 
       case 0x7b:  /* ??? */
@@ -359,7 +443,8 @@ static void init_eeprom_groups(c7200_t *router)
 }
 
 /* Shutdown the MP FPGA device */
-void dev_c7200_mpfpga_shutdown(vm_instance_t *vm,struct mpfpga_data *d)
+static void 
+dev_c7200_mpfpga_shutdown(vm_instance_t *vm,struct c7200_mpfpga_data *d)
 {
    if (d != NULL) {
       /* Remove the device */
@@ -370,12 +455,10 @@ void dev_c7200_mpfpga_shutdown(vm_instance_t *vm,struct mpfpga_data *d)
    }
 }
 
-/* 
- * dev_c7200_mpfpga_init()
- */
+/* Create the c7200 Midplane FPGA */
 int dev_c7200_mpfpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
 {   
-   struct mpfpga_data *d;
+   struct c7200_mpfpga_data *d;
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {

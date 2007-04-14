@@ -24,6 +24,7 @@
    abort(); \
 }
 
+EMPTY(void ppc32_emit_breakpoint(ppc32_jit_tcb_t *block));
 EMPTY(void ppc32_jit_tcb_push_epilog(ppc32_jit_tcb_t *block));
 EMPTY(void ppc32_jit_tcb_exec(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block));
 EMPTY(void ppc32_set_ia(ppc32_jit_tcb_t *b,m_uint32_t new_ia));

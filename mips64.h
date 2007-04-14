@@ -354,7 +354,7 @@ struct cpu_mips {
    m_uint64_t lo,hi,ret_pc;
    
    /* Code page translation cache */
-   mips64_jit_tcb_t **exec_phys_map;
+   mips64_jit_tcb_t **exec_blk_map;
 
    /* Virtual address to physical page translation */
    fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
@@ -434,6 +434,9 @@ struct cpu_mips {
 
    /* Fast memory operations use */
    u_int fast_memop;
+
+   /* Direct block jump */
+   u_int exec_blk_direct_jump;
 
    /* Address mode (32 or 64 bits) */
    u_int addr_mode;

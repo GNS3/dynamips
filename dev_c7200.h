@@ -28,7 +28,7 @@
 #include "net.h"
 #include "device.h"
 #include "pci_dev.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "dev_mv64460.h"
 #include "net_io.h"
 #include "vm.h"
@@ -65,6 +65,14 @@
 
 /* C7200 Error/OIR Interrupt */
 #define C7200_OIR_IRQ    6
+
+/* Network IRQ */
+#define C7200_NETIO_IRQ_BASE       32
+#define C7200_NETIO_IRQ_PORT_BITS  3
+#define C7200_NETIO_IRQ_PORT_MASK  ((1 << C7200_NETIO_IRQ_PORT_BITS) - 1)
+#define C7200_NETIO_IRQ_PER_SLOT   (1 << C7200_NETIO_IRQ_PORT_BITS)
+#define C7200_NETIO_IRQ_END        \
+    (C7200_NETIO_IRQ_BASE + (C7200_MAX_PA_BAYS * C7200_NETIO_IRQ_PER_SLOT) - 1)
 
 /* C7200 base ram limit (256 Mb) */
 #define C7200_BASE_RAM_LIMIT  256
@@ -194,6 +202,9 @@ struct c7200_router {
    /* MV64460 device for NPE-G2 */
    struct mv64460_data *mv64460_sysctr;
 
+   /* Midplane FPGA */
+   struct c7200_mpfpga_data *mpfpga_data;
+
    /* NPE and PA information */
    struct c7200_npe_driver *npe_driver;
    struct c7200_pa_bay pa_bay[C7200_MAX_PA_BAYS];
@@ -206,10 +217,10 @@ struct c7200_router {
    /* Midplane EEPROM can be modified to change the chassis MAC address... */
    struct cisco_eeprom cpu_eeprom,mp_eeprom,pem_eeprom;
 
-   struct nmc93c46_group sys_eeprom_g1;    /* EEPROMs for CPU and Midplane */
-   struct nmc93c46_group sys_eeprom_g2;    /* EEPROM for PEM */
-   struct nmc93c46_group pa_eeprom_g1;     /* EEPROMs for bays 0, 1, 3, 4 */
-   struct nmc93c46_group pa_eeprom_g2;     /* EEPROMs for bays 2, 5, 6 */
+   struct nmc93cX6_group sys_eeprom_g1;    /* EEPROMs for CPU and Midplane */
+   struct nmc93cX6_group sys_eeprom_g2;    /* EEPROM for PEM */
+   struct nmc93cX6_group pa_eeprom_g1;     /* EEPROMs for bays 0, 1, 3, 4 */
+   struct nmc93cX6_group pa_eeprom_g2;     /* EEPROMs for bays 2, 5, 6 */
 };
 
 /* Initialize EEPROM groups */
@@ -229,6 +240,9 @@ void c7200_save_config(c7200_t *router,FILE *fd);
 
 /* Save configurations of all C7200 instances */
 void c7200_save_config_all(FILE *fd);
+
+/* Get network IRQ for specified slot/port */
+u_int c7200_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Set PA EEPROM definition */
 int c7200_pa_set_eeprom(c7200_t *router,u_int pa_bay,
@@ -343,9 +357,6 @@ int c7200_pa_stop_online(c7200_t *router,u_int pa_bay);
 
 /* dev_c7200_iofpga_init() */
 int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
-
-/* dev_mpfpga_init() */
-int dev_c7200_mpfpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 
 /* PA drivers */
 extern struct c7200_pa_driver dev_c7200_iocard_fe_driver;

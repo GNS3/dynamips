@@ -57,7 +57,7 @@ static int dev_c2600_nm_eth_init(c2600_t *router,char *name,u_int nm_bay,
       data->port[i] = dev_am79c971_init(router->vm,name,interface_type,
                                         router->nm_bay[nm_bay].pci_map,
                                         i+(nm_bay * 4),
-                                        C2600_NETIO_IRQ);
+                                        c2600_net_irq_for_slot_port(nm_bay,i));
    }
 
    /* Store device info into the router structure */
@@ -216,7 +216,7 @@ static int dev_c2600_nm_16esw_init(c2600_t *router,char *name,u_int nm_bay)
    /* Create the device */
    data = dev_nm_16esw_init(router->vm,name,nm_bay,
                             router->nm_bay[nm_bay].pci_map,4,
-                            C2600_NETIO_IRQ);
+                            c2600_net_irq_for_slot_port(nm_bay,0));
 
    /* Store device info into the router structure */
    return(c2600_nm_set_drvinfo(router,nm_bay,data));

@@ -96,7 +96,7 @@
 #define MUESLIX_XYMEM_LEN     0x100
 
 /* Maximum packet size */
-#define MUESLIX_MAX_PKT_SIZE  2048
+#define MUESLIX_MAX_PKT_SIZE  18000
 
 /* Send up to 16 packets in a TX ring scan pass */
 #define MUESLIX_TXRING_PASS_COUNT  16
@@ -109,7 +109,7 @@
 #define MUESLIX_RXDESC_IGNORED    0x08000000  /* Ignored */
 #define MUESLIX_RXDESC_ABORT      0x04000000  /* Abort */
 #define MUESLIX_RXDESC_CRC        0x02000000  /* CRC error */
-#define MUESLIX_RXDESC_LEN_MASK   0xfff
+#define MUESLIX_RXDESC_LEN_MASK   0xffff
 
 /* TX descriptors */
 #define MUESLIX_TXDESC_OWN        0x80000000  /* Ownership */
@@ -121,7 +121,7 @@
 #define MUESLIX_TXDESC_PAD        0x00c00000  /* Sort of padding info ? */
 #define MUESLIX_TXDESC_PAD_SHIFT  22
 
-#define MUESLIX_TXDESC_LEN_MASK   0xfff
+#define MUESLIX_TXDESC_LEN_MASK   0xffff
 
 /* RX Descriptor */
 struct rx_desc {
@@ -140,9 +140,6 @@ typedef struct mueslix_data mueslix_data_t;
 struct mueslix_channel {
    /* Channel ID */
    u_int id;
-
-   /* RX/TX status */
-   u_int rx_tx_status;
 
    /* Channel status (0=disabled) */
    u_int status;
@@ -166,7 +163,14 @@ struct mueslix_channel {
 /* Mueslix Data */
 struct mueslix_data {
    char *name;
-   
+
+   /* Lock */
+   pthread_mutex_t lock;
+
+   /* IRQ status and mask */
+   m_uint32_t irq_status,irq_mask;
+   u_int irq_clearing_count;
+
    /* TPU options */
    m_uint32_t tpu_options;
 
@@ -204,6 +208,10 @@ static m_uint32_t channel_offset[MUESLIX_NR_CHANNELS] = {
    MUESLIX_CHANNEL2_OFFSET, MUESLIX_CHANNEL3_OFFSET,
 };
 
+/* Lock/Unlock primitives */
+#define MUESLIX_LOCK(d)    pthread_mutex_lock(&(d)->lock)
+#define MUESLIX_UNLOCK(d)  pthread_mutex_unlock(&(d)->lock)
+
 /* Log a Mueslix message */
 #define MUESLIX_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
@@ -212,6 +220,19 @@ static inline int dev_mueslix_is_rx_tx_enabled(struct mueslix_data *d,u_int id)
 {
    /* 2 bits for RX/TX, 4 channels max */
    return((d->channel_enable_mask >> (id << 1)) & 0x03);
+}
+
+/* Update IRQ status */
+static inline void dev_mueslix_update_irq_status(struct mueslix_data *d)
+{
+   if (d->irq_status & d->irq_mask)
+      pci_dev_trigger_irq(d->vm,d->pci_dev);
+   else {
+      if (++d->irq_clearing_count == 3) {
+         pci_dev_clear_irq(d->vm,d->pci_dev);
+         d->irq_clearing_count = 0;
+      }
+   }
 }
 
 /*
@@ -323,8 +344,6 @@ void *dev_mueslix_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct mueslix_data *d = dev->priv_data;
-   struct mueslix_channel *channel;
-   m_uint32_t irq_status;
    int i;
 
 #if DEBUG_ACCESS >= 2
@@ -361,52 +380,36 @@ void *dev_mueslix_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
       if ((offset >= channel_offset[i]) && 
           (offset < (channel_offset[i] + MUESLIX_CHANNEL_LEN)))
    {
+      MUESLIX_LOCK(d);
       dev_mueslix_chan_access(cpu,&d->channel[i],
                               offset - channel_offset[i],
                               op_size,op_type,data);
+      MUESLIX_UNLOCK(d);
       return NULL;
    }
+
+   MUESLIX_LOCK(d);
 
    /* Generic case */
    switch(offset) {
       /* this reg is accessed when an interrupt occurs */
       case 0x0:
          if (op_type == MTS_READ) {
-            irq_status = 0;
-
-            for(i=0;i<MUESLIX_NR_CHANNELS;i++) {
-               channel = &d->channel[i];
-
-               if ((dev_mueslix_is_rx_tx_enabled(d,i) & MUESLIX_TX_ENABLE) &&
-                   (channel->rx_tx_status & MUESLIX_CHANNEL_STATUS_RX))
-                  irq_status |= MUESLIX_RX_IRQ << i;
-
-               if ((dev_mueslix_is_rx_tx_enabled(d,i) & MUESLIX_TX_ENABLE) &&
-                   (channel->rx_tx_status & MUESLIX_CHANNEL_STATUS_TX))
-                  irq_status |= MUESLIX_TX_IRQ << i;
-            }
-
-            /* 
-             * Hack: we re-trigger an interrupt here. This was necessary
-             * because the Mueslix driver was not working properly with
-             * a C3620 platform.
-             */
-            if (irq_status)
-               pci_dev_trigger_irq(d->vm,d->pci_dev);   
-
-            *data = irq_status;
+            *data = d->irq_status;
          } else {
-            for(i=0;i<MUESLIX_NR_CHANNELS;i++) {
-               channel = &d->channel[i];
-               channel->rx_tx_status = 0;
-            }
+            d->irq_status &= ~(*data);
+            dev_mueslix_update_irq_status(d);
          }
          break;
 
-      /* maybe interrupt mask */
+      /* Maybe interrupt mask */
       case 0x10:
-         if (op_type == MTS_READ)
-            *data = 0x2FF;
+         if (op_type == MTS_READ) {
+            *data = d->irq_mask;
+         } else {
+            d->irq_mask = *data;
+            dev_mueslix_update_irq_status(d);
+         }
          break;
 
       case 0x14:
@@ -486,6 +489,7 @@ void *dev_mueslix_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #endif
    }
 
+   MUESLIX_UNLOCK(d);
    return NULL;
 }
 
@@ -654,24 +658,27 @@ static void dev_mueslix_receive_pkt(struct mueslix_channel *channel,
    /* Indicate that we have a frame ready (XXX something to do ?) */
 
    /* Generate IRQ on CPU */
-   channel->rx_tx_status |= MUESLIX_CHANNEL_STATUS_RX;
-   pci_dev_trigger_irq(d->vm,d->pci_dev);
+   d->irq_status |= MUESLIX_RX_IRQ << channel->id;
+   dev_mueslix_update_irq_status(d);
 }
 
 /* Handle the Mueslix RX ring of the specified channel */
 static int dev_mueslix_handle_rxring(netio_desc_t *nio,
                                      u_char *pkt,ssize_t pkt_len,
                                      struct mueslix_channel *channel)
-{
-#if DEBUG_RECEIVE
+{  
    struct mueslix_data *d = channel->parent;
 
+#if DEBUG_RECEIVE
    MUESLIX_LOG(d,"channel %u: receiving a packet of %d bytes\n",
                channel->id,pkt_len);
    mem_dump(log_file,pkt,pkt_len);
 #endif
 
-   dev_mueslix_receive_pkt(channel,pkt,pkt_len);
+   MUESLIX_LOCK(d);
+   if (dev_mueslix_is_rx_tx_enabled(d,channel->id) & MUESLIX_RX_ENABLE)
+      dev_mueslix_receive_pkt(channel,pkt,pkt_len);
+   MUESLIX_UNLOCK(d);
    return(TRUE);
 }
 
@@ -809,19 +816,28 @@ static int dev_mueslix_handle_txring_single(struct mueslix_channel *channel)
    physmem_copy_u32_to_vm(d->vm,tx_start,0);
 
    /* Interrupt on completion ? */
-   channel->rx_tx_status |= MUESLIX_CHANNEL_STATUS_TX;
-   pci_dev_trigger_irq(d->vm,d->pci_dev);   
+   d->irq_status |= MUESLIX_TX_IRQ << channel->id;
+   dev_mueslix_update_irq_status(d);
    return(TRUE);
 }
 
 /* Handle the TX ring of a specific channel */
 static int dev_mueslix_handle_txring(struct mueslix_channel *channel)
 {
-   int i;
+   struct mueslix_data *d = channel->parent;
+   int res,i;
 
-   for(i=0;i<MUESLIX_TXRING_PASS_COUNT;i++)
-      if (!dev_mueslix_handle_txring_single(channel))
+   if (!dev_mueslix_is_rx_tx_enabled(d,channel->id) & MUESLIX_TX_ENABLE)
+      return(FALSE);
+
+   for(i=0;i<MUESLIX_TXRING_PASS_COUNT;i++) {
+      MUESLIX_LOCK(d);
+      res = dev_mueslix_handle_txring_single(channel);
+      MUESLIX_UNLOCK(d);
+     
+      if (!res)
          break;
+   }
 
    return(TRUE);
 }
@@ -873,6 +889,7 @@ dev_mueslix_init(vm_instance_t *vm,char *name,int chip_mode,
    }
 
    memset(d,0,sizeof(*d));
+   pthread_mutex_init(&d->lock,NULL);
    d->chip_mode = chip_mode;
 
    for(i=0;i<MUESLIX_NR_CHANNELS;i++)

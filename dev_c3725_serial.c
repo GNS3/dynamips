@@ -41,7 +41,7 @@ int dev_c3725_nm_4t_init(c3725_t *router,char *name,u_int nm_bay)
    data = dev_mueslix_init(router->vm,name,0,
                            router->nm_bay[nm_bay].pci_map,
                            c3725_nm_get_pci_device(nm_bay),
-                           C3725_NETIO_IRQ);
+                           c3725_net_irq_for_slot_port(nm_bay,0));
 
    if (!data) return(-1);
 

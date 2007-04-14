@@ -60,7 +60,7 @@ static int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay)
    data = dev_dec21140_init(router->vm,name,
                             router->pa_bay[pa_bay].pci_map,
                             router->npe_driver->dec21140_pci_dev,
-                            C7200_NETIO_IRQ);
+                            c7200_net_irq_for_slot_port(pa_bay,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
@@ -119,7 +119,7 @@ static int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
 
    /* Create the DEC21140 chip */
    data = dev_dec21140_init(router->vm,name,router->pa_bay[pa_bay].pci_map,0,
-                            C7200_NETIO_IRQ);
+                            c7200_net_irq_for_slot_port(pa_bay,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
@@ -277,7 +277,7 @@ static int dev_c7200_pa_2fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
    for(i=0;i<data->nr_port;i++) {
       data->port[i] = dev_i8254x_init(router->vm,name,0,
                                       router->pa_bay[pa_bay].pci_map,i,
-                                      C7200_NETIO_IRQ);
+                                      c7200_net_irq_for_slot_port(pa_bay,i));
    }
 
    /* Store device info into the router structure */
@@ -323,7 +323,7 @@ static int dev_c7200_pa_ge_init(c7200_t *router,char *name,u_int pa_bay)
    /* Create the Intel i8254x chip */
    data->port[0] = dev_i8254x_init(router->vm,name,0,
                                    router->pa_bay[pa_bay].pci_map,0,
-                                   C7200_NETIO_IRQ);
+                                   c7200_net_irq_for_slot_port(pa_bay,0));
 
    /* Store device info into the router structure */
    return(c7200_pa_set_drvinfo(router,pa_bay,data));
@@ -385,12 +385,19 @@ static int dev_c7200_iocard_2fe_init(c7200_t *router,char *name,u_int pa_bay)
    /* Port Fa0/0 is on PCI Device 1 */
    data->port[0] = dev_i8254x_init(router->vm,name,0,
                                    router->pa_bay[pa_bay].pci_map,1,
-                                   C7200_NETIO_IRQ);
+                                   c7200_net_irq_for_slot_port(pa_bay,1));
 
    /* Port Fa0/1 is on PCI Device 0 */
    data->port[1] = dev_i8254x_init(router->vm,name,0,
                                    router->pa_bay[pa_bay].pci_map,0,
-                                   C7200_NETIO_IRQ);
+                                   c7200_net_irq_for_slot_port(pa_bay,0));
+
+   if (!data->port[0] || !data->port[1]) {
+      dev_i8254x_remove(data->port[0]);
+      dev_i8254x_remove(data->port[1]);
+      free(data);
+      return(-1);
+   }
 
    /* Store device info into the router structure */
    return(c7200_pa_set_drvinfo(router,pa_bay,data));
@@ -455,12 +462,12 @@ static int dev_c7200_iocard_ge_e_init(c7200_t *router,char *name,u_int pa_bay)
    /* Port Gi0/0 is on PCI Device 1 */
    data->port[0] = dev_i8254x_init(router->vm,name,0,
                                    router->pa_bay[pa_bay].pci_map,1,
-                                   C7200_NETIO_IRQ);
+                                   c7200_net_irq_for_slot_port(pa_bay,1));
 
    /* Port e0/0 is on PCI Device 0 */
    data->port[1] = dev_i8254x_init(router->vm,name,0,
                                    router->pa_bay[pa_bay].pci_map,0,
-                                   C7200_NETIO_IRQ);
+                                   c7200_net_irq_for_slot_port(pa_bay,0));
 
    /* Store device info into the router structure */
    return(c7200_pa_set_drvinfo(router,pa_bay,data));
@@ -513,7 +520,7 @@ static int dev_c7200_pa_4e_init(c7200_t *router,char *name,u_int pa_bay)
    for(i=0;i<data->nr_port;i++) {
       data->port[i] = dev_am79c971_init(router->vm,name,AM79C971_TYPE_10BASE_T,
                                         router->pa_bay[pa_bay].pci_map,i,
-                                        C7200_NETIO_IRQ);
+                                        c7200_net_irq_for_slot_port(pa_bay,i));
    }
 
    /* Store device info into the router structure */
@@ -547,7 +554,7 @@ static int dev_c7200_pa_8e_init(c7200_t *router,char *name,u_int pa_bay)
    for(i=0;i<data->nr_port;i++) {
       data->port[i] = dev_am79c971_init(router->vm,name,AM79C971_TYPE_10BASE_T,
                                         router->pa_bay[pa_bay].pci_map,i,
-                                        C7200_NETIO_IRQ);
+                                        c7200_net_irq_for_slot_port(pa_bay,i));
    }
 
    /* Store device info into the router structure */

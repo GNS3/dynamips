@@ -107,6 +107,15 @@ void vm_object_free_list(vm_instance_t *vm)
    vm->vm_object_list = NULL;
 }
 
+/* Rebuild the object list pointers */
+static void vm_object_rebuild_list(vm_instance_t *vm)
+{
+   vm_obj_t **obj;
+
+   for(obj=&vm->vm_object_list;*obj;obj=&(*obj)->next)
+      (*obj)->pprev = obj;
+}
+
 /* Dump the object list of an instance */
 void vm_object_dump(vm_instance_t *vm)
 {
@@ -145,6 +154,9 @@ char *vm_get_type(vm_instance_t *vm)
      case VM_TYPE_C2600:
          machine = "c2600";
          break;
+     case VM_TYPE_MSFC1:
+         machine = "msfc1";
+         break;
      case VM_TYPE_PPC32_TEST:
          machine = "ppc32_test";
          break;
@@ -180,7 +192,10 @@ char *vm_get_platform_type(vm_instance_t *vm)
       case VM_TYPE_C2600:
          machine = "C2600";
          break;
-     case VM_TYPE_PPC32_TEST:
+      case VM_TYPE_MSFC1:
+         machine = "MSFC1";
+         break;
+      case VM_TYPE_PPC32_TEST:
          machine = "PPC32_TEST";
          break;
       default:
@@ -372,14 +387,15 @@ vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
    }
    
    memset(vm,0,sizeof(*vm));
-   vm->instance_id    = instance_id;
-   vm->type           = machine_type;
-   vm->status         = VM_STATUS_HALTED;
-   vm->jit_use        = JIT_SUPPORT;
-   vm->vtty_con_type  = VTTY_TYPE_TERM;
-   vm->vtty_aux_type  = VTTY_TYPE_NONE;
-   vm->timer_irq_check_itv = VM_TIMER_IRQ_CHECK_ITV;
-   vm->log_file_enabled = TRUE;
+   vm->instance_id          = instance_id;
+   vm->type                 = machine_type;
+   vm->status               = VM_STATUS_HALTED;
+   vm->jit_use              = JIT_SUPPORT;
+   vm->exec_blk_direct_jump = TRUE;
+   vm->vtty_con_type        = VTTY_TYPE_TERM;
+   vm->vtty_aux_type        = VTTY_TYPE_NONE;
+   vm->timer_irq_check_itv  = VM_TIMER_IRQ_CHECK_ITV;
+   vm->log_file_enabled     = TRUE;
 
    if (!(vm->name = strdup(name))) {
       fprintf(stderr,"VM %s: unable to store instance name!\n",name);
@@ -591,7 +607,7 @@ int vm_unbind_device(vm_instance_t *vm,struct vdevice *dev)
 {
    u_int i;
 
-   if (!dev->pprev)
+   if (!dev || !dev->pprev)
       return(-1);
 
    /* Remove the device from the linked list */

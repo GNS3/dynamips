@@ -25,6 +25,78 @@
    static int ppc32_emit_##name(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, \
                                 ppc_insn_t insn)
 
+/* EFLAGS to Condition Register (CR) field - signed */
+static m_uint32_t eflags_to_cr_signed[256] = {
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+   0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+};
+
+/* EFLAGS to Condition Register (CR) field - unsigned */
+static m_uint32_t eflags_to_cr_unsigned[256] = {
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x04, 0x08, 0x04, 0x08, 0x04, 0x08, 0x04, 0x08,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+   0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a, 0x02, 0x0a,
+};
+
 /* Load a 32 bit immediate value */
 static inline void ppc32_load_imm(ppc32_jit_tcb_t *b,u_int reg,m_uint32_t val)
 {
@@ -46,6 +118,58 @@ void ppc32_set_lr(ppc32_jit_tcb_t *b,m_uint32_t new_lr)
    amd64_mov_membase_imm(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,lr),new_lr,4);
 }
 
+/* 
+ * Try to branch directly to the specified JIT block without returning to 
+ * main loop.
+ */
+static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
+                                      m_uint32_t new_ia)
+{
+   m_uint32_t new_page,ia_hash,ia_offset;
+   u_char *test1,*test2,*test3;
+
+   new_page = new_ia & PPC32_MIN_PAGE_MASK;
+   ia_offset = (new_ia & PPC32_MIN_PAGE_IMASK) >> 2;
+   ia_hash = ppc32_jit_get_ia_hash(new_ia);
+   
+   /* Get JIT block info in %rdx */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
+                         AMD64_R15,OFFSET(cpu_ppc_t,exec_blk_map),8);
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,
+                         AMD64_RBX,ia_hash*sizeof(void *),8);
+
+   /* no JIT block found ? */
+   amd64_test_reg_reg(b->jit_ptr,AMD64_RDX,AMD64_RDX);
+   test1 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+
+   /* Check block IA */
+   ppc32_load_imm(b,AMD64_RAX,new_page);
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_CMP,X86_EAX,AMD64_RDX,
+                              OFFSET(ppc32_jit_tcb_t,start_ia),4);
+   test2 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
+
+   /* Jump to the code */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RSI,
+                         AMD64_RDX,OFFSET(ppc32_jit_tcb_t,jit_insn_ptr),8);
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
+                         AMD64_RSI,ia_offset * sizeof(void *),8);
+   
+   amd64_test_reg_reg(b->jit_ptr,AMD64_RBX,AMD64_RBX);
+   test3 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   amd64_jump_reg(b->jit_ptr,AMD64_RBX);
+
+   /* Returns to caller... */
+   amd64_patch(test1,b->jit_ptr);
+   amd64_patch(test2,b->jit_ptr);
+   amd64_patch(test3,b->jit_ptr);
+
+   ppc32_set_ia(b,new_ia);
+   ppc32_jit_tcb_push_epilog(b);
+}
+
 /* Set Jump */
 static void ppc32_set_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                            m_uint32_t new_ia,int local_jump)
@@ -65,25 +189,15 @@ static void ppc32_set_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
          ppc32_jit_tcb_record_patch(b,b->jit_ptr,new_ia);
          amd64_jump32(b->jit_ptr,0);
       }
-   } else {
-      /* save PC */
-      ppc32_set_ia(b,new_ia);
-
-      /* address is in another block, for now, returns to caller */
-      ppc32_jit_tcb_push_epilog(b);
+   } else {   
+      if (cpu->exec_blk_direct_jump) {
+         /* Block lookup optimization */
+         ppc32_try_direct_far_jump(cpu,b,new_ia);
+      } else {
+         ppc32_set_ia(b,new_ia);
+         ppc32_jit_tcb_push_epilog(b);
+      }
    }
-}
-
-/* Load the Condition Register (CR) into the specified host register */
-static forced_inline void ppc32_load_cr(ppc32_jit_tcb_t *b,u_int host_reg)
-{
-   amd64_mov_reg_membase(b->jit_ptr,host_reg,AMD64_R15,OFFSET(cpu_ppc_t,cr),4);
-}
-
-/* Store the Condition Register (CR) from the specified host register */
-static forced_inline void ppc32_store_cr(ppc32_jit_tcb_t *b,u_int host_reg)
-{
-   amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,cr),host_reg,4);
 }
 
 /* Load a GPR into the specified host register */
@@ -110,47 +224,34 @@ static forced_inline void ppc32_alu_gpr(ppc32_jit_tcb_t *b,u_int op,
 
 /* 
  * Update CR from %eflags
- * %eax, %ecx, %edx, %esi are modified.
+ * %rax, %rdx, %rsi are modified.
  */
-#define PPC32_CR_LT_BIT  3
-#define PPC32_CR_GT_BIT  2
-#define PPC32_CR_EQ_BIT  1
-#define PPC32_CR_SO_BIT  0
-
 static void ppc32_update_cr(ppc32_jit_tcb_t *b,int field,int is_signed)
 {
-   m_uint32_t cr_mask;
-   u_int cfb;
+   /* Get status bits from EFLAGS */
+   amd64_pushfd_size(b->jit_ptr,8);
+   amd64_pop_reg(b->jit_ptr,AMD64_RAX);
+   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,0xFF);
 
-   cr_mask = 0xF0000000 >> (field << 2);
-   cfb = 28 - (field << 2);
+   if (is_signed)
+      amd64_mov_reg_imm_size(b->jit_ptr,AMD64_RDX,eflags_to_cr_signed,8);
+   else
+      amd64_mov_reg_imm_size(b->jit_ptr,AMD64_RDX,eflags_to_cr_unsigned,8);
 
-   amd64_set_reg(b->jit_ptr,X86_CC_LT,AMD64_RAX,is_signed);
-   amd64_set_reg(b->jit_ptr,X86_CC_GT,AMD64_RCX,is_signed);
-   amd64_set_reg(b->jit_ptr,X86_CC_Z,AMD64_RDX,is_signed);
+   amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RDX,0,AMD64_RAX,2,4);
 
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RAX,(cfb + PPC32_CR_LT_BIT));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RCX,(cfb + PPC32_CR_GT_BIT));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RDX,(cfb + PPC32_CR_EQ_BIT));
-
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,X86_EAX,X86_ECX);
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,X86_EAX,X86_EDX);
-
-   /* Load Condition Register */
-   ppc32_load_cr(b,AMD64_RDX);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RDX,~cr_mask);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,cr_mask);
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RDX,AMD64_RAX);
-
+#if 0
    /* Check XER Summary of Overflow and report it */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
                          AMD64_R15,OFFSET(cpu_ppc_t,xer),4);
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RCX,PPC32_XER_SO);
    amd64_shift_reg_imm(b->jit_ptr,X86_SHR,AMD64_RCX,(field << 2) + 3);
    amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RDX,AMD64_RCX);
+#endif
 
-   /* Store modified CR */
-   ppc32_store_cr(b,AMD64_RDX);
+   /* Store modified CR field */
+   amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,PPC32_CR_FIELD_OFFSET(field),
+                         AMD64_RAX,4);
 }
 
 /* 
@@ -328,7 +429,7 @@ static void ppc32_emit_memop_fast(ppc32_jit_tcb_t *b,int write_op,
    if (write_op) {
       amd64_test_membase_imm_size(b->jit_ptr,
                                   AMD64_RCX,OFFSET(mts32_entry_t,flags),
-                                  MTS_FLAG_COW,4);
+                                  MTS_FLAG_COW|MTS_FLAG_EXEC,4);
       test2 = b->jit_ptr;
       amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
    }
@@ -369,6 +470,13 @@ static void ppc32_emit_memop_fast(ppc32_jit_tcb_t *b,int write_op,
 
    amd64_patch(p_exit,b->jit_ptr);
    amd64_patch(p_exception,b->jit_ptr);
+}
+
+/* Virtual Breakpoint */
+void ppc32_emit_breakpoint(ppc32_jit_tcb_t *b)
+{
+   amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   ppc32_emit_c_call(b,ppc32_run_breakpoint);
 }
 
 /* Emit unhandled instruction code */
@@ -796,6 +904,7 @@ DECLARE_INSN(BCC)
    int bo = bits(insn,21,25);
    int bi = bits(insn,16,20);
    int bd = bits(insn,2,15);
+   u_int cr_field,cr_bit;
    m_uint32_t new_ia;
    u_char *jump_ptr;
    int local_jump;
@@ -814,8 +923,12 @@ DECLARE_INSN(BCC)
       new_ia += b->start_ia + ((b->ppc_trans_pos-1) << 2);
 
    /* Test the condition bit */
-   amd64_test_membase_imm_size(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,cr),
-                               (1 << (31 - bi)),4);
+   cr_field = ppc32_get_cr_field(bi);
+   cr_bit = ppc32_get_cr_bit(bi);
+
+   amd64_test_membase_imm_size(b->jit_ptr,
+                               AMD64_R15,PPC32_CR_FIELD_OFFSET(cr_field),
+                               (1 << cr_bit),4);
 
    local_jump = ppc32_jit_tcb_local_addr(b,new_ia,&jump_ptr);
 
@@ -846,6 +959,7 @@ DECLARE_INSN(BC)
    int bo = bits(insn,21,25);
    int bi = bits(insn,16,20);
    int bd = bits(insn,2,15);
+   u_int cr_field,cr_bit;
    m_uint32_t new_ia;
    u_char *jump_ptr;
    int local_jump;
@@ -875,8 +989,13 @@ DECLARE_INSN(BC)
 
    /* Test the condition bit */
    if (!((bo >> 4) & 0x01)) {
-      amd64_test_membase_imm_size(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,cr),
-                                  (1 << (31 - bi)),4);
+      cr_field = ppc32_get_cr_field(bi);
+      cr_bit = ppc32_get_cr_bit(bi);
+
+      amd64_test_membase_imm_size(b->jit_ptr,
+                                  AMD64_R15,PPC32_CR_FIELD_OFFSET(cr_field),
+                                  (1 << cr_bit),4);
+
       amd64_set_reg(b->jit_ptr,(cond) ? X86_CC_NZ : X86_CC_Z,AMD64_RCX,FALSE);
       amd64_alu_reg_reg(b->jit_ptr,X86_AND,AMD64_RAX,AMD64_RCX);
    }
@@ -912,6 +1031,7 @@ DECLARE_INSN(BCLR)
    int bo = bits(insn,21,25);
    int bi = bits(insn,16,20);
    int bd = bits(insn,2,15);
+   u_int cr_field,cr_bit;
    m_uint32_t new_ia;
    u_char *jump_ptr;
    int cond,ctr;
@@ -936,8 +1056,13 @@ DECLARE_INSN(BCLR)
 
    /* Test the condition bit */
    if (!((bo >> 4) & 0x01)) {
-      amd64_test_membase_imm_size(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,cr),
-                                  (1 << (31 - bi)),4);
+      cr_field = ppc32_get_cr_field(bi);
+      cr_bit = ppc32_get_cr_bit(bi);
+
+      amd64_test_membase_imm_size(b->jit_ptr,
+                                  AMD64_R15,PPC32_CR_FIELD_OFFSET(cr_field),
+                                  (1 << cr_bit),4);
+
       amd64_set_reg(b->jit_ptr,(cond) ? X86_CC_NZ : X86_CC_Z,AMD64_RCX,FALSE);
       amd64_alu_reg_reg(b->jit_ptr,X86_AND,AMD64_RAX,AMD64_RCX);
    }
@@ -1028,14 +1153,18 @@ DECLARE_INSN(CRAND)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of AND between $ba and $bb */
@@ -1043,11 +1172,16 @@ DECLARE_INSN(CRAND)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1058,14 +1192,18 @@ DECLARE_INSN(CRANDC)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_Z,AMD64_RBX,FALSE);
    
    /* result of AND between $ba and $bb */
@@ -1073,11 +1211,16 @@ DECLARE_INSN(CRANDC)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1088,14 +1231,18 @@ DECLARE_INSN(CREQV)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of XOR between $ba and $bb */
@@ -1104,11 +1251,16 @@ DECLARE_INSN(CREQV)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1119,14 +1271,18 @@ DECLARE_INSN(CRNAND)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of NAND between $ba and $bb */
@@ -1135,11 +1291,16 @@ DECLARE_INSN(CRNAND)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1150,14 +1311,18 @@ DECLARE_INSN(CRNOR)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of NOR between $ba and $bb */
@@ -1166,11 +1331,16 @@ DECLARE_INSN(CRNOR)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1181,14 +1351,18 @@ DECLARE_INSN(CROR)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of NOR between $ba and $bb */
@@ -1196,11 +1370,16 @@ DECLARE_INSN(CROR)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1211,14 +1390,18 @@ DECLARE_INSN(CRORC)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_Z,AMD64_RBX,FALSE);
    
    /* result of ORC between $ba and $bb */
@@ -1226,11 +1409,16 @@ DECLARE_INSN(CRORC)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1241,14 +1429,18 @@ DECLARE_INSN(CRXOR)
    int bb = bits(insn,16,20);
    int ba = bits(insn,11,15);
 
-   ppc32_load_cr(b,AMD64_RSI);
-
    /* test $ba bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - ba)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(ba)),
+                          (1 << ppc32_get_cr_bit(ba)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RAX,FALSE);
 
    /* test $bb bit */
-   amd64_test_reg_imm_size(b->jit_ptr,AMD64_RSI,(1 << (31 - bb)),4);
+   amd64_test_membase_imm(b->jit_ptr,
+                          AMD64_R15,
+                          PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bb)),
+                          (1 << ppc32_get_cr_bit(bb)));
    amd64_set_reg(b->jit_ptr,X86_CC_NZ,AMD64_RBX,FALSE);
    
    /* result of XOR between $ba and $bb */
@@ -1256,11 +1448,16 @@ DECLARE_INSN(CRXOR)
    amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x01);
    
    /* set/clear $bd bit depending on the result */
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RSI,~(1 << (31 - bd)));
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(31 - bd));
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RSI,AMD64_RBX);
+   amd64_alu_membase_imm_size(b->jit_ptr,X86_AND,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              ~(1 << ppc32_get_cr_bit(bd)),4);
 
-   ppc32_store_cr(b,AMD64_RSI);
+   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,ppc32_get_cr_bit(bd));
+   amd64_alu_membase_reg_size(b->jit_ptr,X86_OR,
+                              AMD64_R15,
+                              PPC32_CR_FIELD_OFFSET(ppc32_get_cr_field(bd)),
+                              AMD64_RBX,4);
    return(0);
 }
 
@@ -1528,23 +1725,14 @@ DECLARE_INSN(MCRF)
 {
    int rd = bits(insn,23,25);
    int rs = bits(insn,18,20);
-   m_uint32_t dmask;
 
-   /* %rax = %rbx = CR */
-   ppc32_load_cr(b,AMD64_RAX);
-   amd64_mov_reg_reg(b->jit_ptr,X86_EBX,X86_EAX,8);
+   /* Load "rs" field in %rdx */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,
+                         AMD64_R15,PPC32_CR_FIELD_OFFSET(rs),4);
 
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHR,AMD64_RBX,(28 - (rs << 2)));
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RBX,0x0F);
-   amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RBX,(28 - (rd << 2)));
-
-   /* clear the destination bits */
-   dmask = (0xF0000000 >> (rd << 2));
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,~dmask);
-
-   /* set the new field value */
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RAX,AMD64_RBX);
-   ppc32_store_cr(b,AMD64_RAX);
+   /* Store it in "rd" field */
+   amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,PPC32_CR_FIELD_OFFSET(rd),
+                         AMD64_RDX,4);
    return(0);
 }
 
@@ -1552,8 +1740,18 @@ DECLARE_INSN(MCRF)
 DECLARE_INSN(MFCR)
 {
    int rd = bits(insn,21,25);
+   int i;
+   
+   amd64_alu_reg_reg(b->jit_ptr,X86_XOR,AMD64_RAX,AMD64_RAX);
 
-   ppc32_load_cr(b,AMD64_RAX);
+   for(i=0;i<8;i++) {
+      /* load field in %rdx */
+      amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,
+                            AMD64_R15,PPC32_CR_FIELD_OFFSET(i),4);
+      amd64_shift_reg_imm(b->jit_ptr,X86_SHL,AMD64_RAX,4);
+      amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RAX,AMD64_RDX);
+   }
+
    ppc32_store_gpr(b,rd,AMD64_RAX);
    return(0);
 }
@@ -1586,21 +1784,22 @@ DECLARE_INSN(MTCRF)
 {
    int rs = bits(insn,21,25);
    int crm = bits(insn,12,19);
-   m_uint32_t mask = 0;
    int i;
 
-   for(i=0;i<8;i++)
-      if (crm & (1 << i))
-         mask |= 0xF << (i << 2);
-
-   ppc32_load_cr(b,AMD64_RAX);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,~mask);
-
    ppc32_load_gpr(b,AMD64_RDX,rs);
-   amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RDX,mask);
 
-   amd64_alu_reg_reg(b->jit_ptr,X86_OR,AMD64_RDX,AMD64_RAX);
-   ppc32_store_cr(b,AMD64_RDX);
+   for(i=0;i<8;i++)
+      if (crm & (1 << (7 - i))) {
+         amd64_mov_reg_reg(b->jit_ptr,AMD64_RAX,AMD64_RDX,8);
+
+         if (i != 7)
+            amd64_shift_reg_imm(b->jit_ptr,X86_SHR,AMD64_RAX,28 - (i << 2));
+
+         amd64_alu_reg_imm(b->jit_ptr,X86_AND,AMD64_RAX,0x0F);
+         amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,PPC32_CR_FIELD_OFFSET(i),
+                               AMD64_RAX,4);
+      }
+
    return(0);
 }
 
@@ -2397,4 +2596,5 @@ struct ppc32_insn_tag ppc32_insn_tags[] = {
    { ppc32_emit_XORI       , 0xfc000000 , 0x68000000 },
    { ppc32_emit_XORIS      , 0xfc000000 , 0x6c000000 },
    { ppc32_emit_unknown    , 0x00000000 , 0x00000000 },
+   { NULL                  , 0x00000000 , 0x00000000 },
 };

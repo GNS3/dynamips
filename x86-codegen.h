@@ -1075,6 +1075,15 @@ typedef union {
 		x86_memindex_emit ((inst), (dreg), (basereg), (disp), (indexreg), (shift));	\
 	} while (0)
 
+#define x86_lahf(inst)  do { *(inst)++ = (unsigned char)0x9f; } while (0)
+#define x86_sahf(inst)  do { *(inst)++ = (unsigned char)0x9e; } while (0)
+#define x86_xchg_ah_al(inst) \
+       do { \
+                *(inst)++ = (unsigned char)0x86; \
+                *(inst)++ = (unsigned char)0xe0; \
+       } while (0)
+
+
 #define x86_cdq(inst)  do { *(inst)++ = (unsigned char)0x99; } while (0)
 #define x86_wait(inst) do { *(inst)++ = (unsigned char)0x9b; } while (0)
 

@@ -56,8 +56,8 @@ static int dev_c2691_nm_eth_init(c2691_t *router,char *name,u_int nm_bay,
    /* Create the AMD Am971c971 chip(s) */
    for(i=0;i<data->nr_port;i++) {
       data->port[i] = dev_am79c971_init(router->vm,name,interface_type,
-                                        router->nm_bay[nm_bay].pci_map,
-                                        6,C2691_NETIO_IRQ);
+                                        router->nm_bay[nm_bay].pci_map,6+i,
+                                        c2691_net_irq_for_slot_port(nm_bay,i));
    }
 
    /* Store device info into the router structure */
@@ -148,8 +148,8 @@ static int dev_c2691_nm_16esw_init(c2691_t *router,char *name,u_int nm_bay)
 
    /* Create the device */
    data = dev_nm_16esw_init(router->vm,name,nm_bay,
-                            router->nm_bay[nm_bay].pci_map,
-                            6,C2691_NETIO_IRQ);
+                            router->nm_bay[nm_bay].pci_map,6,
+                            c2691_net_irq_for_slot_port(nm_bay,0));
 
    /* Store device info into the router structure */
    return(c2691_nm_set_drvinfo(router,nm_bay,data));

@@ -64,6 +64,7 @@ enum {
    VM_TYPE_C3725,
    VM_TYPE_C3745,
    VM_TYPE_C2600,
+   VM_TYPE_MSFC1,
    VM_TYPE_PPC32_TEST,
 };
 
@@ -144,11 +145,17 @@ struct vm_instance {
    /* Ghost RAM image handling */
    int ghost_status;
 
+   /* Timer IRQ interval check */
+   u_int timer_irq_check_itv;
+
    /* "idling" pointer counter */
    m_uint64_t idle_pc;
 
-   /* Timer IRQ interval check */
-   u_int timer_irq_check_itv;
+   /* JIT block direct jumps */
+   int exec_blk_direct_jump;
+
+   /* IRQ idling preemption */
+   u_int irq_idle_preempt[256];
 
    /* Console and AUX port VTTY type and parameters */
    int vtty_con_type,vtty_aux_type;
@@ -165,7 +172,7 @@ struct vm_instance {
    ssize_t (*nvram_extract_config)(vm_instance_t *vm,char **buffer);
    int (*nvram_push_config)(vm_instance_t *vm,char *buffer,size_t len);
 
-   /* Chassis cookie (for c2600 and maybe other routers */
+   /* Chassis cookie (for c2600 and maybe other routers) */
    m_uint16_t chassis_cookie[64];
 
    /* Specific hardware data */
@@ -181,6 +188,7 @@ struct vm_instance {
 #define VM_C3725(vm) ((c3725_t *)vm->hw_data)
 #define VM_C3745(vm) ((c3745_t *)vm->hw_data)
 #define VM_C2600(vm) ((c2600_t *)vm->hw_data)
+#define VM_MSFC1(vm) ((msfc1_t *)vm->hw_data)
 
 extern int vm_file_naming_type;
 

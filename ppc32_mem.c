@@ -180,13 +180,22 @@ static no_inline struct mts32_entry *
 ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
               mts32_entry_t *entry,mts32_entry_t *alt_entry)
 {
+   ppc32_jit_tcb_t *block;
    struct vdevice *dev;
    m_uint32_t offset;
    m_iptr_t host_ptr;
+   m_uint32_t exec_flag = 0;
    int cow;
 
    if (!(dev = dev_lookup(cpu->vm,map->paddr,map->cached)))
       return NULL;
+
+   if (cpu->exec_phys_map) {
+      block = ppc32_jit_find_by_phys_page(cpu,map->paddr >> VM_PAGE_SHIFT);
+
+      if (block)
+         exec_flag = MTS_FLAG_EXEC;
+   }
 
    if (dev->flags & VDEVICE_FLAG_SPARSE) {
       host_ptr = dev_sparse_get_host_addr(cpu->vm,dev,map->paddr,op_type,&cow);
@@ -195,6 +204,7 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
       entry->gppa  = map->paddr;
       entry->hpa   = host_ptr;
       entry->flags = (cow) ? MTS_FLAG_COW : 0;
+      entry->flags |= exec_flag;
       return entry;
    }
 
@@ -211,7 +221,7 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
    entry->gvpa  = map->vaddr;
    entry->gppa  = map->paddr;
    entry->hpa   = dev->host_addr + (map->paddr - dev->phys_addr);
-   entry->flags = 0;
+   entry->flags = exec_flag;
    return entry;
 }
 
@@ -369,7 +379,10 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                      u_int *exc)
 {   
    mts32_entry_t *entry,alt_entry;
+   ppc32_jit_tcb_t *block;
    m_uint32_t hash_bucket;
+   m_uint32_t phys_page;
+   m_uint32_t ia_hash;
    m_iptr_t haddr;
    u_int dev_id;
    int cow;
@@ -402,6 +415,28 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
          haddr  = entry->hpa & MTS_DEVOFF_MASK;
          haddr += vaddr - entry->gvpa;
          return(dev_access_fast(cpu->gen,dev_id,haddr,op_size,op_type,data));
+      }
+   }
+
+   /* Invalidate JIT code for written pages */
+   if ((op_type == MTS_WRITE) && (entry->flags & MTS_FLAG_EXEC)) {
+      if (cpu->exec_phys_map) {
+         phys_page = entry->gppa >> VM_PAGE_SHIFT;
+
+         if (vaddr >= PPC32_EXC_SYS_RST) {
+            block = ppc32_jit_find_by_phys_page(cpu,phys_page);
+
+            if (block != NULL) {
+               //printf("Invalidation of block 0x%8.8x\n",block->start_ia);
+               ia_hash = ppc32_jit_get_ia_hash(block->start_ia);
+               ppc32_jit_tcb_free(cpu,block,TRUE);
+
+               if (cpu->exec_blk_map[ia_hash] == block)
+                  cpu->exec_blk_map[ia_hash] = NULL;
+
+               entry->flags &= ~MTS_FLAG_EXEC;
+            }
+         }
       }
    }
 
@@ -869,29 +904,25 @@ fastcall u_int ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
 #endif
 
    if (!cpu->translate(cpu,vaddr,PPC32_MTS_ICACHE,&phys_page)) {
-      if ((phys_page < 1048576) && cpu->exec_phys_map) {
-         block = cpu->exec_phys_map[phys_page];
+      if (cpu->exec_phys_map) {
+         block = ppc32_jit_find_by_phys_page(cpu,phys_page);
 
-         if (block) {
-            if ((cpu->ia < block->start_ia) ||
-                ((cpu->ia - block->start_ia) >= PPC32_MIN_PAGE_SIZE))
-            {
+         if (block && ppc32_jit_tcb_match(cpu,block)) {
 #if DEBUG_ICBI
-               cpu_log(cpu->gen,"MTS",
-                       "ICBI: removing compiled page at 0x%8.8x, pc=0x%8.8x\n",
-                       block->start_ia,cpu->ia);
+            cpu_log(cpu->gen,"MTS",
+                    "ICBI: removing compiled page at 0x%8.8x, pc=0x%8.8x\n",
+                    block->start_ia,cpu->ia);
 #endif
-               cpu->exec_phys_map[phys_page] = NULL;
-               ppc32_jit_tcb_free(cpu,block,TRUE);
-            }
-            else
-            {
+            ppc32_jit_tcb_free(cpu,block,TRUE);
+            cpu->exec_blk_map[ppc32_jit_get_ia_hash(vaddr)] = NULL;
+         }
+         else
+         {
 #if DEBUG_ICBI
-               cpu_log(cpu->gen,"MTS",
-                       "ICBI: trying to remove page 0x%llx with pc=0x%llx\n",
-                       block->start_ia,cpu->ia);
+            cpu_log(cpu->gen,"MTS",
+                    "ICBI: trying to remove page 0x%llx with pc=0x%llx\n",
+                    block->start_ia,cpu->ia);
 #endif
-            }
          }
       }
    }

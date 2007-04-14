@@ -80,7 +80,7 @@
 
 /* IDMA buffer descriptor */
 struct mpc860_idma_bd {
-   m_uint16_t offset;   /* Offset in DPRAM memory */
+   m_uint16_t offset;      /* Offset in DPRAM memory */
 
    m_uint16_t ctrl;        /* Control Word */
    m_uint8_t  dfcr,sfcr;   /* Src/Dst Function code registers */
@@ -126,7 +126,7 @@ static inline m_uint8_t dpram_r8(struct mpc860_data *d,m_uint16_t offset)
 
 static inline void dpram_w8(struct mpc860_data *d,m_uint16_t offset,
                             m_uint8_t val)
-{
+{   
    d->dpram[offset] = val;
 }
 
@@ -141,7 +141,7 @@ static inline m_uint16_t dpram_r16(struct mpc860_data *d,m_uint16_t offset)
 
 static inline void dpram_w16(struct mpc860_data *d,m_uint16_t offset,
                              m_uint16_t val)
-{
+{  
    d->dpram[offset]   = val >> 8;
    d->dpram[offset+1] = val & 0xFF;
 }
@@ -285,7 +285,7 @@ static int mpc860_idma_start_channel(struct mpc860_data *d,u_int id)
 
       /* Clear the Valid bit */
       bd.ctrl &= ~MPC860_IDMA_CTRL_V;
-      dpram_w16(d,bd_offset+0x00,bd.ctrl);
+      dpram_w16(d,bd_offset-MPC860_DPRAM_OFFSET+0x00,bd.ctrl);
 
       /* Generate an interrupt for this buffer ? */
       if (bd.ctrl & MPC860_IDMA_CTRL_I)

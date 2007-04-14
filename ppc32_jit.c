@@ -53,7 +53,7 @@ void ppc32_jit_create_ilt(void)
    for(i=0,count=0;ppc32_insn_tags[i].emit;i++)
       count++;
 
-   ilt = ilt_create(count+1,
+   ilt = ilt_create("ppc32j",count,
                     (ilt_get_insn_cbk_t)ppc32_jit_get_insn,
                     (ilt_check_cbk_t)ppc32_jit_chk_lo,
                     (ilt_check_cbk_t)ppc32_jit_chk_hi);
@@ -68,8 +68,13 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
    size_t len;
    int i;
 
+   /* JIT mapping for executable pages */
+   len = PPC_JIT_IA_HASH_SIZE * sizeof(void *);
+   cpu->exec_blk_map = m_memalign(4096,len);
+   memset(cpu->exec_blk_map,0,len);
+
    /* Physical mapping for executable pages */
-   len = 1048576 * sizeof(void *);
+   len = PPC_JIT_PHYS_HASH_SIZE * sizeof(void *);
    cpu->exec_phys_map = m_memalign(4096,len);
    memset(cpu->exec_phys_map,0,len);
 
@@ -122,6 +127,7 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
 u_int ppc32_jit_flush(cpu_ppc_t *cpu,u_int threshold)
 {
    ppc32_jit_tcb_t *p,*next;
+   m_uint32_t ia_hash;
    u_int count = 0;
 
    if (!threshold)
@@ -131,8 +137,11 @@ u_int ppc32_jit_flush(cpu_ppc_t *cpu,u_int threshold)
       next = p->next;
 
       if (p->acc_count <= threshold) {
-         cpu->exec_phys_map[p->phys_page] = NULL;
+         ia_hash = ppc32_jit_get_ia_hash(p->start_ia);
          ppc32_jit_tcb_free(cpu,p,TRUE);
+
+         if (cpu->exec_blk_map[ia_hash] == p)
+            cpu->exec_blk_map[ia_hash] = NULL;
          count++;
       }
    }
@@ -162,8 +171,11 @@ void ppc32_jit_shutdown(cpu_ppc_t *cpu)
    /* Free the exec page array */
    free(cpu->exec_page_array);
 
+   /* Free JIT block mapping */
+   free(cpu->exec_blk_map);   
+
    /* Free physical mapping for executable pages */
-   free(cpu->exec_phys_map);   
+   free(cpu->exec_phys_map);
 }
 
 /* Allocate an exec page */
@@ -362,8 +374,7 @@ static void ppc32_jit_tcb_free_patches(ppc32_jit_tcb_t *block)
 }
 
 /* Adjust the JIT buffer if its size is not sufficient */
-static int ppc32_jit_tcb_adjust_buffer(cpu_ppc_t *cpu,
-                                       ppc32_jit_tcb_t *block)
+static int ppc32_jit_tcb_adjust_buffer(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
 {
    insn_exec_page_t *new_buffer;
 
@@ -427,6 +438,17 @@ void ppc32_jit_tcb_free(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block,
             block->prev->next = block->next;
          else
             cpu->tcb_list = block->next;
+
+         /* Remove the block from the physical mapping hash table */
+         if (block->phys_pprev) {
+            if (block->phys_next)
+               block->phys_next->phys_pprev = block->phys_pprev;
+            
+            *(block->phys_pprev) = block->phys_next;
+            
+            block->phys_pprev = NULL;
+            block->phys_next = NULL;
+         }
       }
 
       /* Free the patch tables */
@@ -441,8 +463,7 @@ void ppc32_jit_tcb_free(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block,
 
       /* Free the PowerPC-to-native code mapping */
       free(block->jit_insn_ptr);
-
-      /* Make the block return to the free list */
+      
       block->next = cpu->tcb_free_list;
       cpu->tcb_free_list = block;
    }
@@ -452,11 +473,17 @@ void ppc32_jit_tcb_free(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block,
 static ppc32_jit_tcb_t *ppc32_jit_tcb_create(cpu_ppc_t *cpu,m_uint32_t vaddr)
 {
    ppc32_jit_tcb_t *block = NULL;
+   m_uint32_t phys_page;
+
+   if (unlikely(cpu->translate(cpu,cpu->ia,PPC32_MTS_ICACHE,&phys_page)))
+      return NULL;
 
    if (!(block = ppc32_jit_tcb_alloc(cpu)))
       goto err_block_alloc;
 
    block->start_ia = vaddr;
+   block->phys_page = phys_page;
+   block->phys_hash = ppc32_jit_get_phys_hash(phys_page);   
 
    /* Allocate the first JIT buffer */
    if (!(block->jit_buffer = exec_page_alloc(cpu)))
@@ -542,6 +569,15 @@ ppc32_jit_tcb_t *ppc32_jit_tcb_compile(cpu_ppc_t *cpu,m_uint32_t vaddr)
 
    cpu->tcb_list = block;
    
+   /* Add the block to the physical mapping hash table */
+   block->phys_next = cpu->exec_phys_map[block->phys_hash];
+   block->phys_pprev = &cpu->exec_phys_map[block->phys_hash];
+
+   if (cpu->exec_phys_map[block->phys_hash] != NULL)
+      cpu->exec_phys_map[block->phys_hash]->phys_pprev = &block->phys_next;
+
+   cpu->exec_phys_map[block->phys_hash] = block;
+
    cpu->compiled_pages++;
    return block;
 
@@ -566,41 +602,16 @@ void ppc32_jit_tcb_run(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
    ppc32_jit_tcb_exec(cpu,block);
 }
 
-/* Check if the specified address belongs to the specified block */
-int ppc32_jit_tcb_local_addr(ppc32_jit_tcb_t *block,m_uint32_t vaddr,
-                             u_char **jit_addr)
-{
-   if ((vaddr >= block->start_ia) && 
-       ((vaddr - block->start_ia) < PPC32_MIN_PAGE_SIZE))
-   {
-      *jit_addr = ppc32_jit_tcb_get_host_ptr(block,vaddr);
-      return(1);
-   }
-
-   return(0);
-}
-
-/* Check if PC register matches the compiled block virtual address */
-static forced_inline 
-int ppc32_jit_tcb_match(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
-{
-   m_uint32_t vpage;
-
-   vpage = cpu->ia & ~PPC32_MIN_PAGE_IMASK;
-   return(block->start_ia == vpage);
-}
-
 /* Execute compiled PowerPC code */
 void *ppc32_jit_run_cpu(cpu_gen_t *gen)
 {    
    cpu_ppc_t *cpu = CPU_PPC32(gen);
    pthread_t timer_irq_thread;
    ppc32_jit_tcb_t *block;
-   m_uint32_t phys_page;
+   m_uint32_t ia_hash;
    int timer_irq_check = 0;
 
-   if (pthread_create(&timer_irq_thread,NULL,
-                      (void *)ppc32_timer_irq_run,cpu)) 
+   if (pthread_create(&timer_irq_thread,NULL,(void *)ppc32_timer_irq_run,cpu)) 
    {
       fprintf(stderr,
               "VM '%s': unable to create Timer IRQ thread for CPU%u.\n",
@@ -629,10 +640,6 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
          }
       }
 
-      /* Check IRQs */
-      if (unlikely(cpu->irq_check))
-         ppc32_trigger_irq(cpu);
-
       /* Handle the virtual CPU clock */
       if (++timer_irq_check == cpu->timer_irq_check_itv) {
          timer_irq_check = 0;
@@ -644,29 +651,27 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
             cpu->timer_irq_pending--;
 
             vm_set_irq(cpu->vm,0);
-            //ppc32_trigger_timer_irq(cpu);
          }
       }
 
-      /* Get the physical page address corresponding to PC register */
-      if (unlikely(cpu->translate(cpu,cpu->ia,PPC32_MTS_ICACHE,&phys_page))) {
-         fprintf(stderr,"VM '%s': no physical page for CPU%u PC=0x%8.8xx\n",
-                 cpu->vm->name,gen->id,cpu->ia);
-         cpu_stop(gen);
-         break;
-      }
+      /* Check IRQs */
+      if (unlikely(cpu->irq_check))
+         ppc32_trigger_irq(cpu);
 
-      block = cpu->exec_phys_map[phys_page];
+      /* Get the JIT block corresponding to IA register */
+      ia_hash = ppc32_jit_get_ia_hash(cpu->ia);
+      block = cpu->exec_blk_map[ia_hash];
 
       /* No block found, compile the page */
       if (unlikely(!block) || unlikely(!ppc32_jit_tcb_match(cpu,block))) 
       {
          if (block != NULL) {
             ppc32_jit_tcb_free(cpu,block,TRUE);
-            cpu->exec_phys_map[phys_page] = NULL;
+            cpu->exec_blk_map[ia_hash] = NULL;
          }
 
          block = ppc32_jit_tcb_compile(cpu,cpu->ia);
+
          if (unlikely(!block)) {
             fprintf(stderr,
                     "VM '%s': unable to compile block for CPU%u IA=0x%8.8x\n",
@@ -675,8 +680,7 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
             break;
          }
 
-         block->phys_page = phys_page;
-         cpu->exec_phys_map[phys_page] = block;
+         cpu->exec_blk_map[ia_hash] = block;
       }
 
 #if DEBUG_BLOCK_TIMESTAMP

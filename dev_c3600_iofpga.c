@@ -1,5 +1,5 @@
 /*
- * Cisco 3600 simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * TODO: Online Insertion/Removal (OIR).
@@ -21,12 +21,13 @@
 #include "memory.h"
 #include "device.h"
 #include "dev_vtty.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "dev_c3600.h"
 
 /* Debugging flags */
 #define DEBUG_UNKNOWN   1
 #define DEBUG_ACCESS    0
+#define DEBUG_NET_IRQ   0
 
 /* Definitions for Mainboard EEPROM */
 #define EEPROM_MB_DOUT  3
@@ -40,24 +41,43 @@
 #define EEPROM_NM_CLK   2
 #define EEPROM_NM_CS    4
 
-#define C3600_NET_IRQ_CLEARING_DELAY  16
+/* Network IRQ distribution */
+struct net_irq_distrib  {
+   u_int c3620_c3640_offset;
+   u_int c3660_reg;
+   u_int c3660_offset;
+};
+
+/* 
+ * Network IRQ distribution for c3620/c3640
+ *
+ *  Slot 0 | 3620/3640: reg 0x20001 | 3660: reg 0x20010, offset 0
+ *  Slot 1 | 3620/3640: reg 0x20000 | 3660: reg 0x10010, offset 24
+ *  Slot 2 | 3640     : reg 0x20003 | 3660: reg 0x10010, offset 16
+ *  Slot 3 | 3640     : reg 0x20002 | 3660: reg 0x10010, offset 28
+ *  Slot 4 | 3620/3640: N/A         | 3660: reg 0x10010, offset 20
+ *  Slot 5 | 3620/3640: N/A         | 3660: reg 0x10010, offset 8
+ *  Slot 6 | 3620/3640: N/A         | 3660: reg 0x10010, offset 0
+ */
+static struct net_irq_distrib net_irq_dist[C3600_MAX_NM_BAYS] = {
+   { 16, 1, 0  },
+   { 24, 0, 24 },
+   {  0, 0, 16 },
+   {  8, 0, 28 },
+   { 32, 0, 20 },
+   { 32, 0, 8  },
+   { 32, 0, 0  },
+};
 
 /* IO FPGA structure */
-struct iofpga_data {
+struct c3600_iofpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
    c3600_t *router;
    
-   /* 
-    * Used to introduce a "delay" before clearing the network interrupt
-    * on 3620/3640 platforms. Added due to a packet loss when using an 
-    * Ethernet NM on these platforms.
-    *
-    * Anyway, we should rely on the device information with appropriate IRQ
-    * routing.
-    */
-   int net_irq_clearing_count;
-   
+   /* Network IRQ status */
+   m_uint32_t net_irq_status[2];
+
    /* Slot select for EEPROM access */
    u_int eeprom_slot;
 
@@ -68,25 +88,25 @@ struct iofpga_data {
 };
 
 /* Mainboard EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_mb_def = {
+static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
    EEPROM_MB_CLK, EEPROM_MB_CS,
    EEPROM_MB_DIN, EEPROM_MB_DOUT,
 };
 
 /* Mainboard EEPROM */
-static const struct nmc93c46_group eeprom_mb_group = {
-   1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+static const struct nmc93cX6_group eeprom_mb_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_nm_def = {
+static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
    EEPROM_NM_CLK, EEPROM_NM_CS,
    EEPROM_NM_DIN, EEPROM_NM_DOUT,
 };
 
 /* NM EEPROM */
-static const struct nmc93c46_group eeprom_nm_group = {
-   1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+static const struct nmc93cX6_group eeprom_nm_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
 };
 
 /* C3660 NM presence masks */
@@ -100,13 +120,13 @@ static const m_uint16_t c3660_nm_masks[6] = {
 };
 
 /* Select the current NM EEPROM */
-static void nm_eeprom_select(struct iofpga_data *d,u_int slot)
+static void nm_eeprom_select(struct c3600_iofpga_data *d,u_int slot)
 {
    d->router->nm_eeprom_group.eeprom[0] = &d->router->nm_bay[slot].eeprom;
 }
 
 /* Return the NM status register given the detected EEPROM (3620/3640) */
-static u_int nm_get_status_1(struct iofpga_data *d)
+static u_int nm_get_status_1(struct c3600_iofpga_data *d)
 {
    u_int res = 0xFFFF;
    int i;
@@ -120,7 +140,7 @@ static u_int nm_get_status_1(struct iofpga_data *d)
 }
 
 /* Return the NM status register given the detected EEPROM (3660) */
-static u_int nm_get_status_2(struct iofpga_data *d,u_int pos)
+static u_int nm_get_status_2(struct c3600_iofpga_data *d,u_int pos)
 {
    u_int res = 0xFFFF;
    u_int start,end;
@@ -147,6 +167,81 @@ static u_int nm_get_status_2(struct iofpga_data *d,u_int pos)
    return(res);
 }
 
+/* Update network interrupt status */
+static inline void 
+dev_c3620_c3640_iofpga_net_update_irq(struct c3600_iofpga_data *d)
+{
+   if (d->net_irq_status[0]) {
+      vm_set_irq(d->router->vm,C3600_NETIO_IRQ);
+   } else {
+      vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
+   }
+}
+
+static inline void 
+dev_c3660_iofpga_net_update_irq(struct c3600_iofpga_data *d)
+{
+   if (d->net_irq_status[0] || d->net_irq_status[1]) {
+      vm_set_irq(d->router->vm,C3600_NETIO_IRQ);
+   } else {
+      vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
+   }
+}
+
+/* Trigger a Network IRQ for the specified slot/port */
+void dev_c3600_iofpga_net_set_irq(struct c3600_iofpga_data *d,
+                                  u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","setting NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+
+   irq_dist = &net_irq_dist[slot];
+
+   switch(c3600_chassis_get_id(d->router)) {
+      case 3620:
+      case 3640:
+         d->net_irq_status[0] |= (1 << (irq_dist->c3620_c3640_offset + port));
+         dev_c3620_c3640_iofpga_net_update_irq(d);
+         break;
+      case 3660:
+         d->net_irq_status[irq_dist->c3660_reg] |=
+            (1 << (irq_dist->c3660_offset + port));
+         dev_c3660_iofpga_net_update_irq(d);
+         break;
+   }
+}
+
+/* Clear a Network IRQ for the specified slot/port */
+void dev_c3600_iofpga_net_clear_irq(struct c3600_iofpga_data *d,
+                                    u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","clearing NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+
+   irq_dist = &net_irq_dist[slot];
+
+   switch(c3600_chassis_get_id(d->router)) {
+      case 3620:
+      case 3640:
+         d->net_irq_status[0] &= ~(1 << (irq_dist->c3620_c3640_offset + port));
+         dev_c3620_c3640_iofpga_net_update_irq(d);
+         break;
+      case 3660:
+         d->net_irq_status[irq_dist->c3660_reg] &=
+            ~(1 << (irq_dist->c3660_offset + port));
+         dev_c3660_iofpga_net_update_irq(d);
+         break;
+   }
+}
+
 /*
  * dev_c3620_c3640_iofpga_access()
  */
@@ -155,8 +250,7 @@ dev_c3620_c3640_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {
-   struct iofpga_data *d = dev->priv_data;
-   u_int slot;
+   struct c3600_iofpga_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -197,9 +291,9 @@ dev_c3620_c3640_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* Mainboard EEPROM */
       case 0x0000e:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->mb_eeprom_group,(u_int)(*data));
+            nmc93cX6_write(&d->router->mb_eeprom_group,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->mb_eeprom_group);
+            *data = nmc93cX6_read(&d->router->mb_eeprom_group);
          break;
 
       case 0x10004:  /* ??? OIR control ??? */
@@ -231,27 +325,28 @@ dev_c3620_c3640_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_WRITE) {
             d->eeprom_slot = *data & 0x03;
             nm_eeprom_select(d,d->eeprom_slot);
-            nmc93c46_write(&d->router->nm_eeprom_group,*data);
+            nmc93cX6_write(&d->router->nm_eeprom_group,*data);
          } else {
-            *data = nmc93c46_read(&d->router->nm_eeprom_group);
+            *data = nmc93cX6_read(&d->router->nm_eeprom_group);
          }
          break;
 
       /* Network interrupt status */
-      case 0x20000:
-      case 0x20001:
-      case 0x20002:
-      case 0x20003:
-         /* XXX This doesn't seem to be correct (at least on 3620) */
-         slot = offset - 0x20000;
-
+      case 0x20000:   /* slot 1 */
          if (op_type == MTS_READ)
-            *data = 0xFF;
-
-         if (++d->net_irq_clearing_count == C3600_NET_IRQ_CLEARING_DELAY) {
-            vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
-            d->net_irq_clearing_count = 0;
-         }
+            *data = d->net_irq_status[0] >> 24;
+         break;
+      case 0x20001:   /* slot 0 */
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[0] >> 16;
+         break;
+      case 0x20002:   /* slot 3 */
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[0] >> 8;
+         break;
+      case 0x20003:   /* slot 2 */
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[0];
          break;
 
       /* 
@@ -361,7 +456,7 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                         m_uint32_t offset,u_int op_size,u_int op_type,
                         m_uint64_t *data)
 {
-   struct iofpga_data *d = dev->priv_data;
+   struct c3600_iofpga_data *d = dev->priv_data;
    u_int slot;
 
    if (op_type == MTS_READ)
@@ -462,9 +557,9 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        */
       case 0x10000:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->mb_eeprom_group,(u_int)(*data));
+            nmc93cX6_write(&d->router->mb_eeprom_group,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->mb_eeprom_group) | 0x80;
+            *data = nmc93cX6_read(&d->router->mb_eeprom_group) | 0x80;
          break;
 
       /* NM EEPROMs - slots 1 to 6 */
@@ -477,20 +572,20 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          slot = (offset - 0x1000a) + 1;
 
          if (op_type == MTS_WRITE) {
-            nmc93c46_write(&d->router->c3660_nm_eeprom_group[slot],
+            nmc93cX6_write(&d->router->c3660_nm_eeprom_group[slot],
                            (u_int)(*data));
          } else {
-            *data = nmc93c46_read(&d->router->c3660_nm_eeprom_group[slot]);
+            *data = nmc93cX6_read(&d->router->c3660_nm_eeprom_group[slot]);
          }
          break;
 
       /* NM EEPROM - slot 0 */
       case 0x20006:
          if (op_type == MTS_WRITE) {
-            nmc93c46_write(&d->router->c3660_nm_eeprom_group[0],
+            nmc93cX6_write(&d->router->c3660_nm_eeprom_group[0],
                            (u_int)(*data));
          } else {
-            *data = nmc93c46_read(&d->router->c3660_nm_eeprom_group[0]);
+            *data = nmc93cX6_read(&d->router->c3660_nm_eeprom_group[0]);
          }
          break;
 
@@ -537,8 +632,7 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        */
       case 0x10010:
          if (op_type == MTS_READ)
-            *data = 0xFFFFFFFF;
-         vm_clear_irq(d->router->vm,C3600_NETIO_IRQ);
+            *data = d->net_irq_status[0];
          break;
 
       /* 
@@ -550,7 +644,7 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        */        
       case 0x20010:
          if (op_type == MTS_READ)
-            *data = 0x0F;
+            *data = d->net_irq_status[1];
          break;
 
       /* 
@@ -621,7 +715,8 @@ void c3600_init_eeprom_groups(c3600_t *router)
 }
 
 /* Shutdown the IO FPGA device */
-void dev_c3600_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
+static void 
+dev_c3600_iofpga_shutdown(vm_instance_t *vm,struct c3600_iofpga_data *d)
 {
    if (d != NULL) {
       /* Remove the device */
@@ -638,7 +733,7 @@ void dev_c3600_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
 int dev_c3600_iofpga_init(c3600_t *router,m_uint64_t paddr,m_uint32_t len)
 {
    vm_instance_t *vm = router->vm;
-   struct iofpga_data *d;
+   struct c3600_iofpga_data *d;
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {

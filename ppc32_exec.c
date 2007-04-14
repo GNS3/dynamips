@@ -51,7 +51,7 @@ void ppc32_exec_create_ilt(void)
    for(i=0,count=0;ppc32_exec_tags[i].exec;i++)
       count++;
 
-   ilt = ilt_create(count+1,
+   ilt = ilt_create("ppc32e",count,
                     (ilt_get_insn_cbk_t)ppc32_exec_get_insn,
                     (ilt_check_cbk_t)ppc32_exec_chk_lo,
                     (ilt_check_cbk_t)ppc32_exec_chk_hi);
@@ -103,6 +103,14 @@ static forced_inline int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
    return(0);
 }
 
+/* Unknown opcode */
+static fastcall int ppc32_exec_unknown(cpu_ppc_t *cpu,ppc_insn_t insn)
+{   
+   printf("PPC32: unknown opcode 0x%8.8x at ia = 0x%x\n",insn,cpu->ia);
+   ppc32_dump_regs(cpu->gen);
+   return(0);
+}
+
 /* Execute a single instruction */
 static forced_inline int 
 ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
@@ -120,18 +128,11 @@ ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
    tag = ppc32_exec_get_insn(index);
    exec = tag->exec;
 
-   if (likely(exec != NULL)) {
 #if NJM_STATS_ENABLE
-      cpu->insn_exec_count++;
-      ppc32_exec_tags[index].count++;
+   cpu->insn_exec_count++;
+   ppc32_exec_tags[index].count++;
 #endif
-      return(exec(cpu,instruction));
-   }
-
-   printf("PPC32: unknown opcode 0x%8.8x at ia = 0x%x\n",
-          instruction,cpu->ia);
-   ppc32_dump_regs(cpu->gen);
-   return(0);
+   return(exec(cpu,instruction));
 }
 
 /* Execute a single instruction (external) */
@@ -237,19 +238,18 @@ static forced_inline void ppc32_exec_update_cr0(cpu_ppc_t *cpu,m_uint32_t val)
    m_uint32_t res;
 
    if (val & 0x80000000)
-      res = PPC32_CR0_LT;
+      res = 1 << PPC32_CR_LT_BIT;
    else {
       if (val > 0)
-         res = PPC32_CR0_GT;
+         res = 1 << PPC32_CR_GT_BIT;
       else
-         res = PPC32_CR0_EQ;
+         res = 1 << PPC32_CR_EQ_BIT;
    }
 
    if (cpu->xer & PPC32_XER_SO)
-      res |= PPC32_CR0_SO;
+      res |= 1 << PPC32_CR_SO_BIT;
 
-   cpu->cr &= ~(PPC32_CR0_LT|PPC32_CR0_GT|PPC32_CR0_EQ|PPC32_CR0_SO);
-   cpu->cr |= res;
+   cpu->cr_fields[0] = res;
 }
 
 /* 
@@ -312,13 +312,15 @@ static forced_inline int ppc32_check_cond(cpu_ppc_t *cpu,m_uint32_t bo,
 {
    u_int ctr_ok = TRUE;
    u_int cond_ok;
+   u_int cr_bit;
 
    if (!(bo & 0x04)) {
       cpu->ctr--;
       ctr_ok = (cpu->ctr != 0) ^ ((bo >> 1) & 0x1);
    }
 
-   cond_ok = (bo >> 4) | (((cpu->cr >> (31 - bi)) ^ (~bo >> 3)) & 0x1);
+   cr_bit = ppc32_read_cr_bit(cpu,bi);
+   cond_ok = (bo >> 4) | ((cr_bit ^ (~bo >> 3)) & 0x1);
 
    return(ctr_ok & cond_ok);
 }
@@ -1005,9 +1007,8 @@ static fastcall int ppc32_exec_CMP(cpu_ppc_t *cpu,ppc_insn_t insn)
 
    if (cpu->xer & PPC32_XER_SO)
       res |= 0x01;
-   
-   cpu->cr &= ~(0xF0000000 >> (rd << 2));
-   cpu->cr |= res << (28 - (rd << 2));
+
+   cpu->cr_fields[rd] = res;
    return(0);
 }
 
@@ -1035,8 +1036,7 @@ static fastcall int ppc32_exec_CMPI(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (cpu->xer & PPC32_XER_SO)
       res |= 0x01;
    
-   cpu->cr &= ~(0xF0000000 >> (rd << 2));
-   cpu->cr |= res << (28 - (rd << 2));
+   cpu->cr_fields[rd] = res;
    return(0);
 }
 
@@ -1063,8 +1063,7 @@ static fastcall int ppc32_exec_CMPL(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (cpu->xer & PPC32_XER_SO)
       res |= 0x01;
 
-   cpu->cr &= ~(0xF0000000 >> (rd << 2));
-   cpu->cr |= res << (28 - (rd << 2));
+   cpu->cr_fields[rd] = res;
    return(0);
 }
 
@@ -1090,8 +1089,7 @@ static fastcall int ppc32_exec_CMPLI(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (cpu->xer & PPC32_XER_SO)
       res |= 0x01;
    
-   cpu->cr &= ~(0xF0000000 >> (rd << 2));
-   cpu->cr |= res << (28 - (rd << 2));
+   cpu->cr_fields[rd] = res;
    return(0);
 }
 
@@ -1125,13 +1123,13 @@ static fastcall int ppc32_exec_CRAND(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp &= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp &= ppc32_read_cr_bit(cpu,bb);
 
    if (tmp & 0x1)
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1144,13 +1142,13 @@ static fastcall int ppc32_exec_CREQV(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp ^= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp ^= ppc32_read_cr_bit(cpu,bb);
 
    if (!(tmp & 0x1))
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1163,13 +1161,13 @@ static fastcall int ppc32_exec_CRANDC(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp &= ~(cpu->cr >> (31 - bb));
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp &= ~ppc32_read_cr_bit(cpu,bb);
 
    if (tmp & 0x1)
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1182,13 +1180,13 @@ static fastcall int ppc32_exec_CRNAND(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp &= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp &= ppc32_read_cr_bit(cpu,bb);
 
    if (!(tmp & 0x1))
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1201,13 +1199,13 @@ static fastcall int ppc32_exec_CRNOR(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp |= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp |= ppc32_read_cr_bit(cpu,bb);
 
    if (!(tmp & 0x1))
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1220,13 +1218,13 @@ static fastcall int ppc32_exec_CROR(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp |= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp |= ppc32_read_cr_bit(cpu,bb);
 
    if (tmp & 0x1)
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1239,13 +1237,13 @@ static fastcall int ppc32_exec_CRORC(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp |= ~(cpu->cr >> (31 - bb));
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp |= ~ppc32_read_cr_bit(cpu,bb);
 
    if (tmp & 0x1)
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1258,13 +1256,13 @@ static fastcall int ppc32_exec_CRXOR(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ba = bits(insn,11,15);
    m_uint32_t tmp;
 
-   tmp =  cpu->cr >> (31 - ba);
-   tmp ^= cpu->cr >> (31 - bb);
+   tmp =  ppc32_read_cr_bit(cpu,ba);
+   tmp ^= ppc32_read_cr_bit(cpu,bb);
 
    if (tmp & 0x1)
-      cpu->cr |= 1 << (31 - bd);
+      ppc32_set_cr_bit(cpu,bd);
    else
-      cpu->cr &= ~(1 << (31 - bd));
+      ppc32_clear_cr_bit(cpu,bd);
 
    return(0);
 }
@@ -1940,16 +1938,8 @@ static fastcall int ppc32_exec_MCRF(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int rd = bits(insn,23,25);
    int rs = bits(insn,18,20);
-   m_uint32_t tmp,dmask;
 
-   tmp = (cpu->cr >> (28 - (rs << 2))) & 0xF;
-
-   /* clear the destination bits */
-   dmask = (0xF0000000 >> (rd << 2));
-   cpu->cr &= ~dmask;
-
-   /* set the new field value */
-   cpu->cr |= tmp << (28 - (rd << 2));
+   cpu->cr_fields[rd] = cpu->cr_fields[rs];
    return(0);
 }
 
@@ -1958,7 +1948,7 @@ static fastcall int ppc32_exec_MFCR(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int rd = bits(insn,21,25);
 
-   cpu->gpr[rd] = cpu->cr;
+   cpu->gpr[rd] = ppc32_get_cr(cpu);
    return(0);
 }
 
@@ -2100,14 +2090,12 @@ static fastcall int ppc32_exec_MTCRF(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int rs = bits(insn,21,25);
    int crm = bits(insn,12,19);
-   m_uint32_t mask = 0;
    int i;
    
    for(i=0;i<8;i++)
-      if (crm & (1 << i))
-         mask |= 0xF << (i << 2);
+      if (crm & (1 << (7 - i)))
+         cpu->cr_fields[i] = (cpu->gpr[rs] >> (28 - (i << 2))) & 0x0F;
 
-   cpu->cr = (cpu->gpr[rs] & mask) | (cpu->cr & ~mask);
    return(0);
 }
 
@@ -3058,18 +3046,17 @@ static fastcall int ppc32_exec_STWCX_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
       res = ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
       if (res != 0) return(res);
 
-      cpu->cr &= ~0xF0000000;
-      cpu->cr |= PPC32_CR0_EQ;
+      cpu->cr_fields[0] = 1 << PPC32_CR_EQ_BIT;
 
       if (cpu->xer & PPC32_XER_SO)
-         cpu->cr |= PPC32_CR0_SO;
+         cpu->cr_fields[0] |= 1 << PPC32_CR_SO_BIT;
 
       cpu->reserve = 0;
    } else {
-      cpu->cr &= ~0xF0000000;
+      cpu->cr_fields[0] = 0;
 
       if (cpu->xer & PPC32_XER_SO)
-         cpu->cr |= PPC32_CR0_SO;
+         cpu->cr_fields[0] |= 1 << PPC32_CR_SO_BIT;
    }
 
    return(0);
@@ -3847,5 +3834,8 @@ static struct ppc32_insn_exec_tag ppc32_exec_tags[] = {
    { "tlbre"   , ppc32_exec_TLBRE      , 0xfc0007ff , 0x7c000764, 0 },
    { "tlbwe"   , ppc32_exec_TLBWE      , 0xfc0007ff , 0x7c0007a4, 0 },
 
-   { NULL      , NULL                  , 0x00000000 , 0x00000000, 0 },
+   /* Unknown opcode fallback */
+   { "unknown" , ppc32_exec_unknown    , 0x00000000 , 0x00000000, 0 },
+
+   { NULL      , NULL, 0, 0, 0 },
 };

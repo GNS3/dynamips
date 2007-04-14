@@ -1,5 +1,5 @@
 /*
- * Cisco 3725 simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Generic Cisco 3725 routines and definitions (EEPROM,...).
@@ -22,6 +22,7 @@
 #include "cisco_eeprom.h"
 #include "dev_rom.h"
 #include "dev_c3725.h"
+#include "dev_c3725_iofpga.h"
 #include "dev_vtty.h"
 #include "registry.h"
 
@@ -328,6 +329,26 @@ static void c3725_reg_save_config(registry_entry_t *entry,void *opt,int *err)
 void c3725_save_config_all(FILE *fd)
 {
    registry_foreach_type(OBJ_TYPE_VM,c3725_reg_save_config,fd,NULL);
+}
+
+/* Get slot/port corresponding to specified network IRQ */
+static inline void 
+c3725_net_irq_get_slot_port(u_int irq,u_int *slot,u_int *port)
+{
+   irq -= C3725_NETIO_IRQ_BASE;
+   *port = irq & C3725_NETIO_IRQ_PORT_MASK;
+   *slot = irq >> C3725_NETIO_IRQ_PORT_BITS;
+}
+
+/* Get network IRQ for specified slot/port */
+u_int c3725_net_irq_for_slot_port(u_int slot,u_int port)
+{
+   u_int irq;
+
+   irq = (slot << C3725_NETIO_IRQ_PORT_BITS) + port;
+   irq += C3725_NETIO_IRQ_BASE;
+
+   return(irq);
 }
 
 /* Get PCI device for the specified NM bay */
@@ -699,7 +720,7 @@ int c3725_nm_init(c3725_t *router,u_int nm_bay)
    snprintf(bay->dev_name,len,"%s(%u)",bay->dev_type,nm_bay);
 
    /* Initialize NM driver */
-   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == 1) {
+   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == -1) {
       vm_error(router->vm,"unable to initialize NM %u.\n",nm_bay);
       return(-1);
    }
@@ -1022,7 +1043,7 @@ static int c3725_init_gt96100(c3725_t *router)
    }
    
    return(dev_gt96100_init(vm,"gt96100",C3725_GT96K_ADDR,0x200000,
-                           C3725_GT96K_IRQ,C3725_NETIO_IRQ));
+                           C3725_GT96K_IRQ,c3725_net_irq_for_slot_port(0,0)));
 }
 
 /* Initialize a Cisco 3725 */
@@ -1160,6 +1181,11 @@ int c3725_init_platform(c3725_t *router)
    if (dev_c3725_iofpga_init(router,C3725_IOFPGA_ADDR,0x40000) == -1)
       return(-1);
 
+   if (!(obj = vm_object_find(router->vm,"io_fpga")))
+      return(-1);
+
+   router->iofpga_data = obj->data;
+
 #if 0
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C3725_PCI_IO_ADDR)))
@@ -1264,6 +1290,47 @@ int c3725_boot_ios(c3725_t *router)
    return(0);
 }
 
+/* Set an IRQ */
+static void c3725_set_irq(vm_instance_t *vm,u_int irq)
+{
+   c3725_t *router = VM_C3725(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_set_irq(cpu0,irq);
+
+         if (cpu0->irq_idle_preempt[irq])
+            cpu_idle_break_wait(cpu0->gen);
+         break;
+
+      case C3725_NETIO_IRQ_BASE ... C3725_NETIO_IRQ_END:
+         c3725_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c3725_iofpga_net_set_irq(router->iofpga_data,slot,port);
+         break;
+   }
+}
+
+/* Clear an IRQ */
+static void c3725_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   c3725_t *router = VM_C3725(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_clear_irq(cpu0,irq);
+         break;
+
+      case C3725_NETIO_IRQ_BASE ... C3725_NETIO_IRQ_END:
+         c3725_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c3725_iofpga_net_clear_irq(router->iofpga_data,slot,port);
+         break;
+   }
+}
+
 /* Initialize a Cisco 3725 instance */
 int c3725_init_instance(c3725_t *router)
 {   
@@ -1281,6 +1348,10 @@ int c3725_init_instance(c3725_t *router)
       vm_error(vm,"unable to initialize the platform hardware.\n");
       return(-1);
    }
+
+   /* IRQ routing */
+   vm->set_irq = c3725_set_irq;
+   vm->clear_irq = c3725_clear_irq;
 
    /* Load IOS configuration file */
    if (vm->ios_config != NULL) {

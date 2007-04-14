@@ -40,7 +40,7 @@ int dev_c3745_nm_4t_init(c3745_t *router,char *name,u_int nm_bay)
    /* Create the Mueslix chip */
    data = dev_mueslix_init(router->vm,name,0,
                            router->nm_bay[nm_bay].pci_map,0,
-                           C3745_NETIO_IRQ);
+                           c3745_net_irq_for_slot_port(nm_bay,0));
 
    if (!data) return(-1);
 

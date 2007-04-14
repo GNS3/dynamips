@@ -57,6 +57,10 @@ void *dev_access_fast(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
       return NULL;
    }
 
+#if DEBUG_DEV_PERF_CNT
+   cpu->dev_access_counter++;
+#endif
+
    return(dev->handler(cpu,dev,offset,op_size,op_type,data));
 }
 

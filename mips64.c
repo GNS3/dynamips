@@ -68,7 +68,7 @@ int mips64_reset(cpu_mips_t *cpu)
    memset(&cpu->cp0.tlb,0,MIPS64_TLB_MAX_ENTRIES*sizeof(tlb_entry_t));
 
    /* Restart the MTS subsystem */
-   mips64_set_addr_mode(cpu,64);
+   mips64_set_addr_mode(cpu,32/*64*/);  /* zzz */
    cpu->gen->mts_rebuild(cpu->gen);
 
    /* Flush JIT structures */
@@ -93,6 +93,9 @@ int mips64_init(cpu_mips_t *cpu)
 
    /* Enable fast memory operations */
    cpu->fast_memop = TRUE;
+
+   /* Enable/Disable direct block jump */
+   cpu->exec_blk_direct_jump = cpu->vm->exec_blk_direct_jump;
 
    /* Create the IRQ lock (for non-jit architectures) */
    pthread_mutex_init(&cpu->irq_lock,NULL);
@@ -270,6 +273,20 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
              cpu->idle_pc_prop[0].pc);
    } else {
       printf("Done. No suggestion for idling PC\n");
+
+      for(i=0;i<IDLE_HASH_SIZE;i++)
+         for(p=pc_hash[i];p;p=p->next) {
+            printf("  0x%16.16llx (%3u)\n",p->pc,p->count);
+
+            if (cpu->idle_pc_prop_count < CPU_IDLE_PC_MAX_RES) {
+               res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
+
+               res->pc    = p->pc;
+               res->count = p->count;
+            }
+         }
+       
+      printf("\n");
    }
 
    /* Re-enable IRQ */
@@ -622,6 +639,7 @@ void mips64_dump_regs(cpu_gen_t *cpu)
    printf("  Timer IRQ count: %llu, pending: %u, timer drift: %u\n\n",
           mcpu->timer_irq_count,mcpu->timer_irq_pending,mcpu->timer_drift);
 
+   printf("  Device access count: %llu\n",cpu->dev_access_counter);
    printf("\n");
 }
 

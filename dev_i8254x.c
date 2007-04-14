@@ -2,7 +2,7 @@
  * Cisco router simulation platform.
  * Copyright (C) 2007 Christophe Fillot.  All rights reserved.
  *
- * Intel i8254x (Livengood) FastEthernet chip emulation.
+ * Intel i8254x (Wiseman/Livengood) Ethernet chip emulation.
  */
 
 #include <stdio.h>
@@ -27,10 +27,10 @@
 
 /* Debugging flags */
 #define DEBUG_MII_REGS   0
-#define DEBUG_ACCESS     1
+#define DEBUG_ACCESS     0
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
-#define DEBUG_UNKNOWN    1
+#define DEBUG_UNKNOWN    0
 
 /* Intel i8254x PCI vendor/product codes */
 #define I8254X_PCI_VENDOR_ID    0x8086
@@ -68,8 +68,6 @@
 #define I8254X_REG_RDLEN     0x2808  /* RX Descriptor Length */
 #define I8254X_REG_RDH       0x2810  /* RX Descriptor Head */
 #define I8254X_REG_RDT       0x2818  /* RX Descriptor Tail */
-#define I82542_REG_RDH       0x0120  /* RDH for i82542 */
-#define I82542_REG_RDT       0x0128  /* RDT for i82542 */
 #define I8254X_REG_RDTR      0x2820  /* RX Delay Timer Register */
 #define I8254X_REG_RXDCTL    0x3828  /* RX Descriptor Control */
 #define I8254X_REG_RADV      0x282c  /* RX Int. Absolute Delay Timer */
@@ -81,8 +79,6 @@
 #define I8254X_REG_TDLEN     0x3808  /* TX Descriptor Length */
 #define I8254X_REG_TDH       0x3810  /* TX Descriptor Head */
 #define I8254X_REG_TDT       0x3818  /* TX Descriptor Tail */
-#define I82542_REG_TDH       0x0430  /* TDH for i82542 */
-#define I82542_REG_TDT       0x0438  /* TDT for i82542 */
 #define I8254X_REG_TIDV      0x3820  /* TX Interrupt Delay Value */
 #define I8254X_REG_TXDCTL    0x3828  /* TX Descriptor Control */
 #define I8254X_REG_TADV      0x382c  /* TX Absolute Interrupt Delay Value */
@@ -90,6 +86,18 @@
 
 #define I8254X_REG_RXCSUM    0x5000  /* RX Checksum Control */
 
+/* Register list for i8254x */
+#define I82542_REG_RDTR      0x0108  /* RX Delay Timer Register */
+#define I82542_REG_RDBAL     0x0110  /* RX Descriptor Base Address Low */
+#define I82542_REG_RDBAH     0x0114  /* RX Descriptor Base Address High */
+#define I82542_REG_RDLEN     0x0118  /* RX Descriptor Length */
+#define I82542_REG_RDH       0x0120  /* RDH for i82542 */
+#define I82542_REG_RDT       0x0128  /* RDT for i82542 */
+#define I82542_REG_TDBAL     0x0420  /* TX Descriptor Base Address Low */
+#define I82542_REG_TDBAH     0x0424  /* TX Descriptor Base Address Low */
+#define I82542_REG_TDLEN     0x0428  /* TX Descriptor Length */
+#define I82542_REG_TDH       0x0430  /* TDH for i82542 */
+#define I82542_REG_TDT       0x0438  /* TDT for i82542 */
 
 /* CTRL - Control Register (0x0000) */
 #define I8254X_CTRL_FD               0x00000001  /* Full Duplex */
@@ -275,6 +283,12 @@ struct i8254x_data {
    /* Extended Control Register */
    m_uint32_t ctrl_ext;
 
+   /* Flow Control registers */
+   m_uint32_t fcal,fcah,fct;
+
+   /* RX Delay Timer */
+   m_uint32_t rdtr;
+
    /* RX/TX Control Registers */
    m_uint32_t rctl,tctl;
 
@@ -342,7 +356,7 @@ static m_uint16_t mii_reg_read(struct i8254x_data *d)
       case 0x05:
          return(0x41e1);
       case 0x06:
-         return(0x1);
+         return(0x0001);
       case 0x11:
          return(0x4700);
       default:
@@ -463,6 +477,8 @@ static inline void dev_i8254x_update_irq_status(struct i8254x_data *d)
 {
    if (d->icr & d->imr)
       pci_dev_trigger_irq(d->vm,d->pci_dev);
+   else
+      pci_dev_clear_irq(d->vm,d->pci_dev);
 }
 
 /* Compute RX buffer size */
@@ -532,10 +548,17 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
    LVG_LOCK(d);
 
    switch(offset) {
+#if 0 /* TODO */
+      case 0x180:
+         if (op_type == MTS_READ)
+            *data = 0xDC004020; //1 << 31;
+         break;
+#endif
+
       /* Link is Up and Full Duplex */
       case I8254X_REG_STATUS:
          if (op_type == MTS_READ)
-            *data = I8254X_STATUS_LU | I8254X_STATUS_FD ;
+            *data = I8254X_STATUS_LU | I8254X_STATUS_FD;
          break;
 
       /* Device Control Register */
@@ -643,6 +666,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* RX Descriptor Base Address Low */
       case I8254X_REG_RDBAL:
+      case I82542_REG_RDBAL:
          if (op_type == MTS_WRITE) {
             d->rx_addr &= 0xFFFFFFFF00000000ULL;
             d->rx_addr |= (m_uint32_t)(*data);
@@ -653,6 +677,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* RX Descriptor Base Address High */
       case I8254X_REG_RDBAH:
+      case I82542_REG_RDBAH:
          if (op_type == MTS_WRITE) {
             d->rx_addr &= 0x00000000FFFFFFFFULL;
             d->rx_addr |= *data << 32;
@@ -663,6 +688,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* TX Descriptor Base Address Low */
       case I8254X_REG_TDBAL:
+      case I82542_REG_TDBAL:
          if (op_type == MTS_WRITE) {
             d->tx_addr &= 0xFFFFFFFF00000000ULL;
             d->tx_addr |= (m_uint32_t)(*data);
@@ -673,6 +699,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* TX Descriptor Base Address High */
       case I8254X_REG_TDBAH:
+      case I82542_REG_TDBAH:
          if (op_type == MTS_WRITE) {
             d->tx_addr &= 0x00000000FFFFFFFFULL;
             d->tx_addr |= *data << 32;
@@ -683,6 +710,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
       
       /* RX Descriptor Length */
       case I8254X_REG_RDLEN:
+      case I82542_REG_RDLEN:
          if (op_type == MTS_WRITE)
             d->rdlen = *data & 0xFFF80;
          else
@@ -691,6 +719,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* TX Descriptor Length */
       case I8254X_REG_TDLEN:
+      case I82542_REG_TDLEN:
          if (op_type == MTS_WRITE)
             d->tdlen = *data & 0xFFF80;
          else
@@ -731,6 +760,39 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
             d->tdt = *data & 0xFFFF;
          else
             *data = d->tdt;
+         break;
+
+      /* Flow Control Address Low */
+      case I8254X_REG_FCAL:
+         if (op_type == MTS_WRITE)
+            d->fcal = *data;
+         else
+            *data = d->fcal;
+         break;
+
+      /* Flow Control Address High */
+      case I8254X_REG_FCAH:
+         if (op_type == MTS_WRITE)
+            d->fcah = *data & 0xFFFF;
+         else
+            *data = d->fcah;
+         break;
+
+      /* Flow Control Type */
+      case I8254X_REG_FCT:
+         if (op_type == MTS_WRITE)
+            d->fct = *data & 0xFFFF;
+         else
+            *data = d->fct;
+         break;
+
+      /* RX Delay Timer */
+      case I8254X_REG_RDTR:
+      case I82542_REG_RDTR:
+         if (op_type == MTS_WRITE)
+            d->rdtr = *data & 0xFFFF;
+         else
+            *data = d->rdtr;
          break;
 
 #if DEBUG_UNKNOWN
@@ -962,7 +1024,7 @@ static m_uint32_t pci_i8254x_read(cpu_gen_t *cpu,struct pci_device *dev,
       case 0x00:
          return((I8254X_PCI_PRODUCT_ID << 16) | I8254X_PCI_VENDOR_ID);
       case 0x08:
-         return(0x02000002);
+         return(0x02000003);
       case PCI_REG_BAR0:
          return(d->dev->phys_addr);
       default:

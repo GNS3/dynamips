@@ -217,7 +217,7 @@ void physmem_copy_u32_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t val)
    m_uint64_t tmp = val;
    m_uint32_t *ptr;
 
-   if ((ptr = physmem_get_hptr(vm,paddr,4,MTS_WRITE,&tmp)) != NULL)   
+   if ((ptr = physmem_get_hptr(vm,paddr,4,MTS_WRITE,&tmp)) != NULL)
       *ptr = htovm32(val);
 }
 

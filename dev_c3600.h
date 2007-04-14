@@ -14,7 +14,7 @@
 #include "net.h"
 #include "device.h"
 #include "pci_dev.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -47,6 +47,14 @@
 
 /* C3600 NM Management Interrupt handler */
 #define C3600_NM_MGMT_IRQ  3
+
+/* Network IRQ */
+#define C3600_NETIO_IRQ_BASE       32
+#define C3600_NETIO_IRQ_PORT_BITS  2
+#define C3600_NETIO_IRQ_PORT_MASK  ((1 << C3600_NETIO_IRQ_PORT_BITS) - 1)
+#define C3600_NETIO_IRQ_PER_SLOT   (1 << C3600_NETIO_IRQ_PORT_BITS)
+#define C3600_NETIO_IRQ_END        \
+    (C3600_NETIO_IRQ_BASE + (C3600_MAX_NM_BAYS * C3600_NETIO_IRQ_PER_SLOT) - 1)
 
 /* C3600 common device addresses */
 #define C3600_GT64K_ADDR      0x14000000ULL
@@ -141,6 +149,9 @@ struct c3600_router {
    /* IO memory size to be passed to Smart Init */
    u_int nm_iomem_size;
 
+   /* I/O FPGA */
+   struct c3600_iofpga_data *iofpga_data;
+
    /* Chassis information */
    struct c3600_chassis_driver *chassis_driver;
    struct c3600_nm_bay nm_bay[C3600_MAX_NM_BAYS];
@@ -151,13 +162,13 @@ struct c3600_router {
     * It can be modified to change the chassis MAC address.
     */
    struct cisco_eeprom mb_eeprom;
-   struct nmc93c46_group mb_eeprom_group;
+   struct nmc93cX6_group mb_eeprom_group;
 
    /* Network Module EEPROMs (3620/3640) */
-   struct nmc93c46_group nm_eeprom_group;
+   struct nmc93cX6_group nm_eeprom_group;
 
    /* Cisco 3660 NM EEPROMs */
-   struct nmc93c46_group c3660_nm_eeprom_group[C3600_MAX_NM_BAYS];
+   struct nmc93cX6_group c3660_nm_eeprom_group[C3600_MAX_NM_BAYS];
 };
 
 /* Create a new router instance */
@@ -174,6 +185,9 @@ void c3600_save_config(c3600_t *router,FILE *fd);
 
 /* Save configurations of all C3600 instances */
 void c3600_save_config_all(FILE *fd);
+
+/* Get network IRQ for specified slot/port */
+u_int c3600_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Set NM EEPROM definition */
 int c3600_nm_set_eeprom(c3600_t *router,u_int nm_bay,

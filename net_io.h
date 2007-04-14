@@ -22,7 +22,7 @@
 #endif
 
 /* Maximum packet size */
-#define NETIO_MAX_PKT_SIZE  8192
+#define NETIO_MAX_PKT_SIZE  32768
 
 /* Maximum device length */
 #define NETIO_DEV_MAXLEN    64
@@ -187,6 +187,9 @@ struct netio_desc {
 
    /* Next pointer (for RX listener) */
    netio_desc_t *rxl_next;
+
+   /* Packet data */
+   u_char rx_pkt[NETIO_MAX_PKT_SIZE];
 };
 
 /* RX listener */

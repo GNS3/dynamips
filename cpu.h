@@ -100,6 +100,9 @@ struct cpu_gen {
    /* Memory access log for fault debugging */
    u_int memlog_pos;
    memlog_access_t memlog_array[MEMLOG_COUNT];
+
+   /* Statistics */
+   m_uint64_t dev_access_counter;
 };
 
 /* CPU group definition */

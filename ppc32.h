@@ -68,6 +68,16 @@
 #define PPC32_EXC_TRACE     0x00000D00   /* Trace */
 #define PPC32_EXC_FPU_HLP   0x00000E00   /* Floating-Point Assist */
 
+/* Condition Register (CR) is accessed through 8 fields of 4 bits */
+#define ppc32_get_cr_field(n)  ((n) >> 2)
+#define ppc32_get_cr_bit(n)    (~(n) & 0x03)
+
+/* Positions of LT, GT, EQ and SO bits in CR fields */
+#define PPC32_CR_LT_BIT  3
+#define PPC32_CR_GT_BIT  2
+#define PPC32_CR_EQ_BIT  1
+#define PPC32_CR_SO_BIT  0
+
 /* CR0 (Condition Register Field 0) bits */
 #define PPC32_CR0_LT_BIT    31
 #define PPC32_CR0_LT        (1 << PPC32_CR0_LT_BIT)   /* Negative */
@@ -281,14 +291,17 @@ struct cpu_ppc {
    volatile m_uint32_t irq_pending,irq_check;
 
    /* XER, Condition Register, Link Register, Count Register */
-   m_uint32_t xer,cr,lr,ctr,reserve;
+   m_uint32_t xer,lr,ctr,reserve;
    m_uint32_t xer_ca;
+
+   /* Condition Register (CR) fields */
+   u_int cr_fields[8];
 
    /* MTS caches (Instruction+Data) */
    mts32_entry_t *mts_cache[2];
 
-   /* Code page translation cache */
-   ppc32_jit_tcb_t **exec_phys_map;
+   /* Code page translation cache and physical page mapping */
+   ppc32_jit_tcb_t **exec_blk_map,**exec_phys_map;
 
    /* Virtual address to physical page translation */
    fastcall int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
@@ -391,8 +404,8 @@ struct cpu_ppc {
    /* Fast memory operations use */
    u_int fast_memop;
 
-   /* IRQ idling preemption */
-   u_int irq_idle_preempt[32];
+   /* Direct block jump */
+   u_int exec_blk_direct_jump;
 
    /* Current exec page (non-JIT) info */
    m_uint64_t njm_exec_page;
@@ -408,6 +421,51 @@ struct cpu_ppc {
    m_uint32_t breakpoints[PPC32_MAX_BREAKPOINTS];
    u_int breakpoints_enabled;
 };
+
+#define PPC32_CR_FIELD_OFFSET(f) \
+   (OFFSET(cpu_ppc_t,cr_fields)+((f) * sizeof(u_int)))
+
+/* Get the full CR register */
+static forced_inline m_uint32_t ppc32_get_cr(cpu_ppc_t *cpu)
+{
+   m_uint32_t cr = 0;
+   int i;
+
+   for(i=0;i<8;i++)
+      cr |= cpu->cr_fields[i] << (28 - (i << 2));
+
+   return(cr);
+}
+
+/* Set the CR fields given a CR value */
+static forced_inline void ppc32_set_cr(cpu_ppc_t *cpu,m_uint32_t cr)
+{
+   int i;
+
+   for(i=0;i<8;i++)
+      cpu->cr_fields[i] = (cr >> (28 - (i << 2))) & 0x0F;
+}
+
+/* Get a CR bit */
+static forced_inline m_uint32_t ppc32_read_cr_bit(cpu_ppc_t *cpu,u_int bit)
+{
+   m_uint32_t res;
+
+   res = cpu->cr_fields[ppc32_get_cr_field(bit)] >> ppc32_get_cr_bit(bit);
+   return(res & 0x01);
+}
+
+/* Set a CR bit */
+static forced_inline void ppc32_set_cr_bit(cpu_ppc_t *cpu,u_int bit)
+{
+   cpu->cr_fields[ppc32_get_cr_field(bit)] |= 1 << ppc32_get_cr_bit(bit);
+}
+
+/* Clear a CR bit */
+static forced_inline void ppc32_clear_cr_bit(cpu_ppc_t *cpu,u_int bit)
+{
+   cpu->cr_fields[ppc32_get_cr_field(bit)] &= ~(1 << ppc32_get_cr_bit(bit));
+}
 
 /* Reset a PowerPC CPU */
 int ppc32_reset(cpu_ppc_t *cpu);

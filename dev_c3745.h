@@ -14,7 +14,7 @@
 #include "net.h"
 #include "device.h"
 #include "pci_dev.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -29,7 +29,7 @@
 #define C3745_DEFAULT_DISK1_SIZE   0
 #define C3745_DEFAULT_IOMEM_SIZE   5   /* Percents! */
 
-/* 3745 characteritics: 2 NM, 3 WIC, 2 AIM */
+/* 3745 characteritics: 4 NM, 3 WIC, 2 AIM */
 #define C3745_MAX_NM_BAYS  5
 
 /* C3745 DUART Interrupt */
@@ -43,6 +43,14 @@
 
 /* C3745 External Interrupt */
 #define C3745_EXT_IRQ    6
+
+/* Network IRQ */
+#define C3745_NETIO_IRQ_BASE       32
+#define C3745_NETIO_IRQ_PORT_BITS  2
+#define C3745_NETIO_IRQ_PORT_MASK  ((1 << C3745_NETIO_IRQ_PORT_BITS) - 1)
+#define C3745_NETIO_IRQ_PER_SLOT   (1 << C3745_NETIO_IRQ_PORT_BITS)
+#define C3745_NETIO_IRQ_END        \
+    (C3745_NETIO_IRQ_BASE + (C3745_MAX_NM_BAYS * C3745_NETIO_IRQ_PER_SLOT) - 1)
 
 /* C3745 common device addresses */
 #define C3745_GT96K_ADDR      0x24000000ULL
@@ -127,6 +135,9 @@ struct c3745_router {
    /* IO memory size to be passed to Smart Init */
    u_int nm_iomem_size;
 
+   /* I/O FPGA */
+   struct c3745_iofpga_data *iofpga_data;
+
    /* Chassis information */
    struct c3745_nm_bay nm_bay[C3745_MAX_NM_BAYS];
    m_uint8_t oir_status;
@@ -136,10 +147,10 @@ struct c3745_router {
     * It can be modified to change the chassis MAC address.
     */
    struct cisco_eeprom sys_eeprom[3];
-   struct nmc93c46_group sys_eeprom_group;
+   struct nmc93cX6_group sys_eeprom_group;
 
    /* Network Module EEPROMs */
-   struct nmc93c46_group nm_eeprom_group[4];
+   struct nmc93cX6_group nm_eeprom_group[4];
 };
 
 /* Create a new router instance */
@@ -156,6 +167,9 @@ void c3745_save_config(c3745_t *router,FILE *fd);
 
 /* Save configurations of all C3745 instances */
 void c3745_save_config_all(FILE *fd);
+
+/* Get network IRQ for specified slot/port */
+u_int c3745_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Set NM EEPROM definition */
 int c3745_nm_set_eeprom(c3745_t *router,u_int nm_bay,

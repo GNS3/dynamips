@@ -1,5 +1,5 @@
 /*
- * Cisco 3725 simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * Generic Cisco 3725 routines and definitions (EEPROM,...).
@@ -14,7 +14,7 @@
 #include "net.h"
 #include "device.h"
 #include "pci_dev.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -43,6 +43,14 @@
 
 /* C3725 External Interrupt */
 #define C3725_EXT_IRQ    6
+
+/* Network IRQ */
+#define C3725_NETIO_IRQ_BASE       32
+#define C3725_NETIO_IRQ_PORT_BITS  3
+#define C3725_NETIO_IRQ_PORT_MASK  ((1 << C3725_NETIO_IRQ_PORT_BITS) - 1)
+#define C3725_NETIO_IRQ_PER_SLOT   (1 << C3725_NETIO_IRQ_PORT_BITS)
+#define C3725_NETIO_IRQ_END        \
+    (C3725_NETIO_IRQ_BASE + (C3725_MAX_NM_BAYS * C3725_NETIO_IRQ_PER_SLOT) - 1)
 
 /* C3725 common device addresses */
 #define C3725_GT96K_ADDR      0x14000000ULL
@@ -127,6 +135,9 @@ struct c3725_router {
    /* IO memory size to be passed to Smart Init */
    u_int nm_iomem_size;
 
+   /* I/O FPGA */
+   struct c3725_iofpga_data *iofpga_data;
+
    /* Chassis information */
    struct c3725_nm_bay nm_bay[C3725_MAX_NM_BAYS];
    m_uint8_t oir_status;
@@ -136,10 +147,10 @@ struct c3725_router {
     * It can be modified to change the chassis MAC address.
     */
    struct cisco_eeprom mb_eeprom;
-   struct nmc93c46_group mb_eeprom_group;
+   struct nmc93cX6_group mb_eeprom_group;
 
    /* Network Module EEPROMs */
-   struct nmc93c46_group nm_eeprom_group[2];
+   struct nmc93cX6_group nm_eeprom_group[2];
 };
 
 /* Create a new router instance */
@@ -156,6 +167,9 @@ void c3725_save_config(c3725_t *router,FILE *fd);
 
 /* Save configurations of all C3725 instances */
 void c3725_save_config_all(FILE *fd);
+
+/* Get network IRQ for specified slot/port */
+u_int c3725_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Get PCI device for the specified NM bay */
 int c3725_nm_get_pci_device(u_int nm_bay);
@@ -255,9 +269,6 @@ int c3725_stop_instance(c3725_t *router);
 
 /* Initialize EEPROM groups */
 void c3725_init_eeprom_groups(c3725_t *router);
-
-/* dev_c3725_iofpga_init() */
-int dev_c3725_iofpga_init(c3725_t *router,m_uint64_t paddr,m_uint32_t len);
 
 /* NM drivers */
 extern struct c3725_nm_driver dev_c3725_nm_1fe_tx_driver;

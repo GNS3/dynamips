@@ -32,6 +32,7 @@
 #include "dev_c3725.h"
 #include "dev_c3745.h"
 #include "dev_c2600.h"
+#include "dev_msfc1.h"
 #include "ppc32_vmtest.h"
 #include "dev_vtty.h"
 #include "ptask.h"
@@ -57,6 +58,9 @@
 
 /* Software version */
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
+
+/* Software version tag */
+const char *sw_version_tag = "2007030219";
 
 /* Hypervisor */
 int hypervisor_mode = 0;
@@ -154,7 +158,7 @@ static void show_usage(int argc,char *argv[],int platform)
 {
    u_int def_ram_size,def_rom_size,def_nvram_size;
    u_int def_conf_reg,def_clock_div;
-   u_int def_disk0_size,def_disk1_size;
+   u_int def_disk0_size = 0,def_disk1_size = 0;
    u_int def_nm_iomem_size = 0;
 
    switch(platform) {
@@ -215,7 +219,14 @@ static void show_usage(int argc,char *argv[],int platform)
          def_clock_div  = C2600_DEFAULT_CLOCK_DIV;
          def_disk0_size = C2600_DEFAULT_DISK0_SIZE;
          def_disk1_size = C2600_DEFAULT_DISK1_SIZE;
-         def_nm_iomem_size = C3745_DEFAULT_IOMEM_SIZE;
+         def_nm_iomem_size = C2600_DEFAULT_IOMEM_SIZE;
+         break;
+      case VM_TYPE_MSFC1:
+         def_ram_size   = MSFC1_DEFAULT_RAM_SIZE;
+         def_rom_size   = MSFC1_DEFAULT_ROM_SIZE;
+         def_nvram_size = MSFC1_DEFAULT_NVRAM_SIZE;
+         def_conf_reg   = MSFC1_DEFAULT_CONF_REG;
+         def_clock_div  = MSFC1_DEFAULT_CLOCK_DIV;
          break;
       case VM_TYPE_PPC32_TEST:
          def_ram_size   = PPC32_VMTEST_DEFAULT_RAM_SIZE;
@@ -322,6 +333,12 @@ static void show_usage(int argc,char *argv[],int platform)
                 "Network Module\n",
                 def_nm_iomem_size);
          break;
+
+      case VM_TYPE_MSFC1:
+         printf("  -s <pa_nio>        : Bind a Network IO interface to a "
+                "Port Adapter\n");
+         break;
+
    }
 
    printf("\n"
@@ -477,6 +494,8 @@ static int cli_get_platform_type(int argc,char *argv[])
          vm_type = VM_TYPE_C3745;
       else if (!strcmp(str,"2600"))
          vm_type = VM_TYPE_C2600;
+      else if (!strcmp(str,"MSFC1"))
+         vm_type = VM_TYPE_MSFC1;
       else if (!strcmp(str,"PPC32_TEST"))
          vm_type = VM_TYPE_PPC32_TEST;
       else
@@ -703,6 +722,26 @@ static int cli_parse_c2600_options(vm_instance_t *vm,int option)
    return(0);
 }
 
+/* Parse specific options for the MSFC1 platform */
+static int cli_parse_msfc1_options(vm_instance_t *vm,int option)
+{
+   msfc1_t *router;
+
+   router = VM_MSFC1(vm);
+
+   switch(option) {
+      /* PA NIO settings */
+      case 's':
+         return(msfc1_cmd_add_nio(router,optarg));
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
 /* Create a router instance */
 static vm_instance_t *cli_create_instance(char *name,int platform_type,
                                           int instance_id)
@@ -714,6 +753,7 @@ static vm_instance_t *cli_create_instance(char *name,int platform_type,
    c3725_t *c3725;
    c3745_t *c3745;
    c2600_t *c2600;
+   msfc1_t *msfc1;
 
    switch(platform_type) {
       case VM_TYPE_C7200:
@@ -757,6 +797,13 @@ static vm_instance_t *cli_create_instance(char *name,int platform_type,
             return NULL;
          }
          return(c2600->vm);
+
+      case VM_TYPE_MSFC1:
+         if (!(msfc1 = msfc1_create_instance(name,instance_id))) {
+            fprintf(stderr,"MSFC1: unable to create instance!\n");
+            return NULL;
+         }
+         return(msfc1->vm);
 
       case VM_TYPE_PPC32_TEST:
          if (!(vm = ppc32_vmtest_create_instance(name,instance_id))) {
@@ -1031,6 +1078,9 @@ static int parse_std_cmd_line(int argc,char *argv[],int *platform)
               case VM_TYPE_C2600:
                   res = cli_parse_c2600_options(vm,option);
                   break;
+              case VM_TYPE_MSFC1:
+                  res = cli_parse_msfc1_options(vm,option);
+                  break;
             }
 
             if (res == -1)
@@ -1119,6 +1169,7 @@ void dynamips_reset(void)
    c3725_delete_all_instances();
    c3745_delete_all_instances();
    c2600_delete_all_instances();
+   msfc1_delete_all_instances();
    ppc32_vmtest_delete_all_instances();
 
    /* Delete ATM and Frame-Relay switches + bridges */
@@ -1212,6 +1263,9 @@ int main(int argc,char *argv[])
             break;
          case VM_TYPE_C2600:
             res = c2600_init_instance(VM_C2600(vm));
+            break;
+         case VM_TYPE_MSFC1:
+            res = msfc1_init_instance(VM_MSFC1(vm));
             break;
          case VM_TYPE_PPC32_TEST:
             res = ppc32_vmtest_init_instance(vm);

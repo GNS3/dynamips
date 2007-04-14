@@ -126,8 +126,14 @@ struct tx_desc {
 struct am79c971_data {
    char *name;
 
+   /* Lock */
+   pthread_mutex_t lock;
+   
    /* Interface type (10baseT or 100baseTX) */
    int type;
+
+   /* RX/TX clearing count */
+   int rx_tx_clear_count;
 
    /* Current RAP (Register Address Pointer) value */
    m_uint8_t rap;
@@ -172,12 +178,22 @@ struct am79c971_data {
 /* Log an am79c971 message */
 #define AM79C971_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
+/* Lock/Unlock primitives */
+#define AM79C971_LOCK(d)    pthread_mutex_lock(&(d)->lock)
+#define AM79C971_UNLOCK(d)  pthread_mutex_unlock(&(d)->lock)
 
 static m_uint16_t mii_reg_values[32] = {
-   0x1000, 0x782D, 0x2000, 0x5C01, 0x01E1, 0x0000, 0x0000, 0x0000,
+   0x1000, 0x782D, 0x0013, 0x78E2, 0x01E1, 0xC9E1, 0x000F, 0x2001,
+   0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0x0104, 0x4780, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+   0x0000, 0x0000, 0x00C8, 0x0000, 0xFFFF, 0x0000, 0x0000, 0x0000,
+
+#if 0
+   0x1000, 0x782D, 0x0013, 0x78e2, 0x01E1, 0xC9E1, 0x0000, 0x0000,
    0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
    0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001, 0x8060,
-   0x8020, 0x0820, 0x0000, 0x3800, 0xA3B9, 0x0000, 0x0000, 0x0000,
+   0x8023, 0x0820, 0x0000, 0x3800, 0xA3B9, 0x0000, 0x0000, 0x0000,
+#endif
 };
 
 /* Read a MII register */
@@ -203,7 +219,7 @@ static inline int am79c971_handle_mac_addr(struct am79c971_data *d,
 {
    n_eth_hdr_t *hdr = (n_eth_hdr_t *)pkt;
 
-   /* Accept systematically frames if we are running is promiscuous mode */
+   /* Accept systematically frames if we are running in promiscuous mode */
    if (d->csr[15] & AM79C971_CSR15_PROM)
       return(TRUE);
 
@@ -219,25 +235,25 @@ static inline int am79c971_handle_mac_addr(struct am79c971_data *d,
 }
 
 /* Update the Interrupt Flag bit of csr0 */
-static void am79c971_update_intr_flag(struct am79c971_data *d)
+static void am79c971_update_irq_status(struct am79c971_data *d)
 {
    m_uint32_t mask;
 
-   mask = d->csr[3] & AM79C971_CSR3_IM_MASK;
+   /* Bits set in CR3 disable the specified interrupts */
+   mask = AM79C971_CSR3_IM_MASK & ~(d->csr[3] & AM79C971_CSR3_IM_MASK);
    
    if (d->csr[0] & mask)
       d->csr[0] |= AM79C971_CSR0_INTR;
-}
+   else
+      d->csr[0] &= ~AM79C971_CSR0_INTR;
 
-/* Trigger an interrupt */
-static int am79c971_trigger_irq(struct am79c971_data *d)
-{
-   if (d->csr[0] & (AM79C971_CSR0_INTR|AM79C971_CSR0_IENA)) {
+   if ((d->csr[0] & (AM79C971_CSR0_INTR|AM79C971_CSR0_IENA)) ==
+       (AM79C971_CSR0_INTR|AM79C971_CSR0_IENA)) 
+   {
       pci_dev_trigger_irq(d->vm,d->pci_dev);
-      return(TRUE);
+   } else {
+      pci_dev_clear_irq(d->vm,d->pci_dev);
    }
-
-   return(FALSE);
 }
 
 /* Update RX/TX ON bits of csr0 */
@@ -325,12 +341,6 @@ static int am79c971_fetch_init_block(struct am79c971_data *d)
    /* Update RX/TX ON bits of csr0 since csr15 has been modified */
    am79c971_update_rx_tx_on_bits(d);
    AM79C971_LOG(d,"CSR0 = 0x%4.4x\n",d->csr[0]);
-
-   am79c971_update_intr_flag(d);
-
-   if (am79c971_trigger_irq(d))
-      AM79C971_LOG(d,"triggering IDON interrupt\n");
-
    return(0);
 }
 
@@ -362,14 +372,20 @@ static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
                //AM79C971_LOG(d,"stopping interface!\n");
                d->csr[0] = AM79C971_CSR0_STOP;
                d->tx_pos = d->rx_pos = 0;
+               am79c971_update_irq_status(d);
                break;
             }
             
             /* These bits are cleared when set to 1 */
             mask  = AM79C971_CSR0_BABL | AM79C971_CSR0_CERR;
             mask |= AM79C971_CSR0_MISS | AM79C971_CSR0_MERR;
-            mask |= AM79C971_CSR0_RINT | AM79C971_CSR0_TINT;
             mask |= AM79C971_CSR0_IDON;
+
+            if (++d->rx_tx_clear_count == 3) {
+               mask |= AM79C971_CSR0_RINT | AM79C971_CSR0_TINT;
+               d->rx_tx_clear_count = 0;
+            }
+
             d->csr[0] &= ~(*data & mask);
 
             /* Save the Interrupt Enable bit */
@@ -389,6 +405,9 @@ static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
                d->csr[0] &= ~AM79C971_CSR0_STOP;
                am79c971_update_rx_tx_on_bits(d);
             }
+
+            /* Update IRQ status */
+            am79c971_update_irq_status(d);
          }
          break;
 
@@ -400,7 +419,7 @@ static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
          } else {
             *data = (d->tx_l2len << 12) | (d->rx_l2len << 8);
          }
-         break;
+         break;            
 
       case 15:  /* CSR15: Mode */
          if (op_type == MTS_WRITE) {
@@ -512,6 +531,8 @@ void *dev_am79c971_access(cpu_gen_t *cpu,struct vdevice *dev,
    }
 #endif
 
+   AM79C971_LOCK(d);
+
    switch(offset) {
       case 0x14:  /* RAP (Register Address Pointer) */
          if (op_type == MTS_WRITE) {
@@ -530,6 +551,7 @@ void *dev_am79c971_access(cpu_gen_t *cpu,struct vdevice *dev,
          break;
    }
 
+   AM79C971_UNLOCK(d);
    return NULL;
 }
 
@@ -618,7 +640,7 @@ static int am79c971_receive_pkt(struct am79c971_data *d,
    u_char *pkt_ptr = pkt;
    m_uint8_t sw_style;
    int i;
-   
+
    /* Truncate the packet if it is too big */
    pkt_len = m_min(pkt_len,AM79C971_MAX_PKT_SIZE);
 
@@ -700,8 +722,7 @@ static int am79c971_receive_pkt(struct am79c971_data *d,
    physmem_copy_u32_to_vm(d->vm,rx_start+4,rxd0.rmd[1]);
 
    d->csr[0] |= AM79C971_CSR0_RINT;
-   am79c971_update_intr_flag(d);
-   am79c971_trigger_irq(d);
+   am79c971_update_irq_status(d);
    return(TRUE);
 }
 
@@ -724,6 +745,8 @@ static int am79c971_handle_rxring(netio_desc_t *nio,
    mem_dump(log_file,pkt,pkt_len);
 #endif
 
+   AM79C971_LOCK(d);
+
    /* 
     * Receive only multicast/broadcast trafic + unicast traffic 
     * for this virtual machine.
@@ -732,6 +755,7 @@ static int am79c971_handle_rxring(netio_desc_t *nio,
    if (am79c971_handle_mac_addr(d,pkt))
       am79c971_receive_pkt(d,pkt,pkt_len);
 
+   AM79C971_UNLOCK(d);
    return(TRUE);
 }
 
@@ -825,6 +849,7 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
       /* Copy packet data */
       clen = ~((ptxd->tmd[1] & AM79C971_TMD1_LEN) - 1);
       clen &= AM79C971_TMD1_LEN;
+
       physmem_copy_from_vm(d->vm,pkt_ptr,ptxd->tmd[0],clen);
 
       pkt_ptr += clen;
@@ -871,8 +896,7 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
 
    /* Generate TX interrupt */
    d->csr[0] |= AM79C971_CSR0_TINT;
-   am79c971_update_intr_flag(d);
-   am79c971_trigger_irq(d);
+   am79c971_update_irq_status(d);
    return(TRUE);
 }
 
@@ -881,10 +905,13 @@ static int am79c971_handle_txring(struct am79c971_data *d)
 {
    int i;
 
+   AM79C971_LOCK(d);
+
    for(i=0;i<AM79C971_TXRING_PASS_COUNT;i++)
       if (!am79c971_handle_txring_single(d))
          break;
 
+   AM79C971_UNLOCK(d);
    return(TRUE);
 }
 
@@ -957,6 +984,7 @@ dev_am79c971_init(vm_instance_t *vm,char *name,int interface_type,
 
    memset(d,0,sizeof(*d));
    memcpy(d->mii_regs[0],mii_reg_values,sizeof(mii_reg_values));
+   pthread_mutex_init(&d->lock,NULL);
 
    /* Add as PCI device */
    pci_dev = pci_dev_add(pci_bus,name,

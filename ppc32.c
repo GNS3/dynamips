@@ -50,6 +50,9 @@ int ppc32_init(cpu_ppc_t *cpu)
    cpu->timer_irq_check_itv = 1000;
    cpu->timer_irq_freq      = 250;
 
+   /* Enable/disable direct block jump */
+   cpu->exec_blk_direct_jump = cpu->vm->exec_blk_direct_jump;
+
    /* Idle loop mutex and condition */
    pthread_mutex_init(&cpu->gen->idle_mutex,NULL);
    pthread_cond_init(&cpu->gen->idle_cond,NULL);
@@ -226,7 +229,21 @@ int ppc32_get_idling_pc(cpu_gen_t *cpu)
       printf("Restart the emulator with \"--idle-pc=0x%llx\" (for example)\n",
              cpu->idle_pc_prop[0].pc);
    } else {
-      printf("Done. No suggestion for idling PC\n");
+      printf("Done. No suggestion for idling PC, dumping the full table:\n");
+
+      for(i=0;i<IDLE_HASH_SIZE;i++)
+         for(p=pc_hash[i];p;p=p->next) {
+            printf("  0x%8.8x (%3u)\n",p->ia,p->count);
+
+            if (cpu->idle_pc_prop_count < CPU_IDLE_PC_MAX_RES) {
+               res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
+
+               res->pc    = p->ia;
+               res->count = p->count;
+            }
+         }
+       
+      printf("\n");
    }
 
    /* Re-enable IRQ */
@@ -400,7 +417,7 @@ void ppc32_dump_regs(cpu_gen_t *cpu)
    printf("\n");
    printf("  ia = 0x%8.8x, lr = 0x%8.8x\n", pcpu->ia, pcpu->lr);
    printf("  cr = 0x%8.8x, msr = 0x%8.8x, xer = 0x%8.8x, dec = 0x%8.8x\n", 
-          pcpu->cr, pcpu->msr, 
+          ppc32_get_cr(pcpu), pcpu->msr, 
           pcpu->xer | (pcpu->xer_ca << PPC32_XER_CA_BIT), 
           pcpu->dec);
 
@@ -417,6 +434,8 @@ void ppc32_dump_regs(cpu_gen_t *cpu)
 
    printf("  Timer IRQ count: %llu, pending: %u, timer drift: %u\n\n",
           pcpu->timer_irq_count,pcpu->timer_irq_pending,pcpu->timer_drift);
+
+   printf("  Device access count: %llu\n",cpu->dev_access_counter);
 
    printf("\n");
 }

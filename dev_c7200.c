@@ -24,6 +24,7 @@
 #include "cisco_eeprom.h"
 #include "dev_rom.h"
 #include "dev_c7200.h"
+#include "dev_c7200_mpfpga.h"
 #include "dev_vtty.h"
 #include "registry.h"
 #include "net.h"
@@ -533,6 +534,26 @@ void c7200_save_config_all(FILE *fd)
    registry_foreach_type(OBJ_TYPE_VM,c7200_reg_save_config,fd,NULL);
 }
 
+/* Get slot/port corresponding to specified network IRQ */
+static inline void 
+c7200_net_irq_get_slot_port(u_int irq,u_int *slot,u_int *port)
+{
+   irq -= C7200_NETIO_IRQ_BASE;
+   *port = irq & C7200_NETIO_IRQ_PORT_MASK;
+   *slot = irq >> C7200_NETIO_IRQ_PORT_BITS;
+}
+
+/* Get network IRQ for specified slot/port */
+u_int c7200_net_irq_for_slot_port(u_int slot,u_int port)
+{
+   u_int irq;
+
+   irq = (slot << C7200_NETIO_IRQ_PORT_BITS) + port;
+   irq += C7200_NETIO_IRQ_BASE;
+
+   return(irq);
+}
+
 /* Set NPE eeprom definition */
 static int c7200_npe_set_eeprom(c7200_t *router)
 {
@@ -927,7 +948,7 @@ int c7200_pa_init(c7200_t *router,u_int pa_bay)
    snprintf(bay->dev_name,len,"%s(%u)",bay->dev_type,pa_bay);
 
    /* Initialize PA driver */
-   if (bay->pa_driver->pa_init(router,bay->dev_name,pa_bay) == 1) {
+   if (bay->pa_driver->pa_init(router,bay->dev_name,pa_bay) == -1) {
       vm_error(router->vm,"unable to initialize PA %u.\n",pa_bay);
       return(-1);
    }
@@ -2009,6 +2030,7 @@ static int c7200m_init_platform(c7200_t *router)
    struct vm_instance *vm = router->vm;
    cpu_mips_t *cpu0; 
    cpu_gen_t *gen0;
+   vm_obj_t *obj;
 
    /* Copy config register setup into "active" config register */
    vm->conf_reg = vm->conf_reg_setup;
@@ -2092,7 +2114,7 @@ static int c7200m_init_platform(c7200_t *router)
    }
 
    /* Byte swapping */
-   dev_bswap_init(vm,"mem_bswap",C7200_BSWAP_ADDR,512*1048576,0x00000000ULL);
+   dev_bswap_init(vm,"mem_bswap",C7200_BSWAP_ADDR,1024*1048576,0x00000000ULL);
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C7200_PCI_IO_ADDR)))
@@ -2114,6 +2136,11 @@ static int c7200m_init_platform(c7200_t *router)
    /* Midplane FPGA */
    dev_c7200_mpfpga_init(router,C7200_MPFPGA_ADDR,0x1000);
 
+   if (!(obj = vm_object_find(router->vm,"mp_fpga")))
+      return(-1);
+
+   router->mpfpga_data = obj->data;
+
    /* IO FPGA */
    if (dev_c7200_iofpga_init(router,C7200_IOFPGA_ADDR,0x1000) == -1)
       return(-1);
@@ -2127,9 +2154,9 @@ static int c7200m_init_platform(c7200_t *router)
 static int c7200p_init_platform(c7200_t *router)
 {
    struct vm_instance *vm = router->vm;
-   vm_obj_t *obj;
    cpu_ppc_t *cpu0; 
    cpu_gen_t *gen0;
+   vm_obj_t *obj;
 
    /* Copy config register setup into "active" config register */
    vm->conf_reg = vm->conf_reg_setup;
@@ -2162,7 +2189,7 @@ static int c7200p_init_platform(c7200_t *router)
    vm->boot_cpu = gen0;
 
    /* Mark the Network IO interrupt as high priority */
-   cpu0->irq_idle_preempt[C7200_NETIO_IRQ] = TRUE;
+   vm->irq_idle_preempt[C7200_NETIO_IRQ] = TRUE;
 
    /* Copy some parameters from VM to CPU0 (idle PC, ...) */
    cpu0->idle_pc = vm->idle_pc;
@@ -2232,6 +2259,11 @@ static int c7200p_init_platform(c7200_t *router)
    /* MP FPGA */
    if (dev_c7200_mpfpga_init(router,C7200_G2_MPFPGA_ADDR,0x10000) == -1)
       return(-1);
+
+   if (!(obj = vm_object_find(router->vm,"mp_fpga")))
+      return(-1);
+
+   router->mpfpga_data = obj->data;
 
    /* If we have nothing in slot 0, the console is handled by the MV64460 */
    if (!c7200_pa_check_eeprom(router,0)) {
@@ -2345,6 +2377,47 @@ static int c7200p_boot_ios(c7200_t *router)
    return(0);
 }
 
+/* Set an IRQ */
+static void c7200m_set_irq(vm_instance_t *vm,u_int irq)
+{
+   c7200_t *router = VM_C7200(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_set_irq(cpu0,irq);
+
+         if (cpu0->irq_idle_preempt[irq])
+            cpu_idle_break_wait(cpu0->gen);
+         break;
+
+      case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
+         c7200_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c7200_mpfpga_net_set_irq(router->mpfpga_data,slot,port);
+         break;
+   }
+}
+
+/* Clear an IRQ */
+static void c7200m_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   c7200_t *router = VM_C7200(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_clear_irq(cpu0,irq);
+         break;
+
+      case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
+         c7200_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c7200_mpfpga_net_clear_irq(router->mpfpga_data,slot,port);
+         break;
+   }
+}
+
 /* Initialize a Cisco 7200 instance (MIPS) */
 static int c7200m_init_instance(c7200_t *router)
 {
@@ -2357,6 +2430,10 @@ static int c7200m_init_instance(c7200_t *router)
       vm_error(vm,"unable to initialize the platform hardware.\n");
       return(-1);
    }
+
+   /* IRQ routing */
+   vm->set_irq = c7200m_set_irq;
+   vm->clear_irq = c7200m_clear_irq;
 
    /* Load IOS configuration file */
    if (vm->ios_config != NULL) {
@@ -2390,7 +2467,8 @@ static void c7200p_set_irq(vm_instance_t *vm,u_int irq)
 {
    c7200_t *router = VM_C7200(vm);
    cpu_ppc_t *cpu0 = CPU_PPC32(vm->boot_cpu);
-   
+   u_int slot,port;
+
    switch(irq) {
       case C7200_VTIMER_IRQ:
          ppc32_trigger_timer_irq(cpu0);
@@ -2407,9 +2485,13 @@ static void c7200p_set_irq(vm_instance_t *vm,u_int irq)
       case C7200_OIR_IRQ:
          dev_mv64460_set_gpp_intr(router->mv64460_sysctr,0);
          break;
+      case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
+         c7200_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c7200_mpfpga_net_set_irq(router->mpfpga_data,slot,port);
+         break;
    }
 
-   if (cpu0->irq_idle_preempt[irq])
+   if (vm->irq_idle_preempt[irq])
       cpu_idle_break_wait(cpu0->gen);
 }
 
@@ -2417,6 +2499,7 @@ static void c7200p_set_irq(vm_instance_t *vm,u_int irq)
 static void c7200p_clear_irq(vm_instance_t *vm,u_int irq)
 {
    c7200_t *router = VM_C7200(vm);
+   u_int slot,port;
 
    switch(irq) {
       case C7200_DUART_IRQ:
@@ -2430,6 +2513,10 @@ static void c7200p_clear_irq(vm_instance_t *vm,u_int irq)
          break;
       case C7200_OIR_IRQ: 
          dev_mv64460_clear_gpp_intr(router->mv64460_sysctr,0);
+         break;
+      case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
+         c7200_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c7200_mpfpga_net_clear_irq(router->mpfpga_data,slot,port);
          break;
    }
 }
@@ -2447,6 +2534,10 @@ static int c7200p_init_instance(c7200_t *router)
       vm_error(vm,"unable to initialize the platform hardware.\n");
       return(-1);
    }
+
+   /* IRQ routing */
+   vm->set_irq = c7200p_set_irq;
+   vm->clear_irq = c7200p_clear_irq;
 
    /* Load ROM (ELF image or embedded) */
    cpu0 = CPU_PPC32(vm->boot_cpu);
@@ -2489,9 +2580,6 @@ static int c7200p_init_instance(c7200_t *router)
    cpu0->bat[PPC32_DBAT_IDX][3].reg[0] = 0xF0001FFE;
    cpu0->bat[PPC32_DBAT_IDX][3].reg[1] = 0xF0000003;
 
-   /* IRQ routing */
-   vm->set_irq = c7200p_set_irq;
-   vm->clear_irq = c7200p_clear_irq;
 
    return(c7200p_boot_ios(router));
 }

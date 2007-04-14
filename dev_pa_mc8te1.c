@@ -37,6 +37,7 @@
 /* PA-MC-8TE1 Data */
 struct pa_mc_data {
    char *name;
+   u_int irq;
 
    /* Virtual machine */
    vm_instance_t *vm;
@@ -51,6 +52,7 @@ struct pa_mc_data {
    m_uint8_t ssram_data[0x20000];
 
    /* PLX9054 */
+   char *plx_name;
    vm_obj_t *plx_obj;
 
    /* NetIO descriptor */
@@ -135,7 +137,7 @@ static void plx9054_doorbell_callback(struct plx_data *plx_data,
    printf("DOORBELL: 0x%x\n",val);
 
    /* Trigger interrupt */
-   vm_set_irq(pa_data->vm,2);
+   //vm_set_irq(pa_data->vm,pa_data->irq);
    vm_set_irq(pa_data->vm,3);
 }
 
@@ -238,6 +240,7 @@ int dev_c7200_pa_mc8te1_init(c7200_t *router,char *name,u_int pa_bay)
    memset(d,0,sizeof(*d));
    d->name = name;
    d->vm   = router->vm;
+   d->irq  = c7200_net_irq_for_slot_port(pa_bay,0);
 
    /* Set the EEPROM */
    c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-MC-8TE1"));
@@ -245,7 +248,7 @@ int dev_c7200_pa_mc8te1_init(c7200_t *router,char *name,u_int pa_bay)
    /* Create the PM7380 */
    d->pci_dev = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                             0x11f8, 0x7380,
-                            0,0,C7200_NETIO_IRQ,d,
+                            0,0,d->irq,d,
                             NULL,pci_pos_read,pci_pos_write);
 
    /* Initialize SSRAM device */
@@ -256,7 +259,8 @@ int dev_c7200_pa_mc8te1_init(c7200_t *router,char *name,u_int pa_bay)
    d->ssram_dev.handler   = dev_ssram_access;
 
    /* Create the PLX9054 */
-   d->plx_obj = dev_plx9054_init(d->vm,d->name,
+   d->plx_name = dyn_sprintf("%s_plx",name);
+   d->plx_obj = dev_plx9054_init(d->vm,d->plx_name,
                                  router->pa_bay[pa_bay].pci_map,1,
                                  &d->ssram_dev,NULL);
 

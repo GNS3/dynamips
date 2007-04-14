@@ -21,12 +21,13 @@
 #include "memory.h"
 #include "device.h"
 #include "dev_vtty.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "dev_c3725.h"
 
 /* Debugging flags */
 #define DEBUG_UNKNOWN   1
 #define DEBUG_ACCESS    0
+#define DEBUG_NET_IRQ   0
 
 /* Definitions for Mainboard EEPROM */
 #define EEPROM_MB_DOUT  3
@@ -40,49 +41,92 @@
 #define EEPROM_NM_CLK   2
 #define EEPROM_NM_CS    4
 
-#define C3725_NET_IRQ_CLEARING_DELAY  16
+/* Network IRQ distribution */
+struct net_irq_distrib  {
+   u_int reg;
+   u_int offset;
+};
+
+static struct net_irq_distrib net_irq_dist[C3725_MAX_NM_BAYS] = {
+   { 0,  0 },  /* Slot 0: reg 0x26, 0x000000XX */
+   { 1,  0 },  /* Slot 1: reg 0x28, 0x000000XX */
+   { 1,  8 },  /* Slot 2: reg 0x28, 0x0000XX00 */
+};
 
 /* IO FPGA structure */
-struct iofpga_data {
+struct c3725_iofpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
    c3725_t *router;
-   
-   /* 
-    * Used to introduce a "delay" before clearing the network interrupt
-    * on 3620/3640 platforms. Added due to a packet loss when using an 
-    * Ethernet NM on these platforms.
-    *
-    * Anyway, we should rely on the device information with appropriate IRQ
-    * routing.
-    */
-   int net_irq_clearing_count;
 
-   /* Interrupt mask*/
+   /* Network IRQ status */
+   m_uint16_t net_irq_status[2];
+
+   /* Interrupt mask */
    m_uint16_t intr_mask;
 };
 
 /* Mainboard EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_mb_def = {
+static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
    EEPROM_MB_CLK, EEPROM_MB_CS,
    EEPROM_MB_DIN, EEPROM_MB_DOUT,
 };
 
 /* Mainboard EEPROM */
-static const struct nmc93c46_group eeprom_mb_group = {
-   1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+static const struct nmc93cX6_group eeprom_mb_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_nm_def = {
+static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
    EEPROM_NM_CLK, EEPROM_NM_CS,
    EEPROM_NM_DIN, EEPROM_NM_DOUT,
 };
 
 /* NM EEPROM */
-static const struct nmc93c46_group eeprom_nm_group = {
-   1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+static const struct nmc93cX6_group eeprom_nm_group = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
 };
+
+/* Update network interrupt status */
+static inline void dev_c3725_iofpga_net_update_irq(struct c3725_iofpga_data *d)
+{
+   if ((d->net_irq_status[0] != 0xFFFF) || (d->net_irq_status[1] != 0xFFFF)) {
+      vm_set_irq(d->router->vm,C3725_NETIO_IRQ);
+   } else {
+      vm_clear_irq(d->router->vm,C3725_NETIO_IRQ);
+   }
+}
+
+/* Trigger a Network IRQ for the specified slot/port */
+void dev_c3725_iofpga_net_set_irq(struct c3725_iofpga_data *d,
+                                  u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","setting NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   d->net_irq_status[irq_dist->reg] &= ~(1 << (irq_dist->offset + port));
+   dev_c3725_iofpga_net_update_irq(d);
+}
+
+/* Clear a Network IRQ for the specified slot/port */
+void dev_c3725_iofpga_net_clear_irq(struct c3725_iofpga_data *d,
+                                    u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(d->router->vm,"IO_FPGA","clearing NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   d->net_irq_status[irq_dist->reg] |= (1 << (irq_dist->offset + port));
+   dev_c3725_iofpga_net_update_irq(d);
+}
 
 /*
  * dev_c3725_iofpga_access()
@@ -92,7 +136,7 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                         m_uint32_t offset,u_int op_size,u_int op_type,
                         m_uint64_t *data)
 {
-   struct iofpga_data *d = dev->priv_data;
+   struct c3725_iofpga_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -121,9 +165,9 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* Mainboard EEPROM */
       case 0x0e:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->mb_eeprom_group,(u_int)(*data));
+            nmc93cX6_write(&d->router->mb_eeprom_group,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->mb_eeprom_group);
+            *data = nmc93cX6_read(&d->router->mb_eeprom_group);
          break;
 
       case 0x12:
@@ -159,17 +203,17 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* NM Slot 1 EEPROM */
       case 0x44:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->nm_eeprom_group[0],(u_int)(*data));
+            nmc93cX6_write(&d->router->nm_eeprom_group[0],(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->nm_eeprom_group[0]);
+            *data = nmc93cX6_read(&d->router->nm_eeprom_group[0]);
          break;
 
       /* NM Slot 2 EEPROM */
       case 0x46:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->nm_eeprom_group[1],(u_int)(*data));
+            nmc93cX6_write(&d->router->nm_eeprom_group[1],(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->nm_eeprom_group[1]);
+            *data = nmc93cX6_read(&d->router->nm_eeprom_group[1]);
          break;
 
       /* AIM EEPROM #0 */
@@ -223,7 +267,7 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        */
       case 0x26:
          if (op_type == MTS_READ)
-            *data = 0xFFFE;
+            *data = d->net_irq_status[0];
          break;
 
       /* 
@@ -234,14 +278,8 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        * Other bits unknown.
        */
       case 0x28:
-         if (op_type == MTS_READ) {
-            *data = 0xFFEE;
-
-            if (++d->net_irq_clearing_count == C3725_NET_IRQ_CLEARING_DELAY) {
-               vm_clear_irq(d->router->vm,C3725_NETIO_IRQ);
-               d->net_irq_clearing_count = 0;
-            }
-         }
+         if (op_type == MTS_READ)
+            *data = d->net_irq_status[1];
          break;
 
       case 0x2c:
@@ -327,7 +365,8 @@ void c3725_init_eeprom_groups(c3725_t *router)
 }
 
 /* Shutdown the IO FPGA device */
-void dev_c3725_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
+static void 
+dev_c3725_iofpga_shutdown(vm_instance_t *vm,struct c3725_iofpga_data *d)
 {
    if (d != NULL) {
       /* Remove the device */
@@ -344,7 +383,7 @@ void dev_c3725_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
 int dev_c3725_iofpga_init(c3725_t *router,m_uint64_t paddr,m_uint32_t len)
 {
    vm_instance_t *vm = router->vm;
-   struct iofpga_data *d;
+   struct c3725_iofpga_data *d;
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {
@@ -354,6 +393,8 @@ int dev_c3725_iofpga_init(c3725_t *router,m_uint64_t paddr,m_uint32_t len)
 
    memset(d,0,sizeof(*d));
    d->router = router;
+   d->net_irq_status[0] = 0xFFFF;
+   d->net_irq_status[1] = 0xFFFF;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "io_fpga";

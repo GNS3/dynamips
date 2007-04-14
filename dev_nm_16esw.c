@@ -1,5 +1,5 @@
 /*
- * Cisco C3600 simulation platform.
+ * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
  *
  * NM-16ESW ethernet switch module (experimental!)
@@ -30,11 +30,11 @@
 #define DEBUG_ACCESS     0
 #define DEBUG_UNKNOWN    0
 #define DEBUG_MII        0
-#define DEBUG_MEM        0
-#define DEBUG_REG        0
+#define DEBUG_MEM        1
+#define DEBUG_REG        1
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
-#define DEBUG_FORWARD    0
+#define DEBUG_FORWARD    1
 #define DEBUG_MIRROR     0
 #define DEBUG_ARL        0
 
@@ -1520,6 +1520,8 @@ void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                *data |= BCM5600_INTR_LINKSTAT_MOD;
                d->mii_intr = FALSE;
             }
+
+            pci_dev_clear_irq(d->vm,d->pci_dev);
          }
          break;
 
@@ -1852,7 +1854,11 @@ static int bcm5600_dst_mac_lookup(struct nm_16esw_data *d,
     */
    if (dst_mac_index == -1) {
 #if DEBUG_FORWARD
-      BCM_LOG(d,"Destination MAC address unknown, flooding.\n");
+      BCM_LOG(d,"Destination MAC address "
+              "%2.2x%2.2x.%2.2x%2.2x.%2.2x%2.2x unknown, flooding.\n",
+              dst_mac->eth_addr_byte[0],dst_mac->eth_addr_byte[1],
+              dst_mac->eth_addr_byte[2],dst_mac->eth_addr_byte[3],  
+              dst_mac->eth_addr_byte[4],dst_mac->eth_addr_byte[5]);
 #endif
       p->egress_bitmap = p->vlan_entry[1] & BCM5600_VTABLE_PORT_BMAP_MASK;
 
@@ -2071,6 +2077,13 @@ static inline int bcm5600_is_bpdu(n_eth_addr_t *m)
    if (!memcmp(m,"\x01\x80\xc2\x00\x00",5) && !(m->eth_addr_byte[5] & 0xF0))
       return(TRUE);
 
+   /* 
+    * CDP: this is cleary a hack, but IOS seems to program this address
+    * in BPDU registers.
+    */
+   if (!memcmp(m,"\x01\x00\x0c\xcc\xcc\xcc",6))
+      return(TRUE);
+   
    return(FALSE);
 }
 

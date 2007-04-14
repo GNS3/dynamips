@@ -452,3 +452,16 @@ void mem_bswap32(void *ptr,size_t len)
    for(i=0;i<count;i++,p++)
       *p = swap32(*p);
 }
+
+/* Reverse a byte */
+m_uint8_t m_reverse_u8(m_uint8_t val)
+{
+   m_uint8_t res = 0;
+   int i;
+
+   for(i=0;i<8;i++)
+      if (val & (1 << i))
+         res |= 1 << (7 - i);
+   
+   return(res);
+}

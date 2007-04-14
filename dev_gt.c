@@ -711,11 +711,13 @@ void *dev_gt64120_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 /* Update the Ethernet port interrupt status */
 static void gt_eth_update_int_status(struct gt_data *d,struct eth_port *port)
 {
-   if (port->icr & GT_ICR_MASK)
+   if (port->icr & port->imr & GT_ICR_MASK) {
       port->icr |= GT_ICR_INT_SUM;
-
-   if (port->icr & port->imr & GT_ICR_MASK)
       vm_set_irq(d->vm,d->eth_irq);
+   } else {
+      port->icr &= ~GT_ICR_INT_SUM;
+      vm_clear_irq(d->vm,d->eth_irq);
+   }
 }
 
 /* Read a MII register */
@@ -847,19 +849,23 @@ static int gt_eth_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* ICR: Interrupt Cause Register */
       case 0x84850:
       case 0x88850:
-         if (op_type == MTS_READ)
+         if (op_type == MTS_READ) {
             *data = port->icr;
-         else
+         } else {
             port->icr &= *data;
+            gt_eth_update_int_status(d,port);
+         }
          break;
 
       /* IMR: Interrupt Mask Register */
       case 0x84858:
       case 0x88858:
-         if (op_type == MTS_READ)
+         if (op_type == MTS_READ) {
             *data = port->imr;
-         else
+         } else {
             port->imr = *data;
+            gt_eth_update_int_status(d,port);
+         }
          break;
 
       /* PCR: Port Configuration Register */
@@ -1196,6 +1202,7 @@ void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
             if (gt_data->eth_ports[1].icr & GT_ICR_INT_SUM)
                *data |= GT_SCR_ETH1_SUM;
 
+            gt_update_irq_status(gt_data);
             *data = swap32(*data);
          }
          break;

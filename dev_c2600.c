@@ -23,6 +23,7 @@
 #include "dev_mpc860.h"
 #include "dev_rom.h"
 #include "dev_c2600.h"
+#include "dev_c2600_iofpga.h"
 #include "dev_vtty.h"
 #include "registry.h"
 
@@ -76,6 +77,7 @@ static struct c2600_nm_driver *nm_drivers[] = {
    &dev_c2600_nm_4e_driver,
    &dev_c2600_nm_1fe_tx_driver,
    &dev_c2600_nm_16esw_driver,
+
    NULL,
 };
 
@@ -435,6 +437,26 @@ static void c2600_reg_save_config(registry_entry_t *entry,void *opt,int *err)
 void c2600_save_config_all(FILE *fd)
 {
    registry_foreach_type(OBJ_TYPE_VM,c2600_reg_save_config,fd,NULL);
+}
+
+/* Get slot/port corresponding to specified network IRQ */
+static inline void 
+c2600_net_irq_get_slot_port(u_int irq,u_int *slot,u_int *port)
+{
+   irq -= C2600_NETIO_IRQ_BASE;
+   *port = irq & C2600_NETIO_IRQ_PORT_MASK;
+   *slot = irq >> C2600_NETIO_IRQ_PORT_BITS;
+}
+
+/* Get network IRQ for specified slot/port */
+u_int c2600_net_irq_for_slot_port(u_int slot,u_int port)
+{
+   u_int irq;
+
+   irq = (slot << C2600_NETIO_IRQ_PORT_BITS) + port;
+   irq += C2600_NETIO_IRQ_BASE;
+
+   return(irq);
 }
 
 /* Find Cisco 2600 Mainboard info */
@@ -826,7 +848,7 @@ int c2600_nm_init(c2600_t *router,u_int nm_bay)
    snprintf(bay->dev_name,len,"%s(%u)",bay->dev_type,nm_bay);
 
    /* Initialize NM driver */
-   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == 1) {
+   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == -1) {
       vm_error(router->vm,"unable to initialize NM %u.\n",nm_bay);
       return(-1);
    }
@@ -1234,7 +1256,8 @@ static void c2600_set_irq(vm_instance_t *vm,u_int irq)
 {
    c2600_t *router = VM_C2600(vm);
    cpu_ppc_t *cpu = CPU_PPC32(vm->boot_cpu);
-   
+   u_int slot,port;
+
    switch(irq) {
       case C2600_VTIMER_IRQ:
          mpc860_set_pending_irq(router->mpc_data,30);
@@ -1249,13 +1272,18 @@ static void c2600_set_irq(vm_instance_t *vm,u_int irq)
          mpc860_set_pending_irq(router->mpc_data,27);
          break;
 
+      case C2600_NETIO_IRQ_BASE ... C2600_NETIO_IRQ_END:
+         c2600_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c2600_iofpga_net_set_irq(router->iofpga_data,slot,port);
+         break;
+
       /* IRQ test */
       case 255:
          mpc860_set_pending_irq(router->mpc_data,24);
          break;
    }
 
-   if (cpu->irq_idle_preempt[irq])
+   if (vm->irq_idle_preempt[irq])
       cpu_idle_break_wait(cpu->gen);
 }
 
@@ -1263,6 +1291,7 @@ static void c2600_set_irq(vm_instance_t *vm,u_int irq)
 static void c2600_clear_irq(vm_instance_t *vm,u_int irq)
 {
    c2600_t *router = VM_C2600(vm);
+   u_int slot,port;
 
    switch(irq) {
       case C2600_VTIMER_IRQ:
@@ -1276,6 +1305,11 @@ static void c2600_clear_irq(vm_instance_t *vm,u_int irq)
          break;
       case C2600_PA_MGMT_IRQ:
          mpc860_clear_pending_irq(router->mpc_data,27);
+         break;
+
+      case C2600_NETIO_IRQ_BASE ... C2600_NETIO_IRQ_END:
+         c2600_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c2600_iofpga_net_clear_irq(router->iofpga_data,slot,port);
          break;
 
       /* IRQ test */
@@ -1319,10 +1353,10 @@ int c2600_init_platform(c2600_t *router)
 
    /* Set processor ID */
    ppc32_set_pvr(cpu,0x00500202);
-
+   
    /* Mark the Network IO interrupt as high priority */
-   cpu->irq_idle_preempt[C2600_NETIO_IRQ] = TRUE;
-   cpu->irq_idle_preempt[C2600_DUART_IRQ] = TRUE;
+   vm->irq_idle_preempt[C2600_NETIO_IRQ] = TRUE;
+   vm->irq_idle_preempt[C2600_DUART_IRQ] = TRUE;
 
    /* Copy some parameters from VM to CPU (idle PC, ...) */
    cpu->idle_pc = vm->idle_pc;
@@ -1345,6 +1379,11 @@ int c2600_init_platform(c2600_t *router)
    /* IO FPGA */
    if (dev_c2600_iofpga_init(router,C2600_IOFPGA_ADDR,0x10000) == -1)
       return(-1);
+
+   if (!(obj = vm_object_find(router->vm,"io_fpga")))
+      return(-1);
+
+   router->iofpga_data = obj->data;
 
    /* Initialize the chassis */
    if (c2600_init(router) == -1)
@@ -1406,12 +1445,12 @@ static struct ppc32_bat_prog bat_array[] = {
    { PPC32_IBAT_IDX, 0, 0xfff0001e, 0xfff00001 },
    { PPC32_IBAT_IDX, 1, 0x00001ffe, 0x00000001 },
    { PPC32_IBAT_IDX, 2, 0x00000000, 0xee3e0072 },
-   { PPC32_IBAT_IDX, 3, 0x80001ffe, 0x80000001 },
+   { PPC32_IBAT_IDX, 3, 0x80001ffe, 0x00000001 },
 
-   { PPC32_DBAT_IDX, 0, 0x80001ffe, 0x80000042 },
+   { PPC32_DBAT_IDX, 0, 0x80001ffe, 0x00000042 },
    { PPC32_DBAT_IDX, 1, 0x00001ffe, 0x0000002a },
    { PPC32_DBAT_IDX, 2, 0x40007ffe, 0x4000002a },
-   { PPC32_DBAT_IDX, 3, 0xfc0007fe, 0xfc00002a },
+   { PPC32_DBAT_IDX, 3, 0xf0001ffe, 0xf000002a },
    { -1, -1, 0, 0 },
 };
 
@@ -1442,7 +1481,8 @@ int c2600_boot_ios(c2600_t *router)
 
    /* Load BAT registers */
    printf("Loading BAT registers\n");
-   ppc32_load_bat_array(CPU_PPC32(vm->boot_cpu),bat_array);
+   ppc32_load_bat_array(cpu,bat_array);
+   cpu->msr |= PPC32_MSR_IR|PPC32_MSR_DR;
 
    /* IRQ routing */
    vm->set_irq = c2600_set_irq;

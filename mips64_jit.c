@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <assert.h>
 
+#include "sbox.h"
 #include "cpu.h"
 #include "device.h"
 #include "mips64.h"
@@ -82,7 +83,7 @@ void mips64_jit_create_ilt(void)
    for(i=0,count=0;mips64_insn_tags[i].emit;i++)
       count++;
 
-   ilt = ilt_create(count+1,
+   ilt = ilt_create("mips64j",count,
                     (ilt_get_insn_cbk_t)mips64_jit_get_insn,
                     (ilt_check_cbk_t)mips64_jit_chk_lo,
                     (ilt_check_cbk_t)mips64_jit_chk_hi);
@@ -98,9 +99,9 @@ int mips64_jit_init(cpu_mips_t *cpu)
    int i;
 
    /* Physical mapping for executable pages */
-   len = 1048576 * sizeof(void *);
-   cpu->exec_phys_map = m_memalign(4096,len);
-   memset(cpu->exec_phys_map,0,len);
+   len = MIPS_JIT_PC_HASH_SIZE * sizeof(void *);
+   cpu->exec_blk_map = m_memalign(4096,len);
+   memset(cpu->exec_blk_map,0,len);
 
    /* Get area size */
    if (!(area_size = cpu->vm->exec_area_size))
@@ -151,6 +152,7 @@ int mips64_jit_init(cpu_mips_t *cpu)
 u_int mips64_jit_flush(cpu_mips_t *cpu,u_int threshold)
 {
    mips64_jit_tcb_t *p,*next;
+   m_uint32_t pc_hash;
    u_int count = 0;
 
    if (!threshold)
@@ -160,7 +162,8 @@ u_int mips64_jit_flush(cpu_mips_t *cpu,u_int threshold)
       next = p->next;
 
       if (p->acc_count <= threshold) {
-         cpu->exec_phys_map[p->phys_page] = NULL;
+         pc_hash = mips64_jit_get_pc_hash(p->start_pc);
+         cpu->exec_blk_map[pc_hash] = NULL;
          mips64_jit_tcb_free(cpu,p,TRUE);
          count++;
       }
@@ -192,7 +195,7 @@ void mips64_jit_shutdown(cpu_mips_t *cpu)
    free(cpu->exec_page_array);
 
    /* Free physical mapping for executable pages */
-   free(cpu->exec_phys_map);   
+   free(cpu->exec_blk_map);   
 }
 
 /* Allocate an exec page */
@@ -316,6 +319,24 @@ static inline void *physmem_get_hptr(vm_instance_t *vm,m_uint64_t paddr,
 
    offset = paddr - dev->phys_addr;
    return(dev->handler(vm->boot_cpu,dev,offset,op_size,op_type,data));
+}
+
+/* Check if an instruction is in a delay slot or not */
+int mips64_jit_is_delay_slot(mips64_jit_tcb_t *b,m_uint64_t pc)
+{   
+   struct mips64_insn_tag *tag;
+   m_uint32_t offset,insn;
+
+   offset = (pc - b->start_pc) >> 2;
+
+   if (!offset)
+      return(FALSE);
+
+   /* Fetch the previous instruction to determine if it is a jump */
+   insn = vmtoh32(b->mips_code[offset-1]);
+   tag = insn_tag_find(insn);
+   assert(tag != NULL);
+   return(!tag->delay_slot);
 }
 
 /* Fetch a MIPS instruction and emit corresponding translated code */
@@ -696,38 +717,14 @@ void mips64_jit_tcb_run(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
 #endif
 }
 
-/* Check if the specified address belongs to the specified block */
-int mips64_jit_tcb_local_addr(mips64_jit_tcb_t *block,m_uint64_t vaddr,
-                              u_char **jit_addr)
-{
-   if ((vaddr >= block->start_pc) && 
-       ((vaddr - block->start_pc) < MIPS_MIN_PAGE_SIZE))
-   {
-      *jit_addr = mips64_jit_tcb_get_host_ptr(block,vaddr);
-      return(1);
-   }
-
-   return(0);
-}
-
-/* Check if PC register matches the compiled block virtual address */
-static forced_inline 
-int mips64_jit_tcb_match(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
-{
-   m_uint64_t vpage;
-
-   vpage = cpu->pc & ~(m_uint64_t)MIPS_MIN_PAGE_IMASK;
-   return(block->start_pc == vpage);
-}
-
 /* Execute compiled MIPS code */
 void *mips64_jit_run_cpu(cpu_gen_t *gen)
 {    
    cpu_mips_t *cpu = CPU_MIPS64(gen);
    pthread_t timer_irq_thread;
    mips64_jit_tcb_t *block;
-   m_uint32_t phys_page;
    int timer_irq_check = 0;
+   m_uint32_t pc_hash;
 
    if (pthread_create(&timer_irq_thread,NULL,
                       (void *)mips64_timer_irq_run,cpu)) 
@@ -740,7 +737,6 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
    }
 
    gen->cpu_thread_running = TRUE;
-
  start_cpu:   
    gen->idle_count = 0;
 
@@ -770,22 +766,15 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
          }
       }
 
-      /* Get the physical page address corresponding to PC register */
-      if (unlikely(cpu->translate(cpu,cpu->pc,&phys_page))) {
-         fprintf(stderr,"VM '%s': no physical page for CPU%u PC=0x%llx\n",
-                 cpu->vm->name,gen->id,cpu->pc);
-         cpu_stop(gen);
-         break;
-      }
-
-      block = cpu->exec_phys_map[phys_page];
+      pc_hash = mips64_jit_get_pc_hash(cpu->pc);
+      block = cpu->exec_blk_map[pc_hash];
 
       /* No block found, compile the page */
       if (unlikely(!block) || unlikely(!mips64_jit_tcb_match(cpu,block))) 
-      {
+      {        
          if (block != NULL) {
             mips64_jit_tcb_free(cpu,block,TRUE);
-            cpu->exec_phys_map[phys_page] = NULL;
+            cpu->exec_blk_map[pc_hash] = NULL;
          }
 
          block = mips64_jit_tcb_compile(cpu,cpu->pc);
@@ -797,8 +786,7 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
             break;
          }
 
-         block->phys_page = phys_page;
-         cpu->exec_phys_map[phys_page] = block;
+         cpu->exec_blk_map[pc_hash] = block;
       }
 
 #if DEBUG_BLOCK_TIMESTAMP

@@ -96,7 +96,8 @@ static forced_inline int ilt_lookup(insn_lookup_t *ilt,mips_insn_t insn)
 }
 
 /* Create an instruction lookup table */
-insn_lookup_t *ilt_create(int nr_insn,ilt_get_insn_cbk_t get_insn,
+insn_lookup_t *ilt_create(char *table_name,
+                          int nr_insn,ilt_get_insn_cbk_t get_insn,
                           ilt_check_cbk_t chk_lo,ilt_check_cbk_t chk_hi);
 
 #endif

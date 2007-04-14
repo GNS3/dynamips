@@ -491,7 +491,7 @@ static inline int m32_tx_scan(struct m32_data *d,u_int chan_id)
          printf("M32: data_ptr=0x%x, len=%u\n",txd.tdp,pkt_len);
          mem_dump(stdout,pkt,pkt_len);
 
-         /* Poll the next descriptor (wait for HOLD bit to be reset */
+         /* Poll the next descriptor (wait for HOLD bit to be reset) */
          chan->poll_mode = 1;  
 
          if (txd.params & M32_TXDESC_FE) {

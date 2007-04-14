@@ -26,7 +26,7 @@
 #include "memory.h"
 #include "device.h"
 #include "dev_vtty.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "ds1620.h"
 #include "dev_c7200.h"
 
@@ -133,25 +133,25 @@ struct iofpga_data {
 #define IOFPGA_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
 
 /* CPU EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_cpu_def = {
+static const struct nmc93cX6_eeprom_def eeprom_cpu_def = {
    SK1_CLOCK_CPU, CS1_CHIP_SEL_CPU, 
    DI1_DATA_IN_CPU, DO1_DATA_OUT_CPU,
 };
 
 /* Midplane EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_midplane_def = {
+static const struct nmc93cX6_eeprom_def eeprom_midplane_def = {
    SK2_CLOCK_MIDPLANE, CS2_CHIP_SEL_MIDPLANE, 
    DI2_DATA_IN_MIDPLANE, DO2_DATA_OUT_MIDPLANE,
 };
 
 /* PEM (NPE-B) EEPROM definition */
-static const struct nmc93c46_eeprom_def eeprom_pem_def = {
+static const struct nmc93cX6_eeprom_def eeprom_pem_def = {
    SK1_CLOCK_PEM, CS1_CHIP_SEL_PEM, DI1_DATA_IN_PEM, DO1_DATA_OUT_PEM,
 };
 
 /* IOFPGA manages simultaneously CPU and Midplane EEPROM */
-static const struct nmc93c46_group eeprom_cpu_midplane = {
-   2, 0, "CPU and Midplane EEPROM", 0, 
+static const struct nmc93cX6_group eeprom_cpu_midplane = {
+   EEPROM_TYPE_NMC93C46, 2, 0, "CPU and Midplane EEPROM", 0, 
    { &eeprom_cpu_def, &eeprom_midplane_def }, 
 };
 
@@ -160,8 +160,8 @@ static const struct nmc93c46_group eeprom_cpu_midplane = {
  * PEM stands for "Power Entry Module":
  * http://www.cisco.com/en/US/products/hw/routers/ps341/products_field_notice09186a00801cb26d.shtml
  */
-static const struct nmc93c46_group eeprom_pem_npeb = {
-   1, 0, "PEM (NPE-B) EEPROM", 0, { &eeprom_pem_def },
+static const struct nmc93cX6_group eeprom_pem_npeb = {
+   EEPROM_TYPE_NMC93C46, 1, 0, "PEM (NPE-B) EEPROM", 0, { &eeprom_pem_def },
 };
 
 /* Reset DS1620 */
@@ -454,17 +454,17 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* CPU/Midplane EEPROMs */
       case 0x21c:
          if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->sys_eeprom_g1,(u_int)(*data));
+            nmc93cX6_write(&d->router->sys_eeprom_g1,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->sys_eeprom_g1);
+            *data = nmc93cX6_read(&d->router->sys_eeprom_g1);
          break;
 
       /* PEM (NPE-B) EEPROM */
       case 0x388:
           if (op_type == MTS_WRITE)
-            nmc93c46_write(&d->router->sys_eeprom_g2,(u_int)(*data));
+            nmc93cX6_write(&d->router->sys_eeprom_g2,(u_int)(*data));
          else
-            *data = nmc93c46_read(&d->router->sys_eeprom_g2);
+            *data = nmc93cX6_read(&d->router->sys_eeprom_g2);
          break;
 
       /* Watchdog */

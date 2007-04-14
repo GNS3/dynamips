@@ -157,8 +157,9 @@ typedef struct {
 #define MTS_INV_ENTRY_MASK  0x00000001
 
 /* MTS entry flags */
-#define MTS_FLAG_DEV  0x000000001   /* Virtual device used */
-#define MTS_FLAG_COW  0x000000002   /* Copy-On-Write */
+#define MTS_FLAG_DEV   0x000000001   /* Virtual device used */
+#define MTS_FLAG_COW   0x000000002   /* Copy-On-Write */
+#define MTS_FLAG_EXEC  0x000000004   /* Exec page */
 
 /* Virtual TLB entry (32-bit MMU) */
 typedef struct mts32_entry mts32_entry_t;
@@ -358,5 +359,8 @@ m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count);
 
 /* Byte-swap a memory block */
 void mem_bswap32(void *ptr,size_t len);
+
+/* Reverse a byte */
+m_uint8_t m_reverse_u8(m_uint8_t val);
 
 #endif

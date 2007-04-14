@@ -14,7 +14,7 @@
 #include "net.h"
 #include "device.h"
 #include "pci_dev.h"
-#include "nmc93c46.h"
+#include "nmc93cX6.h"
 #include "net_io.h"
 #include "dev_mpc860.h"
 #include "vm.h"
@@ -45,6 +45,14 @@
 
 /* C2600 PA Management Interrupt */
 #define C2600_PA_MGMT_IRQ   3
+
+/* Network IRQ */
+#define C2600_NETIO_IRQ_BASE       32
+#define C2600_NETIO_IRQ_PORT_BITS  2
+#define C2600_NETIO_IRQ_PORT_MASK  ((1 << C2600_NETIO_IRQ_PORT_BITS) - 1)
+#define C2600_NETIO_IRQ_PER_SLOT   (1 << C2600_NETIO_IRQ_PORT_BITS)
+#define C2600_NETIO_IRQ_END        \
+    (C2600_NETIO_IRQ_BASE + (C2600_MAX_NM_BAYS * C2600_NETIO_IRQ_PER_SLOT) - 1)
 
 /* C2600 common device addresses */
 #define C2600_IOFPGA_ADDR     0x67400000ULL
@@ -127,6 +135,9 @@ struct c2600_router {
    /* IO memory size to be passed to Smart Init */
    u_int nm_iomem_size;
 
+   /* I/O FPGA */
+   struct c2600_iofpga_data *iofpga_data;
+
    /* Chassis information */
    struct c2600_nm_bay nm_bay[C2600_MAX_NM_BAYS];
    m_uint8_t oir_status;
@@ -136,10 +147,10 @@ struct c2600_router {
     * It can be modified to change the chassis MAC address.
     */
    struct cisco_eeprom mb_eeprom;
-   struct nmc93c46_group mb_eeprom_group;
+   struct nmc93cX6_group mb_eeprom_group;
 
    /* Network Module EEPROM */
-   struct nmc93c46_group nm_eeprom_group;
+   struct nmc93cX6_group nm_eeprom_group;
 
    /* MPC860 device private data */
    struct mpc860_data *mpc_data;
@@ -159,6 +170,9 @@ void c2600_save_config(c2600_t *router,FILE *fd);
 
 /* Save configurations of all C2600 instances */
 void c2600_save_config_all(FILE *fd);
+
+/* Get network IRQ for specified slot/port */
+u_int c2600_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Show all available mainboards */
 void c2600_mainboard_show_drivers(void);

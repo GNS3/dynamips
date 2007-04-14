@@ -32,9 +32,9 @@
 
 /* Debugging flags */
 #define DEBUG_ACCESS    0
-#define DEBUG_UNKNOWN   1
-#define DEBUG_TRANSMIT  0
-#define DEBUG_RECEIVE   0
+#define DEBUG_UNKNOWN   0
+#define DEBUG_TRANSMIT  1
+#define DEBUG_RECEIVE   1
 
 /* PCI vendor/product codes */
 #define POS_OC3_PCI_VENDOR_ID    0x10b5
@@ -288,8 +288,10 @@ static void *dev_pos_cs_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x300000:
       case 0x300004:
       case 0x30001c:
-         if (op_type == MTS_READ)
-            *data = 0x00000FFF;         
+         if (op_type == MTS_READ) {
+            *data = 0x00000FFF;
+            pci_dev_clear_irq(d->vm,d->pci_dev);
+         }     
          break;
 
       case 0x300008:
@@ -417,7 +419,7 @@ static void dev_pos_oc3_receive_pkt(struct pos_oc3_data *d,
 
       /* We have finished if the complete packet has been stored */
       if (tot_len == 0) {
-         rxdc->rdes[0] = cp_len + 4;
+         rxdc->rdes[0] = (cp_len + 4);
 
          if (i != 0)
             physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
@@ -544,7 +546,7 @@ static int dev_pos_oc3_handle_txring(struct pos_oc3_data *d)
          addr = ptxd->tdes[1];
 
          norm_len = normalize_size(clen,4,0);
-         physmem_copy_from_vm(d->vm,pkt_ptr,addr,clen);
+         physmem_copy_from_vm(d->vm,pkt_ptr,addr,norm_len);
          mem_bswap32(pkt_ptr,norm_len);
       }
 
@@ -688,7 +690,9 @@ int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
    d->dev.phys_len  = 0x10000;
    d->dev.handler   = dev_pos_access;
 
-   d->pci_dev = pci_dev_add(pci_bus,name,0,0,3,0,C7200_NETIO_IRQ,
+   d->pci_dev = pci_dev_add(pci_bus,name,0,0,3,0,
+                            /*C7200_NETIO_IRQ,*/
+                            c7200_net_irq_for_slot_port(pa_bay,0),
                             d,NULL,pci_pos_read,pci_pos_write);
 
    /* Store device info into the router structure */

@@ -26,6 +26,7 @@
 #define DEBUG_MTS_STATS        1   /* MTS cache performance */
 #define DEBUG_INSN_PERF_CNT    0   /* Instruction performance counter */
 #define DEBUG_BLOCK_PERF_CNT   0   /* Block performance counter */
+#define DEBUG_DEV_PERF_CNT     1   /* Device performance counter */
 #define DEBUG_TLB_ACTIVITY     0 
 #define DEBUG_SYSCALL          0
 #define DEBUG_CACHE            0
@@ -33,7 +34,7 @@
 
 /* Feature flags */
 #define MEMLOG_ENABLE          0   /* Memlogger (fast memop must be off) */
-#define BREAKPOINT_ENABLE      0   /* Virtual Breakpoints */
+#define BREAKPOINT_ENABLE      1   /* Virtual Breakpoints */
 #define NJM_STATS_ENABLE       1   /* Non-JIT mode stats (little overhead) */
 
 /* Symbol */
@@ -50,6 +51,9 @@ extern FILE *log_file;
 
 /* Software version */
 extern const char *sw_version;
+
+/* Software version specific tag */
+extern const char *sw_version_tag;
 
 /* Delete all objects */
 void dynamips_reset(void);

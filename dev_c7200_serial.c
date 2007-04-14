@@ -54,7 +54,7 @@ int dev_c7200_pa_4t_init(c7200_t *router,char *name,u_int pa_bay)
    /* Create the Mueslix chip */
    data = dev_mueslix_init(router->vm,name,1,
                            router->pa_bay[pa_bay].pci_map,0,
-                           C7200_NETIO_IRQ);
+                           c7200_net_irq_for_slot_port(pa_bay,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
@@ -138,13 +138,13 @@ int dev_c7200_pa_8t_init(c7200_t *router,char *name,u_int pa_bay)
    /* Create the 1st Mueslix chip */
    data->mueslix[0] = dev_mueslix_init(router->vm,name,1,
                                        router->pa_bay[pa_bay].pci_map,0,
-                                       C7200_NETIO_IRQ);
+                                       c7200_net_irq_for_slot_port(pa_bay,0));
    if (!data->mueslix[0]) return(-1);
 
    /* Create the 2nd Mueslix chip */
    data->mueslix[1] = dev_mueslix_init(router->vm,name,1,
                                        router->pa_bay[pa_bay].pci_map,1,
-                                       C7200_NETIO_IRQ);
+                                       c7200_net_irq_for_slot_port(pa_bay,1));
    if (!data->mueslix[1]) return(-1);
 
    /* Store device info into the router structure */

@@ -2088,3 +2088,133 @@
 14-Feb-2007
 -----------
   - C7200: added C7200-IO-GE+E, based on Intel i82543 chips.
+
+16-Feb-2007
+-----------
+  - MIPS64: fixed a problem of jump in delay slots (occuring with a "forward"
+    jump). This caused a malfunction for C7200-IO-2FE and C7200-IO-GE-E cards.
+  - C7200: adjusted the byte-swapped zone for NPE-300 io-memory.
+
+18-Feb-2007
+-----------
+  - PPC32: Remove JIT compiled pages when a write occurs (required for c2600).
+
+19-Feb-2007
+-----------
+  - PPC32: Optimization for writes on JIT page at address 0.
+	
+20-Feb-2007
+-----------
+  - Working on MSFC1 - just for fun (this will probably never route any 
+    packet).
+  - Fixed DEC21140 TX ring interrupt generation.
+	
+21-Feb-2007
+-----------
+  - Continuing on MSFC1 (added EEPROM, SRAM, ...)
+  - Added NMC93C56 EEPROM support.
+
+23-Feb-2007
+-----------
+  - MPC860: fixed a bug in DMA handling which caused incorrect writes out
+    of DPRAM memory.
+  - PPC32: added missing breakpoint function for JIT.
+  - C7200: rework on network interrupts, for clean handling per slot/port.
+
+24-Feb-2007
+-----------
+  - C7200: Net IRQs are now correctly dispatched. Need to fix all drivers
+    to generate IRQs correctly.
+  - DEC21140: proper management of CSR5 register for new interrupt handling.
+  - i8254x: converted to new interrupt handling.
+  - Am79c971: fixed interrupt management + a bug with IRQ mask.
+  - PA-A1/PA-POS-OC3/Mueslix: fixed interrupt management.
+
+25-Feb-2007
+-----------
+  - C2691: updated interrupt infrastructure.
+  - NM-16ESW: fixed interrupt handling.
+
+26-Feb-2007
+-----------
+  - C3725/C3745: updated interrupt infrastructure.
+
+27-Feb-2007
+-----------
+  - C2600: updated interrupt infrastructure.
+
+02-Mar-2007
+-----------
+  - Added a cache for the instruction lookup tables (ILT), allowing a faster
+    start.
+
+03-Mar-2007
+-----------
+  - Fixed instruction tables (problem seen on amd64 platforms).
+
+07-Mar-2007
+-----------
+  - MIPS64/PPC32: various code cleanups in JIT code.
+  - MIPS64: replace the JIT block lookup algorithm based on physical
+    pages by s-boxes (x86 only).
+
+08-Mar-2007
+-----------
+  - PPC32: JIT block lookup optimization (x86 only).
+
+09-Mar-2007
+-----------
+  - MIPS64/PPC32: JIT block lookup optimization (amd64).
+
+12-Mar-2007
+-----------
+  - PPC32: fixed invalid hash index in JIT block invalidation (thanks to Greg).
+	
+13-Mar-2007
+-----------
+  - Updated the Mueslix driver and fixed it for packets > 128 bytes
+    (IRQ clearing delay required because of the new interrupt system).
+  - Allowed MTU up to 18000 bytes on the Mueslix driver. This required an
+    update of the NIO core.
+  - Full dump of the idle-pc values when no "good" value can be determined.
+
+25-Mar-2007
+-----------
+  - Store the idle-pc values in the CPU structure when no "good" value is
+    available, so they are readable/usable by dynagen.
+  - PA-POS-OC3: fixed memory copy which caused invalid frames to be sent.
+
+27-Mar-2007
+-----------
+  - Added a device access counter for each CPU for diagnostics purposes.
+
+29-Mar-2007
+-----------
+  - PPC32: optimizations for eflags->cr computing.
+
+30-Mar-2007
+-----------
+  - PPC32: optimizations in CR handling (split in 8 fields).
+
+31-Mar-2007
+-----------
+  - PPC32: added CR optimizations to amd64 backend.
+
+02-Apr-2007
+-----------
+  - Fixed "nojit" build (reported by Philipp Brenner, BTS entry #156).
+  - AMD Am79c970 FastEthernet interfaces now announce 100 Mb/s Full duplex.
+
+04-Apr-2007
+-----------
+  - Fixed build (NetIO filters) when PCAP is lacking.
+
+09-Apr-2007
+-----------
+  - Added NM-1A-OC3MM EEPROM definition for future work.
+  - NM-16ESW: filter CDP specifically to not propagate frames to all ports.
+
+12-Apr-2007
+-----------
+  - Added an hypervisor command to disable direct jumps between JIT blocks
+    (vm set_blk_direct_jump <vm_name> <0|1>).

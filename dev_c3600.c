@@ -21,6 +21,7 @@
 #include "cisco_eeprom.h"
 #include "dev_rom.h"
 #include "dev_c3600.h"
+#include "dev_c3600_iofpga.h"
 #include "dev_c3600_bay.h"
 #include "dev_vtty.h"
 #include "registry.h"
@@ -341,6 +342,26 @@ static void c3600_reg_save_config(registry_entry_t *entry,void *opt,int *err)
 void c3600_save_config_all(FILE *fd)
 {
    registry_foreach_type(OBJ_TYPE_VM,c3600_reg_save_config,fd,NULL);
+}
+
+/* Get slot/port corresponding to specified network IRQ */
+static inline void 
+c3600_net_irq_get_slot_port(u_int irq,u_int *slot,u_int *port)
+{
+   irq -= C3600_NETIO_IRQ_BASE;
+   *port = irq & C3600_NETIO_IRQ_PORT_MASK;
+   *slot = irq >> C3600_NETIO_IRQ_PORT_BITS;
+}
+
+/* Get network IRQ for specified slot/port */
+u_int c3600_net_irq_for_slot_port(u_int slot,u_int port)
+{
+   u_int irq;
+
+   irq = (slot << C3600_NETIO_IRQ_PORT_BITS) + port;
+   irq += C3600_NETIO_IRQ_BASE;
+
+   return(irq);
 }
 
 /* Set NM EEPROM definition */
@@ -699,7 +720,7 @@ int c3600_nm_init(c3600_t *router,u_int nm_bay)
    snprintf(bay->dev_name,len,"%s(%u)",bay->dev_type,nm_bay);
 
    /* Initialize NM driver */
-   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == 1) {
+   if (bay->nm_driver->nm_init(router,bay->dev_name,nm_bay) == -1) {
       vm_error(router->vm,"unable to initialize NM %u.\n",nm_bay);
       return(-1);
    }
@@ -1267,6 +1288,7 @@ int c3600_init_platform(c3600_t *router)
    struct c3600_nm_bay *nm_bay;
    cpu_mips_t *cpu;
    cpu_gen_t *gen;
+   vm_obj_t *obj;
    int i;
 
    /* Copy config register setup into "active" config register */
@@ -1327,6 +1349,11 @@ int c3600_init_platform(c3600_t *router)
    /* IO FPGA */
    if (dev_c3600_iofpga_init(router,C3600_IOFPGA_ADDR,0x40000) == -1)
       return(-1);
+
+   if (!(obj = vm_object_find(router->vm,"io_fpga")))
+      return(-1);
+
+   router->iofpga_data = obj->data;
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C3600_PCI_IO_ADDR)))
@@ -1426,6 +1453,47 @@ int c3600_boot_ios(c3600_t *router)
    return(0);
 }
 
+/* Set an IRQ */
+static void c3600_set_irq(vm_instance_t *vm,u_int irq)
+{
+   c3600_t *router = VM_C3600(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_set_irq(cpu0,irq);
+
+         if (cpu0->irq_idle_preempt[irq])
+            cpu_idle_break_wait(cpu0->gen);
+         break;
+
+      case C3600_NETIO_IRQ_BASE ... C3600_NETIO_IRQ_END:
+         c3600_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c3600_iofpga_net_set_irq(router->iofpga_data,slot,port);
+         break;
+   }
+}
+
+/* Clear an IRQ */
+static void c3600_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   c3600_t *router = VM_C3600(vm);
+   cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
+   u_int slot,port;
+
+   switch(irq) {
+      case 0 ... 7:
+         mips64_clear_irq(cpu0,irq);
+         break;
+
+      case C3600_NETIO_IRQ_BASE ... C3600_NETIO_IRQ_END:
+         c3600_net_irq_get_slot_port(irq,&slot,&port);
+         dev_c3600_iofpga_net_clear_irq(router->iofpga_data,slot,port);
+         break;
+   }
+}
+
 /* Initialize a Cisco 3600 instance */
 int c3600_init_instance(c3600_t *router)
 {   
@@ -1443,6 +1511,10 @@ int c3600_init_instance(c3600_t *router)
       vm_error(vm,"unable to initialize the platform hardware.\n");
       return(-1);
    }
+
+   /* IRQ routing */
+   vm->set_irq = c3600_set_irq;
+   vm->clear_irq = c3600_clear_irq;
 
    /* Load IOS configuration file */
    if (vm->ios_config != NULL) {

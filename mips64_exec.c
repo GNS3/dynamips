@@ -51,7 +51,7 @@ void mips64_exec_create_ilt(void)
    for(i=0,count=0;mips64_exec_tags[i].exec;i++)
       count++;
 
-   ilt = ilt_create(count+1,
+   ilt = ilt_create("mips64e",count,
                     (ilt_get_insn_cbk_t)mips64_exec_get_insn,
                     (ilt_check_cbk_t)mips64_exec_chk_lo,
                     (ilt_check_cbk_t)mips64_exec_chk_hi);
@@ -322,6 +322,14 @@ static forced_inline int mips64_exec_fetch(cpu_mips_t *cpu,m_uint64_t pc,
    return(0);
 }
 
+/* Unknown opcode */
+static fastcall int mips64_exec_unknown(cpu_mips_t *cpu,mips_insn_t insn)
+{
+   printf("MIPS64: unknown opcode 0x%8.8x at pc = 0x%llx\n",insn,cpu->pc);
+   mips64_dump_regs(cpu->gen);
+   return(0);
+}
+
 /* Execute a single instruction */
 static forced_inline int 
 mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
@@ -342,10 +350,9 @@ mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
    tag = mips64_exec_get_insn(index);
    exec = tag->exec;
 
-   if (likely(exec != NULL)) {
 #if NJM_STATS_ENABLE
-      cpu->insn_exec_count++;
-      mips64_exec_tags[index].count++;
+   cpu->insn_exec_count++;
+   mips64_exec_tags[index].count++;
 #endif
 #if 0
    {
@@ -356,13 +363,7 @@ mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
    }
 #endif
 
-      return(exec(cpu,instruction));
-   }
-
-   printf("MIPS64: unknown opcode 0x%8.8x at pc = 0x%llx\n",
-          instruction,cpu->pc);
-   mips64_dump_regs(cpu->gen);
-   return(0);
+   return(exec(cpu,instruction));
 }
 
 /* Single-step execution */
@@ -2196,6 +2197,7 @@ static struct mips64_insn_exec_tag mips64_exec_tags[] = {
    { "tlbwr"  , mips64_exec_TLBWR   , 0xffffffff , 0x42000006, 1, 1 },
    { "xor"    , mips64_exec_XOR     , 0xfc0007ff , 0x00000026, 1, 3 },
    { "xori"   , mips64_exec_XORI    , 0xfc000000 , 0x38000000, 1, 5 },
+   { "unknown", mips64_exec_unknown , 0x00000000 , 0x00000000, 1, 0 },
    { NULL     , NULL                , 0x00000000 , 0x00000000, 1, 0 },
 };
 

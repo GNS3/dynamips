@@ -1461,14 +1461,14 @@ static void netio_rxl_add_internal(struct netio_rx_listener *rxl)
 static void *netio_rxl_spec_thread(void *arg)
 {
    struct netio_rx_listener *rxl = arg;
-   u_char pkt[NETIO_MAX_PKT_SIZE];
+   netio_desc_t *nio = rxl->nio;
    ssize_t pkt_len;
 
    while(rxl->running) {
-      pkt_len = netio_recv(rxl->nio,pkt,sizeof(pkt));
+      pkt_len = netio_recv(nio,nio->rx_pkt,sizeof(nio->rx_pkt));
 
       if (pkt_len > 0)
-         rxl->rx_handler(rxl->nio,pkt,pkt_len,rxl->arg1,rxl->arg2);
+         rxl->rx_handler(nio,nio->rx_pkt,pkt_len,rxl->arg1,rxl->arg2);
    }
 
    return NULL;
@@ -1478,7 +1478,6 @@ static void *netio_rxl_spec_thread(void *arg)
 void *netio_rxl_gen_thread(void *arg)
 { 
    struct netio_rx_listener *rxl;
-   u_char pkt[NETIO_MAX_PKT_SIZE];
    ssize_t pkt_len;
    netio_desc_t *nio;
    struct timeval tv;
@@ -1533,14 +1532,16 @@ void *netio_rxl_gen_thread(void *arg)
       NETIO_RXL_LOCK();
 
       for(rxl=netio_rxl_list;rxl;rxl=rxl->next) {
-         if ((fd = netio_get_fd(rxl->nio)) == -1)
+         nio = rxl->nio;
+
+         if ((fd = netio_get_fd(nio)) == -1)
             continue;
 
          if (FD_ISSET(fd,&rfds)) {
-            pkt_len = netio_recv(rxl->nio,pkt,sizeof(pkt));
+            pkt_len = netio_recv(nio,nio->rx_pkt,sizeof(nio->rx_pkt));
 
             if (pkt_len > 0)
-               rxl->rx_handler(rxl->nio,pkt,pkt_len,rxl->arg1,rxl->arg2);
+               rxl->rx_handler(nio,nio->rx_pkt,pkt_len,rxl->arg1,rxl->arg2);
          }
       }
 

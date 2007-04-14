@@ -82,6 +82,66 @@ void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc)
    x86_mov_membase_reg(b->jit_ptr,X86_EDI,REG_OFFSET(MIPS_GPR_RA)+4,X86_EDX,4);
 }
 
+/* 
+ * Try to branch directly to the specified JIT block without returning to 
+ * main loop.
+ */
+static void mips64_try_direct_far_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+                                       m_uint64_t new_pc)
+{
+   m_uint64_t new_page;
+   m_uint32_t pc_hash,pc_offset;
+   u_char *test1,*test2,*test3,*test4;
+
+   new_page = new_pc & MIPS_MIN_PAGE_MASK;
+   pc_offset = (new_pc & MIPS_MIN_PAGE_IMASK) >> 2;
+   pc_hash = mips64_jit_get_pc_hash(new_pc);
+
+   /* Get JIT block info in %edx */
+   x86_mov_reg_membase(b->jit_ptr,X86_EBX,
+                       X86_EDI,OFFSET(cpu_mips_t,exec_blk_map),4);
+   x86_mov_reg_membase(b->jit_ptr,X86_EDX,X86_EBX,pc_hash*sizeof(void *),4);
+
+   /* no JIT block found ? */
+   x86_test_reg_reg(b->jit_ptr,X86_EDX,X86_EDX);
+   test1 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+
+   /* Check block PC (lower 32-bits first) */
+   x86_mov_reg_imm(b->jit_ptr,X86_EAX,(m_uint32_t)new_page);
+   x86_alu_reg_membase(b->jit_ptr,X86_CMP,X86_EAX,X86_EDX,
+                       OFFSET(mips64_jit_tcb_t,start_pc));
+   test2 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
+
+   /* Check higher bits... */
+   x86_mov_reg_imm(b->jit_ptr,X86_ECX,new_page >> 32);
+   x86_alu_reg_membase(b->jit_ptr,X86_CMP,X86_ECX,X86_EDX,
+                       OFFSET(mips64_jit_tcb_t,start_pc)+4);
+   test3 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
+
+   /* Jump to the code */
+   x86_mov_reg_membase(b->jit_ptr,X86_ESI,
+                       X86_EDX,OFFSET(mips64_jit_tcb_t,jit_insn_ptr),4);
+   x86_mov_reg_membase(b->jit_ptr,X86_EBX,
+                       X86_ESI,pc_offset * sizeof(void *),4);
+   
+   x86_test_reg_reg(b->jit_ptr,X86_EBX,X86_EBX);
+   test4 = b->jit_ptr;
+   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   x86_jump_reg(b->jit_ptr,X86_EBX);
+
+   /* Returns to caller... */
+   x86_patch(test1,b->jit_ptr);
+   x86_patch(test2,b->jit_ptr);
+   x86_patch(test3,b->jit_ptr);
+   x86_patch(test4,b->jit_ptr);
+
+   mips64_set_pc(b,new_pc);
+   mips64_jit_tcb_push_epilog(b);
+}
+
 /* Set Jump */
 static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
                             m_uint64_t new_pc,int local_jump)
@@ -96,15 +156,24 @@ static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
       if (jump_ptr) {
          x86_jump_code(b->jit_ptr,jump_ptr);
       } else {
+         /* Never jump directly to code in a delay slot */
+         if (mips64_jit_is_delay_slot(b,new_pc)) {
+            mips64_set_pc(b,new_pc);
+            mips64_jit_tcb_push_epilog(b);
+            return;
+         }
+
          mips64_jit_tcb_record_patch(b,b->jit_ptr,new_pc);
          x86_jump32(b->jit_ptr,0);
       }
    } else {
-      /* save PC */
-      mips64_set_pc(b,new_pc);
-
-      /* address is in another block, for now, returns to caller */
-      mips64_jit_tcb_push_epilog(b);
+      if (cpu->exec_blk_direct_jump) {
+         /* Block lookup optimization */
+         mips64_try_direct_far_jump(cpu,b,new_pc);
+      } else {
+         mips64_set_pc(b,new_pc);
+         mips64_jit_tcb_push_epilog(b);
+      }
    }
 }
 
@@ -2994,4 +3063,5 @@ struct mips64_insn_tag mips64_insn_tags[] = {
    { mips64_emit_XOR     , 0xfc0007ff , 0x00000026, 1 },
    { mips64_emit_XORI    , 0xfc000000 , 0x38000000, 1 },
    { mips64_emit_unknown , 0x00000000 , 0x00000000, 1 },
+   { NULL                , 0x00000000 , 0x00000000, 0 },
 };

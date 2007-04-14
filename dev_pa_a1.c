@@ -285,6 +285,9 @@ struct ti1570_rcr_entry {
 struct pa_a1_data {
    char *name;
 
+   /* IRQ clearing counter */
+   u_int irq_clear_count;
+
    /* Control Memory pointer */
    m_uint32_t *ctrl_mem_ptr;
 
@@ -336,6 +339,16 @@ struct pa_a1_data {
 /* Reset the TI1570 (forward declaration) */
 static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem);
 
+/* Update the interrupt status */
+static inline void dev_pa_a1_update_irq_status(struct pa_a1_data *d)
+{
+   if (d->iregs[TI1570_REG_STATUS] & d->iregs[TI1570_REG_IMASK]) {
+      pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
+   } else {
+      pci_dev_clear_irq(d->vm,d->pci_dev_ti);
+   }
+}
+
 /*
  * dev_pa_a1_access()
  */
@@ -359,6 +372,21 @@ void *dev_pa_a1_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
    /* Specific cases */
    switch(offset) {
+      /* Status register */
+      case 0x3204:
+         if (op_type == MTS_READ) {
+            *data = d->iregs[TI1570_REG_STATUS];
+
+            if (++d->irq_clear_count == 2) {
+               d->iregs[TI1570_REG_STATUS] &= ~0x3FF;
+               d->irq_clear_count = 0;
+            }
+
+            dev_pa_a1_update_irq_status(d);
+         }
+         break;
+
+      /* Software Reset register */
       case 0x3238:
          TI1570_LOG(d,"reset issued.\n");
          ti1570_reset(d,FALSE);
@@ -888,11 +916,11 @@ static int ti1570_scan_tx_dma_entry_single(struct pa_a1_data *d,
    /* Generate an interrupt if required */
    if (tde->ctrl_buf & TI1570_TX_DMA_TCR_SELECT) 
    {
-      if (((d->iregs[TI1570_REG_STATUS] & TI1570_CFG_BP_SEL) && buf_end) ||
+      if (((d->iregs[TI1570_REG_CONFIG] & TI1570_CFG_BP_SEL) && buf_end) ||
           pkt_end)
       {
          d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_CP_TX;
-         pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
+         dev_pa_a1_update_irq_status(d);
       }
    }
 
@@ -1025,7 +1053,7 @@ static void ti1570_update_rx_cring(struct pa_a1_data *d,
 
       /* generate the appropriate IRQ */
       d->iregs[TI1570_REG_STATUS] |= TI1570_STAT_CP_RX;
-      pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
+      dev_pa_a1_update_irq_status(d);
    } else  {
       rcr_end = (d->iregs[TI1570_REG_RX_CRING_SIZE] >> 16);
       rcr_end &= TI1570_RCR_SIZE_MASK;
@@ -1472,6 +1500,8 @@ static void pci_ti1570_write(cpu_gen_t *cpu,struct pci_device *dev,
 static m_uint32_t pci_plx9060es_read(cpu_gen_t *cpu,struct pci_device *dev,
                                      int reg)
 {
+   struct pa_a1_data *d = dev->priv_data;
+
 #if DEBUG_ACCESS
    TI1570_LOG(d,"PLX9060ES","read reg 0x%x\n",reg);
 #endif
@@ -1487,6 +1517,8 @@ static m_uint32_t pci_plx9060es_read(cpu_gen_t *cpu,struct pci_device *dev,
 static void pci_plx9060es_write(cpu_gen_t *cpu,struct pci_device *dev,
                                 int reg,m_uint32_t value)
 {
+   struct pa_a1_data *d = dev->priv_data;
+
 #if DEBUG_ACCESS
    TI1570_LOG(d,"PLX9060ES","write reg 0x%x, value 0x%x\n",reg,value);
 #endif
@@ -1533,7 +1565,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    /* Add PCI device TI1570 */
    pci_dev_ti = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                             TI1570_PCI_VENDOR_ID,TI1570_PCI_PRODUCT_ID,
-                            0,0,C7200_NETIO_IRQ,d,
+                            0,0,c7200_net_irq_for_slot_port(pa_bay,0),d,
                             NULL,pci_ti1570_read,pci_ti1570_write);
 
    if (!pci_dev_ti) {
@@ -1546,7 +1578,7 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    pci_dev_plx = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
                              PLX_9060ES_PCI_VENDOR_ID,
                              PLX_9060ES_PCI_PRODUCT_ID,
-                             1,0,C7200_NETIO_IRQ,d,
+                             1,0,-1,d,
                              NULL,pci_plx9060es_read,pci_plx9060es_write);
 
    if (!pci_dev_plx) {

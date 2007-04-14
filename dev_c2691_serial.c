@@ -40,7 +40,7 @@ int dev_c2691_nm_4t_init(c2691_t *router,char *name,u_int nm_bay)
    /* Create the Mueslix chip */
    data = dev_mueslix_init(router->vm,name,0,
                            router->nm_bay[nm_bay].pci_map,
-                           6,C2691_NETIO_IRQ);
+                           6,c2691_net_irq_for_slot_port(nm_bay,0));
 
    if (!data) return(-1);
 
