@@ -49,8 +49,8 @@ struct net_irq_distrib  {
 
 static struct net_irq_distrib net_irq_dist[C3725_MAX_NM_BAYS] = {
    { 0,  0 },  /* Slot 0: reg 0x26, 0x000000XX */
-   { 1,  0 },  /* Slot 1: reg 0x28, 0x000000XX */
-   { 1,  8 },  /* Slot 2: reg 0x28, 0x0000XX00 */
+   { 1,  0 },  /* Slot 1: reg 0x28, 0x0000000X */
+   { 1,  4 },  /* Slot 2: reg 0x28, 0x000000X0 */
 };
 
 /* IO FPGA structure */

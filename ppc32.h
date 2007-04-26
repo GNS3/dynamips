@@ -26,6 +26,9 @@
 #define PPC32_MIN_PAGE_IMASK   (PPC32_MIN_PAGE_SIZE - 1)
 #define PPC32_MIN_PAGE_MASK    0xFFFFF000
 
+/* Number of instructions per page */
+#define PPC32_INSN_PER_PAGE    (PPC32_MIN_PAGE_SIZE/sizeof(ppc_insn_t))
+
 /* Starting point for ROM */
 #define PPC32_ROM_START  0xfff00100
 #define PPC32_ROM_SP     0x00006000
@@ -420,6 +423,12 @@ struct cpu_ppc {
    /* Breakpoints */
    m_uint32_t breakpoints[PPC32_MAX_BREAKPOINTS];
    u_int breakpoints_enabled;
+
+   /* JIT host register allocation */
+   char *jit_hreg_seq_name;
+   int ppc_reg_map[PPC32_GPR_NR];
+   struct hreg_map *hreg_map_list,*hreg_lru;
+   struct hreg_map hreg_map[JIT_HOST_NREG];
 };
 
 #define PPC32_CR_FIELD_OFFSET(f) \

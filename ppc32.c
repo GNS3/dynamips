@@ -42,6 +42,9 @@ int ppc32_reset(cpu_ppc_t *cpu)
 /* Initialize a PowerPC processor */
 int ppc32_init(cpu_ppc_t *cpu)
 {
+   /* Initialize JIT operations */
+   jit_op_init_cpu(cpu->gen);
+
    /* Initialize idle timer */
    cpu->gen->idle_max = 1500;
    cpu->gen->idle_sleep_time = 30000;

@@ -580,10 +580,10 @@ fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 #endif
 
    if (cpu->exec_blk_map) {
-      pc_hash = mips64_jit_get_pc_hash(cpu->pc);
+      pc_hash = mips64_jit_get_pc_hash(vaddr);
       block = cpu->exec_blk_map[pc_hash];
 
-      if (block && mips64_jit_tcb_match(cpu,block)) {
+      if (block && (block->start_pc == (vaddr & MIPS_MIN_PAGE_MASK))) {
 #if DEBUG_CACHE
          cpu_log(cpu->gen,"MTS",
                  "CACHE: removing compiled page at 0x%llx, pc=0x%llx\n",
@@ -597,8 +597,9 @@ fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 #if DEBUG_CACHE
          cpu_log(cpu->gen,"MTS",
                  "CACHE: trying to remove page 0x%llx with pc=0x%llx\n",
-                 block->start_pc,cpu->pc);
+                 vaddr, cpu->pc);
 #endif
+         
       }
    }
 

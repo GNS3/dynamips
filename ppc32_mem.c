@@ -907,7 +907,7 @@ fastcall u_int ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
       if (cpu->exec_phys_map) {
          block = ppc32_jit_find_by_phys_page(cpu,phys_page);
 
-         if (block && ppc32_jit_tcb_match(cpu,block)) {
+         if (block && (block->start_ia == (vaddr & PPC32_MIN_PAGE_MASK))) {
 #if DEBUG_ICBI
             cpu_log(cpu->gen,"MTS",
                     "ICBI: removing compiled page at 0x%8.8x, pc=0x%8.8x\n",

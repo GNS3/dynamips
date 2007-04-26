@@ -2218,3 +2218,23 @@
 -----------
   - Added an hypervisor command to disable direct jumps between JIT blocks
     (vm set_blk_direct_jump <vm_name> <0|1>).
+
+15-Apr-2007 => 22-Apr-2007
+===========================
+  - PPC32: rewrite of JIT with peephole and CR flags optimizations.
+	
+23-Apr-2007
+-----------
+  - PPC32: converted amd64 JIT to new system.
+	
+24-Apr-2007
+-----------
+  - MIPS64: fixed a bug in cache instruction preventing compressed IOS images
+    to boot.
+  - PPC32: same as above for ICBI instruction.
+  - PPC32: fixed ADDZE instruction.
+
+25-Apr-2007
+-----------
+  - C3725: fixed interrupt problems with slot 2 (bad shift - only 4 irq
+    lines per port).

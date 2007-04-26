@@ -145,6 +145,28 @@ fastcall int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn)
    return(res);
 }
 
+/* Execute a page */
+fastcall int ppc32_exec_page(cpu_ppc_t *cpu)
+{
+   m_uint32_t exec_page,offset;
+   ppc_insn_t insn;
+   int res;
+
+   exec_page = cpu->ia & ~PPC32_MIN_PAGE_IMASK;
+   cpu->njm_exec_page = exec_page;
+   cpu->njm_exec_ptr  = cpu->mem_op_lookup(cpu,exec_page,PPC32_MTS_ICACHE);
+
+   do {
+      offset = (cpu->ia & PPC32_MIN_PAGE_IMASK) >> 2;
+      insn = vmtoh32(cpu->njm_exec_ptr[offset]);
+
+      res = ppc32_exec_single_instruction(cpu,insn);
+      if (likely(!res)) cpu->ia += sizeof(ppc_insn_t);
+   }while((cpu->ia & ~PPC32_MIN_PAGE_IMASK) == exec_page);
+
+   return(0);
+}
+
 /* Run PowerPC code in step-by-step mode */
 void *ppc32_exec_run_cpu(cpu_gen_t *gen)
 {   

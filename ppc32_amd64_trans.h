@@ -33,9 +33,9 @@ static forced_inline void atomic_and(m_uint32_t *v,m_uint32_t m)
 extern struct ppc32_insn_tag ppc32_insn_tags[];
 
 /* Push epilog for an x86 instruction block */
-static forced_inline void ppc32_jit_tcb_push_epilog(ppc32_jit_tcb_t *block)
+static forced_inline void ppc32_jit_tcb_push_epilog(u_char **ptr)
 {
-   amd64_ret(block->jit_ptr);
+   amd64_ret(*ptr);
 }
 
 /* Execute JIT code */
@@ -48,15 +48,20 @@ void ppc32_jit_tcb_exec(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
    offset = (cpu->ia & PPC32_MIN_PAGE_IMASK) >> 2;
    jit_code = (insn_tblock_fptr)block->jit_insn_ptr[offset];
 
-#if 0
    if (unlikely(!jit_code)) {
-      ppc32_exec_single_step(cpu,vmtoh32(block->ppc_code[offset]));
-      return;
+      ppc32_jit_tcb_set_target_bit(block,cpu->ia);
+
+      if (++block->target_undef_cnt == 16) {
+         ppc32_jit_tcb_recompile(cpu,block);
+         jit_code = (insn_tblock_fptr)block->jit_insn_ptr[offset];
+      } else {
+         ppc32_exec_page(cpu);
+         return;
+      }
    }
-#endif
 
    asm volatile ("movq %0,%%r15"::"r"(cpu):
-                 "r14","r15","rax","rbx","rcx","rdx","rdi","rsi");
+                 "r13","r14","r15","rax","rbx","rcx","rdx","rdi","rsi");
    jit_code();
 }
 
@@ -81,14 +86,5 @@ static inline void amd64_patch(u_char *code,u_char *target)
    else
       x86_patch(code,target);
 }
-
-/* Set the Instruction Address (IA) register */
-void ppc32_set_ia(ppc32_jit_tcb_t *b,m_uint32_t new_ia);
-
-/* Set the Link Register (LR) */
-void ppc32_set_lr(ppc32_jit_tcb_t *b,m_uint32_t new_lr);
-
-/* Increment the number of executed instructions (performance debugging) */
-void ppc32_inc_perf_counter(ppc32_jit_tcb_t *b);
 
 #endif

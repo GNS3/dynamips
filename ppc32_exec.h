@@ -36,6 +36,9 @@ void ppc32_exec_create_ilt(void);
 /* Dump statistics */
 void ppc32_dump_stats(cpu_ppc_t *cpu);
 
+/* Execute a page */
+fastcall int ppc32_exec_page(cpu_ppc_t *cpu);
+
 /* Execute a single instruction (external) */
 fastcall int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn);
 

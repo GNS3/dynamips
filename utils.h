@@ -22,6 +22,20 @@
 #define TRUE  1
 #endif
 
+/* Host CPU Types */
+#define CPU_x86    0
+#define CPU_amd64  1
+#define CPU_nojit  2
+
+/* Number of host registers available for JIT */
+#if JIT_CPU == CPU_x86
+#define JIT_HOST_NREG  8
+#elif JIT_CPU == CPU_amd64
+#define JIT_HOST_NREG  16
+#else
+#define JIT_HOST_NREG  0
+#endif
+
 /* Endianness */
 #define ARCH_BIG_ENDIAN     0x4321
 #define ARCH_LITTLE_ENDIAN  0x1234
@@ -99,9 +113,11 @@ typedef unsigned long m_iptr_t;
 typedef m_uint64_t m_tmcnt_t;
 
 /* Forward declarations */
+typedef struct cpu_gen cpu_gen_t;
 typedef struct vm_instance vm_instance_t;
 typedef struct mips64_jit_tcb mips64_jit_tcb_t;
 typedef struct ppc32_jit_tcb ppc32_jit_tcb_t;
+typedef struct jit_op jit_op_t;
 
 /* Translated block function pointer */
 typedef void (*insn_tblock_fptr)(void);
@@ -178,6 +194,16 @@ struct mts64_entry {
    m_iptr_t   hpa;    /* Host Page Address */
    m_uint32_t flags;  /* Flags */
 }__attribute__ ((aligned(16)));
+
+/* Host register allocation */
+#define HREG_FLAG_ALLOC_LOCKED  1
+#define HREG_FLAG_ALLOC_FORCED  2
+
+struct hreg_map {
+   int hreg,vreg;
+   int flags;
+   struct hreg_map *prev,*next;
+};
 
 /* Global logfile */
 extern FILE *log_file;

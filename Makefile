@@ -14,7 +14,7 @@ HAS_PCAP?=1
 
 # Current dynamips release
 VERSION_TRAIN=0.2.7
-VERSION_SUB=-RC2
+VERSION_SUB=-RC3
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -33,7 +33,7 @@ MIPS64_ARCH_INC_FILE=\"mips64_$(DYNAMIPS_ARCH)_trans.h\"
 PPC32_ARCH_INC_FILE=\"ppc32_$(DYNAMIPS_ARCH)_trans.h\"
 
 CFLAGS+=-g -Wall -O3 -fomit-frame-pointer \
-	-DJIT_ARCH=\"$(DYNAMIPS_ARCH)\" \
+	-DJIT_ARCH=\"$(DYNAMIPS_ARCH)\" -DJIT_CPU=CPU_$(DYNAMIPS_ARCH) \
 	-DMIPS64_ARCH_INC_FILE=$(MIPS64_ARCH_INC_FILE) \
 	-DPPC32_ARCH_INC_FILE=$(PPC32_ARCH_INC_FILE) \
 	-DDYNAMIPS_VERSION=\"$(VERSION)\" \
@@ -93,7 +93,7 @@ HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h \
 	crc.h sbox.h base64.h net.h net_io.h net_io_bridge.h net_io_filter.h \
 	atm.h frame_relay.h eth_switch.h \
 	ptask.h timer.h dev_vtty.h hypervisor.h dynamips.h insn_lookup.h \
-	vm.h cpu.h memory.h device.h \
+	vm.h cpu.h jit_op.h memory.h device.h \
 	mips64.h mips64_mem.h mips64_exec.h mips64_jit.h mips64_cp0.h \
 	ppc32.h ppc32_mem.h ppc32_exec.h ppc32_jit.h ppc32_vmtest.h \
 	nmc93cX6.h cisco_eeprom.h ds1620.h dev_rom.h \
@@ -112,7 +112,7 @@ SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 	ptask.c timer.c crc.c base64.c \
 	net.c net_io.c net_io_bridge.c net_io_filter.c \
 	atm.c frame_relay.c eth_switch.c \
-	dynamips.c insn_lookup.c vm.c cpu.c \
+	dynamips.c insn_lookup.c vm.c cpu.c jit_op.c \
 	mips64.c mips64_mem.c mips64_cp0.c mips64_jit.c mips64_exec.c \
 	ppc32.c ppc32_mem.c ppc32_jit.c ppc32_exec.c ppc32_vmtest.c \
 	memory.c device.c nmc93cX6.c cisco_eeprom.c \
