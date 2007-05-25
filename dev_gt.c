@@ -708,16 +708,26 @@ void *dev_gt64120_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
    return NULL;
 }
 
+/* Trigger/clear Ethernet interrupt if one or both port have pending events */
+static void gt_eth_set_int_status(struct gt_data *d)
+{
+   if ((d->eth_ports[0].icr & GT_ICR_INT_SUM) ||
+       (d->eth_ports[1].icr & GT_ICR_INT_SUM))
+      vm_set_irq(d->vm,d->eth_irq);
+   else
+      vm_clear_irq(d->vm,d->eth_irq);
+}
+
 /* Update the Ethernet port interrupt status */
 static void gt_eth_update_int_status(struct gt_data *d,struct eth_port *port)
 {
    if (port->icr & port->imr & GT_ICR_MASK) {
       port->icr |= GT_ICR_INT_SUM;
-      vm_set_irq(d->vm,d->eth_irq);
    } else {
       port->icr &= ~GT_ICR_INT_SUM;
-      vm_clear_irq(d->vm,d->eth_irq);
    }
+
+   gt_eth_set_int_status(d);
 }
 
 /* Read a MII register */
@@ -1289,14 +1299,14 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
    tx_start = tx_current = port->tx_current[queue];
 
    if (!tx_start)
-      goto done;
+      return(FALSE);
 
    ptxd = &txd0;
    gt_eth_desc_read(d,tx_start,ptxd);
 
    /* If we don't own the first descriptor, we cannot transmit */
    if (!(txd0.cmd_stat & GT_TXDESC_OWN))
-      goto done;
+      return(FALSE);
 
    /* Empty packet for now */
    pkt_ptr = pkt;
@@ -1369,7 +1379,6 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
    else
       port->icr |= GT_ICR_TXBUFH;
 
- done:
    if (abort) {
       /* TX underrun */
       port->icr |= GT_ICR_TXUDR;

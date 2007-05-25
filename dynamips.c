@@ -60,7 +60,7 @@
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2007042500";
+const char *sw_version_tag = "2007052600";
 
 /* Hypervisor */
 int hypervisor_mode = 0;

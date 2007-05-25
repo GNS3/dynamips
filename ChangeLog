@@ -2238,3 +2238,9 @@
 -----------
   - C3725: fixed interrupt problems with slot 2 (bad shift - only 4 irq
     lines per port).
+	
+23-May-2007
+-----------
+  - GT96100/ETH: fixed interrupt handling for TX packets (the interrupt was
+    incorrectly disabled when no packet was available on a ring, causing
+    packet loss when the two ports were enabled) - BTS entry #171.
