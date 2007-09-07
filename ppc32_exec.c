@@ -76,13 +76,13 @@ void ppc32_dump_stats(cpu_ppc_t *cpu)
 }
 
 /* Execute a memory operation */
-static forced_inline int ppc32_exec_memop(cpu_ppc_t *cpu,int memop,
-                                          m_uint32_t vaddr,u_int dst_reg)
+static forced_inline void ppc32_exec_memop(cpu_ppc_t *cpu,int memop,
+                                           m_uint32_t vaddr,u_int dst_reg)
 {     
    fastcall ppc_memop_fn fn;
     
    fn = cpu->mem_op_fn[memop];
-   return(fn(cpu,vaddr,dst_reg));
+   fn(cpu,vaddr,dst_reg);
 }
 
 /* Fetch an instruction */
@@ -118,7 +118,7 @@ ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
    register fastcall int (*exec)(cpu_ppc_t *,ppc_insn_t) = NULL;
    struct ppc32_insn_exec_tag *tag;
    int index;
-
+   
 #if DEBUG_INSN_PERF_CNT
    cpu->perf_counter++;
 #endif
@@ -186,6 +186,7 @@ void *ppc32_exec_run_cpu(cpu_gen_t *gen)
    }
 
    gen->cpu_thread_running = TRUE;
+   cpu_exec_loop_set(gen);
 
  start_cpu:
    for(;;) {
@@ -1500,7 +1501,8 @@ static fastcall int ppc32_exec_ICBI(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_ICBI,vaddr,0));
+   ppc32_exec_memop(cpu,PPC_MEMOP_ICBI,vaddr,0);
+   return(0);
 }
 
 /* ISYNC - Instruction Synchronize */
@@ -1522,7 +1524,8 @@ static fastcall int ppc32_exec_LBZ(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
+   return(0);
 }
 
 /* LBZU - Load Byte and Zero with Update */
@@ -1532,12 +1535,11 @@ static fastcall int ppc32_exec_LBZU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LBZUX - Load Byte and Zero with Update Indexed */
@@ -1547,12 +1549,11 @@ static fastcall int ppc32_exec_LBZUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LBZX - Load Byte and Zero Indexed */
@@ -1568,7 +1569,8 @@ static fastcall int ppc32_exec_LBZX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LBZ,vaddr,rd);
+   return(0);
 }
 
 /* LHA - Load Half-Word Algebraic */
@@ -1584,7 +1586,8 @@ static fastcall int ppc32_exec_LHA(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
+   return(0);
 }
 
 /* LHAU - Load Half-Word Algebraic with Update */
@@ -1594,12 +1597,11 @@ static fastcall int ppc32_exec_LHAU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LHAUX - Load Half-Word Algebraic with Update Indexed */
@@ -1609,12 +1611,11 @@ static fastcall int ppc32_exec_LHAUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LHAX - Load Half-Word Algebraic ndexed */
@@ -1630,7 +1631,8 @@ static fastcall int ppc32_exec_LHAX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHA,vaddr,rd);
+   return(0);
 }
 
 /* LHZ - Load Half-Word and Zero */
@@ -1646,7 +1648,8 @@ static fastcall int ppc32_exec_LHZ(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
+   return(0);
 }
 
 /* LHZU - Load Half-Word and Zero with Update */
@@ -1656,12 +1659,11 @@ static fastcall int ppc32_exec_LHZU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LHZUX - Load Half-Word and Zero with Update Indexed */
@@ -1671,12 +1673,11 @@ static fastcall int ppc32_exec_LHZUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LHZX - Load Half-Word and Zero Indexed */
@@ -1692,7 +1693,8 @@ static fastcall int ppc32_exec_LHZX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LHZ,vaddr,rd);
+   return(0);
 }
 
 /* LMW - Load Multiple Word */
@@ -1702,7 +1704,7 @@ static fastcall int ppc32_exec_LMW(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int r,res;
+   int r;
 
    vaddr = sign_extend_32(imm,16);
    
@@ -1710,9 +1712,7 @@ static fastcall int ppc32_exec_LMW(cpu_ppc_t *cpu,ppc_insn_t insn)
       vaddr += cpu->gpr[ra];
 
    for(r=rd;r<=31;r++) {
-      res = ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,r);
-      if (res != 0) return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,r);
       vaddr += sizeof(m_uint32_t);
    }
 
@@ -1732,7 +1732,8 @@ static fastcall int ppc32_exec_LWBRX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LWBR,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWBR,vaddr,rd);
+   return(0);
 }
 
 /* LWZ - Load Word and Zero */
@@ -1748,7 +1749,8 @@ static fastcall int ppc32_exec_LWZ(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
+   return(0);
 }
 
 /* LWZU - Load Word and Zero with Update */
@@ -1758,12 +1760,11 @@ static fastcall int ppc32_exec_LWZU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LWZUX - Load Word and Zero with Update Indexed */
@@ -1773,12 +1774,11 @@ static fastcall int ppc32_exec_LWZUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LWZX - Load Word and Zero Indexed */
@@ -1794,7 +1794,8 @@ static fastcall int ppc32_exec_LWZX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
+   return(0);
 }
 
 /* LWARX - Load Word and Reserve Indexed */
@@ -1811,8 +1812,8 @@ static fastcall int ppc32_exec_LWARX(cpu_ppc_t *cpu,ppc_insn_t insn)
       vaddr += cpu->gpr[ra];
 
    cpu->reserve = 1;
-
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LWZ,vaddr,rd);
+   return(0);
 }
 
 /* LFD - Load Floating-Point Double */
@@ -1828,7 +1829,8 @@ static fastcall int ppc32_exec_LFD(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
+   return(0);
 }
 
 /* LFDU - Load Floating-Point Double with Update */
@@ -1838,12 +1840,11 @@ static fastcall int ppc32_exec_LFDU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LFDUX - Load Floating-Point Double with Update Indexed */
@@ -1853,12 +1854,11 @@ static fastcall int ppc32_exec_LFDUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
+   ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* LFDX - Load Floating-Point Double Indexed */
@@ -1874,7 +1874,8 @@ static fastcall int ppc32_exec_LFDX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd));
+   ppc32_exec_memop(cpu,PPC_MEMOP_LFD,vaddr,rd);
+   return(0);
 }
 
 /* LSWI - Load String Word Immediate */
@@ -1884,7 +1885,7 @@ static fastcall int ppc32_exec_LSWI(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int nb = bits(insn,11,15);
    m_uint32_t vaddr = 0;
-   int res,r;
+   int r;
 
    if (ra != 0)
       vaddr += cpu->gpr[ra];
@@ -1901,9 +1902,7 @@ static fastcall int ppc32_exec_LSWI(cpu_ppc_t *cpu,ppc_insn_t insn)
          cpu->gpr[r] = 0;
       }
       
-      if (unlikely(res = ppc32_exec_memop(cpu,PPC_MEMOP_LSW,vaddr,r)) != 0)
-         return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_LSW,vaddr,r);
       cpu->sw_pos += 8;
 
       if (cpu->sw_pos == 32)
@@ -1923,7 +1922,7 @@ static fastcall int ppc32_exec_LSWX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res,r,nb;
+   int r,nb;
 
    vaddr = cpu->gpr[rb];
 
@@ -1940,9 +1939,7 @@ static fastcall int ppc32_exec_LSWX(cpu_ppc_t *cpu,ppc_insn_t insn)
          cpu->gpr[r] = 0;
       }
       
-      if (unlikely(res = ppc32_exec_memop(cpu,PPC_MEMOP_LSW,vaddr,r)) != 0)
-         return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_LSW,vaddr,r);
       cpu->sw_pos += 8;
 
       if (cpu->sw_pos == 32)
@@ -2076,7 +2073,7 @@ static fastcall int ppc32_exec_MFSPR(cpu_ppc_t *cpu,ppc_insn_t insn)
 
       /* MPC860 IMMR */
       case 638:
-         cpu->gpr[rd] = 0x68010000;
+         cpu->gpr[rd] = cpu->mpc860_immr;
          break;
 
       default:
@@ -2837,7 +2834,8 @@ static fastcall int ppc32_exec_STB(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
+   return(0);
 }
 
 /* STBU - Store Byte with Update */
@@ -2847,12 +2845,11 @@ static fastcall int ppc32_exec_STBU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STBUX - Store Byte with Update Indexed */
@@ -2862,12 +2859,11 @@ static fastcall int ppc32_exec_STBUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STBX - Store Byte Indexed */
@@ -2883,7 +2879,8 @@ static fastcall int ppc32_exec_STBX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STB,vaddr,rs);
+   return(0);
 }
 
 /* STH - Store Half-Word */
@@ -2899,7 +2896,8 @@ static fastcall int ppc32_exec_STH(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
+   return(0);
 }
 
 /* STHU - Store Half-Word with Update */
@@ -2909,12 +2907,11 @@ static fastcall int ppc32_exec_STHU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra  = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STHUX - Store Half-Word with Update Indexed */
@@ -2924,12 +2921,11 @@ static fastcall int ppc32_exec_STHUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STHX - Store Half-Word Indexed */
@@ -2945,7 +2941,8 @@ static fastcall int ppc32_exec_STHX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STH,vaddr,rs);
+   return(0);
 }
 
 /* STMW - Store Multiple Word */
@@ -2955,7 +2952,7 @@ static fastcall int ppc32_exec_STMW(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int r,res;
+   int r;
 
    vaddr = sign_extend_32(imm,16);
    
@@ -2963,9 +2960,7 @@ static fastcall int ppc32_exec_STMW(cpu_ppc_t *cpu,ppc_insn_t insn)
       vaddr += cpu->gpr[ra];
 
    for(r=rs;r<=31;r++) {
-      res = ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,r);
-      if (res != 0) return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,r);
       vaddr += sizeof(m_uint32_t);
    }
 
@@ -2985,7 +2980,8 @@ static fastcall int ppc32_exec_STW(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
+   return(0);
 }
 
 /* STWU - Store Word with Update */
@@ -2995,12 +2991,11 @@ static fastcall int ppc32_exec_STWU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STWUX - Store Word with Update Indexed */
@@ -3010,12 +3005,11 @@ static fastcall int ppc32_exec_STWUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STWX - Store Word Indexed */
@@ -3031,7 +3025,8 @@ static fastcall int ppc32_exec_STWX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
+   return(0);
 }
 
 /* STWBRX - Store Word Byte-Reverse Indexed */
@@ -3047,7 +3042,8 @@ static fastcall int ppc32_exec_STWBRX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STWBR,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STWBR,vaddr,rs);
+   return(0);
 }
 
 /* STWCX. - Store Word Conditional Indexed */
@@ -3057,7 +3053,6 @@ static fastcall int ppc32_exec_STWCX_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[rb];
 
@@ -3065,8 +3060,7 @@ static fastcall int ppc32_exec_STWCX_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
       vaddr += cpu->gpr[ra];
 
    if (cpu->reserve) {
-      res = ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
-      if (res != 0) return(res);
+      ppc32_exec_memop(cpu,PPC_MEMOP_STW,vaddr,rs);
 
       cpu->cr_fields[0] = 1 << PPC32_CR_EQ_BIT;
 
@@ -3097,7 +3091,8 @@ static fastcall int ppc32_exec_STFD(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
+   return(0);
 }
 
 /* STFDU - Store Floating-Point Double with Update */
@@ -3107,12 +3102,11 @@ static fastcall int ppc32_exec_STFDU(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    m_uint16_t imm = bits(insn,0,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + sign_extend_32(imm,16);
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STFDUX - Store Floating-Point Double with Update Indexed */
@@ -3122,12 +3116,11 @@ static fastcall int ppc32_exec_STFDUX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res;
 
    vaddr = cpu->gpr[ra] + cpu->gpr[rb];
-   res = ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
+   ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
    cpu->gpr[ra] = vaddr;
-   return(res);
+   return(0);
 }
 
 /* STFDX - Store Floating-Point Double Indexed */
@@ -3143,7 +3136,8 @@ static fastcall int ppc32_exec_STFDX(cpu_ppc_t *cpu,ppc_insn_t insn)
    if (ra != 0)
       vaddr += cpu->gpr[ra];
 
-   return(ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs));
+   ppc32_exec_memop(cpu,PPC_MEMOP_STFD,vaddr,rs);
+   return(0);
 }
 
 /* STSWI - Store String Word Immediate */
@@ -3153,7 +3147,7 @@ static fastcall int ppc32_exec_STSWI(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int nb = bits(insn,11,15);
    m_uint32_t vaddr = 0;
-   int res,r;
+   int r;
 
    if (ra != 0)
       vaddr += cpu->gpr[ra];
@@ -3168,9 +3162,7 @@ static fastcall int ppc32_exec_STSWI(cpu_ppc_t *cpu,ppc_insn_t insn)
       if (cpu->sw_pos == 0) 
          r = (r + 1) & 0x1F;
       
-      if (unlikely(res = ppc32_exec_memop(cpu,PPC_MEMOP_STSW,vaddr,r)) != 0)
-         return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_STSW,vaddr,r);
       cpu->sw_pos += 8;
 
       if (cpu->sw_pos == 32)
@@ -3190,7 +3182,7 @@ static fastcall int ppc32_exec_STSWX(cpu_ppc_t *cpu,ppc_insn_t insn)
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
    m_uint32_t vaddr;
-   int res,r,nb;
+   int r,nb;
 
    vaddr = cpu->gpr[rb];
 
@@ -3205,9 +3197,7 @@ static fastcall int ppc32_exec_STSWX(cpu_ppc_t *cpu,ppc_insn_t insn)
       if (cpu->sw_pos == 0) 
          r = (r + 1) & 0x1F;
       
-      if (unlikely(res = ppc32_exec_memop(cpu,PPC_MEMOP_STSW,vaddr,r)) != 0)
-         return(res);
-
+      ppc32_exec_memop(cpu,PPC_MEMOP_STSW,vaddr,r);
       cpu->sw_pos += 8;
 
       if (cpu->sw_pos == 32)

@@ -18,8 +18,26 @@ enum {
    EEPROM_TYPE_NMC93C56,
 };
 
+/* EEPROM data bit order */
+enum {
+   EEPROM_DORD_NORMAL = 0,
+   EEPROM_DORD_REVERSED,
+};
+
+/* EEPROM debugging */
+enum {
+   EEPROM_DEBUG_DISABLED = 0,
+   EEPROM_DEBUG_ENABLED,
+};
+
+/* EEPROM DOUT default status */
+enum {
+   EEPROM_DOUT_HIGH = 0,
+   EEPROM_DOUT_KEEP,
+};
+
 /* 8 groups with 4 differents bits (clock,select,data_in,data_out) */
-#define NMC93CX6_MAX_EEPROM_PER_GROUP  8
+#define NMC93CX6_MAX_EEPROM_PER_GROUP  16
 
 /* NMC93C46 EEPROM command bit length */
 #define NMC93C46_CMD_BITLEN   9
@@ -59,8 +77,10 @@ struct nmc93cX6_group {
    u_int eeprom_type;
    u_int nr_eeprom;
    u_int eeprom_reg;
-   char *description;
+   u_int reverse_data;
+   u_int dout_status;
    int debug;
+   char *description;
    const struct nmc93cX6_eeprom_def *def[NMC93CX6_MAX_EEPROM_PER_GROUP];
    struct nmc93cX6_eeprom_state state[NMC93CX6_MAX_EEPROM_PER_GROUP];
    struct cisco_eeprom *eeprom[NMC93CX6_MAX_EEPROM_PER_GROUP];
@@ -68,6 +88,12 @@ struct nmc93cX6_group {
 
 /* Handle write */
 void nmc93cX6_write(struct nmc93cX6_group *g,u_int data);
+
+/* Returns the TRUE if the EEPROM is active */
+u_int nmc93cX6_is_active(struct nmc93cX6_group *g,u_int group_id);
+
+/* Returns the DOUT bit value */
+u_int nmc93cX6_get_dout(struct nmc93cX6_group *g,u_int group_id);
 
 /* Handle read */
 u_int nmc93cX6_read(struct nmc93cX6_group *p);

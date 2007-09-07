@@ -380,6 +380,8 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
                res->paddr += (res->vaddr & (page_size-1));
                res->paddr &= cpu->addr_bus_mask;
 
+               res->offset = vaddr & MIPS_MIN_PAGE_IMASK;
+
                pca = (entry->lo0 & MIPS_TLB_C_MASK);
                pca >>= MIPS_TLB_C_SHIFT;
                res->cached = mips64_cca_cached(pca);
@@ -395,6 +397,8 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
                res->paddr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
                res->paddr += (res->vaddr & (page_size-1));
                res->paddr &= cpu->addr_bus_mask;
+
+               res->offset = vaddr & MIPS_MIN_PAGE_IMASK;
 
                pca = (entry->lo1 & MIPS_TLB_C_MASK);
                pca >>= MIPS_TLB_C_SHIFT;

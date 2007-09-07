@@ -28,7 +28,7 @@
 /* Memory access with special access mask */
 void ppc32_access_special(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                           m_uint32_t mask,u_int op_code,u_int op_type,
-                          u_int op_size,m_uint64_t *data,u_int *exc)
+                          u_int op_size,m_uint64_t *data)
 {
    switch(mask) {
       case MTS_ACC_T:
@@ -44,7 +44,6 @@ void ppc32_access_special(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
             memlog_dump(cpu->gen);
 #endif
 #endif
-
             if (cid == PPC32_MTS_DCACHE) {
                cpu->dsisr = PPC32_DSISR_NOTRANS;
 
@@ -53,13 +52,21 @@ void ppc32_access_special(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
 
                cpu->dar = vaddr;
                ppc32_trigger_exception(cpu,PPC32_EXC_DSI);
+               cpu_exec_loop_enter(cpu->gen);
             }
-         }
-          
-         *exc = 1;
+         }        
          break;
 
       case MTS_ACC_U:
+         if (op_type == MTS_READ)
+            *data = 0;
+
+         if (cpu->gen->undef_mem_handler != NULL) {
+            if (cpu->gen->undef_mem_handler(cpu->gen,(m_uint64_t)vaddr,
+                                            op_size,op_type,data))
+               return;
+         }
+
 #if DEBUG_MTS_ACC_U
          if (op_type == MTS_READ)
             cpu_log(cpu->gen,
@@ -71,8 +78,6 @@ void ppc32_access_special(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                     "ia=0x%8.8x, value=0x%8.8llx (size=%u)\n",
                     vaddr,cpu->ia,*data,op_size);
 #endif
-         if (op_type == MTS_READ)
-            *data = 0;
          break;
    }
 }
@@ -187,7 +192,7 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
    m_uint32_t exec_flag = 0;
    int cow;
 
-   if (!(dev = dev_lookup(cpu->vm,map->paddr,map->cached)))
+   if (!(dev = dev_lookup(cpu->vm,map->paddr+map->offset,map->cached)))
       return NULL;
 
    if (cpu->exec_phys_map) {
@@ -209,10 +214,9 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
    }
 
    if (!dev->host_addr || (dev->flags & VDEVICE_FLAG_NO_MTS_MMAP)) {
-      offset = map->paddr - dev->phys_addr;
+      offset = (map->paddr + map->offset) - dev->phys_addr;
 
-      alt_entry->gvpa  = map->vaddr;
-      alt_entry->gppa  = map->paddr;
+      /* device entries are never stored in virtual TLB */
       alt_entry->hpa   = (dev->id << MTS_DEVID_SHIFT) + offset;
       alt_entry->flags = MTS_FLAG_DEV;
       return alt_entry;
@@ -251,6 +255,7 @@ static forced_inline int ppc32_bat_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
          map->vaddr = vaddr & PPC32_MIN_PAGE_MASK;
          map->paddr = cpu->bat[cid][i].reg[1] & PPC32_LBAT_BRPN_MASK;
          map->paddr += map->vaddr - bepi;
+         map->offset = vaddr & PPC32_MIN_PAGE_IMASK;
          map->cached = FALSE;
          return(TRUE);
       }
@@ -263,7 +268,7 @@ static forced_inline int ppc32_bat_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
 static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                         u_int cid,u_int op_code,u_int op_size,
                                         u_int op_type,m_uint64_t *data,
-                                        u_int *exc,mts32_entry_t *alt_entry)
+                                        mts32_entry_t *alt_entry)
 {
    m_uint32_t hash_bucket,segment,vsid;
    m_uint32_t hash,tmp,pteg_offset,pte_key,key,pte2;
@@ -286,6 +291,7 @@ static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
    {
       map.vaddr  = vaddr & PPC32_MIN_PAGE_MASK;
       map.paddr  = vaddr & PPC32_MIN_PAGE_MASK;
+      map.offset = vaddr & PPC32_MIN_PAGE_IMASK;
       map.cached = FALSE;
 
       if (!(entry = ppc32_mem_map(cpu,op_type,&map,entry,alt_entry)))
@@ -349,8 +355,7 @@ static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
    
  no_pte:
    /* No matching PTE for this virtual address */
-   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_T,op_code,op_type,op_size,
-                        data,exc);
+   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_T,op_code,op_type,op_size,data);
    return NULL;
 
  pte_lookup_done:
@@ -361,22 +366,21 @@ static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
 
    map.vaddr  = vaddr & ~PPC32_MIN_PAGE_IMASK;
    map.paddr  = paddr;
+   map.offset = vaddr & PPC32_MIN_PAGE_IMASK;
    map.cached = FALSE;
    
    if ((entry = ppc32_mem_map(cpu,op_type,&map,entry,alt_entry)))
       return entry;
 
  err_undef:
-   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_U,op_code,op_type,op_size,
-                        data,exc);
+   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_U,op_code,op_type,op_size,data);
    return NULL;
 }
 
 /* Memory access */
 static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                      u_int cid,u_int op_code,u_int op_size,
-                                     u_int op_type,m_uint64_t *data,
-                                     u_int *exc)
+                                     u_int op_type,m_uint64_t *data)
 {   
    mts32_entry_t *entry,alt_entry;
    ppc32_jit_tcb_t *block;
@@ -392,7 +396,6 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
    memlog_rec_access(cpu->gen,vaddr,*data,op_size,op_type);
 #endif
 
-   *exc = 0;
    hash_bucket = MTS32_HASH(vaddr);
    entry = &cpu->mts_cache[cid][hash_bucket];
 
@@ -406,14 +409,13 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
    /* Slow lookup if nothing found in cache */
    if (unlikely(((vaddr & PPC32_MIN_PAGE_MASK) != entry->gvpa) || cow)) {
       entry = cpu->mts_slow_lookup(cpu,vaddr,cid,op_code,op_size,op_type,
-                                   data,exc,&alt_entry);
+                                   data,&alt_entry);
       if (!entry)
          return NULL;
 
       if (entry->flags & MTS_FLAG_DEV) {
          dev_id = (entry->hpa & MTS_DEVID_MASK) >> MTS_DEVID_SHIFT;
          haddr  = entry->hpa & MTS_DEVOFF_MASK;
-         haddr += vaddr - entry->gvpa;
          return(dev_access_fast(cpu->gen,dev_id,haddr,op_size,op_type,data));
       }
    }
@@ -449,9 +451,9 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
 }
 
 /* Memory data access */
-#define PPC32_MEM_DACCESS(cpu,vaddr,op_code,op_size,op_type,data,exc) \
+#define PPC32_MEM_DACCESS(cpu,vaddr,op_code,op_size,op_type,data) \
    ppc32_mem_access((cpu),(vaddr),PPC32_MTS_DCACHE,(op_code),(op_size),\
-                    (op_type),(data),(exc))
+                    (op_type),(data))
 
 /* Virtual address to physical page translation */
 static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
@@ -460,7 +462,6 @@ static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
    mts32_entry_t *entry,alt_entry;
    m_uint32_t hash_bucket;
    m_uint64_t data = 0;
-   u_int exc = 0;
    
    hash_bucket = MTS32_HASH(vaddr);
    entry = &cpu->mts_cache[cid][hash_bucket];
@@ -468,7 +469,7 @@ static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
    /* Slow lookup if nothing found in cache */
    if (unlikely(((m_uint32_t)vaddr & PPC32_MIN_PAGE_MASK) != entry->gvpa)) {
       entry = cpu->mts_slow_lookup(cpu,vaddr,cid,PPC_MEMOP_LOOKUP,4,MTS_READ,
-                                   &data,&exc,&alt_entry);
+                                   &data,&alt_entry);
       if (!entry)
          return(-1);
    }
@@ -481,9 +482,7 @@ static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
 static void *ppc32_mem_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid)
 {
    m_uint64_t data;
-   u_int exc;
-   return(ppc32_mem_access(cpu,vaddr,cid,PPC_MEMOP_LOOKUP,4,MTS_READ,
-                           &data,&exc));
+   return(ppc32_mem_access(cpu,vaddr,cid,PPC_MEMOP_LOOKUP,4,MTS_READ,&data));
 }
 
 /* Set a BAT register */
@@ -632,7 +631,7 @@ static m_uint32_t ppc405_tlb_masks[8] = {
 static mts32_entry_t *ppc405_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                          u_int cid,u_int op_code,u_int op_size,
                                          u_int op_type,m_uint64_t *data,
-                                         u_int *exc,mts32_entry_t *alt_entry)
+                                         mts32_entry_t *alt_entry)
 {
    struct ppc405_tlb_entry *tlb_entry;
    m_uint32_t hash_bucket,mask;
@@ -691,13 +690,11 @@ static mts32_entry_t *ppc405_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
    }
 
    /* No matching TLB entry for this virtual address */
-   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_T,op_code,op_type,op_size,
-                        data,exc);
+   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_T,op_code,op_type,op_size,data);
    return NULL;
 
  err_undef:
-   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_U,op_code,op_type,op_size,
-                        data,exc);
+   ppc32_access_special(cpu,vaddr,cid,MTS_ACC_U,op_code,op_type,op_size,data);
    return NULL;
 }
 
@@ -725,176 +722,150 @@ static void ppc405_dump_tlb(cpu_gen_t *cpu)
 /* === PPC Memory Operations ============================================= */
 
 /* LBZ: Load Byte Zero */
-fastcall u_int ppc32_lbz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lbz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LBZ,1,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LBZ,1,MTS_READ,&data);
    if (likely(haddr != NULL)) data = *(m_uint8_t *)haddr;
-   if (likely(!exc)) cpu->gpr[reg] = data & 0xFF;
-   return(exc);
+   cpu->gpr[reg] = data & 0xFF;
 }
 
 /* LHZ: Load Half-Word Zero */
-fastcall u_int ppc32_lhz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lhz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LHZ,2,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LHZ,2,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh16(*(m_uint16_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = data & 0xFFFF;
-   return(exc);
+   cpu->gpr[reg] = data & 0xFFFF;
 }
 
 /* LWZ: Load Word Zero */
-fastcall u_int ppc32_lwz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lwz(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWZ,4,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWZ,4,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh32(*(m_uint32_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = data;
-   return(exc);
+   cpu->gpr[reg] = data;
 }
 
 /* LWBR: Load Word Byte Reverse */
-fastcall u_int ppc32_lwbr(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lwbr(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWBR,4,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWBR,4,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh32(*(m_uint32_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = swap32(data);
-   return(exc);
+   cpu->gpr[reg] = swap32(data);
 }
 
 /* LHA: Load Half-Word Algebraic */
-fastcall u_int ppc32_lha(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lha(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LHZ,2,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LHZ,2,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh16(*(m_uint16_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = sign_extend_32(data,16);
-   return(exc);
+   cpu->gpr[reg] = sign_extend_32(data,16);
 }
 
 /* STB: Store Byte */
-fastcall u_int ppc32_stb(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_stb(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg] & 0xff;
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STB,1,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STB,1,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint8_t *)haddr = data;
-   return(exc);
 }
 
 /* STH: Store Half-Word */
-fastcall u_int ppc32_sth(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_sth(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg] & 0xffff;
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STH,2,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STH,2,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint16_t *)haddr = htovm16(data);
-   return(exc);
 }
 
 /* STW: Store Word */
-fastcall u_int ppc32_stw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_stw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg];
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STW,4,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STW,4,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
-   return(exc);
 }
 
 /* STWBR: Store Word Byte Reversed */
-fastcall u_int ppc32_stwbr(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_stwbr(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = swap32(cpu->gpr[reg]);
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STWBR,4,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STWBR,4,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
-   return(exc);
 }
 
 /* LSW: Load String Word */
-fastcall u_int ppc32_lsw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lsw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LSW,1,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LSW,1,MTS_READ,&data);
    if (likely(haddr != NULL)) data = *(m_uint8_t *)haddr;
-   if (likely(!exc)) cpu->gpr[reg] |= (data & 0xFF) << (24 - cpu->sw_pos);
-   return(exc);
+   cpu->gpr[reg] |= (data & 0xFF) << (24 - cpu->sw_pos);
 }
 
 /* STW: Store String Word */
-fastcall u_int ppc32_stsw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_stsw(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = (cpu->gpr[reg] >> (24 - cpu->sw_pos)) & 0xFF;
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STSW,1,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STSW,1,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint8_t *)haddr = data;
-   return(exc);
 }
 
 /* LFD: Load Floating-Point Double */
-fastcall u_int ppc32_lfd(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_lfd(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWZ,8,MTS_READ,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_LWZ,8,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh64(*(m_uint64_t *)haddr);
-   if (likely(!exc)) cpu->fpu.reg[reg] = data;
-   return(exc);
+   cpu->fpu.reg[reg] = data;
 }
 
 /* STFD: Store Floating-Point Double */
-fastcall u_int ppc32_stfd(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
+fastcall void ppc32_stfd(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->fpu.reg[reg];
-   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STW,8,MTS_WRITE,&data,&exc);
+   haddr = PPC32_MEM_DACCESS(cpu,vaddr,PPC_MEMOP_STW,8,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint64_t *)haddr = htovm64(data);
-   return(exc);
 }
 
 /* ICBI: Instruction Cache Block Invalidate */
-fastcall u_int ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
+fastcall void ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
 {
    ppc32_jit_tcb_t *block;
    m_uint32_t phys_page;
@@ -926,8 +897,6 @@ fastcall u_int ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
          }
       }
    }
-
-   return(0);
 }
 
 /* ======================================================================== */

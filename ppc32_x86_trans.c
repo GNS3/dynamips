@@ -18,6 +18,9 @@
 #include "ppc32_x86_trans.h"
 #include "memory.h"
 
+/* %esp adjustment (for MacOS X) */
+#define STACK_ADJUST  12
+
 /* ======================================================================= */
 
 /* Macros for CPU structure access */
@@ -191,7 +194,7 @@ static void ppc32_set_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,jit_op_t *iop,
    if (cpu->sym_trace && !local_jump)
       return_to_caller = TRUE;
 #endif
-   
+      
    if (!return_to_caller && ppc32_jit_tcb_local_addr(b,new_ia,&jump_ptr)) {
       ppc32_jit_tcb_record_patch(b,iop,iop->ob_ptr,new_ia);
       x86_jump32(iop->ob_ptr,0);
@@ -303,15 +306,6 @@ static void ppc32_emit_c_call(ppc32_jit_tcb_t *b,jit_op_t *iop,void *f)
    ppc32_emit_basic_c_call(&iop->ob_ptr,f);
 }
 
-/* Increment the number of executed instructions (performance debugging) */
-void ppc32_inc_perf_counter(ppc32_jit_tcb_t *b)
-{
-   x86_alu_membase_imm(b->jit_ptr,X86_ADD,
-                       X86_EDI,OFFSET(cpu_ppc_t,perf_counter),1);
-   x86_alu_membase_imm(b->jit_ptr,X86_ADC,
-                       X86_EDI,OFFSET(cpu_ppc_t,perf_counter)+4,0);
-}
-
 /* ======================================================================== */
 
 /* Initialize register mapping */
@@ -358,7 +352,7 @@ void ppc32_op_insn_output(ppc32_jit_tcb_t *b,jit_op_t *op)
    b->jit_ptr += op->ob_ptr - op->ob_data;
 
    if ((op->ob_ptr - op->ob_data) >= jit_op_blk_sizes[op->ob_size_index]) {
-      printf("FAILURE: count=%d, size=%d\n",
+      printf("ppc32_op_insn_output: FAILURE: count=%d, size=%d\n",
              op->ob_ptr - op->ob_data, jit_op_blk_sizes[op->ob_size_index]);
    }
 }
@@ -405,7 +399,6 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                              int op,int base,int offset,int target,int update)
 {
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1;
    jit_op_t *iop;
 
    /* 
@@ -437,15 +430,10 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(op));
-
-   /* Exception ? */
-   x86_test_reg_reg(iop->ob_ptr,X86_EAX,X86_EAX);
-   test1 = iop->ob_ptr;
-   x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-   x86_patch(test1,iop->ob_ptr);
-
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
+   
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,base,X86_ESI);
 }
@@ -454,7 +442,6 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                                  int op,int ra,int rb,int target,int update)
 {
-   u_char *test1;
    jit_op_t *iop;
 
    /* 
@@ -486,15 +473,10 @@ static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(op));
-
-   /* Exception ? */
-   x86_test_reg_reg(iop->ob_ptr,X86_EAX,X86_EAX);
-   test1 = iop->ob_ptr;
-   x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-   x86_patch(test1,iop->ob_ptr);
-
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
+   
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,ra,X86_ESI);
 }
@@ -539,7 +521,7 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                                   memop_fast_access op_handler)
 {
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exception,*p_exit;
+   u_char *test1,*test2,*p_exit,*p_fast_exit;
    jit_op_t *iop;
 
    /* 
@@ -566,6 +548,32 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
       else
          ppc32_load_imm(&iop->ob_ptr,X86_EBX,0);
    }
+
+#if 0
+   /* ======= zzz ======= */
+   {
+      u_char *testZ;
+
+      x86_mov_reg_reg(iop->ob_ptr,X86_ESI,X86_EBX,4);
+      x86_alu_reg_imm(iop->ob_ptr,X86_AND,X86_ESI,PPC32_MIN_PAGE_MASK);
+      x86_alu_reg_membase(iop->ob_ptr,X86_CMP,X86_ESI,X86_EDI,
+                          OFFSET(cpu_ppc_t,vtlb[base].vaddr));
+      testZ = iop->ob_ptr;
+      x86_branch8(iop->ob_ptr, X86_CC_NZ, 0, 1);
+
+      x86_alu_reg_imm(iop->ob_ptr,X86_AND,X86_EBX,PPC32_MIN_PAGE_IMASK);
+      x86_mov_reg_membase(iop->ob_ptr,X86_EAX,
+                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].haddr),4);
+
+      /* Memory access */
+      op_handler(iop,target);
+
+      p_fast_exit = iop->ob_ptr;
+      x86_jump8(iop->ob_ptr,0);
+
+      x86_patch(testZ,iop->ob_ptr);
+   }
+#endif
 
    /* EAX = mts32_entry index */
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EBX,4);
@@ -601,6 +609,18 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_membase(iop->ob_ptr,X86_EAX,
                        X86_EDX,OFFSET(mts32_entry_t,hpa),4);
 
+#if 0
+   /* zzz */
+   {
+      x86_mov_membase_reg(iop->ob_ptr,
+                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].vaddr),
+                          X86_ESI,4);
+      x86_mov_membase_reg(iop->ob_ptr,
+                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].haddr),
+                          X86_EAX,4);
+   }
+#endif
+
    /* Memory access */
    op_handler(iop,target);
  
@@ -625,16 +645,16 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(opcode));
-
-   /* Check for exception */
-   x86_test_reg_reg(iop->ob_ptr,X86_EAX,X86_EAX);
-   p_exception = iop->ob_ptr;
-   x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
+   
    x86_patch(p_exit,iop->ob_ptr);
-   x86_patch(p_exception,iop->ob_ptr);
+
+   /* zzz */
+#if 0
+   x86_patch(p_fast_exit,iop->ob_ptr);
+#endif
 }
 
 /* Emit unhandled instruction code */
@@ -650,10 +670,13 @@ static int ppc32_emit_unknown(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    ppc32_set_ia(&iop->ob_ptr,b->start_ia+(b->ppc_trans_pos << 2));
 
    /* Fallback to non-JIT mode */
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
    x86_mov_reg_imm(iop->ob_ptr,X86_EDX,opcode);
 
-   ppc32_emit_c_call(b,iop,ppc32_exec_single_insn_ext);
+   ppc32_emit_basic_c_call(&iop->ob_ptr,ppc32_exec_single_insn_ext);
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
+   
    x86_test_reg_reg(iop->ob_ptr,X86_EAX,X86_EAX);
    test1 = iop->ob_ptr;
    x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
@@ -673,8 +696,10 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 
    iop = ppc32_op_emit_insn_output(cpu,2,"breakpoint");
 
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
    ppc32_emit_c_call(b,iop,ppc32_run_breakpoint);
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
 
    /* Signal this as an EOB to to reset JIT state */
    ppc32_op_emit_basic_opcode(cpu,JIT_OP_EOB);
@@ -684,16 +709,27 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 static void ppc32_emit_dump_regs(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 {   
    jit_op_t *iop;
-
+   
    iop = ppc32_op_emit_insn_output(cpu,2,"dump_regs");
 
    x86_mov_reg_membase(iop->ob_ptr,X86_EAX,X86_EDI,OFFSET(cpu_ppc_t,gen),4);
+   
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-4);
    x86_push_reg(iop->ob_ptr,X86_EAX);
    ppc32_emit_c_call(b,iop,ppc32_dump_regs);
-   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,4);
+   x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
 
    /* Signal this as an EOB to to reset JIT state */
    ppc32_op_emit_basic_opcode(cpu,JIT_OP_EOB);
+}
+
+/* Increment the number of executed instructions (performance debugging) */
+void ppc32_inc_perf_counter(cpu_ppc_t *cpu)
+{ 
+   jit_op_t *iop;
+   
+   iop = ppc32_op_emit_insn_output(cpu,1,"perf_cnt");
+   x86_inc_membase(iop->ob_ptr,X86_EDI,OFFSET(cpu_ppc_t,perf_counter));
 }
 
 /* ======================================================================== */
@@ -3783,7 +3819,7 @@ struct ppc32_insn_tag ppc32_insn_tags[] = {
    { ppc32_emit_BLA        , 0xfc000003 , 0x48000003 },
    { ppc32_emit_BCC        , 0xfe800000 , 0x40800000 },
    { ppc32_emit_BC         , 0xfc000000 , 0x40000000 },
-   { ppc32_emit_BCLR       , 0xfc00fffe , 0x4c000020 },
+   { ppc32_emit_BCLR       , 0xfc00fffe , 0x4c000020 },   
    { ppc32_emit_CMP        , 0xfc6007ff , 0x7c000000 },
    { ppc32_emit_CMPI       , 0xfc600000 , 0x2c000000 },
    { ppc32_emit_CMPL       , 0xfc6007ff , 0x7c000040 },

@@ -43,62 +43,67 @@ static const struct cisco_eeprom eeprom_c7200_io_fe = {
  *
  * Add an IOcard into slot 0.
  */
-static int dev_c7200_iocard_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_iocard_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct dec21140_data *data;
-   
-   if (pa_bay != 0) {
-      fprintf(stderr,"C7200 '%s': cannot put IOCARD in PA bay %u!\n",
-              router->vm->name,pa_bay);
+   u_int slot = card->slot_id;
+
+   if (slot != 0) {
+      vm_error(vm,"cannot put IOCARD in PA bay %u!\n",slot);
       return(-1);
    }
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_io_fe);
+   cisco_card_set_eeprom(vm,card,&eeprom_c7200_io_fe);
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the DEC21140 chip */
-   data = dev_dec21140_init(router->vm,name,
-                            router->pa_bay[pa_bay].pci_map,
-                            router->npe_driver->dec21140_pci_dev,
-                            c7200_net_irq_for_slot_port(pa_bay,0));
+   data = dev_dec21140_init(vm,card->dev_name,
+                            card->pci_bus,
+                            VM_C7200(vm)->npe_driver->dec21140_pci_dev,
+                            c7200_net_irq_for_slot_port(slot,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove an IOcard from slot 0 */
-static int dev_c7200_iocard_shutdown(c7200_t *router,u_int pa_bay) 
+static int dev_c7200_iocard_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
+   /* Remove the PA EEPROM */
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   c7200_pa_unset_eeprom(router,pa_bay);
-   dev_dec21140_remove(bay->drv_info);
+   /* Shutdown the DEC21140 */
+   dev_dec21140_remove(card->drv_info);
    return(0);
 }
 
 /* Bind a Network IO descriptor */
-static int dev_c7200_iocard_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                                    netio_desc_t *nio)
+static int dev_c7200_iocard_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                                    u_int port_id,netio_desc_t *nio)
 {
-   struct dec21140_data *d;
+   struct dec21140_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    return(dev_dec21140_set_nio(d,nio));
 }
 
 /* Unbind a Network IO descriptor */
-static int dev_c7200_iocard_unset_nio(c7200_t *router,u_int pa_bay,
+static int dev_c7200_iocard_unset_nio(vm_instance_t *vm,
+                                      struct cisco_card *card,
                                       u_int port_id)
 {
-   struct dec21140_data *d;
+   struct dec21140_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
    
    dev_dec21140_unset_nio(d);
@@ -110,54 +115,62 @@ static int dev_c7200_iocard_unset_nio(c7200_t *router,u_int pa_bay,
  *
  * Add a PA-FE-TX port adapter into specified slot.
  */
-static int dev_c7200_pa_fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_fe_tx_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct dec21140_data *data;
+   u_int slot = card->slot_id;
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-FE-TX"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-FE-TX"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the DEC21140 chip */
-   data = dev_dec21140_init(router->vm,name,router->pa_bay[pa_bay].pci_map,0,
-                            c7200_net_irq_for_slot_port(pa_bay,0));
+   data = dev_dec21140_init(vm,card->dev_name,card->pci_bus,0,
+                            c7200_net_irq_for_slot_port(slot,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove a PA-FE-TX from the specified slot */
-static int dev_c7200_pa_fe_tx_shutdown(c7200_t *router,u_int pa_bay) 
+static int 
+dev_c7200_pa_fe_tx_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
+   /* Remove the PA EEPROM */
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   c7200_pa_unset_eeprom(router,pa_bay);
-   dev_dec21140_remove(bay->drv_info);
+   /* Shutdown the DEC21140 */
+   dev_dec21140_remove(card->drv_info);
    return(0);
 }
 
 /* Bind a Network IO descriptor */
-static int dev_c7200_pa_fe_tx_set_nio(c7200_t *router,u_int pa_bay,
-                                      u_int port_id,netio_desc_t *nio)
+static int 
+dev_c7200_pa_fe_tx_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                           u_int port_id,netio_desc_t *nio)
 {
-   struct dec21140_data *d;
+   struct dec21140_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
-   
+
    return(dev_dec21140_set_nio(d,nio));
 }
 
 /* Unbind a Network IO descriptor */
-static int dev_c7200_pa_fe_tx_unset_nio(c7200_t *router,u_int pa_bay,
-                                        u_int port_id)
+static int 
+dev_c7200_pa_fe_tx_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                             u_int port_id)
 {
-   struct dec21140_data *d;
+   struct dec21140_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
    
    dev_dec21140_unset_nio(d);
@@ -165,20 +178,22 @@ static int dev_c7200_pa_fe_tx_unset_nio(c7200_t *router,u_int pa_bay,
 }
 
 /* C7200-IO-FE driver */
-struct c7200_pa_driver dev_c7200_iocard_fe_driver = {
-   "C7200-IO-FE", 1, 
+struct cisco_card_driver dev_c7200_iocard_fe_driver = {
+   "C7200-IO-FE", 1, 0, 
    dev_c7200_iocard_init, 
    dev_c7200_iocard_shutdown,
+   NULL,
    dev_c7200_iocard_set_nio,
    dev_c7200_iocard_unset_nio,
    NULL,
 };
 
 /* PA-FE-TX driver */
-struct c7200_pa_driver dev_c7200_pa_fe_tx_driver = {
-   "PA-FE-TX", 1, 
+struct cisco_card_driver dev_c7200_pa_fe_tx_driver = {
+   "PA-FE-TX", 1, 0, 
    dev_c7200_pa_fe_tx_init, 
    dev_c7200_pa_fe_tx_shutdown,
+   NULL,
    dev_c7200_pa_fe_tx_set_nio,
    dev_c7200_pa_fe_tx_unset_nio,
    NULL,
@@ -194,21 +209,17 @@ struct pa_i8254x_data {
 };
 
 /* Remove a PA-2FE-TX from the specified slot */
-static int dev_c7200_pa_i8254x_shutdown(c7200_t *router,u_int pa_bay) 
+static int 
+dev_c7200_pa_i8254x_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa_i8254x_data *data;
+   struct pa_i8254x_data *data = card->drv_info;
    int i;
 
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   data = bay->drv_info;
-
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
-   /* Remove the AMD Am79c971 chips */
+   /* Remove the Intel i2854x chips */
    for(i=0;i<data->nr_port;i++)
       dev_i8254x_remove(data->port[i]);
 
@@ -217,12 +228,11 @@ static int dev_c7200_pa_i8254x_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor */
-static int dev_c7200_pa_i8254x_set_nio(c7200_t *router,u_int pa_bay,
-                                       u_int port_id,netio_desc_t *nio)
+static int 
+dev_c7200_pa_i8254x_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                            u_int port_id,netio_desc_t *nio)
 {
-   struct pa_i8254x_data *d;
-
-   d = c7200_pa_get_drvinfo(router,pa_bay);
+   struct pa_i8254x_data *d = card->drv_info;
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -232,12 +242,11 @@ static int dev_c7200_pa_i8254x_set_nio(c7200_t *router,u_int pa_bay,
 }
 
 /* Unbind a Network IO descriptor */
-static int dev_c7200_pa_i8254x_unset_nio(c7200_t *router,u_int pa_bay,
-                                         u_int port_id)
+static int 
+dev_c7200_pa_i8254x_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                              u_int port_id)
 {
-   struct pa_i8254x_data *d;
-
-   d = c7200_pa_get_drvinfo(router,pa_bay);
+   struct pa_i8254x_data *d = card->drv_info;
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -255,14 +264,15 @@ static int dev_c7200_pa_i8254x_unset_nio(c7200_t *router,u_int pa_bay,
  *
  * Add a PA-2FE-TX port adapter into specified slot.
  */
-static int dev_c7200_pa_2fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_2fe_tx_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_i8254x_data *data;
+   u_int slot = card->slot_id;
    int i;
 
    /* Allocate the private data structure for the PA-2FE-TX */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (PA-2FE-TX): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -270,25 +280,31 @@ static int dev_c7200_pa_2fe_tx_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 2;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-2FE-TX"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-2FE-TX"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the Intel i8254x chips */
    for(i=0;i<data->nr_port;i++) {
-      data->port[i] = dev_i8254x_init(router->vm,name,0,
-                                      router->pa_bay[pa_bay].pci_map,i,
-                                      c7200_net_irq_for_slot_port(pa_bay,i));
+      data->port[i] = dev_i8254x_init(vm,card->dev_name,0,
+                                      card->pci_bus,i,
+                                      c7200_net_irq_for_slot_port(slot,i));
    }
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* PA-2FE-TX driver */
-struct c7200_pa_driver dev_c7200_pa_2fe_tx_driver = {
-   "PA-2FE-TX", 0, 
+struct cisco_card_driver dev_c7200_pa_2fe_tx_driver = {
+   "PA-2FE-TX", 0, 0,
    dev_c7200_pa_2fe_tx_init, 
    dev_c7200_pa_i8254x_shutdown, 
+   NULL,
    dev_c7200_pa_i8254x_set_nio,
    dev_c7200_pa_i8254x_unset_nio,
    NULL,
@@ -303,13 +319,14 @@ struct c7200_pa_driver dev_c7200_pa_2fe_tx_driver = {
  *
  * Add a PA-GE port adapter into specified slot.
  */
-static int dev_c7200_pa_ge_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_ge_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_i8254x_data *data;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for the PA-2FE-TX */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (PA-GE): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -317,23 +334,29 @@ static int dev_c7200_pa_ge_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 1;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-GE"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-GE"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the Intel i8254x chip */
-   data->port[0] = dev_i8254x_init(router->vm,name,0,
-                                   router->pa_bay[pa_bay].pci_map,0,
-                                   c7200_net_irq_for_slot_port(pa_bay,0));
+   data->port[0] = dev_i8254x_init(vm,card->dev_name,0,
+                                   card->pci_bus,0,
+                                   c7200_net_irq_for_slot_port(slot,0));
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* PA-GE driver */
-struct c7200_pa_driver dev_c7200_pa_ge_driver = {
-   "PA-GE", 0, 
+struct cisco_card_driver dev_c7200_pa_ge_driver = {
+   "PA-GE", 0, 0,
    dev_c7200_pa_ge_init, 
    dev_c7200_pa_i8254x_shutdown, 
+   NULL,
    dev_c7200_pa_i8254x_set_nio,
    dev_c7200_pa_i8254x_unset_nio,
    NULL,
@@ -365,13 +388,14 @@ static const struct cisco_eeprom eeprom_c7200_io_2fe = {
  *
  * Add a C7200-IO-2FE/E port adapter into specified slot.
  */
-static int dev_c7200_iocard_2fe_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_iocard_2fe_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_i8254x_data *data;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for the iocard */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (C7200-IO-2FE): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -379,18 +403,22 @@ static int dev_c7200_iocard_2fe_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 2;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_io_2fe);
+   cisco_card_set_eeprom(vm,card,&eeprom_c7200_io_2fe);
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Port Fa0/0 is on PCI Device 1 */
-   data->port[0] = dev_i8254x_init(router->vm,name,0,
-                                   router->pa_bay[pa_bay].pci_map,1,
-                                   c7200_net_irq_for_slot_port(pa_bay,1));
+   data->port[0] = dev_i8254x_init(vm,card->dev_name,0,
+                                   card->pci_bus,1,
+                                   c7200_net_irq_for_slot_port(slot,1));
 
    /* Port Fa0/1 is on PCI Device 0 */
-   data->port[1] = dev_i8254x_init(router->vm,name,0,
-                                   router->pa_bay[pa_bay].pci_map,0,
-                                   c7200_net_irq_for_slot_port(pa_bay,0));
+   data->port[1] = dev_i8254x_init(vm,card->dev_name,0,
+                                   card->pci_bus,0,
+                                   c7200_net_irq_for_slot_port(slot,0));
 
    if (!data->port[0] || !data->port[1]) {
       dev_i8254x_remove(data->port[0]);
@@ -400,14 +428,16 @@ static int dev_c7200_iocard_2fe_init(c7200_t *router,char *name,u_int pa_bay)
    }
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* C7200-IO-2FE driver */
-struct c7200_pa_driver dev_c7200_iocard_2fe_driver = {
-   "C7200-IO-2FE", 0, 
+struct cisco_card_driver dev_c7200_iocard_2fe_driver = {
+   "C7200-IO-2FE", 0, 0,
    dev_c7200_iocard_2fe_init, 
    dev_c7200_pa_i8254x_shutdown, 
+   NULL,
    dev_c7200_pa_i8254x_set_nio,
    dev_c7200_pa_i8254x_unset_nio,
    NULL,
@@ -442,13 +472,15 @@ static const struct cisco_eeprom eeprom_c7200_io_ge_e = {
  *
  * Add a C7200-I/O-GE+E port adapter into specified slot.
  */
-static int dev_c7200_iocard_ge_e_init(c7200_t *router,char *name,u_int pa_bay)
+static int 
+dev_c7200_iocard_ge_e_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_i8254x_data *data;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for the iocard */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (C7200-IO-GE+E): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -456,28 +488,34 @@ static int dev_c7200_iocard_ge_e_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 2;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,&eeprom_c7200_io_ge_e);
+   cisco_card_set_eeprom(vm,card,&eeprom_c7200_io_ge_e);
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Port Gi0/0 is on PCI Device 1 */
-   data->port[0] = dev_i8254x_init(router->vm,name,0,
-                                   router->pa_bay[pa_bay].pci_map,1,
-                                   c7200_net_irq_for_slot_port(pa_bay,1));
+   data->port[0] = dev_i8254x_init(vm,card->dev_name,0,
+                                   card->pci_bus,1,
+                                   c7200_net_irq_for_slot_port(slot,1));
 
    /* Port e0/0 is on PCI Device 0 */
-   data->port[1] = dev_i8254x_init(router->vm,name,0,
-                                   router->pa_bay[pa_bay].pci_map,0,
-                                   c7200_net_irq_for_slot_port(pa_bay,0));
+   data->port[1] = dev_i8254x_init(vm,card->dev_name,0,
+                                   card->pci_bus,0,
+                                   c7200_net_irq_for_slot_port(slot,0));
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* C7200-IO-GE-E driver */
-struct c7200_pa_driver dev_c7200_iocard_ge_e_driver = {
-   "C7200-IO-GE-E", 0, 
+struct cisco_card_driver dev_c7200_iocard_ge_e_driver = {
+   "C7200-IO-GE-E", 0, 0,
    dev_c7200_iocard_ge_e_init, 
    dev_c7200_pa_i8254x_shutdown, 
+   NULL,
    dev_c7200_pa_i8254x_set_nio,
    dev_c7200_pa_i8254x_unset_nio,
    NULL,
@@ -498,14 +536,15 @@ struct pa_4e8e_data {
  *
  * Add a PA-4E port adapter into specified slot.
  */
-static int dev_c7200_pa_4e_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_4e_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_4e8e_data *data;
+   u_int slot = card->slot_id;
    int i;
 
    /* Allocate the private data structure for the PA-4E */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (PA-4E): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -513,18 +552,24 @@ static int dev_c7200_pa_4e_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 4;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4E"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-4E"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the AMD Am79c971 chips */
    for(i=0;i<data->nr_port;i++) {
-      data->port[i] = dev_am79c971_init(router->vm,name,AM79C971_TYPE_10BASE_T,
-                                        router->pa_bay[pa_bay].pci_map,i,
-                                        c7200_net_irq_for_slot_port(pa_bay,i));
+      data->port[i] = dev_am79c971_init(vm,card->dev_name,
+                                        AM79C971_TYPE_10BASE_T,
+                                        card->pci_bus,i,
+                                        c7200_net_irq_for_slot_port(slot,i));
    }
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /*
@@ -532,14 +577,15 @@ static int dev_c7200_pa_4e_init(c7200_t *router,char *name,u_int pa_bay)
  *
  * Add a PA-8E port adapter into specified slot.
  */
-static int dev_c7200_pa_8e_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_8e_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_4e8e_data *data;
+   u_int slot = card->slot_id;
    int i;
 
    /* Allocate the private data structure for the PA-8E */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (PA-8E): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
@@ -547,34 +593,36 @@ static int dev_c7200_pa_8e_init(c7200_t *router,char *name,u_int pa_bay)
    memset(data,0,sizeof(*data));
    data->nr_port = 8;
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-8E"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-8E"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the AMD Am79c971 chips */
    for(i=0;i<data->nr_port;i++) {
-      data->port[i] = dev_am79c971_init(router->vm,name,AM79C971_TYPE_10BASE_T,
-                                        router->pa_bay[pa_bay].pci_map,i,
-                                        c7200_net_irq_for_slot_port(pa_bay,i));
+      data->port[i] = dev_am79c971_init(vm,card->dev_name,
+                                        AM79C971_TYPE_10BASE_T,
+                                        card->pci_bus,i,
+                                        c7200_net_irq_for_slot_port(slot,i));
    }
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove a PA-4E/PA-8E from the specified slot */
-static int dev_c7200_pa_4e8e_shutdown(c7200_t *router,u_int pa_bay) 
+static int 
+dev_c7200_pa_4e8e_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa_4e8e_data *data;
+   struct pa_4e8e_data *data = card->drv_info;
    int i;
 
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   data = bay->drv_info;
-
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the AMD Am79c971 chips */
    for(i=0;i<data->nr_port;i++)
@@ -585,12 +633,11 @@ static int dev_c7200_pa_4e8e_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor */
-static int dev_c7200_pa_4e8e_set_nio(c7200_t *router,u_int pa_bay,
-                                     u_int port_id,netio_desc_t *nio)
+static int 
+dev_c7200_pa_4e8e_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                          u_int port_id,netio_desc_t *nio)
 {
-   struct pa_4e8e_data *d;
-
-   d = c7200_pa_get_drvinfo(router,pa_bay);
+   struct pa_4e8e_data *d = card->drv_info;
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -600,12 +647,11 @@ static int dev_c7200_pa_4e8e_set_nio(c7200_t *router,u_int pa_bay,
 }
 
 /* Unbind a Network IO descriptor */
-static int dev_c7200_pa_4e8e_unset_nio(c7200_t *router,u_int pa_bay,
-                                       u_int port_id)
+static int 
+dev_c7200_pa_4e8e_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                            u_int port_id)
 {
-   struct pa_4e8e_data *d;
-
-   d = c7200_pa_get_drvinfo(router,pa_bay);
+   struct pa_4e8e_data *d = card->drv_info;
 
    if (!d || (port_id >= d->nr_port))
       return(-1);
@@ -615,20 +661,22 @@ static int dev_c7200_pa_4e8e_unset_nio(c7200_t *router,u_int pa_bay,
 }
 
 /* PA-4E driver */
-struct c7200_pa_driver dev_c7200_pa_4e_driver = {
-   "PA-4E", 1, 
+struct cisco_card_driver dev_c7200_pa_4e_driver = {
+   "PA-4E", 1, 0,
    dev_c7200_pa_4e_init, 
    dev_c7200_pa_4e8e_shutdown, 
+   NULL,
    dev_c7200_pa_4e8e_set_nio,
    dev_c7200_pa_4e8e_unset_nio,
    NULL,
 };
 
 /* PA-8E driver */
-struct c7200_pa_driver dev_c7200_pa_8e_driver = {
-   "PA-8E", 1, 
+struct cisco_card_driver dev_c7200_pa_8e_driver = {
+   "PA-8E", 1, 0,
    dev_c7200_pa_8e_init, 
    dev_c7200_pa_4e8e_shutdown, 
+   NULL,
    dev_c7200_pa_4e8e_set_nio,
    dev_c7200_pa_4e8e_unset_nio,
    NULL,

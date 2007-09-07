@@ -6,9 +6,7 @@
  *   - 0x95: PA-POS-OC3SMI
  *   - 0x96: PA-POS-OC3MM
  *
- * Just an experimentation (I don't have any PA-POS-OC3). It basically works,
- * on NPE-400. There is something strange with the buffer addresses in TX ring,
- * preventing this driver working with platforms using SRAM.
+ * Just an experimentation (I don't have any PA-POS-OC3).
  */
 
 #include <stdio.h>
@@ -33,8 +31,8 @@
 /* Debugging flags */
 #define DEBUG_ACCESS    0
 #define DEBUG_UNKNOWN   0
-#define DEBUG_TRANSMIT  1
-#define DEBUG_RECEIVE   1
+#define DEBUG_TRANSMIT  0
+#define DEBUG_RECEIVE   0
 
 /* PCI vendor/product codes */
 #define POS_OC3_PCI_VENDOR_ID    0x10b5
@@ -68,6 +66,15 @@ struct tx_desc {
 /* PA-POS-OC3 Data */
 struct pos_oc3_data {
    char *name;
+
+   /* IRQ clearing count */
+   u_int irq_clearing_count;
+
+   /* Control register #1 */
+   m_uint16_t ctrl_reg1;
+
+   /* CRC size */
+   u_int crc_size;
 
    /* physical addresses for start and end of RX/TX rings */
    m_uint32_t rx_start,rx_end,tx_start,tx_end;
@@ -290,13 +297,41 @@ static void *dev_pos_cs_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x30001c:
          if (op_type == MTS_READ) {
             *data = 0x00000FFF;
-            pci_dev_clear_irq(d->vm,d->pci_dev);
+
+            /* Add a delay before clearing the IRQ */
+            if (++d->irq_clearing_count == 20) {
+               pci_dev_clear_irq(d->vm,d->pci_dev);
+               d->irq_clearing_count = 0;
+            }
          }     
          break;
 
       case 0x300008:
          if (op_type == MTS_READ)
             *data = 0x000007F;      
+         break;
+
+      case 0x300028:
+         if (op_type == MTS_READ) {
+            *data = d->ctrl_reg1;
+         } else {
+            d->ctrl_reg1 = *data;
+
+            switch(*data) {
+               case 0x06:
+                  d->crc_size = 2;
+                  break;
+               case 0x07:
+                  d->crc_size = 4;
+                  break;
+               default:
+                  d->crc_size = 2;
+                  cpu_log(cpu,d->cs_name,
+                          "unknown value 0x%4.4llx written in ctrl_reg1\n",
+                          *data);
+            }
+            cpu_log(cpu,d->cs_name,"CRC size set to 0x%4.4x\n",d->crc_size);
+         }
          break;
 
 #if DEBUG_UNKNOWN
@@ -419,7 +454,7 @@ static void dev_pos_oc3_receive_pkt(struct pos_oc3_data *d,
 
       /* We have finished if the complete packet has been stored */
       if (tot_len == 0) {
-         rxdc->rdes[0] = (cp_len + 4);
+         rxdc->rdes[0] = (cp_len + d->crc_size);
 
          if (i != 0)
             physmem_copy_u32_to_vm(d->vm,d->rx_current,rxdc->rdes[0]);
@@ -632,102 +667,98 @@ static void pci_pos_write(cpu_gen_t *cpu,struct pci_device *dev,
  *
  * Add a PA-POS port adapter into specified slot.
  */
-int dev_c7200_pa_pos_init(c7200_t *router,char *name,u_int pa_bay)
+int dev_c7200_pa_pos_init(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct pci_bus *pci_bus;
    struct pos_oc3_data *d;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for PA-POS-OC3 chip */
    if (!(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"%s (PA-POS-OC3): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
    memset(d,0,sizeof(*d));
-   d->name = name;
-   d->vm   = router->vm;
+   d->name = card->dev_name;
+   d->vm   = vm;
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-POS-OC3"));
-
-   /* Get the appropriate PCI bus */
-   pci_bus = router->pa_bay[pa_bay].pci_map;
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-POS-OC3"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Initialize RX device */
-   d->rx_name = dyn_sprintf("%s_RX",name);
+   d->rx_name = dyn_sprintf("%s_RX",card->dev_name);
    dev_init(&d->rx_dev);
    d->rx_dev.name      = d->rx_name;
    d->rx_dev.priv_data = d;
    d->rx_dev.handler   = dev_pos_rx_access;
 
    /* Initialize TX device */
-   d->tx_name = dyn_sprintf("%s_TX",name);
+   d->tx_name = dyn_sprintf("%s_TX",card->dev_name);
    dev_init(&d->tx_dev);
    d->tx_dev.name      = d->tx_name;
    d->tx_dev.priv_data = d;
    d->tx_dev.handler   = dev_pos_tx_access;
 
    /* Initialize CS device */
-   d->cs_name = dyn_sprintf("%s_CS",name);
+   d->cs_name = dyn_sprintf("%s_CS",card->dev_name);
    dev_init(&d->cs_dev);
    d->cs_dev.name      = d->cs_name;
    d->cs_dev.priv_data = d;
    d->cs_dev.handler   = dev_pos_cs_access;
 
    /* Initialize PLX9060 for RX part */
-   d->rx_obj = dev_plx9060_init(d->vm,d->rx_name,pci_bus,0,&d->rx_dev);
+   d->rx_obj = dev_plx9060_init(vm,d->rx_name,card->pci_bus,0,&d->rx_dev);
 
    /* Initialize PLX9060 for TX part */
-   d->tx_obj = dev_plx9060_init(d->vm,d->tx_name,pci_bus,1,&d->tx_dev);
+   d->tx_obj = dev_plx9060_init(vm,d->tx_name,card->pci_bus,1,&d->tx_dev);
 
    /* Initialize PLX9060 for CS part (CS=card status, chip status, ... ?) */
-   d->cs_obj = dev_plx9060_init(d->vm,d->cs_name,pci_bus,2,&d->cs_dev);
+   d->cs_obj = dev_plx9060_init(vm,d->cs_name,card->pci_bus,2,&d->cs_dev);
 
    /* Unknown PCI device here (will be mapped at 0x30000) */
    dev_init(&d->dev);
-   d->dev.name      = name;
+   d->dev.name      = card->dev_name;
    d->dev.priv_data = d;
    d->dev.phys_len  = 0x10000;
    d->dev.handler   = dev_pos_access;
 
-   d->pci_dev = pci_dev_add(pci_bus,name,0,0,3,0,
-                            /*C7200_NETIO_IRQ,*/
-                            c7200_net_irq_for_slot_port(pa_bay,0),
+   d->pci_dev = pci_dev_add(card->pci_bus,card->dev_name,0,0,3,0,
+                            c7200_net_irq_for_slot_port(slot,0),
                             d,NULL,pci_pos_read,pci_pos_write);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+   card->drv_info = d;
+   return(0);
 }
 
 /* Remove a PA-POS-OC3 from the specified slot */
-int dev_c7200_pa_pos_shutdown(c7200_t *router,u_int pa_bay)
+int dev_c7200_pa_pos_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pos_oc3_data *d;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   d = bay->drv_info;
+   struct pos_oc3_data *d = card->drv_info;
 
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the PCI device */
    pci_dev_remove(d->pci_dev);
 
    /* Remove the PLX9060 chips */
-   vm_object_remove(d->vm,d->rx_obj);
-   vm_object_remove(d->vm,d->tx_obj);
-   vm_object_remove(d->vm,d->cs_obj);
+   vm_object_remove(vm,d->rx_obj);
+   vm_object_remove(vm,d->tx_obj);
+   vm_object_remove(vm,d->cs_obj);
 
    /* Remove the devices from the CPU address space */
-   vm_unbind_device(router->vm,&d->rx_dev);
-   vm_unbind_device(router->vm,&d->tx_dev);
-   vm_unbind_device(router->vm,&d->cs_dev);
+   vm_unbind_device(vm,&d->rx_dev);
+   vm_unbind_device(vm,&d->tx_dev);
+   vm_unbind_device(vm,&d->cs_dev);
 
-   vm_unbind_device(router->vm,&d->dev);
-   cpu_group_rebuild_mts(router->vm->cpu_group);
+   vm_unbind_device(vm,&d->dev);
+   cpu_group_rebuild_mts(vm->cpu_group);
 
    /* Free the device structure itself */
    free(d);
@@ -735,12 +766,12 @@ int dev_c7200_pa_pos_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_pos_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                             netio_desc_t *nio)
+int dev_c7200_pa_pos_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                             u_int port_id,netio_desc_t *nio)
 {
-   struct pos_oc3_data *d;
+   struct pos_oc3_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio != NULL)
@@ -753,11 +784,12 @@ int dev_c7200_pa_pos_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_pos_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+int dev_c7200_pa_pos_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                               u_int port_id)
 {
-   struct pos_oc3_data *d;
+   struct pos_oc3_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio) {
@@ -769,10 +801,11 @@ int dev_c7200_pa_pos_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
 }
 
 /* PA-POS-OC3 driver */
-struct c7200_pa_driver dev_c7200_pa_pos_oc3_driver = {
-   "PA-POS-OC3", 1, 
+struct cisco_card_driver dev_c7200_pa_pos_oc3_driver = {
+   "PA-POS-OC3", 1, 0,
    dev_c7200_pa_pos_init,
    dev_c7200_pa_pos_shutdown,
+   NULL,
    dev_c7200_pa_pos_set_nio,
    dev_c7200_pa_pos_unset_nio,
    NULL,

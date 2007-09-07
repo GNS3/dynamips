@@ -178,7 +178,7 @@ static struct cisco_eeprom c7200_pem_eeprom[] = {
 /* ======================================================================== */
 /* Port Adapter Drivers                                                     */
 /* ======================================================================== */
-static struct c7200_pa_driver *pa_drivers[] = {
+static struct cisco_card_driver *pa_drivers[] = {
    &dev_c7200_iocard_fe_driver,
    &dev_c7200_iocard_2fe_driver,
    &dev_c7200_iocard_ge_e_driver,
@@ -238,8 +238,11 @@ static struct c7200_npe_driver npe_drivers[] = {
 /* Cisco 7200 router instances                                              */
 /* ======================================================================== */
 
+/* Initialize default parameters for a C7200 */
+static void c7200_init_defaults(c7200_t *router);
+
 /* Directly extract the configuration from the NVRAM device */
-ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
+static ssize_t c7200_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 {   
    u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
    m_uint32_t start,end,nvlen,clen;
@@ -303,7 +306,7 @@ ssize_t c7200_nvram_extract_config(vm_instance_t *vm,char **buffer)
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
-int c7200_nvram_push_config(vm_instance_t *vm,char *buffer,size_t len)
+static int c7200_nvram_push_config(vm_instance_t *vm,u_char *buffer,size_t len)
 {  
    u_char *base_ptr,*ios_ptr,*cfg_ptr;
    m_uint32_t cfg_addr,cfg_offset;
@@ -388,7 +391,7 @@ static int c7200_burn_mac_addr(c7200_t *router,n_eth_addr_t *addr)
 static void c7200_free_hw_ressources(c7200_t *router)
 {
    /* Shutdown all Port Adapters */
-   c7200_pa_shutdown_all(router);
+   vm_slot_shutdown_all(router->vm);
 
    /* Inactivate the PCMCIA bus */
    router->pcmcia_bus = NULL;
@@ -401,137 +404,104 @@ static void c7200_free_hw_ressources(c7200_t *router)
 }
 
 /* Create a new router instance */
-c7200_t *c7200_create_instance(char *name,int instance_id)
+static int c7200_create_instance(vm_instance_t *vm)
 {
    c7200_t *router;
 
    if (!(router = malloc(sizeof(*router)))) {
-      fprintf(stderr,"C7200 '%s': Unable to create new instance!\n",name);
-      return NULL;
+      fprintf(stderr,"C7200 '%s': Unable to create new instance!\n",vm->name);
+      return(-1);
    }
-   
-   memset(router,0,sizeof(*router));
 
-   if (!(router->vm = vm_create(name,instance_id,VM_TYPE_C7200))) {
-      fprintf(stderr,"C7200 '%s': unable to create VM instance!\n",name);
-      goto err_vm;
-   }
+   memset(router,0,sizeof(*router));
+   router->vm = vm;
+   vm->hw_data = router;
+   vm->elf_machine_id = C7200_ELF_MACHINE_ID;
 
    c7200_init_defaults(router);
-   router->vm->hw_data = router;
-   router->vm->elf_machine_id = C7200_ELF_MACHINE_ID;
-   return router;
-
- err_vm:
-   free(router);
-   return NULL;
+   return(0);
 }
 
 /* Free resources used by a router instance */
-static int c7200_free_instance(void *data,void *arg)
+static int c7200_delete_instance(vm_instance_t *vm)
 {
-   vm_instance_t *vm = data;
-   c7200_t *router;
+   c7200_t *router = VM_C7200(vm);
    int i;
 
-   if (vm->type == VM_TYPE_C7200) {
-      router = VM_C7200(vm);
+   /* Stop all CPUs */
+   if (vm->cpu_group != NULL) {
+      vm_stop(vm);
 
-      /* Stop all CPUs */
-      if (vm->cpu_group != NULL) {
-         vm_stop(vm);
-
-         if (cpu_group_sync_state(vm->cpu_group) == -1) {
-            vm_error(vm,"unable to sync with system CPUs.\n");
-            return(FALSE);
-         }
+      if (cpu_group_sync_state(vm->cpu_group) == -1) {
+         vm_error(vm,"unable to sync with system CPUs.\n");
+         return(FALSE);
       }
-
-      /* Remove NIO bindings */
-      for(i=0;i<C7200_MAX_PA_BAYS;i++)
-         c7200_pa_remove_all_nio_bindings(router,i);
-
-      /* Free specific HW resources */
-      c7200_free_hw_ressources(router);
-
-      /* Free EEPROMs */
-      cisco_eeprom_free(&router->cpu_eeprom);
-      cisco_eeprom_free(&router->mp_eeprom);
-      cisco_eeprom_free(&router->pem_eeprom);
-
-      /* Free all resources used by VM */
-      vm_free(vm);
-
-      /* Free the router structure */
-      free(router);
-      return(TRUE);
    }
 
-   return(FALSE);
-}
+   /* Remove NIO bindings */
+   for(i=0;i<vm->nr_slots;i++)
+      vm_slot_remove_all_nio_bindings(vm,i);
 
-/* Delete a router instance */
-int c7200_delete_instance(char *name)
-{
-   return(registry_delete_if_unused(name,OBJ_TYPE_VM,
-                                    c7200_free_instance,NULL));
-}
+   /* Free specific HW resources */
+   c7200_free_hw_ressources(router);
 
-/* Delete all router instances */
-int c7200_delete_all_instances(void)
-{
-   return(registry_delete_type(OBJ_TYPE_VM,c7200_free_instance,NULL));
+   /* Free EEPROMs */
+   cisco_eeprom_free(&router->cpu_eeprom);
+   cisco_eeprom_free(&router->mp_eeprom);
+   cisco_eeprom_free(&router->pem_eeprom);
+
+   /* Free all resources used by VM */
+   vm_free(vm);
+
+   /* Free the router structure */
+   free(router);
+   return(TRUE);
 }
 
 /* Save configuration of a C7200 instance */
-void c7200_save_config(c7200_t *router,FILE *fd)
+static void c7200_save_config(vm_instance_t *vm,FILE *fd)
 {
-   vm_instance_t *vm = router->vm;
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-   int i;
-
-   /* General settings */
-   fprintf(fd,"c7200 create %s %u\n",vm->name,vm->instance_id);
-
-   fprintf(fd,"c7200 set_npe %s %s\n",vm->name,router->npe_driver->npe_type);
-   fprintf(fd,"c7200 set_midplane %s %s\n",vm->name,router->midplane_type);
-
-   /* VM configuration */
-   vm_save_config(vm,fd);
-
-   /* Port Adapter settings */
-   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
-      if (!(bay = c7200_pa_get_info(router,i)))
-         continue;
-
-      if (bay->dev_type) {
-         fprintf(fd,"c7200 add_pa_binding %s %u %s\n",
-                 vm->name,i,bay->dev_type);
-      }
-
-      for(nb=bay->nio_list;nb;nb=nb->next) {
-         fprintf(fd,"c7200 add_nio_binding %s %u %u %s\n",
-                 vm->name,i,nb->port_id,nb->nio->name);
-      }
-   }
-
-   fprintf(fd,"\n");
-}
-
-/* Save configurations of all C7200 instances */
-static void c7200_reg_save_config(registry_entry_t *entry,void *opt,int *err)
-{
-   vm_instance_t *vm = entry->data;
    c7200_t *router = VM_C7200(vm);
 
-   if (vm->type == VM_TYPE_C7200)
-      c7200_save_config(router,(FILE *)opt);
+   fprintf(fd,"c7200 set_npe %s %s\n",vm->name,router->npe_driver->npe_type);
+   fprintf(fd,"c7200 set_midplane %s %s\n\n",vm->name,router->midplane_type);
 }
 
-void c7200_save_config_all(FILE *fd)
+/* Set EEPROM for the specified slot */
+int c7200_set_slot_eeprom(c7200_t *router,u_int slot,
+                          struct cisco_eeprom *eeprom)
 {
-   registry_foreach_type(OBJ_TYPE_VM,c7200_reg_save_config,fd,NULL);
+   if (slot >= C7200_MAX_PA_BAYS)
+      return(-1);
+
+   switch(slot) {
+      /* Group 1: bays 0, 1, 3, 4 */
+      case 0:
+         router->pa_eeprom_g1.eeprom[0] = eeprom;
+         break;
+      case 1:
+         router->pa_eeprom_g1.eeprom[1] = eeprom;
+         break;
+      case 3:
+         router->pa_eeprom_g1.eeprom[2] = eeprom;
+         break;
+      case 4:
+         router->pa_eeprom_g1.eeprom[3] = eeprom;
+         break;
+
+      /* Group 2: bays 2, 5, 6 */
+      case 2:
+         router->pa_eeprom_g2.eeprom[0] = eeprom;
+         break;        
+      case 5:
+         router->pa_eeprom_g2.eeprom[1] = eeprom;
+         break;
+      case 6:
+         router->pa_eeprom_g2.eeprom[2] = eeprom;
+         break;
+   }
+
+   return(0);
 }
 
 /* Get slot/port corresponding to specified network IRQ */
@@ -592,627 +562,6 @@ static int c7200_pem_set_eeprom(c7200_t *router)
    return(0);
 }
 
-/* Set PA EEPROM definition */
-int c7200_pa_set_eeprom(c7200_t *router,u_int pa_bay,
-                        const struct cisco_eeprom *eeprom)
-{
-   if (pa_bay >= C7200_MAX_PA_BAYS) {
-      vm_error(router->vm,"c7200_pa_set_eeprom: invalid PA Bay %u.\n",pa_bay);
-      return(-1);
-   }
-
-   if (cisco_eeprom_copy(&router->pa_bay[pa_bay].eeprom,eeprom) == -1) {
-      vm_error(router->vm,"c7200_pa_set_eeprom: no memory.\n");
-      return(-1);
-   }
-
-   return(0);
-}
-
-/* Unset PA EEPROM definition (empty bay) */
-int c7200_pa_unset_eeprom(c7200_t *router,u_int pa_bay)
-{
-   if (pa_bay >= C7200_MAX_PA_BAYS) {
-      vm_error(router->vm,"c7200_pa_set_eeprom: invalid PA Bay %u.\n",pa_bay);
-      return(-1);
-   }
-   
-   cisco_eeprom_free(&router->pa_bay[pa_bay].eeprom);
-   return(0);
-}
-
-/* Check if a bay has a port adapter */
-int c7200_pa_check_eeprom(c7200_t *router,u_int pa_bay)
-{
-   if (pa_bay >= C7200_MAX_PA_BAYS)
-      return(FALSE);
-
-   return(cisco_eeprom_valid(&router->pa_bay[pa_bay].eeprom));
-}
-
-/* Get bay info */
-struct c7200_pa_bay *c7200_pa_get_info(c7200_t *router,u_int pa_bay)
-{
-   if (pa_bay >= C7200_MAX_PA_BAYS)
-      return NULL;
-
-   return(&router->pa_bay[pa_bay]);
-}
-
-/* Get PA type */
-char *c7200_pa_get_type(c7200_t *router,u_int pa_bay)
-{
-   struct c7200_pa_bay *bay;
-
-   bay = c7200_pa_get_info(router,pa_bay);
-   return((bay != NULL) ? bay->dev_type : NULL);
-}
-
-/* Get driver info about the specified slot */
-void *c7200_pa_get_drvinfo(c7200_t *router,u_int pa_bay)
-{
-   struct c7200_pa_bay *bay;
-
-   bay = c7200_pa_get_info(router,pa_bay);
-   return((bay != NULL) ? bay->drv_info : NULL);
-}
-
-/* Set driver info for the specified slot */
-int c7200_pa_set_drvinfo(c7200_t *router,u_int pa_bay,void *drv_info)
-{
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   bay->drv_info = drv_info;
-   return(0);
-}
-
-/* Get a PA driver */
-static struct c7200_pa_driver *c7200_pa_get_driver(char *dev_type)
-{
-   int i;
-
-   for(i=0;pa_drivers[i];i++)
-      if (!strcmp(pa_drivers[i]->dev_type,dev_type))
-         return pa_drivers[i];
-
-   return NULL;
-}
-
-/* Add a PA binding */
-int c7200_pa_add_binding(c7200_t *router,char *dev_type,u_int pa_bay)
-{   
-   struct c7200_pa_driver *pa_driver;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that this bay is empty */
-   if (bay->dev_type != NULL) {
-      vm_error(router->vm,"a PA already exists in slot %u.\n",pa_bay);
-      return(-1);
-   }
-
-   /* find the PA driver */
-   if (!(pa_driver = c7200_pa_get_driver(dev_type))) {
-      vm_error(router->vm,"unknown PA type '%s'.\n",dev_type);
-      return(-1);
-   }
-
-   bay->dev_type = pa_driver->dev_type;
-   bay->pa_driver = pa_driver;
-   return(0);  
-}
-
-/* Remove a PA binding */
-int c7200_pa_remove_binding(c7200_t *router,u_int pa_bay)
-{   
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* stop if this bay is still active */
-   if (bay->drv_info != NULL) {
-      vm_error(router->vm,"slot %u still active.\n",pa_bay);
-      return(-1);
-   }
-
-   /* check that this bay is not empty */
-   if (bay->dev_type == NULL) {
-      vm_error(router->vm,"slot %u is empty.\n",pa_bay);
-      return(-1);
-   }
-   
-   /* remove all NIOs bindings */ 
-   c7200_pa_remove_all_nio_bindings(router,pa_bay);
-
-   bay->dev_type  = NULL;
-   bay->pa_driver = NULL;
-   return(0);
-}
-
-/* Find a NIO binding */
-struct c7200_nio_binding *
-c7200_pa_find_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id)
-{   
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return NULL;
-
-   for(nb=bay->nio_list;nb;nb=nb->next)
-      if (nb->port_id == port_id)
-         return nb;
-
-   return NULL;
-}
-
-/* Add a network IO binding */
-int c7200_pa_add_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id,
-                             char *nio_name)
-{
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-   netio_desc_t *nio;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that a NIO is not already bound to this port */
-   if (c7200_pa_find_nio_binding(router,pa_bay,port_id) != NULL) {
-      vm_error(router->vm,"a NIO already exists for interface %u/%u\n",
-               pa_bay,port_id);
-      return(-1);
-   }
-
-   /* acquire a reference on the NIO object */
-   if (!(nio = netio_acquire(nio_name))) {
-      vm_error(router->vm,"unable to find NIO '%s'.\n",nio_name);
-      return(-1);
-   }
-
-   /* create a new binding */
-   if (!(nb = malloc(sizeof(*nb)))) {
-      vm_error(router->vm,"unable to create NIO binding "
-               "for interface %u/%u.\n",pa_bay,port_id);
-      netio_release(nio_name);
-      return(-1);
-   }
-
-   memset(nb,0,sizeof(*nb));
-   nb->nio       = nio;
-   nb->port_id   = port_id;
-   nb->next      = bay->nio_list;
-   if (nb->next) nb->next->prev = nb;
-   bay->nio_list = nb;
-   return(0);
-}
-
-/* Remove a NIO binding */
-int c7200_pa_remove_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id)
-{
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-   
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   if (!(nb = c7200_pa_find_nio_binding(router,pa_bay,port_id)))
-      return(-1);   /* no nio binding for this slot/port */
-
-   /* tell the PA driver to stop using this NIO */
-   if (bay->pa_driver)
-      bay->pa_driver->pa_unset_nio(router,pa_bay,port_id);
-
-   /* remove this entry from the double linked list */
-   if (nb->next)
-      nb->next->prev = nb->prev;
-
-   if (nb->prev) {
-      nb->prev->next = nb->next;
-   } else {
-      bay->nio_list = nb->next;
-   }
-
-   /* unreference NIO object */
-   netio_release(nb->nio->name);
-   free(nb);
-   return(0);
-}
-
-/* Remove all NIO bindings for the specified PA */
-int c7200_pa_remove_all_nio_bindings(c7200_t *router,u_int pa_bay)
-{  
-   struct c7200_nio_binding *nb,*next;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   for(nb=bay->nio_list;nb;nb=next) {
-      next = nb->next;
-
-      /* tell the PA driver to stop using this NIO */
-      if (bay->pa_driver)
-         bay->pa_driver->pa_unset_nio(router,pa_bay,nb->port_id);
-
-      /* unreference NIO object */
-      netio_release(nb->nio->name);
-      free(nb);
-   }
-
-   bay->nio_list = NULL;
-   return(0);
-}
-
-/* Enable a Network IO descriptor for a Port Adapter */
-int c7200_pa_enable_nio(c7200_t *router,u_int pa_bay,u_int port_id)
-{
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that we have an NIO binding for this interface */
-   if (!(nb = c7200_pa_find_nio_binding(router,pa_bay,port_id)))
-      return(-1);
-
-   /* check that the driver is defined and successfully initialized */
-   if (!bay->pa_driver || !bay->drv_info)
-      return(-1);
-
-   return(bay->pa_driver->pa_set_nio(router,pa_bay,port_id,nb->nio));
-}
-
-/* Disable Network IO descriptor of a Port Adapter */
-int c7200_pa_disable_nio(c7200_t *router,u_int pa_bay,u_int port_id)
-{
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that the driver is defined and successfully initialized */
-   if (!bay->pa_driver || !bay->drv_info)
-      return(-1);
-
-   return(bay->pa_driver->pa_unset_nio(router,pa_bay,port_id));
-}
-
-/* Enable all NIO of the specified PA */
-int c7200_pa_enable_all_nio(c7200_t *router,u_int pa_bay)
-{
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that the driver is defined and successfully initialized */
-   if (!bay->pa_driver || !bay->drv_info)
-      return(-1);
-
-   for(nb=bay->nio_list;nb;nb=nb->next)
-      bay->pa_driver->pa_set_nio(router,pa_bay,nb->port_id,nb->nio);
-
-   return(0);
-}
-
-/* Disable all NIO of the specified PA */
-int c7200_pa_disable_all_nio(c7200_t *router,u_int pa_bay)
-{
-   struct c7200_nio_binding *nb;
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* check that the driver is defined and successfully initialized */
-   if (!bay->pa_driver || !bay->drv_info)
-      return(-1);
-
-   for(nb=bay->nio_list;nb;nb=nb->next)
-      bay->pa_driver->pa_unset_nio(router,pa_bay,nb->port_id);
-
-   return(0);
-}
-
-/* Initialize a Port Adapter */
-int c7200_pa_init(c7200_t *router,u_int pa_bay)
-{   
-   struct c7200_pa_bay *bay;
-   size_t len;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* Check that a device type is defined for this bay */
-   if (!bay->dev_type || !bay->pa_driver) {
-      vm_error(router->vm,"trying to init empty slot %u.\n",pa_bay);
-      return(-1);
-   }
-
-   /* Allocate device name */
-   len = strlen(bay->dev_type) + 10;
-   if (!(bay->dev_name = malloc(len))) {
-      vm_error(router->vm,"unable to allocate device name.\n");
-      return(-1);
-   }
-
-   snprintf(bay->dev_name,len,"%s(%u)",bay->dev_type,pa_bay);
-
-   /* Initialize PA driver */
-   if (bay->pa_driver->pa_init(router,bay->dev_name,pa_bay) == -1) {
-      vm_error(router->vm,"unable to initialize PA %u.\n",pa_bay);
-      return(-1);
-   }
-
-   /* Enable all NIO */
-   c7200_pa_enable_all_nio(router,pa_bay);
-   return(0);
-}
-
-/* Shutdown a Port Adapter */
-int c7200_pa_shutdown(c7200_t *router,u_int pa_bay)
-{
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   /* Check that a device type is defined for this bay */   
-   if (!bay->dev_type || !bay->pa_driver) {
-      vm_error(router->vm,"trying to shut down an empty bay %u.\n",pa_bay);
-      return(-1);
-   }
-
-   /* Disable all NIO */
-   c7200_pa_disable_all_nio(router,pa_bay);
-
-   /* Shutdown the PA driver */
-   if (bay->drv_info && (bay->pa_driver->pa_shutdown(router,pa_bay) == -1)) {
-      vm_error(router->vm,"unable to shutdown PA %u.\n",pa_bay);
-      return(-1);
-   }
-
-   free(bay->dev_name);
-   bay->dev_name = NULL;
-   bay->drv_info = NULL;
-   return(0);
-}
-
-/* Shutdown all PA of a router */
-int c7200_pa_shutdown_all(c7200_t *router)
-{
-   int i;
-
-   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
-      if (!router->pa_bay[i].dev_type) 
-         continue;
-
-      c7200_pa_shutdown(router,i);
-   }
-
-   return(0);
-}
-
-/* Show info about all NMs */
-int c7200_pa_show_all_info(c7200_t *router)
-{
-   struct c7200_pa_bay *bay;
-   int i;
-
-   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
-      if (!(bay = c7200_pa_get_info(router,i)) || !bay->pa_driver)
-         continue;
-
-      if (bay->pa_driver->pa_show_info != NULL)
-         bay->pa_driver->pa_show_info(router,i);
-   }
-
-   return(0);
-}
-
-/* Maximum number of tokens in a PA description */
-#define PA_DESC_MAX_TOKENS  8
-
-/* Create a Port Adapter (command line) */
-int c7200_cmd_pa_create(c7200_t *router,char *str)
-{
-   char *tokens[PA_DESC_MAX_TOKENS];
-   int i,count,res;
-   u_int pa_bay;
-
-   /* A port adapter description is like "1:PA-FE-TX" */
-   if ((count = m_strsplit(str,':',tokens,PA_DESC_MAX_TOKENS)) != 2) {
-      vm_error(router->vm,"unable to parse PA description '%s'.\n",str);
-      return(-1);
-   }
-
-   /* Parse the PA bay id */
-   pa_bay = atoi(tokens[0]);
-
-   /* Add this new PA to the current PA list */
-   res = c7200_pa_add_binding(router,tokens[1],pa_bay);
-
-   /* The complete array was cleaned by strsplit */
-   for(i=0;i<PA_DESC_MAX_TOKENS;i++)
-      free(tokens[i]);
-
-   return(res);
-}
-
-/* Add a Network IO descriptor binding (command line) */
-int c7200_cmd_add_nio(c7200_t *router,char *str)
-{
-   char *tokens[PA_DESC_MAX_TOKENS];
-   int i,count,nio_type,res=-1;
-   u_int pa_bay,port_id;
-   netio_desc_t *nio;
-   char nio_name[128];
-
-   /* A port adapter description is like "1:3:tap:tap0" */
-   if ((count = m_strsplit(str,':',tokens,PA_DESC_MAX_TOKENS)) < 3) {
-      vm_error(router->vm,"unable to parse NIO description '%s'.\n",str);
-      return(-1);
-   }
-
-   /* Parse the PA bay */
-   pa_bay = atoi(tokens[0]);
-
-   /* Parse the PA port id */
-   port_id = atoi(tokens[1]);
-
-   /* Autogenerate a NIO name */
-   snprintf(nio_name,sizeof(nio_name),"c7200-i%u/%u/%u",
-            router->vm->instance_id,pa_bay,port_id);
-
-   /* Create the Network IO descriptor */
-   nio = NULL;
-   nio_type = netio_get_type(tokens[2]);
-
-   switch(nio_type) {
-      case NETIO_TYPE_UNIX:
-         if (count != 5) {
-            vm_error(router->vm,
-                     "invalid number of arguments for UNIX NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_unix(nio_name,tokens[3],tokens[4]);
-         break;
-
-      case NETIO_TYPE_VDE:
-         if (count != 5) {
-            vm_error(router->vm,
-                     "invalid number of arguments for VDE NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_vde(nio_name,tokens[3],tokens[4]);
-         break;
-
-      case NETIO_TYPE_TAP:
-         if (count != 4) {
-            vm_error(router->vm,
-                     "invalid number of arguments for TAP NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_tap(nio_name,tokens[3]);
-         break;
-
-      case NETIO_TYPE_UDP:
-         if (count != 6) {
-            vm_error(router->vm,
-                     "invalid number of arguments for UDP NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_udp(nio_name,atoi(tokens[3]),
-                                     tokens[4],atoi(tokens[5]));
-         break;
-
-      case NETIO_TYPE_TCP_CLI:
-         if (count != 5) {
-            vm_error(router->vm,
-                     "invalid number of arguments for TCP CLI NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_tcp_cli(nio_name,tokens[3],tokens[4]);
-         break;
-
-      case NETIO_TYPE_TCP_SER:
-         if (count != 4) {
-            vm_error(router->vm,
-                     "invalid number of arguments for TCP SER NIO '%s'\n",str);
-            goto done;
-         }
-
-         nio = netio_desc_create_tcp_ser(nio_name,tokens[3]);
-         break;
-
-      case NETIO_TYPE_NULL:
-         nio = netio_desc_create_null(nio_name);
-         break;
-
-#ifdef LINUX_ETH
-      case NETIO_TYPE_LINUX_ETH:
-         if (count != 4) {
-            vm_error(router->vm,
-                     "invalid number of arguments for Linux Eth NIO '%s'\n",
-                     str);
-            goto done;
-         }
-         
-         nio = netio_desc_create_lnxeth(nio_name,tokens[3]);
-         break;
-#endif
-
-#ifdef GEN_ETH
-      case NETIO_TYPE_GEN_ETH:
-         if (count != 4) {
-            vm_error(router->vm,"invalid number of "
-                     "arguments for Generic Eth NIO '%s'\n",str);
-            goto done;
-         }
-         
-         nio = netio_desc_create_geneth(nio_name,tokens[3]);
-         break;
-#endif
-
-      default:
-         vm_error(router->vm,"unknown NETIO type '%s'\n",tokens[2]);
-         goto done;
-   }
-
-   if (!nio) {
-      fprintf(stderr,"c7200_cmd_add_nio: unable to create NETIO "
-              "descriptor for PA bay %u\n",pa_bay);
-      goto done;
-   }
-
-   if (c7200_pa_add_nio_binding(router,pa_bay,port_id,nio_name) == -1) {
-      vm_error(router->vm,"unable to add NETIO binding for slot %u\n",pa_bay);
-      netio_release(nio_name);
-      netio_delete(nio_name);
-      goto done;
-   }
-   
-   netio_release(nio_name);
-   res = 0;
-
- done:
-   /* The complete array was cleaned by strsplit */
-   for(i=0;i<PA_DESC_MAX_TOKENS;i++)
-      free(tokens[i]);
-
-   return(res);
-}
-
-/* Show the list of available PA drivers */
-void c7200_pa_show_drivers(void)
-{
-   int i;
-
-   printf("Available C7200 Port Adapter drivers:\n");
-
-   for(i=0;pa_drivers[i];i++) {
-      printf("  * %s %s\n",
-             pa_drivers[i]->dev_type,
-             !pa_drivers[i]->supported ? "(NOT WORKING)" : "");
-   }
-   
-   printf("\n");
-}
-
 /* Get an NPE driver */
 struct c7200_npe_driver *c7200_npe_get_driver(char *npe_type)
 {
@@ -1248,11 +597,16 @@ int c7200_npe_set_type(c7200_t *router,char *npe_type)
       return(-1);
    }
 
+   /* Use a C7200-IO-FE by default in slot 0 if an I/O card is required */
+   if (driver->iocard_required) {
+      vm_slot_add_binding(router->vm,"C7200-IO-FE",0,0);
+      vm_slot_set_flag(router->vm,0,0,CISCO_CARD_FLAG_OVERRIDE);
+   }
    return(0);
 }
 
 /* Show the list of available NPE drivers */
-void c7200_npe_show_drivers(void)
+static void c7200_npe_show_drivers(void)
 {
    int i;
 
@@ -1408,13 +762,17 @@ static int c7200_pa_create_pci_busses(c7200_t *router)
 static int c7200_pa_init_pci_bridge(c7200_t *router,u_int pa_bay,
                                     struct pci_bus *pci_bus,int pci_device)
 {
+   struct pci_bus *pa_bus;
+
+   pa_bus = router->vm->slots_pci_bus[pa_bay];
+
    switch(router->midplane_version) {
       case 0:
       case 1:
-         dev_dec21050_init(pci_bus,pci_device,router->pa_bay[pa_bay].pci_map);
+         dev_dec21050_init(pci_bus,pci_device,pa_bus);
          break;
       default:
-         dev_dec21150_init(pci_bus,pci_device,router->pa_bay[pa_bay].pci_map);
+         dev_dec21150_init(pci_bus,pci_device,pa_bus);
    }
    return(0);
 }
@@ -1485,10 +843,10 @@ int c7200_init_npe100(c7200_t *router)
    dev_dec21050_init(vm->pci_bus[0],4,vm->pci_bus_pool[25]);
 
    /* Map the PA PCI busses */
-   router->pa_bay[0].pci_map = vm->pci_bus[0];
+   vm->slots_pci_bus[0] = vm->pci_bus[0];
 
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1533,10 +891,10 @@ int c7200_init_npe150(c7200_t *router)
    dev_dec21050_init(vm->pci_bus[0],4,vm->pci_bus_pool[25]);
 
    /* Map the PA PCI busses */   
-   router->pa_bay[0].pci_map = vm->pci_bus[0];
+   vm->slots_pci_bus[0] = vm->pci_bus[0];
 
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1586,7 +944,7 @@ int c7200_init_npe175(c7200_t *router)
 
    /* Map the PA PCI busses */
    for(i=0;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus[0],7);
@@ -1634,10 +992,10 @@ int c7200_init_npe200(c7200_t *router)
    dev_dec21050_init(vm->pci_bus[0],4,vm->pci_bus_pool[25]);
 
    /* Map the PA PCI busses */
-   router->pa_bay[0].pci_map = vm->pci_bus[0];
+   vm->slots_pci_bus[0] = vm->pci_bus[0];
 
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1687,7 +1045,7 @@ int c7200_init_npe225(c7200_t *router)
 
    /* Map the PA PCI busses */
    for(i=0;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus[0],7);
@@ -1744,7 +1102,7 @@ int c7200_init_npe300(c7200_t *router)
 
    /* Map the PA PCI busses */
    for(i=0;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1795,7 +1153,7 @@ int c7200_init_npe400(c7200_t *router)
 
    /* Map the PA PCI busses */
    for(i=0;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus[0],7);
@@ -1850,10 +1208,10 @@ int c7200_init_npeg1(c7200_t *router)
    c7200_create_io_pci_bridge(router,vm->pci_bus_pool[0]);
 
    /* Map the PA PCI busses */
-   router->pa_bay[0].pci_map = vm->pci_bus[0];
+   vm->slots_pci_bus[0] = vm->pci_bus[0];
 
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1896,10 +1254,10 @@ int c7200_init_npeg2(c7200_t *router)
    c7200_create_io_pci_bridge(router,vm->pci_bus_pool[0]);
 
    /* Map the PA PCI busses */
-   router->pa_bay[0].pci_map = vm->pci_bus_pool[0];
+   vm->slots_pci_bus[0] = vm->pci_bus_pool[0];
 
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
-      router->pa_bay[i].pci_map = vm->pci_bus_pool[i];
+      vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
    /* PCI bridges for PA Bays 1 to 6 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
@@ -1936,11 +1294,16 @@ void c7200_show_hardware(c7200_t *router)
 }
 
 /* Initialize default parameters for a C7200 */
-void c7200_init_defaults(c7200_t *router)
+static void c7200_init_defaults(c7200_t *router)
 {
    vm_instance_t *vm = router->vm;
    n_eth_addr_t *m;
    m_uint16_t pid;
+
+   /* Set platform slots characteristics */
+   vm->nr_slots   = C7200_MAX_PA_BAYS;
+   vm->slots_type = CISCO_CARD_TYPE_PA;
+   vm->slots_drivers = pa_drivers;
 
    pid = (m_uint16_t)getpid();
 
@@ -1953,7 +1316,8 @@ void c7200_init_defaults(c7200_t *router)
    m->eth_addr_byte[4] = 0x00;
    m->eth_addr_byte[5] = 0x00;
 
-   c7200_init_eeprom_groups(router);
+   c7200_init_sys_eeprom_groups(router);
+   c7200_init_mp_eeprom_groups(router);
    c7200_npe_set_type(router,C7200_DEFAULT_NPE_TYPE);
    c7200_midplane_set_type(router,C7200_DEFAULT_MIDPLANE);
 
@@ -1968,10 +1332,6 @@ void c7200_init_defaults(c7200_t *router)
 
    vm->pcmcia_disk_size[0] = C7200_DEFAULT_DISK0_SIZE;
    vm->pcmcia_disk_size[1] = C7200_DEFAULT_DISK1_SIZE;
-
-   /* Enable NVRAM operations to load/store configs */
-   vm->nvram_extract_config = c7200_nvram_extract_config;
-   vm->nvram_push_config = c7200_nvram_push_config;
 }
 
 /* Run the checklist */
@@ -1994,34 +1354,7 @@ static int c7200_checklist(c7200_t *router)
 /* Initialize Port Adapters */
 static int c7200_init_platform_pa(c7200_t *router)
 {
-   vm_instance_t *vm = router->vm;
-   struct c7200_pa_bay *pa_bay;
-   int i;
-
-   /* Initialize Port Adapters */
-   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
-      pa_bay = &router->pa_bay[i];
-
-      if (!pa_bay->dev_type) 
-         continue;
-
-      if (c7200_pa_init(router,i) == -1) {
-         vm_error(vm,"unable to create Port Adapter \"%s\"\n",
-                  pa_bay->dev_type);
-         return(-1);
-      }
-   }
-
-   /* 
-    * By default, initialize a C7200-IO-FE in slot 0 if nothing found.
-    * We only do that for NPEs that require an IO card (all excepted G1/G2).
-    */
-   if (router->npe_driver->iocard_required && !router->pa_bay[0].drv_info) {
-      c7200_pa_add_binding(router,"C7200-IO-FE",0);
-      c7200_pa_init(router,0);
-   }
-
-   return(0);
+   return(vm_slot_init_all(router->vm));
 }
 
 /* Initialize the C7200 Platform (MIPS) */
@@ -2085,8 +1418,9 @@ static int c7200m_init_platform(c7200_t *router)
    /* Remote emulator control */
    dev_remote_control_init(vm,0x16000000,0x1000);
 
-   /* Bootflash */
-   dev_bootflash_init(vm,"bootflash",C7200_BOOTFLASH_ADDR,(8 * 1048576));
+   /* Bootflash (8 Mb) */
+   dev_bootflash_init(vm,"bootflash","c7200-bootflash-8mb",
+                      C7200_BOOTFLASH_ADDR);
 
    /* NVRAM and calendar */
    dev_nvram_init(vm,"nvram",router->npe_driver->nvram_addr,
@@ -2209,8 +1543,9 @@ static int c7200p_init_platform(c7200_t *router)
    /* Remote emulator control */
    dev_remote_control_init(vm,0xf6000000,0x1000);
 
-   /* Bootflash */
-   dev_bootflash_init(vm,"bootflash",C7200_G2_BOOTFLASH_ADDR,(64 * 1048576));
+   /* Bootflash (64 Mb) */
+   dev_bootflash_init(vm,"bootflash","c7200-bootflash-64mb",
+                      C7200_G2_BOOTFLASH_ADDR);
 
    /* NVRAM and calendar */
    vm->nvram_size = C7200_G2_NVRAM_SIZE / 1024;
@@ -2266,7 +1601,7 @@ static int c7200p_init_platform(c7200_t *router)
    router->mpfpga_data = obj->data;
 
    /* If we have nothing in slot 0, the console is handled by the MV64460 */
-   if (!c7200_pa_check_eeprom(router,0)) {
+   if (!vm_slot_get_card_ptr(vm,0)) {
       vm_log(vm,"CONSOLE","console managed by NPE-G2 board\n");
       mv64460_sdma_bind_vtty(router->mv64460_sysctr,0,vm->vtty_con);
       mv64460_sdma_bind_vtty(router->mv64460_sysctr,1,vm->vtty_aux);
@@ -2585,8 +1920,10 @@ static int c7200p_init_instance(c7200_t *router)
 }
 
 /* Initialize a Cisco 7200 instance */
-int c7200_init_instance(c7200_t *router)
+static int c7200_init_instance(vm_instance_t *vm)
 {
+   c7200_t *router = VM_C7200(vm);
+
    switch(router->npe_driver->npe_family) {
       case C7200_NPE_FAMILY_MIPS:
          return(c7200m_init_instance(router));
@@ -2602,10 +1939,8 @@ int c7200_init_instance(c7200_t *router)
 }
 
 /* Stop a Cisco 7200 instance */
-int c7200_stop_instance(c7200_t *router)
+static int c7200_stop_instance(vm_instance_t *vm)
 {
-   vm_instance_t *vm = router->vm;
-
    printf("\nC7200 '%s': stopping simulation.\n",vm->name);
    vm_log(vm,"C7200_STOP","stopping simulation.\n");
 
@@ -2620,7 +1955,7 @@ int c7200_stop_instance(c7200_t *router)
    }
 
    /* Free resources that were used during execution to emulate hardware */
-   c7200_free_hw_ressources(router);
+   c7200_free_hw_ressources(VM_C7200(vm));
    vm_hardware_shutdown(vm);
    return(0);
 }
@@ -2659,7 +1994,7 @@ int c7200_pa_init_online(c7200_t *router,u_int pa_bay)
    }
 
    /* Add the new hardware elements */
-   if (c7200_pa_init(router,pa_bay) == -1)
+   if (vm_slot_init(vm,pa_bay) == -1)
       return(-1);
 
    /* Resume normal operations */
@@ -2674,24 +2009,20 @@ int c7200_pa_init_online(c7200_t *router,u_int pa_bay)
 int c7200_pa_stop_online(c7200_t *router,u_int pa_bay)
 {   
    vm_instance_t *vm = router->vm;
-   struct c7200_pa_bay *bay;
 
    if (!pa_bay) {
       vm_error(vm,"OIR not supported on slot 0.\n");
       return(-1);
    }
 
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
    /* The PA driver must be initialized */
-   if (!bay->dev_type || !bay->pa_driver) {
+   if (!vm_slot_get_card_ptr(vm,pa_bay)) {
       vm_error(vm,"trying to shut down empty slot %u.\n",pa_bay);
       return(-1);
    }
 
    /* Disable all NIOs to stop traffic forwarding */
-   c7200_pa_disable_all_nio(router,pa_bay);
+   vm_slot_disable_all_nio(vm,pa_bay);
 
    /* We can safely trigger the OIR event */
    c7200_trigger_oir_event(router,1 << pa_bay);
@@ -2703,9 +2034,81 @@ int c7200_pa_stop_online(c7200_t *router,u_int pa_bay)
    vm_suspend(vm);
 
    /* Device removal */
-   c7200_pa_shutdown(router,pa_bay);
+   vm_slot_shutdown(vm,pa_bay);
 
    /* Resume normal operations */
    vm_resume(vm);
    return(0);
+}
+
+/* Get MAC address MSB */
+static u_int c7200_get_mac_addr_msb(void)
+{
+   return(0xCA);
+}
+
+/* Parse specific options for the Cisco 7200 platform */
+static int c7200_cli_parse_options(vm_instance_t *vm,int option)
+{
+   c7200_t *router = VM_C7200(vm);
+
+   switch(option) {
+      /* NPE type */
+      case 't':
+         c7200_npe_set_type(router,optarg);
+         break;
+
+      /* Midplane type */
+      case 'M':
+         c7200_midplane_set_type(router,optarg);
+         break;
+
+      /* Set the base MAC address */
+      case 'm':
+         if (!c7200_midplane_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+
+      /* Unknown option */
+      default:
+         return(-1);
+   }
+
+   return(0);
+}
+
+/* Show specific CLI options */
+static void c7200_cli_show_options(vm_instance_t *vm)
+{
+   printf("  -t <npe_type>      : Select NPE type (default: \"%s\")\n"
+          "  -M <midplane>      : Select Midplane (\"std\" or \"vxr\")\n"
+          "  -p <pa_desc>       : Define a Port Adapter\n"
+          "  -s <pa_nio>        : Bind a Network IO interface to a "
+          "Port Adapter\n",
+          C7200_DEFAULT_NPE_TYPE);
+}
+
+/* Platform definition */
+static vm_platform_t c7200_platform = {
+   "c7200", "C7200", "7200",
+   c7200_create_instance,
+   c7200_delete_instance,
+   c7200_init_instance,
+   c7200_stop_instance,
+   c7200_nvram_extract_config,
+   c7200_nvram_push_config,
+   c7200_get_mac_addr_msb,
+   c7200_save_config,
+   c7200_cli_parse_options,
+   c7200_cli_show_options,
+   c7200_npe_show_drivers,
+};
+
+/* Register the c7200 platform */
+int c7200_platform_register(void)
+{
+   if (vm_platform_register(&c7200_platform) == -1)
+      return(-1);
+
+   return(hypervisor_c7200_init(&c7200_platform));
 }

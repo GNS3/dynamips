@@ -147,7 +147,7 @@ int hypervisor_nio_bridge_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("nio_bridge");
+   module = hypervisor_register_module("nio_bridge",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,nio_bridge_cmd_array);

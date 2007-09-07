@@ -38,56 +38,29 @@ static struct ppc32_bat_prog bat_array[] = {
    { -1, -1, 0, 0 },
 };
 
-/* Create a new test instance */
-vm_instance_t *ppc32_vmtest_create_instance(char *name,int instance_id)
+/* Create a new router instance */
+static int ppc32_vmtest_create_instance(vm_instance_t *vm)
 {
-   vm_instance_t *vm;
-
-   if (!(vm = vm_create(name,instance_id,VM_TYPE_PPC32_TEST))) {
-      fprintf(stderr,"PPC32_VMTEST '%s': unable to create VM instance!\n",
-              name);
-      return NULL;
-   }
-
    vm->ram_size = PPC32_VMTEST_DEFAULT_RAM_SIZE;
-   return vm;
+   return(0);
 }
 
 /* Free resources used by a test instance */
-static int ppc32_vmtest_free_instance(void *data,void *arg)
+static int ppc32_vmtest_delete_instance(vm_instance_t *vm)
 {
-   vm_instance_t *vm = data;
-
-   if (vm->type == VM_TYPE_PPC32_TEST) {
-      /* Stop all CPUs */
-      if (vm->cpu_group != NULL) {
-         vm_stop(vm);
-
-         if (cpu_group_sync_state(vm->cpu_group) == -1) {
-            vm_error(vm,"unable to sync with system CPUs.\n");
-            return(FALSE);
-         }
+   /* Stop all CPUs */
+   if (vm->cpu_group != NULL) {
+      vm_stop(vm);
+      
+      if (cpu_group_sync_state(vm->cpu_group) == -1) {
+         vm_error(vm,"unable to sync with system CPUs.\n");
+         return(FALSE);
       }
-
-      /* Free all resources used by VM */
-      vm_free(vm);
-      return(TRUE);
    }
 
-   return(FALSE);
-}
-
-/* Delete a router instance */
-int ppc32_vmtest_delete_instance(char *name)
-{
-   return(registry_delete_if_unused(name,OBJ_TYPE_VM,
-                                    ppc32_vmtest_free_instance,NULL));
-}
-
-/* Delete all router instances */
-int ppc32_vmtest_delete_all_instances(void)
-{
-   return(registry_delete_type(OBJ_TYPE_VM,ppc32_vmtest_free_instance,NULL));
+   /* Free all resources used by VM */
+   vm_free(vm);
+   return(TRUE);
 }
 
 /* Set IRQ line */
@@ -107,7 +80,7 @@ static void ppc32_vmtest_clear_irq(vm_instance_t *vm,u_int irq)
 }
 
 /* Initialize the PPC32 VM test Platform */
-int ppc32_vmtest_init_platform(vm_instance_t *vm)
+static int ppc32_vmtest_init_platform(vm_instance_t *vm)
 {
    cpu_ppc_t *cpu0; 
    cpu_gen_t *gen0;
@@ -183,7 +156,7 @@ int ppc32_vmtest_init_platform(vm_instance_t *vm)
 }
 
 /* Boot the RAW image */
-int ppc32_vmtest_boot_raw(vm_instance_t *vm)
+static int ppc32_vmtest_boot_raw(vm_instance_t *vm)
 {   
    cpu_ppc_t *cpu;
 
@@ -232,7 +205,7 @@ int ppc32_vmtest_boot_raw(vm_instance_t *vm)
 }
 
 /* Boot the ELF image */
-int ppc32_vmtest_boot_elf(vm_instance_t *vm)
+static int ppc32_vmtest_boot_elf(vm_instance_t *vm)
 {     
    m_uint32_t rom_entry_point;
    cpu_ppc_t *cpu;
@@ -294,7 +267,7 @@ int ppc32_vmtest_boot_elf(vm_instance_t *vm)
 }
 
 /* Initialize a test instance */
-int ppc32_vmtest_init_instance(vm_instance_t *vm)
+static int ppc32_vmtest_init_instance(vm_instance_t *vm)
 {
    /* Initialize the test platform */
    if (ppc32_vmtest_init_platform(vm) == -1) {
@@ -309,7 +282,7 @@ int ppc32_vmtest_init_instance(vm_instance_t *vm)
 }
 
 /* Stop a test instance */
-int ppc32_vmtest_stop_instance(vm_instance_t *vm)
+static int ppc32_vmtest_stop_instance(vm_instance_t *vm)
 {
    printf("\nPPC32_VMTEST '%s': stopping simulation.\n",vm->name);
    vm_log(vm,"PPC32_VMTEST_STOP","stopping simulation.\n");
@@ -327,4 +300,26 @@ int ppc32_vmtest_stop_instance(vm_instance_t *vm)
    /* Free resources that were used during execution to emulate hardware */
    vm_hardware_shutdown(vm);
    return(0);
+}
+
+/* Platform definition */
+static vm_platform_t ppc32_vmtest_platform = {
+   "ppc32_test", "PPC32_VMTEST", "PPC32_TEST",
+   ppc32_vmtest_create_instance,
+   ppc32_vmtest_delete_instance,
+   ppc32_vmtest_init_instance,
+   ppc32_vmtest_stop_instance,
+   NULL,
+   NULL,
+   NULL,
+   NULL,
+   NULL,
+   NULL,
+   NULL,
+};
+
+/* Register the ppc32_vmtest platform */
+int ppc32_vmtest_platform_register(void)
+{
+   return(vm_platform_register(&ppc32_vmtest_platform));
 }

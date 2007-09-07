@@ -247,7 +247,7 @@ int hypervisor_ethsw_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("ethsw");
+   module = hypervisor_register_module("ethsw",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,ethsw_cmd_array);

@@ -241,7 +241,7 @@ int hypervisor_vm_debug_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("vm_debug");
+   module = hypervisor_register_module("vm_debug",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,vm_cmd_array);

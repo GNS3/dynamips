@@ -60,6 +60,91 @@ static cpu_gen_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
    return cpu;
 }
 
+/* Create a VM instance */
+static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = vm_create_instance(argv[0],atoi(argv[1]),argv[2]))) {
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
+                            "unable to create VM instance '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   vm->vtty_con_type = VTTY_TYPE_NONE;
+   vm->vtty_aux_type = VTTY_TYPE_NONE;
+   
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' created",argv[0]);
+   return(0);
+}
+
+/* Delete a VM instance */
+static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   int res;
+
+   res = vm_delete_instance(argv[0]);
+
+   if (res == 1) {
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' deleted",argv[0]);
+   } else {
+      hypervisor_send_reply(conn,HSC_ERR_DELETE,1,
+                            "unable to delete VM '%s'",argv[0]);
+   }
+
+   return(res);
+}
+
+/* Start a VM instance */
+static int cmd_start(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (vm->vtty_con_type == VTTY_TYPE_NONE) {
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,
+                            "Warning: no console port defined for "
+                            "VM '%s'",argv[0]);
+   }
+
+   if (vm_init_instance(vm) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_START,1,
+                            "unable to start VM instance '%s'",
+                            argv[0]);
+      return(-1);
+   }
+   
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' started",argv[0]);
+   return(0);
+}
+
+/* Stop a VM instance */
+static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   if (vm_stop_instance(vm) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_STOP,1,
+                            "unable to stop VM instance '%s'",
+                            argv[0]);
+      return(-1);
+   }
+   
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' stopped",argv[0]);
+   return(0);
+}
+
 /* Set debugging level */
 static int cmd_set_debug_level(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -348,12 +433,22 @@ static int cmd_show_timer_drift(hypervisor_conn_t *conn,
    if (!(cpu = find_cpu(conn,vm,atoi(argv[1]))))
       return(-1);
 
-   if (cpu->type == CPU_TYPE_MIPS64) {
-      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
-                            CPU_MIPS64(cpu)->timer_drift);
+   switch(cpu->type) {
+      case CPU_TYPE_MIPS64:
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
+                               CPU_MIPS64(cpu)->timer_drift);
 
-      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
-                            CPU_MIPS64(cpu)->timer_irq_pending);      
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
+                               CPU_MIPS64(cpu)->timer_irq_pending);
+         break;
+
+     case CPU_TYPE_PPC32:
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Timer Drift: %u",
+                               CPU_PPC32(cpu)->timer_drift);
+
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"Pending Timer IRQ: %u",
+                               CPU_PPC32(cpu)->timer_irq_pending);
+         break;
    }
 
    vm_release(vm);
@@ -485,17 +580,17 @@ static int cmd_set_aux_tcp_port(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   char *cfg_buffer,*cfg_base64;
+   u_char *cfg_buffer,*cfg_base64;
    ssize_t cfg_len;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   if (!vm->nvram_extract_config)
+   if (!vm->platform->nvram_extract_config)
       goto err_no_extract_method;
 
    /* Extract the IOS configuration */
-   if (((cfg_len = vm->nvram_extract_config(vm,&cfg_buffer)) < 0) ||
+   if (((cfg_len = vm->platform->nvram_extract_config(vm,&cfg_buffer)) < 0) ||
        (cfg_buffer == NULL)) 
       goto err_nvram_extract;
 
@@ -529,24 +624,24 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   char *cfg_buffer;
+   u_char *cfg_buffer;
    ssize_t len;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   if (!vm->nvram_push_config)
+   if (!vm->platform->nvram_push_config)
       goto err_no_push_method;
 
    /* Convert base64 input to standard text */
    if (!(cfg_buffer = malloc(3 * strlen(argv[1]))))
       goto err_alloc_base64;
 
-   if ((len = base64_decode(cfg_buffer,argv[1],0)) < 0)
+   if ((len = base64_decode(cfg_buffer,(u_char *)argv[1],0)) < 0)
       goto err_decode_base64;
 
    /* Push configuration */
-   if (vm->nvram_push_config(vm,cfg_buffer,len) < 0)
+   if (vm->platform->nvram_push_config(vm,cfg_buffer,len) < 0)
       goto err_nvram_push;
 
    free(cfg_buffer);
@@ -649,6 +744,231 @@ static int cmd_send_aux_msg(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+
+/* Show slot bindings */
+static int cmd_slot_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   struct cisco_card *card,*sc;
+   vm_instance_t *vm;
+   int i,j;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   for(i=0;i<vm->nr_slots;i++) {
+      if (!(card = vm_slot_get_card_ptr(vm,i)))
+         continue;
+
+      /* main module */
+      hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%u/%u: %s",
+                            card->slot_id,card->subslot_id,card->dev_type);
+
+      /* sub-slots */
+      for(j=0;j<CISCO_CARD_MAX_SUBSLOTS;j++) {
+         if (!(sc = card->sub_slots[j]))
+            continue;
+
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%u/%u: %s",
+                               card->slot_id,card->subslot_id,card->dev_type);
+      }
+   }
+   
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Show NIO bindings for the specified slot */
+static int cmd_slot_nio_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
+{     
+   struct cisco_nio_binding *nb;
+   struct cisco_card *card,*sc;
+   vm_instance_t *vm;
+   u_int i,slot;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+
+   if ((card = vm_slot_get_card_ptr(vm,slot)))
+   {
+      /* main module */
+      for(nb=card->nio_list;nb;nb=nb->next) {
+         hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%u: %s",
+                               nb->port_id,nb->nio->name);
+      }
+
+      /* sub-slots */
+      for(i=0;i<CISCO_CARD_MAX_SUBSLOTS;i++) {
+         if (!(sc = card->sub_slots[i]))
+            continue;
+
+         for(nb=sc->nio_list;nb;nb=nb->next) {
+            hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%u: %s",
+                                  nb->port_id,nb->nio->name);
+         }
+      }
+   }
+   
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Add a slot binding */
+static int cmd_slot_add_binding(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_add_binding(vm,argv[3],slot,port) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to add binding for slot %u/%u",
+                            argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Remove a slot binding */
+static int cmd_slot_remove_binding(hypervisor_conn_t *conn,
+                                   int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_remove_binding(vm,slot,port) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to remove binding for slot %u/%u",
+                            argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Add a NIO binding for a slot/port */
+static int cmd_slot_add_nio_binding(hypervisor_conn_t *conn,
+                                    int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_add_nio_binding(vm,slot,port,argv[3]) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to add binding "
+                            "for slot %u/%u",argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Remove a NIO binding for a slot/port */
+static int cmd_slot_remove_nio_binding(hypervisor_conn_t *conn,
+                                       int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_remove_nio_binding(vm,slot,port) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to remove NIO binding "
+                            "for slot %u/%u",argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Enable NIO of the specified slot/port */
+static int cmd_slot_enable_nio(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_enable_nio(vm,slot,port) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to enable NIO for slot %u/%u",
+                            argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Disable NIO of the specified slot/port */
+static int cmd_slot_disable_nio(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,port;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   port = atoi(argv[2]);
+
+   if (vm_slot_disable_nio(vm,slot,port) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "VM %s: unable to disable NIO for slot %u/%u",
+                            argv[0],slot,port);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Show info about VM object */
 static void cmd_show_vm_list(registry_entry_t *entry,void *opt,int *err)
 {
@@ -691,6 +1011,10 @@ static int cmd_vm_list_con_ports(hypervisor_conn_t *conn,int argc,char *argv[])
 
 /* VM commands */
 static hypervisor_cmd_t vm_cmd_array[] = {
+   { "create", 3, 3, cmd_create, NULL },
+   { "delete", 1, 1, cmd_delete, NULL },
+   { "start", 1, 1, cmd_start, NULL },
+   { "stop", 1, 1, cmd_stop, NULL },
    { "set_debug_level", 2, 2, cmd_set_debug_level, NULL },
    { "set_ios", 2, 2, cmd_set_ios, NULL },
    { "set_config", 2, 2, cmd_set_config, NULL },
@@ -722,6 +1046,14 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "resume", 1, 1, cmd_resume, NULL },
    { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
    { "send_aux_msg", 2, 2, cmd_send_aux_msg, NULL },
+   { "slot_bindings", 1, 1, cmd_slot_bindings, NULL },
+   { "slot_nio_bindings", 2, 2, cmd_slot_nio_bindings, NULL },
+   { "slot_add_binding", 4, 4, cmd_slot_add_binding, NULL },
+   { "slot_remove_binding", 3, 3, cmd_slot_remove_binding, NULL },
+   { "slot_add_nio_binding", 4, 4, cmd_slot_add_nio_binding, NULL },
+   { "slot_remove_nio_binding", 3, 3, cmd_slot_remove_nio_binding, NULL },
+   { "slot_enable_nio", 3, 3, cmd_slot_enable_nio, NULL },
+   { "slot_disable_nio", 3, 3, cmd_slot_disable_nio, NULL },
    { "list", 0, 0, cmd_vm_list, NULL },
    { "list_con_ports", 0, 0, cmd_vm_list_con_ports, NULL },
    { NULL, -1, -1, NULL, NULL },
@@ -732,7 +1064,7 @@ int hypervisor_vm_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("vm");
+   module = hypervisor_register_module("vm",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,vm_cmd_array);

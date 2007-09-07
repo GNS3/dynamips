@@ -30,11 +30,11 @@
 #define DEBUG_ACCESS     0
 #define DEBUG_UNKNOWN    0
 #define DEBUG_MII        0
-#define DEBUG_MEM        1
-#define DEBUG_REG        1
+#define DEBUG_MEM        0
+#define DEBUG_REG        0
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
-#define DEBUG_FORWARD    1
+#define DEBUG_FORWARD    0
 #define DEBUG_MIRROR     0
 #define DEBUG_ARL        0
 

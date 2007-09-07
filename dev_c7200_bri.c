@@ -784,81 +784,79 @@ static void pci_munich32_write(cpu_gen_t *cpu,struct pci_device *dev,
  *
  * Add a PA-4B/PA-8B port adapter into specified slot.
  */
-int dev_c7200_pa_bri_init(c7200_t *router,char *name,u_int pa_bay)
+int dev_c7200_pa_bri_init(vm_instance_t *vm,struct cisco_card *card)
 {
+   u_int slot = card->slot_id;
    struct pci_device *pci_dev;
    struct pa_4b_data *d;
    struct vdevice *dev;
 
    /* Allocate the private data structure for PA-4B chip */
    if (!(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"%s (PA-4B): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
    memset(d,0,sizeof(*d));
    d->m32_offset = 0x08;
-   d->m32_data.vm = router->vm;
+   d->m32_data.vm = vm;
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4B"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-4B"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Add as PCI device PA-4B */
-   pci_dev = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
+   pci_dev = pci_dev_add(card->pci_bus,card->dev_name,
                          BRI_PCI_VENDOR_ID,BRI_PCI_PRODUCT_ID,
                          0,0,C7200_NETIO_IRQ,d,
                          NULL,pci_munich32_read,pci_munich32_write);
 
    if (!pci_dev) {
-      fprintf(stderr,"%s (PA-4B): unable to create PCI device.\n",name);
+      vm_error(vm,"%s: unable to create PCI device.\n",card->dev_name);
       return(-1);
    }
 
    /* Create the PA-4B structure */
-   d->name        = name;
-   d->pci_dev     = pci_dev;
-   d->vm          = router->vm;
+   d->name    = card->dev_name;
+   d->pci_dev = pci_dev;
+   d->vm      = vm;
 
    /* Create the device itself */
-   if (!(dev = dev_create(name))) {
-      fprintf(stderr,"%s (PA-4B): unable to create device.\n",name);
+   if (!(dev = dev_create(card->dev_name))) {
+      vm_error(vm,"%s: unable to create device.\n",card->dev_name);
       return(-1);
    }
 
-   dev->phys_len  = 0x800000;
-   dev->handler   = pa_4b_access;
+   dev->phys_len = 0x800000;
+   dev->handler  = pa_4b_access;
 
    /* Store device info */
    dev->priv_data = d;
    d->dev = dev;
 
-   /* Map this device to the VM */
-   vm_bind_device(router->vm,dev);
-
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+   card->drv_info = d;
+   return(0);
 }
 
 /* Remove a PA-4B from the specified slot */
-int dev_c7200_pa_bri_shutdown(c7200_t *router,u_int pa_bay)
+int dev_c7200_pa_bri_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa_4b_data *d;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   d = bay->drv_info;
+   struct pa_4b_data *d = card->drv_info;
 
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the PCI device */
    pci_dev_remove(d->pci_dev);
 
    /* Remove the device from the CPU address space */
-   vm_unbind_device(router->vm,d->dev);
-   cpu_group_rebuild_mts(router->vm->cpu_group);
+   vm_unbind_device(vm,d->dev);
+   cpu_group_rebuild_mts(vm->cpu_group);
 
    /* Free the device structure itself */
    free(d->dev);
@@ -867,12 +865,12 @@ int dev_c7200_pa_bri_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_bri_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                             netio_desc_t *nio)
+int dev_c7200_pa_bri_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                             u_int port_id,netio_desc_t *nio)
 {
-   struct pa_4b_data *d;
+   struct pa_4b_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio != NULL)
@@ -881,18 +879,20 @@ int dev_c7200_pa_bri_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
    d->nio = nio;
 
    /* TEST */
-   d->m32_data.tx_tid = ptask_add((ptask_callback)m32_tx_scan_all_channels,&d->m32_data,NULL);
+   d->m32_data.tx_tid = ptask_add((ptask_callback)m32_tx_scan_all_channels,
+                                  &d->m32_data,NULL);
 
    //netio_rxl_add(nio,(netio_rx_handler_t)dev_pa_4b_handle_rxring,d,NULL);
    return(0);
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_bri_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+int dev_c7200_pa_bri_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                               u_int port_id)
 {
-   struct pa_4b_data *d;
+   struct pa_4b_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio) {
@@ -906,10 +906,11 @@ int dev_c7200_pa_bri_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
 }
 
 /* PA-4B driver */
-struct c7200_pa_driver dev_c7200_pa_4b_driver = {
-   "PA-4B", 0, 
+struct cisco_card_driver dev_c7200_pa_4b_driver = {
+   "PA-4B", 0, 0,
    dev_c7200_pa_bri_init,
    dev_c7200_pa_bri_shutdown,
+   NULL,
    dev_c7200_pa_bri_set_nio,
    dev_c7200_pa_bri_unset_nio,
    NULL,

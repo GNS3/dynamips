@@ -151,7 +151,11 @@ static const struct nmc93cX6_eeprom_def eeprom_pem_def = {
 
 /* IOFPGA manages simultaneously CPU and Midplane EEPROM */
 static const struct nmc93cX6_group eeprom_cpu_midplane = {
-   EEPROM_TYPE_NMC93C46, 2, 0, "CPU and Midplane EEPROM", 0, 
+   EEPROM_TYPE_NMC93C46, 2, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "CPU and Midplane EEPROM",
    { &eeprom_cpu_def, &eeprom_midplane_def }, 
 };
 
@@ -161,7 +165,12 @@ static const struct nmc93cX6_group eeprom_cpu_midplane = {
  * http://www.cisco.com/en/US/products/hw/routers/ps341/products_field_notice09186a00801cb26d.shtml
  */
 static const struct nmc93cX6_group eeprom_pem_npeb = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "PEM (NPE-B) EEPROM", 0, { &eeprom_pem_def },
+   EEPROM_TYPE_NMC93C46, 1, 0,
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "PEM (NPE-B) EEPROM", 
+   { &eeprom_pem_def },
 };
 
 /* Reset DS1620 */
@@ -433,7 +442,7 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data = 0x0102;
             
             /* If we have an I/O slot, we use the I/O slot DUART */
-            if (c7200_pa_check_eeprom(d->router,0))
+            if (vm_slot_check_eeprom(d->router->vm,0,0))
                *data |= 0x01000000;
          }
          break;
@@ -707,8 +716,8 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    return NULL;
 }
 
-/* Initialize EEPROM groups */
-void c7200_init_eeprom_groups(c7200_t *router)
+/* Initialize system EEPROM groups */
+void c7200_init_sys_eeprom_groups(c7200_t *router)
 {
    router->sys_eeprom_g1 = eeprom_cpu_midplane;
    router->sys_eeprom_g2 = eeprom_pem_npeb;
@@ -778,7 +787,7 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
    d->dev.priv_data = d;
 
    /* If we have an I/O slot, we use the I/O slot DUART */
-   if (c7200_pa_check_eeprom(d->router,0)) {
+   if (vm_slot_check_eeprom(vm,0,0)) {
       vm_log(vm,"CONSOLE","console managed by I/O board\n");
 
       /* Set console and AUX port notifying functions */

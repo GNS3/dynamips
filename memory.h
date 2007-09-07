@@ -29,10 +29,9 @@
 /* Device ID mask and shift, device offset mask */
 #define MTS_DEVID_MASK    0xfc000000
 #define MTS_DEVID_SHIFT   26
-#define MTS_DEVOFF_MASK   0x03fffff0
+#define MTS_DEVOFF_MASK   0x03ffffff
 
 /* Memory access flags */
-#define MTS_ACC_OK  0x00000000   /* Access OK */
 #define MTS_ACC_AE  0x00000002   /* Address Error */
 #define MTS_ACC_T   0x00000004   /* TLB Exception */
 #define MTS_ACC_U   0x00000006   /* Unexistent */

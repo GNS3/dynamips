@@ -1,4 +1,4 @@
-Help for Cisco router simulator (dynamips-0.2.6)
+Help for Cisco router simulator (dynamips-0.2.8)
 ================================================
 Authors of this document: Fabien Devaux, Christophe Fillot, MtvE
 
@@ -11,6 +11,8 @@ The emulator currently supports the following platforms:
   - Cisco 2691
   - Cisco 3725
   - Cisco 3745
+  - Cisco 2600 (2610 to 2650XM)
+  - Cisco 1700 (1710 to 1760)
 
 By default, a Cisco 7206VXR with NPE-200 (256 Mb of DRAM) is emulated.
 

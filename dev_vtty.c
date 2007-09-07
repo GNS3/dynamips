@@ -690,26 +690,7 @@ static void remote_control(vtty_t *vtty,u_char c)
 
       /* Show info about Port Adapters or Network Modules */
       case 'p':
-         switch(vm->type) {
-            case VM_TYPE_C3600:
-               c3600_nm_show_all_info(VM_C3600(vm));
-               break;
-            case VM_TYPE_C7200:
-               c7200_pa_show_all_info(VM_C7200(vm));
-               break;
-            case VM_TYPE_C2691:
-               c2691_nm_show_all_info(VM_C2691(vm));
-               break;
-            case VM_TYPE_C3725:
-               c3725_nm_show_all_info(VM_C3725(vm));
-               break;
-            case VM_TYPE_C3745:
-               c3745_nm_show_all_info(VM_C3745(vm));
-               break;
-            case VM_TYPE_C2600:
-               c2600_nm_show_all_info(VM_C2600(vm));
-               break;
-         }
+         vm_slot_show_all_info(vm);
          break;
   
       /* Dump the MIPS registers */
@@ -762,14 +743,16 @@ static void remote_control(vtty_t *vtty,u_char c)
       case 'x':
          if (cpu0) {
             /* IRQ triggering */
-            vm_set_irq(vm,2);
+            //vm_set_irq(vm,5);
+
+            CPU_MIPS64(cpu0)->irq_disable = TRUE;
          }
          break;
 
       case 'y':
          if (cpu0) {
             /* IRQ clearing */
-            vm_clear_irq(vm,2);
+            vm_clear_irq(vm,5);
          }
          break;
 
@@ -1034,12 +1017,13 @@ void vtty_flush(vtty_t *vtty)
    switch(vtty->type) {
       case VTTY_TYPE_TERM:
       case VTTY_TYPE_TCP:
-         if (vtty->fstream)
+         if (vtty->fstream != NULL)
             fflush(vtty->fstream);
          break;
 
       case VTTY_TYPE_SERIAL:
-         fsync(vtty->fd);
+         if (vtty->fd != -1)
+            fsync(vtty->fd);
          break;
    }
 }

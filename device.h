@@ -153,8 +153,8 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
                    u_int *conf_reg);
 
 /* Create a 8 Mb bootflash */
-int dev_bootflash_init(vm_instance_t *vm,char *name,
-                       m_uint64_t paddr,m_uint32_t len);
+int dev_bootflash_init(vm_instance_t *vm,char *name,char *model,
+                       m_uint64_t paddr);
 
 /* Create a Flash device */
 vm_obj_t *dev_flash_init(vm_instance_t *vm,char *name,

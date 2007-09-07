@@ -30,67 +30,71 @@
  *
  * Add a NM-4T network module into specified slot.
  */
-int dev_c2691_nm_4t_init(c2691_t *router,char *name,u_int nm_bay)
+int dev_c2691_nm_4t_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct mueslix_data *data;
+   u_int slot = card->slot_id;
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c2691_nm_set_eeprom(router,nm_bay,cisco_eeprom_find_nm("NM-4T"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_nm("NM-4T"));
+   c2691_set_slot_eeprom(VM_C2691(vm),slot,&card->eeprom);
 
    /* Create the Mueslix chip */
-   data = dev_mueslix_init(router->vm,name,0,
-                           router->nm_bay[nm_bay].pci_map,
-                           6,c2691_net_irq_for_slot_port(nm_bay,0));
+   data = dev_mueslix_init(vm,card->dev_name,0,card->pci_bus,6,
+                           c2691_net_irq_for_slot_port(slot,0));
 
    if (!data) return(-1);
 
    /* Store device info into the router structure */
-   return(c2691_nm_set_drvinfo(router,nm_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove a NM-4T from the specified slot */
-int dev_c2691_nm_4t_shutdown(c2691_t *router,u_int nm_bay) 
+int dev_c2691_nm_4t_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c2691_nm_bay *bay;
+   /* Remove the NM EEPROM */
+   cisco_card_unset_eeprom(card);
+   c2691_set_slot_eeprom(VM_C2691(vm),card->slot_id,NULL);
 
-   if (!(bay = c2691_nm_get_info(router,nm_bay)))
-      return(-1);
-
-   c2691_nm_unset_eeprom(router,nm_bay);
-   dev_mueslix_remove(bay->drv_info);
+   /* Remove the mueslix driver */
+   dev_mueslix_remove(card->drv_info);
    return(0);
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c2691_nm_4t_set_nio(c2691_t *router,u_int nm_bay,u_int port_id,
-                            netio_desc_t *nio)
+int dev_c2691_nm_4t_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                            u_int port_id,netio_desc_t *nio)
 {
-   struct mueslix_data *data;
+   struct mueslix_data *d = card->drv_info;
 
-   if ((port_id >= MUESLIX_NR_CHANNELS) || 
-       !(data = c2691_nm_get_drvinfo(router,nm_bay)))
+   if (!d || (port_id >= MUESLIX_NR_CHANNELS))
       return(-1);
 
-   return(dev_mueslix_set_nio(data,port_id,nio));
+   return(dev_mueslix_set_nio(d,port_id,nio));
 }
 
 /* Unbind a Network IO descriptor to a specific port */
-int dev_c2691_nm_4t_unset_nio(c2691_t *router,u_int nm_bay,u_int port_id)
+int dev_c2691_nm_4t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                              u_int port_id)
 {
-   struct mueslix_data *d;
+   struct mueslix_data *d = card->drv_info;
 
-   if ((port_id >= MUESLIX_NR_CHANNELS) || 
-       !(d = c2691_nm_get_drvinfo(router,nm_bay)))
+   if (!d || (port_id >= MUESLIX_NR_CHANNELS))
       return(-1);
    
    return(dev_mueslix_unset_nio(d,port_id));
 }
 
 /* NM-4T driver */
-struct c2691_nm_driver dev_c2691_nm_4t_driver = {
+struct cisco_card_driver dev_c2691_nm_4t_driver = {
    "NM-4T", 1, 0,
    dev_c2691_nm_4t_init, 
    dev_c2691_nm_4t_shutdown,
+   NULL,
    dev_c2691_nm_4t_set_nio,
    dev_c2691_nm_4t_unset_nio,
    NULL,

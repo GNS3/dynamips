@@ -2,7 +2,7 @@
  * Cisco router simulation platform.
  * Copyright (c) 2007 Christophe Fillot (cf@utc.fr)
  *
- * Cisco C6k-MSFC1 I/O FPGA:
+ * Cisco C6k-SUP1 I/O FPGA:
  *   - Simulates a NMC93C56 Serial EEPROM.
  *   - Simulates a DALLAS DS1620 for Temperature Sensors.
  *   - Simulates console and AUX ports (SCN2681).
@@ -29,7 +29,7 @@
 #include "dev_vtty.h"
 #include "nmc93cX6.h"
 #include "ds1620.h"
-#include "dev_msfc1.h"
+#include "dev_c6sup1.h"
 
 /* Debugging flags */
 #define DEBUG_UNKNOWN  1
@@ -62,14 +62,14 @@
 #define NVRAM_PACKED   0x04
 
 /* 2 temperature sensors in a MSFC1: chassis inlet and oulet */
-#define MSFC1_TEMP_SENSORS  2
-#define MSFC1_DEFAULT_TEMP  22    /* default temperature: 22°C */
+#define C6SUP1_TEMP_SENSORS  2
+#define C6SUP1_DEFAULT_TEMP  22    /* default temperature: 22°C */
 
 /* IO FPGA structure */
 struct iofpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
-   msfc1_t *router;
+   c6sup1_t *router;
 
    /* Lock test */
    pthread_mutex_t lock;
@@ -84,8 +84,8 @@ struct iofpga_data {
    u_int io_ctrl_reg;
 
    /* Temperature Control */
-   u_int temp_cfg_reg[MSFC1_TEMP_SENSORS];
-   u_int temp_deg_reg[MSFC1_TEMP_SENSORS];
+   u_int temp_cfg_reg[C6SUP1_TEMP_SENSORS];
+   u_int temp_deg_reg[C6SUP1_TEMP_SENSORS];
    u_int temp_clk_low;
 
    u_int temp_cmd;
@@ -100,25 +100,6 @@ struct iofpga_data {
 
 #define IOFPGA_LOCK(d)   pthread_mutex_lock(&(d)->lock)
 #define IOFPGA_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
-
-/* CPU EEPROM definition */
-static const struct nmc93cX6_eeprom_def eeprom_cpu_def = {
-   SK1_CLOCK_CPU, CS1_CHIP_SEL_CPU, 
-   DI1_DATA_IN_CPU, DO1_DATA_OUT_CPU,
-};
-
-/* Midplane EEPROM definition */
-static const struct nmc93cX6_eeprom_def eeprom_midplane_def = {
-   SK2_CLOCK_MIDPLANE, CS2_CHIP_SEL_MIDPLANE, 
-   DI2_DATA_IN_MIDPLANE, DO2_DATA_OUT_MIDPLANE,
-};
-
-
-/* IOFPGA manages simultaneously CPU and Midplane EEPROM */
-static const struct nmc93cX6_group eeprom_cpu_midplane = {
-   EEPROM_TYPE_NMC93C56, 2, 0, "CPU and Midplane EEPROM", 0, 
-   { &eeprom_cpu_def, &eeprom_midplane_def }, 
-};
 
 /* Reset DS1620 */
 static void temp_reset(struct iofpga_data *d)
@@ -155,7 +136,7 @@ static u_int temp_read_data(struct iofpga_data *d)
 
    switch(d->temp_cmd) {
       case DS1620_READ_CONFIG:
-         for(i=0;i<MSFC1_TEMP_SENSORS;i++)
+         for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
             data |= ((d->temp_cfg_reg[i] >> d->temp_data_pos) & 1) << i;
 
          d->temp_data_pos++;
@@ -166,7 +147,7 @@ static u_int temp_read_data(struct iofpga_data *d)
          break;
 
       case DS1620_READ_TEMP:
-         for(i=0;i<MSFC1_TEMP_SENSORS;i++)
+         for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
             data |= ((d->temp_deg_reg[i] >> d->temp_data_pos) & 1) << i;
 
          d->temp_data_pos++;
@@ -236,7 +217,7 @@ static void tty_con_input(vtty_t *vtty)
    IOFPGA_LOCK(d);
    if (d->duart_imr & DUART_RXRDYA) {
       d->duart_isr |= DUART_RXRDYA;
-      vm_set_irq(d->router->vm,MSFC1_DUART_IRQ);
+      vm_set_irq(d->router->vm,C6SUP1_DUART_IRQ);
    }
    IOFPGA_UNLOCK(d);
 }
@@ -249,7 +230,7 @@ static void tty_aux_input(vtty_t *vtty)
    IOFPGA_LOCK(d);
    if (d->duart_imr & DUART_RXRDYB) {
       d->duart_isr |= DUART_RXRDYB;
-      vm_set_irq(d->router->vm,MSFC1_DUART_IRQ);
+      vm_set_irq(d->router->vm,C6SUP1_DUART_IRQ);
    }
    IOFPGA_UNLOCK(d);
 }
@@ -266,7 +247,7 @@ static int tty_trigger_dummy_irq(struct iofpga_data *d,void *arg)
       mask = DUART_TXRDYA|DUART_TXRDYB;
       if (d->duart_imr & mask) {
          d->duart_isr |= DUART_TXRDYA|DUART_TXRDYB;
-         vm_set_irq(d->router->vm,MSFC1_DUART_IRQ);
+         vm_set_irq(d->router->vm,C6SUP1_DUART_IRQ);
       }
 
       d->duart_irq_seq = 0;
@@ -277,11 +258,11 @@ static int tty_trigger_dummy_irq(struct iofpga_data *d,void *arg)
 }
 
 /*
- * dev_msfc1_iofpga_access()
+ * dev_c6sup1_iofpga_access()
  */
-void *dev_msfc1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
-                              m_uint32_t offset,u_int op_size,u_int op_type,
-                              m_uint64_t *data)
+void *dev_c6sup1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
+                                m_uint32_t offset,u_int op_size,u_int op_type,
+                                m_uint64_t *data)
 {
    struct iofpga_data *d = dev->priv_data;
    vm_instance_t *vm = d->router->vm;
@@ -324,15 +305,7 @@ void *dev_msfc1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data |= NVRAM_PACKED;              /* Packed NVRAM */
          }
          break;
-
-      /* CPU/Midplane EEPROMs */
-      case 0x21c:
-         if (op_type == MTS_WRITE)
-            nmc93cX6_write(&d->router->sys_eeprom_g1,(u_int)(*data));
-         else
-            *data = nmc93cX6_read(&d->router->sys_eeprom_g1);
-         break;
-
+         
       /* Watchdog */
       case 0x234:
          break;
@@ -381,7 +354,7 @@ void *dev_msfc1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
             odata |= DUART_TX_READY;
          
-            vm_clear_irq(vm,MSFC1_DUART_IRQ);
+            vm_clear_irq(vm,C6SUP1_DUART_IRQ);
             *data = odata;
          }
          break;
@@ -428,7 +401,7 @@ void *dev_msfc1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
             odata |= DUART_TX_READY;
          
-            //vm_clear_irq(vm,MSFC1_DUART_IRQ);
+            //vm_clear_irq(vm,C6SUP1_DUART_IRQ);
             *data = odata;
          }
          break;
@@ -492,16 +465,8 @@ void *dev_msfc1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    return NULL;
 }
 
-/* Initialize EEPROM groups */
-void msfc1_init_eeprom_groups(msfc1_t *router)
-{
-   router->sys_eeprom_g1 = eeprom_cpu_midplane;
-   router->sys_eeprom_g1.eeprom[0] = &router->cpu_eeprom;
-   router->sys_eeprom_g1.eeprom[1] = &router->mp_eeprom;
-}
-
 /* Shutdown the IO FPGA device */
-void dev_msfc1_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
+void dev_c6sup1_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
 {
    if (d != NULL) {
       IOFPGA_LOCK(d);
@@ -521,9 +486,9 @@ void dev_msfc1_iofpga_shutdown(vm_instance_t *vm,struct iofpga_data *d)
 }
 
 /*
- * dev_msfc1_iofpga_init()
+ * dev_c6sup1_iofpga_init()
  */
-int dev_msfc1_iofpga_init(msfc1_t *router,m_uint64_t paddr,m_uint32_t len)
+int dev_c6sup1_iofpga_init(c6sup1_t *router,m_uint64_t paddr,m_uint32_t len)
 {
    vm_instance_t *vm = router->vm;
    struct iofpga_data *d;
@@ -540,22 +505,22 @@ int dev_msfc1_iofpga_init(msfc1_t *router,m_uint64_t paddr,m_uint32_t len)
    pthread_mutex_init(&d->lock,NULL);
    d->router = router;
 
-   for(i=0;i<MSFC1_TEMP_SENSORS;i++) {
+   for(i=0;i<C6SUP1_TEMP_SENSORS;i++) {
       d->temp_cfg_reg[i] = DS1620_CONFIG_STATUS_CPU;
-      d->temp_deg_reg[i] = MSFC1_DEFAULT_TEMP * 2;
+      d->temp_deg_reg[i] = C6SUP1_DEFAULT_TEMP * 2;
    }
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "io_fpga";
    d->vm_obj.data = d;
-   d->vm_obj.shutdown = (vm_shutdown_t)dev_msfc1_iofpga_shutdown;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_c6sup1_iofpga_shutdown;
 
    /* Set device properties */
    dev_init(&d->dev);
    d->dev.name      = "io_fpga";
    d->dev.phys_addr = paddr;
    d->dev.phys_len  = len;
-   d->dev.handler   = dev_msfc1_iofpga_access;
+   d->dev.handler   = dev_c6sup1_iofpga_access;
    d->dev.priv_data = d;
 
    /* Set console and AUX port notifying functions */

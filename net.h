@@ -145,14 +145,37 @@ typedef struct {
 
 /* Cisco ISL header */
 typedef struct {
-   m_uint16_t hsa1;               /* High bits of source MAC address */
-   m_uint8_t  hsa2;               /* (in theory: 0x00-00-0c) */
-   m_uint16_t vlan;               /* VLAN + BPDU */
-   m_uint16_t index;              /* Index port of source */
-   m_uint16_t res;                /* Reserved for TokenRing and FDDI */
+   m_uint16_t hsa1;       /* High bits of source MAC address */
+   m_uint8_t  hsa2;       /* (in theory: 0x00-00-0c) */
+   m_uint16_t vlan;       /* VLAN + BPDU */
+   m_uint16_t index;      /* Index port of source */
+   m_uint16_t res;        /* Reserved for TokenRing and FDDI */
 } __attribute__ ((__packed__)) n_eth_isl_hdr_t;
 
 #define N_ISL_HDR_SIZE  (sizeof(n_eth_llc_hdr_t) + sizeof(n_eth_isl_hdr_t))
+
+/* Cisco SCP/RBCP header */
+typedef struct {
+   m_uint8_t sa;          /* Source Address */
+   m_uint8_t da;          /* Destination Address */
+   m_uint16_t len;        /* Data Length */
+   m_uint8_t dsap;        /* Destination Service Access Point */
+   m_uint8_t ssap;        /* Source Service Access Point */
+   m_uint16_t opcode;     /* Opcode */
+   m_uint16_t seqno;      /* Sequence Number */
+   m_uint8_t flags;       /* Flags: command/response */
+   m_uint8_t unk1;        /* Unknown */
+   m_uint16_t unk2;       /* Unknown */
+   m_uint16_t unk3;       /* Unknown */
+} __attribute__ ((__packed__)) n_scp_hdr_t;
+
+/* Check for a broadcast ethernet address */
+static inline int eth_addr_is_bcast(n_eth_addr_t *addr)
+{
+   static const char *bcast_addr = "\xff\xff\xff\xff\xff\xff";
+   return(!memcmp(addr,bcast_addr,6));
+
+}
 
 /* Check for a broadcast/multicast ethernet address */
 static inline int eth_addr_is_mcast(n_eth_addr_t *addr)
@@ -218,6 +241,9 @@ char *n_eth_ntoa(char *buffer,n_eth_addr_t *addr,int format);
 int udp_connect(int local_port,char *remote_host,int remote_port);
 
 /* Listen on the specified port */
-int ip_listen(int port,int sock_type,int max_fd,int fd_array[]);
+int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[]);
+
+/* ISL rewrite */
+void cisco_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len);
 
 #endif

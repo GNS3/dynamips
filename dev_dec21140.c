@@ -187,39 +187,6 @@ struct dec21140_data {
 /* Log a dec21140 message */
 #define DEC21140_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
-/* 
- * ISL rewrite.
- *
- * See: http://www.cisco.com/en/US/tech/tk389/tk390/technologies_tech_note09186a0080094665.shtml
- */
-static void dec21140_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len)
-{
-   static m_uint8_t isl_xaddr[N_ETH_ALEN] = { 0x01,0x00,0x0c,0x00,0x10,0x00 };
-   u_int real_offset,real_len;
-   n_eth_hdr_t *hdr;
-   m_uint32_t ifcs;
-
-   hdr = (n_eth_hdr_t *)pkt;
-   if (!memcmp(&hdr->daddr,isl_xaddr,N_ETH_ALEN)) {
-      real_offset = N_ETH_HLEN + N_ISL_HDR_SIZE;
-      real_len    = ntohs(hdr->type);
-      real_len    -= (N_ISL_HDR_SIZE + 4);
-   
-      if ((real_offset+real_len) > tot_len)
-         return;
-   
-      /* Rewrite the destination MAC address */
-      hdr->daddr.eth_addr_byte[4] = 0x00;
-
-      /* Compute the internal FCS on the encapsulated packet */
-      ifcs = crc32_compute(0xFFFFFFFF,pkt+real_offset,real_len);
-      pkt[tot_len-4] = ifcs & 0xff;
-      pkt[tot_len-3] = (ifcs >> 8) & 0xff;
-      pkt[tot_len-2] = (ifcs >> 16) & 0xff;
-      pkt[tot_len-1] = ifcs >> 24;
-   }
-}
-
 /* Check if a packet must be delivered to the emulated chip */
 static inline int dec21140_handle_mac_addr(struct dec21140_data *d,
                                            m_uint8_t *pkt)
@@ -436,10 +403,10 @@ static inline void dev_dec21140_update_irq_status(struct dec21140_data *d)
    }
 
    d->csr[5] = csr5;
-
+   
    if (trigger)
       pci_dev_trigger_irq(d->vm,d->pci_dev);
-   else
+   else 
       pci_dev_clear_irq(d->vm,d->pci_dev);
 }
 
@@ -872,7 +839,7 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
       mem_dump(log_file,pkt,tot_len);
 #endif
       /* rewrite ISL header if required */
-      dec21140_isl_rewrite(pkt,tot_len);
+      cisco_isl_rewrite(pkt,tot_len);
 
       /* send it on wire */
       netio_send(d->nio,pkt,tot_len);
@@ -881,9 +848,9 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
  clear_txd0_own_bit:
    /* Clear the OWN flag of the first descriptor */
    physmem_copy_u32_to_vm(d->vm,tx_start,0);
-
+   
    /* Interrupt on completion ? */
-   if (txd0.tdes[1] & DEC21140_TXDESC_IC) {
+   if (txd0.tdes[1] & DEC21140_TXDESC_IC) {      
       d->csr[5] |= DEC21140_CSR5_TI;
       dev_dec21140_update_irq_status(d);
    }

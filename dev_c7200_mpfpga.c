@@ -127,8 +127,11 @@ static const struct nmc93cX6_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
 
 /* EEPROM group #1 (Bays 0, 1, 3, 4) */
 static const struct nmc93cX6_group eeprom_bays_g1 = {
-   EEPROM_TYPE_NMC93C46, 4, 0, "PA Bays (Group #1) EEPROM", FALSE,
-
+   EEPROM_TYPE_NMC93C46, 4, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "PA Bays (Group #1) EEPROM", 
    { &eeprom_bay_def[0], &eeprom_bay_def[1], 
      &eeprom_bay_def[3], &eeprom_bay_def[4],
    },
@@ -136,8 +139,11 @@ static const struct nmc93cX6_group eeprom_bays_g1 = {
 
 /* EEPROM group #2 (Bays 2, 5, 6) */
 static const struct nmc93cX6_group eeprom_bays_g2 = {
-   EEPROM_TYPE_NMC93C46, 3, 0, "PA Bays (Group #2) EEPROM", FALSE,
-
+   EEPROM_TYPE_NMC93C46, 3, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "PA Bays (Group #2) EEPROM",
    { &eeprom_bay_def[2], &eeprom_bay_def[5], &eeprom_bay_def[6] },
 };
 
@@ -224,22 +230,22 @@ static void pa_update_status_reg(struct c7200_mpfpga_data *d)
    res |= PCI_BAY0_5V_OK | PCI_BAY0_3V_OK;
 
    /* We fake power on bays defined by the final user */
-   if (c7200_pa_check_eeprom(d->router,1))
+   if (vm_slot_check_eeprom(d->router->vm,1,0))
       res |= PCI_BAY1_5V_OK | PCI_BAY1_3V_OK;
    
-   if (c7200_pa_check_eeprom(d->router,2))
+   if (vm_slot_check_eeprom(d->router->vm,2,0))
       res |= PCI_BAY2_5V_OK | PCI_BAY2_3V_OK;
 
-   if (c7200_pa_check_eeprom(d->router,3))
+   if (vm_slot_check_eeprom(d->router->vm,3,0))
       res |= PCI_BAY3_5V_OK | PCI_BAY3_3V_OK;
    
-   if (c7200_pa_check_eeprom(d->router,4))
+   if (vm_slot_check_eeprom(d->router->vm,4,0))
       res |= PCI_BAY4_5V_OK | PCI_BAY4_3V_OK;
 
-   if (c7200_pa_check_eeprom(d->router,5))
+   if (vm_slot_check_eeprom(d->router->vm,5,0))
       res |= PCI_BAY5_5V_OK | PCI_BAY5_3V_OK;
       
-   if (c7200_pa_check_eeprom(d->router,6))
+   if (vm_slot_check_eeprom(d->router->vm,6,0))
       res |= PCI_BAY6_5V_OK | PCI_BAY6_3V_OK;
 
    d->pa_status_reg = res;
@@ -426,20 +432,20 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 }
 
 /* Initialize EEPROM groups */
-static void init_eeprom_groups(c7200_t *router)
+void c7200_init_mp_eeprom_groups(c7200_t *router)
 {
    /* Group 1: bays 0, 1, 3, 4 */
    router->pa_eeprom_g1 = eeprom_bays_g1;
-   router->pa_eeprom_g1.eeprom[0] = &router->pa_bay[0].eeprom;
-   router->pa_eeprom_g1.eeprom[1] = &router->pa_bay[1].eeprom;
-   router->pa_eeprom_g1.eeprom[2] = &router->pa_bay[3].eeprom;
-   router->pa_eeprom_g1.eeprom[3] = &router->pa_bay[4].eeprom;
+   router->pa_eeprom_g1.eeprom[0] = NULL;
+   router->pa_eeprom_g1.eeprom[1] = NULL;
+   router->pa_eeprom_g1.eeprom[2] = NULL;
+   router->pa_eeprom_g1.eeprom[3] = NULL;
 
    /* Group 2: bays 2, 5, 6 */
    router->pa_eeprom_g2 = eeprom_bays_g2;
-   router->pa_eeprom_g2.eeprom[0] = &router->pa_bay[2].eeprom;
-   router->pa_eeprom_g2.eeprom[1] = &router->pa_bay[5].eeprom;
-   router->pa_eeprom_g2.eeprom[2] = &router->pa_bay[6].eeprom;
+   router->pa_eeprom_g2.eeprom[0] = NULL;
+   router->pa_eeprom_g2.eeprom[1] = NULL;
+   router->pa_eeprom_g2.eeprom[2] = NULL;
 }
 
 /* Shutdown the MP FPGA device */
@@ -468,9 +474,6 @@ int dev_c7200_mpfpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
 
    memset(d,0,sizeof(*d));
    d->router = router;
-   
-   /* Initialize EEPROMs */
-   init_eeprom_groups(router);
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "mp_fpga";

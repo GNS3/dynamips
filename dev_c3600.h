@@ -72,62 +72,15 @@
 /* C3600 ELF Platform ID */
 #define C3620_ELF_MACHINE_ID  0x1e
 #define C3640_ELF_MACHINE_ID  0x1e
-//#define C3660_ELF_MACHINE_ID  ????
+#define C3660_ELF_MACHINE_ID  0x34
+
+#define VM_C3600(vm) ((c3600_t *)vm->hw_data)
 
 /* C3600 router */
 typedef struct c3600_router c3600_t;
 
 /* Prototype of chassis driver initialization function */
 typedef int (*c3600_chassis_init_fn)(c3600_t *router);
-
-/* Prototype of NM driver initialization function */
-typedef int (*c3600_nm_init_fn)(c3600_t *router,char *name,u_int nm_bay);
-
-/* Prototype of NM driver shutdown function */
-typedef int (*c3600_nm_shutdown_fn)(c3600_t *router,u_int nm_bay);
-
-/* Prototype of NM NIO set function */
-typedef int (*c3600_nm_set_nio_fn)(c3600_t *router,u_int nm_bay,u_int port_id,
-                                   netio_desc_t *nio);
-
-/* Prototype of NM NIO unset function */
-typedef int (*c3600_nm_unset_nio_fn)(c3600_t *router,u_int nm_bay,
-                                     u_int port_id);
-
-/* Prototype of NM NIO show info function */
-typedef int (*c3600_nm_show_info_fn)(c3600_t *router,u_int nm_bay);
-
-/* C3600 Network Module Driver */
-struct c3600_nm_driver {
-   char *dev_type;
-   int supported;
-   int wic_slots;
-   c3600_nm_init_fn nm_init;
-   c3600_nm_shutdown_fn nm_shutdown;
-   c3600_nm_set_nio_fn nm_set_nio;
-   c3600_nm_unset_nio_fn nm_unset_nio;
-   c3600_nm_show_info_fn nm_show_info;
-
-   /* TODO: WAN Interface Cards (WIC) */
-};
-
-/* C3600 NIO binding to a slot/port */
-struct c3600_nio_binding {
-   netio_desc_t *nio;
-   u_int port_id;
-   struct c3600_nio_binding *prev,*next;
-};
-
-/* C3600 NM bay */
-struct c3600_nm_bay {
-   char *dev_name;                       /* Device name */
-   char *dev_type;                       /* Device Type */
-   struct cisco_eeprom eeprom;           /* NM EEPROM */
-   struct pci_bus *pci_map;              /* PCI bus */
-   struct c3600_nm_driver *nm_driver;    /* NM Driver */
-   void *drv_info;                       /* Private driver info */
-   struct c3600_nio_binding *nio_list;   /* NIO bindings to ports */
-};
 
 /* C3600 Chassis Driver */
 struct c3600_chassis_driver {
@@ -146,15 +99,11 @@ struct c3600_router {
    /* Associated VM instance */
    vm_instance_t *vm;
 
-   /* IO memory size to be passed to Smart Init */
-   u_int nm_iomem_size;
-
    /* I/O FPGA */
    struct c3600_iofpga_data *iofpga_data;
 
    /* Chassis information */
    struct c3600_chassis_driver *chassis_driver;
-   struct c3600_nm_bay nm_bay[C3600_MAX_NM_BAYS];
    m_uint8_t oir_status;
 
    /* 
@@ -171,95 +120,12 @@ struct c3600_router {
    struct nmc93cX6_group c3660_nm_eeprom_group[C3600_MAX_NM_BAYS];
 };
 
-/* Create a new router instance */
-c3600_t *c3600_create_instance(char *name,int instance_id);
-
-/* Delete a router instance */
-int c3600_delete_instance(char *name);
-
-/* Delete all router instances */
-int c3600_delete_all_instances(void);
-
-/* Save configuration of a C3600 instance */
-void c3600_save_config(c3600_t *router,FILE *fd);
-
-/* Save configurations of all C3600 instances */
-void c3600_save_config_all(FILE *fd);
+/* Set EEPROM for the specified slot */
+int c3600_set_slot_eeprom(c3600_t *router,u_int slot,
+                          struct cisco_eeprom *eeprom);
 
 /* Get network IRQ for specified slot/port */
 u_int c3600_net_irq_for_slot_port(u_int slot,u_int port);
-
-/* Set NM EEPROM definition */
-int c3600_nm_set_eeprom(c3600_t *router,u_int nm_bay,
-                        const struct cisco_eeprom *eeprom);
-
-/* Unset NM EEPROM definition (empty bay) */
-int c3600_nm_unset_eeprom(c3600_t *router,u_int nm_bay);
-
-/* Check if a bay has a Network Module */
-int c3600_nm_check_eeprom(c3600_t *router,u_int nm_bay);
-
-/* Get bay info */
-struct c3600_nm_bay *c3600_nm_get_info(c3600_t *router,u_int nm_bay);
-
-/* Get NM type */
-char *c3600_nm_get_type(c3600_t *router,u_int nm_bay);
-
-/* Get driver info about the specified slot */
-void *c3600_nm_get_drvinfo(c3600_t *router,u_int nm_bay);
-
-/* Set driver info for the specified slot */
-int c3600_nm_set_drvinfo(c3600_t *router,u_int nm_bay,void *drv_info);
-
-/* Add a NM binding */
-int c3600_nm_add_binding(c3600_t *router,char *dev_type,u_int nm_bay);
-
-/* Remove a NM binding */
-int c3600_nm_remove_binding(c3600_t *router,u_int nm_bay);
-
-/* Find a NIO binding */
-struct c3600_nio_binding *
-c3600_nm_find_nio_binding(c3600_t *router,u_int nm_bay,u_int port_id);
-
-/* Add a network IO binding */
-int c3600_nm_add_nio_binding(c3600_t *router,u_int nm_bay,u_int port_id,
-                             char *nio_name);
-
-/* Remove a NIO binding */
-int c3600_nm_remove_nio_binding(c3600_t *router,u_int nm_bay,u_int port_id);
-
-/* Remove all NIO bindings for the specified NM */
-int c3600_nm_remove_all_nio_bindings(c3600_t *router,u_int nm_bay);
-
-/* Enable a Network IO descriptor for a Network Module */
-int c3600_nm_enable_nio(c3600_t *router,u_int nm_bay,u_int port_id);
-
-/* Disable Network IO descriptor of a Network Module */
-int c3600_nm_disable_nio(c3600_t *router,u_int nm_bay,u_int port_id);
-
-/* Enable all NIO of the specified NM */
-int c3600_nm_enable_all_nio(c3600_t *router,u_int nm_bay);
-
-/* Disable all NIO of the specified NM */
-int c3600_nm_disable_all_nio(c3600_t *router,u_int nm_bay);
-
-/* Initialize a Network Module */
-int c3600_nm_init(c3600_t *router,u_int nm_bay);
-
-/* Shutdown a Network Module */
-int c3600_nm_shutdown(c3600_t *router,u_int nm_bay);
-
-/* Shutdown all NM of a router */
-int c3600_nm_shutdown_all(c3600_t *router);
-
-/* Show info about all NMs */
-int c3600_nm_show_all_info(c3600_t *router);
-
-/* Create a Network Module (command line) */
-int c3600_cmd_nm_create(c3600_t *router,char *str);
-
-/* Add a Network IO descriptor binding (command line) */
-int c3600_cmd_add_nio(c3600_t *router,char *str);
 
 /* Show the list of available NM drivers */
 void c3600_nm_show_drivers(void);
@@ -273,23 +139,8 @@ int c3600_chassis_set_type(c3600_t *router,char *chassis_type);
 /* Get the chassis ID */
 int c3600_chassis_get_id(c3600_t *router);
 
-/* Show the list of available chassis drivers */
-void c3600_chassis_show_drivers(void);
-
 /* Show C3600 hardware info */
 void c3600_show_hardware(c3600_t *router);
-
-/* Initialize default parameters for a C3600 */
-void c3600_init_defaults(c3600_t *router);
-
-/* Initialize the C3600 Platform */
-int c3600_init_platform(c3600_t *router);
-
-/* Initialize a Cisco 3600 instance */
-int c3600_init_instance(c3600_t *router);
-
-/* Stop a Cisco 3600 instance */
-int c3600_stop_instance(c3600_t *router);
 
 /* Initialize EEPROM groups */
 void c3600_init_eeprom_groups(c3600_t *router);
@@ -297,12 +148,18 @@ void c3600_init_eeprom_groups(c3600_t *router);
 /* dev_c3600_iofpga_init() */
 int dev_c3600_iofpga_init(c3600_t *router,m_uint64_t paddr,m_uint32_t len);
 
+/* Register the c3600 platform */
+int c3600_platform_register(void);
+
+/* Hypervisor C3600 initialization */
+extern int hypervisor_c3600_init(vm_platform_t *platform);
+
 /* NM drivers */
-extern struct c3600_nm_driver dev_c3600_nm_1e_driver;
-extern struct c3600_nm_driver dev_c3600_nm_4e_driver;
-extern struct c3600_nm_driver dev_c3600_nm_1fe_tx_driver;
-extern struct c3600_nm_driver dev_c3600_nm_4t_driver;
-extern struct c3600_nm_driver dev_c3600_leopard_2fe_driver;
-extern struct c3600_nm_driver dev_c3600_nm_16esw_driver;
+extern struct cisco_card_driver dev_c3600_nm_1e_driver;
+extern struct cisco_card_driver dev_c3600_nm_4e_driver;
+extern struct cisco_card_driver dev_c3600_nm_1fe_tx_driver;
+extern struct cisco_card_driver dev_c3600_nm_4t_driver;
+extern struct cisco_card_driver dev_c3600_leopard_2fe_driver;
+extern struct cisco_card_driver dev_c3600_nm_16esw_driver;
 
 #endif

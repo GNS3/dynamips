@@ -216,7 +216,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
                                      memop_fast_access op_handler)
 {   
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exception,*p_exit;
+   u_char *test1,*test2,*p_exit;
 
    test2 = NULL;
 
@@ -286,14 +286,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    /* Call memory access function */
    amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
 
-   /* Exception ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
-   p_exception = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-
    amd64_patch(p_exit,b->jit_ptr);
-   amd64_patch(p_exception,b->jit_ptr);
 }
 
 /* Fast memory operation (32-bit) */
@@ -303,7 +296,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
                                      memop_fast_access op_handler)
 {   
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exception,*p_exit;
+   u_char *test1,*test2,*p_exit;
 
    test2 = NULL;
 
@@ -373,14 +366,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    /* Call memory access function */
    amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
 
-   /* Exception ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
-   p_exception = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-
    amd64_patch(p_exit,b->jit_ptr);
-   amd64_patch(p_exception,b->jit_ptr);
 }
 
 /* Fast memory operation */
@@ -407,7 +393,6 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
                               int target,int keep_ll_bit)
 {
    m_uint64_t val = sign_extend(offset,16);
-   u_char *test1;
 
    /* Save PC for exception handling */
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
@@ -431,13 +416,6 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
 
    /* Call memory access function */
    amd64_call_membase(b->jit_ptr,AMD64_RDI,MEMOP_OFFSET(op));
-
-   /* Exception ? */
-   amd64_test_reg_reg_size(b->jit_ptr,AMD64_RAX,AMD64_RAX,4);
-   test1 = b->jit_ptr;
-   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-   amd64_patch(test1,b->jit_ptr);
 }
 
 /* Coprocessor Register transfert operation */
@@ -567,7 +545,8 @@ void mips64_check_pending_irq(mips64_jit_tcb_t *b)
 /* Increment the number of executed instructions (performance debugging) */
 void mips64_inc_perf_counter(mips64_jit_tcb_t *b)
 { 
-   amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,perf_counter));
+   amd64_inc_membase_size(b->jit_ptr,
+                          AMD64_R15,OFFSET(cpu_mips_t,perf_counter),4);
 }
 
 /* ADD */

@@ -15,64 +15,65 @@
 #include "memory.h"
 #include "device.h"
 #include "nmc93cX6.h"
-#include "dev_msfc1.h"
+#include "dev_c6msfc1.h"
 
 #define DEBUG_UNKNOWN  1
 #define DEBUG_ACCESS   1
 #define DEBUG_NET_IRQ  1
 
 /* Midplane FPGA private data */
-struct msfc1_mpfpga_data {
+struct c6msfc1_mpfpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
 
-   msfc1_t *router;
+   c6msfc1_t *router;
    m_uint32_t irq_status;
    m_uint32_t intr_enable;
 };
 
 /* Update network interrupt status */
-static inline void dev_msfc1_mpfpga_net_update_irq(struct msfc1_mpfpga_data *d)
+static inline 
+void dev_c6msfc1_mpfpga_net_update_irq(struct c6msfc1_mpfpga_data *d)
 {
    if (d->irq_status) {
-      vm_set_irq(d->router->vm,MSFC1_NETIO_IRQ);
+      vm_set_irq(d->router->vm,C6MSFC1_NETIO_IRQ);
    } else {
-      vm_clear_irq(d->router->vm,MSFC1_NETIO_IRQ);
+      vm_clear_irq(d->router->vm,C6MSFC1_NETIO_IRQ);
    }
 }
 
 /* Trigger a Network IRQ for the specified slot/port */
-void dev_msfc1_mpfpga_net_set_irq(struct msfc1_mpfpga_data *d,
-                                  u_int slot,u_int port)
+void dev_c6msfc1_mpfpga_net_set_irq(struct c6msfc1_mpfpga_data *d,
+                                    u_int slot,u_int port)
 {
 #if DEBUG_NET_IRQ
    vm_log(d->router->vm,"MP_FPGA","setting NetIRQ for slot %u port %u\n",
           slot,port);
 #endif
-   //d->net_irq_status[irq_dist->reg] |= 1 << (irq_dist->offset + port);
-   dev_msfc1_mpfpga_net_update_irq(d);
+   d->irq_status |= 1 << slot;
+   dev_c6msfc1_mpfpga_net_update_irq(d);
 }
 
 /* Clear a Network IRQ for the specified slot/port */
-void dev_msfc1_mpfpga_net_clear_irq(struct msfc1_mpfpga_data *d,
-                                    u_int slot,u_int port)
+void dev_c6msfc1_mpfpga_net_clear_irq(struct c6msfc1_mpfpga_data *d,
+                                      u_int slot,u_int port)
 {
 #if DEBUG_NET_IRQ
    vm_log(d->router->vm,"MP_FPGA","clearing NetIRQ for slot %u port %u\n",
           slot,port);
 #endif
-   //d->net_irq_status[irq_dist->reg] &= ~(1 << (irq_dist->offset + port));
-   dev_msfc1_mpfpga_net_update_irq(d);
+   d->irq_status &= ~(1 << slot);
+   dev_c6msfc1_mpfpga_net_update_irq(d);
 }
 
 /*
- * dev_msfc1_access()
+ * dev_c6msfc1_access()
  */
-void *dev_msfc1_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
-                              m_uint32_t offset,u_int op_size,u_int op_type,
-                              m_uint64_t *data)
+void *dev_c6msfc1_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
+                                m_uint32_t offset,u_int op_size,u_int op_type,
+                                m_uint64_t *data)
 {
-   struct msfc1_mpfpga_data *d = dev->priv_data;
+   struct c6msfc1_mpfpga_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -112,7 +113,11 @@ void *dev_msfc1_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             d->intr_enable = *data;
          break;
          
-      /* Read when a Network Interrupt is triggered */
+      /* 
+       * Read when a Network Interrupt is triggered.
+       *   Bit 0: EOBC
+       *   Bit 1: IBC
+       */
       case 0x18:
       case 0x1b:
          if (op_type == MTS_READ)
@@ -122,10 +127,10 @@ void *dev_msfc1_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 #if DEBUG_UNKNOWN
       default:
          if (op_type == MTS_READ) {
-            cpu_log(cpu,"MP_FPGA","read from addr 0x%x, pc=0x%llx\n",
+            cpu_log(cpu,"MP_FPGA","read from unknown addr 0x%x, pc=0x%llx\n",
                     offset,cpu_get_pc(cpu));
          } else {
-            cpu_log(cpu,"MP_FPGA","write to addr 0x%x, value=0x%llx, "
+            cpu_log(cpu,"MP_FPGA","write to unknown addr 0x%x, value=0x%llx, "
                     "pc=0x%llx\n",offset,*data,cpu_get_pc(cpu));
          }
 #endif
@@ -136,7 +141,7 @@ void *dev_msfc1_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
 /* Shutdown the MP FPGA device */
 static void 
-dev_msfc1_mpfpga_shutdown(vm_instance_t *vm,struct msfc1_mpfpga_data *d)
+dev_c6msfc1_mpfpga_shutdown(vm_instance_t *vm,struct c6msfc1_mpfpga_data *d)
 {
    if (d != NULL) {
       /* Remove the device */
@@ -148,11 +153,11 @@ dev_msfc1_mpfpga_shutdown(vm_instance_t *vm,struct msfc1_mpfpga_data *d)
 }
 
 /* 
- * dev_msfc1_mpfpga_init()
+ * dev_c6msfc1_mpfpga_init()
  */
-int dev_msfc1_mpfpga_init(msfc1_t *router,m_uint64_t paddr,m_uint32_t len)
+int dev_c6msfc1_mpfpga_init(c6msfc1_t *router,m_uint64_t paddr,m_uint32_t len)
 {   
-   struct msfc1_mpfpga_data *d;
+   struct c6msfc1_mpfpga_data *d;
 
    /* Allocate private data structure */
    if (!(d = malloc(sizeof(*d)))) {
@@ -166,14 +171,14 @@ int dev_msfc1_mpfpga_init(msfc1_t *router,m_uint64_t paddr,m_uint32_t len)
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "mp_fpga";
    d->vm_obj.data = d;
-   d->vm_obj.shutdown = (vm_shutdown_t)dev_msfc1_mpfpga_shutdown;
+   d->vm_obj.shutdown = (vm_shutdown_t)dev_c6msfc1_mpfpga_shutdown;
 
    /* Set device properties */
    dev_init(&d->dev);
    d->dev.name      = "mp_fpga";
    d->dev.phys_addr = paddr;
    d->dev.phys_len  = len;
-   d->dev.handler   = dev_msfc1_mpfpga_access;
+   d->dev.handler   = dev_c6msfc1_mpfpga_access;
    d->dev.priv_data = d;
 
    /* Map this device to the VM */

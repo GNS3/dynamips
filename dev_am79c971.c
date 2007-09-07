@@ -30,8 +30,8 @@
 #define DEBUG_BCR_REGS   0
 #define DEBUG_PCI_REGS   0
 #define DEBUG_ACCESS     0
-#define DEBUG_TRANSMIT   0
-#define DEBUG_RECEIVE    0
+#define DEBUG_TRANSMIT   1
+#define DEBUG_RECEIVE    1
 #define DEBUG_UNKNOWN    0
 
 /* AMD Am79c971 PCI vendor/product codes */
@@ -502,7 +502,8 @@ static void am79c971_bdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
          if (op_type == MTS_READ) {
             cpu_log(cpu,d->name,"read access to unknown BCR %d\n",d->rap);
          } else {
-            cpu_log(cpu,d->name,"write access to unknown BCR %d, value=0x%x\n",
+            cpu_log(cpu,d->name,
+                    "write access to unknown BCR %d, value=0x%x\n",
                     d->rap,*data);
          }
 #endif
@@ -737,7 +738,7 @@ static int am79c971_handle_rxring(netio_desc_t *nio,
     * Don't start receive if the RX ring address has not been set
     * and if RX ON is not set.
     */
-   if ((d->rx_start == 0) || !(d->csr[0] & AM79C971_CSR0_TXON))
+   if ((d->rx_start == 0) || !(d->csr[0] & AM79C971_CSR0_RXON))
       return(FALSE);
 
 #if DEBUG_RECEIVE
@@ -752,6 +753,7 @@ static int am79c971_handle_rxring(netio_desc_t *nio,
     * for this virtual machine.
     */
    hdr = (n_eth_hdr_t *)pkt;
+
    if (am79c971_handle_mac_addr(d,pkt))
       am79c971_receive_pkt(d,pkt,pkt_len);
 
@@ -817,7 +819,7 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
    struct tx_desc txd0,ctxd,ntxd,*ptxd;
    m_uint32_t tx_start,tx_current;
    m_uint32_t clen,tot_len;
-
+   
    if ((d->tx_start == 0) || !(d->csr[0] & AM79C971_CSR0_TXON))
       return(FALSE);
    
@@ -825,11 +827,11 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
    tx_start = tx_current = txdesc_get_current(d);
    ptxd = &txd0;
    txdesc_read(d,tx_start,ptxd);
-
+   
    /* If we don't own the first descriptor, we cannot transmit */
    if (!(ptxd->tmd[1] & AM79C971_TMD1_OWN))
       return(FALSE);
-   
+    
 #if DEBUG_TRANSMIT
    AM79C971_LOG(d,"am79c971_handle_txring: 1st desc: "
                 "tmd[0]=0x%x, tmd[1]=0x%x, tmd[2]=0x%x, tmd[3]=0x%x\n",
@@ -886,6 +888,9 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
       AM79C971_LOG(d,"sending packet of %u bytes\n",tot_len);
       mem_dump(log_file,pkt,tot_len);
 #endif
+      /* rewrite ISL header if required */
+      cisco_isl_rewrite(pkt,tot_len);
+
       /* send it on wire */
       netio_send(d->nio,pkt,tot_len);
    }
@@ -1036,7 +1041,7 @@ void dev_am79c971_remove(struct am79c971_data *d)
 
 /* Bind a NIO to an AMD Am79c971 device */
 int dev_am79c971_set_nio(struct am79c971_data *d,netio_desc_t *nio)
-{
+{   
    /* check that a NIO is not already bound */
    if (d->nio != NULL)
       return(-1);

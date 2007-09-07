@@ -24,6 +24,7 @@
 
 #include "utils.h"
 #include "net.h"
+#include "crc.h"
 
 /* 
  * IP mask table, which allows to find quickly a network mask 
@@ -353,10 +354,10 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
 
 #if HAS_RFC2553
 /* Listen on the specified port */
-int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
+int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
 {
    struct addrinfo hints,*res,*res0;
-   char port_str[20];
+   char port_str[20],*addr;
    int nsock,error,i;
    int reuse = 1;
    
@@ -369,8 +370,9 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
    hints.ai_flags = AI_PASSIVE;
 
    snprintf(port_str,sizeof(port_str),"%d",port);
+   addr = (ip_addr && strlen(ip_addr)) ? ip_addr : NULL;
 
-   if ((error = getaddrinfo(NULL,port_str,&hints,&res0)) != 0) {
+   if ((error = getaddrinfo(addr,port_str,&hints,&res0)) != 0) {
       fprintf(stderr,"ip_listen: %s", gai_strerror(error));
       return(-1);
    }
@@ -390,7 +392,7 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
       setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
 
       if ((bind(fd_array[nsock],res->ai_addr,res->ai_addrlen) < 0) ||
-          (listen(fd_array[nsock],5) < 0))
+          ((sock_type == SOCK_STREAM) && (listen(fd_array[nsock],5) < 0)))
       {
          close(fd_array[nsock]);
          fd_array[nsock] = -1;
@@ -405,7 +407,7 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
 }
 #else
 /* Listen on the specified port */
-int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
+int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
 {
    struct sockaddr_in sin;
    int i,sck,reuse=1;
@@ -423,6 +425,9 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
    sin.sin_family = PF_INET;
    sin.sin_port   = htons(port);
 
+   if (ip_addr && strlen(ip_addr))
+      sin.sin_addr.s_addr = inet_addr(ip_addr);
+
    setsockopt(fd_array[0],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
 
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
@@ -430,7 +435,7 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
       goto error;
    }
 
-   if (listen(sck,5) < 0) {
+   if ((sock_type == SOCK_STREAM) && (listen(sck,5) < 0)) {
       perror("ip_listen: listen");
       goto error;
    }
@@ -443,3 +448,36 @@ int ip_listen(int port,int sock_type,int max_fd,int fd_array[])
    return(-1);
 }
 #endif
+
+/* 
+ * ISL rewrite.
+ *
+ * See: http://www.cisco.com/en/US/tech/tk389/tk390/technologies_tech_note09186a0080094665.shtml
+ */
+void cisco_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len)
+{
+   static m_uint8_t isl_xaddr[N_ETH_ALEN] = { 0x01,0x00,0x0c,0x00,0x10,0x00 };
+   u_int real_offset,real_len;
+   n_eth_hdr_t *hdr;
+   m_uint32_t ifcs;
+
+   hdr = (n_eth_hdr_t *)pkt;
+   if (!memcmp(&hdr->daddr,isl_xaddr,N_ETH_ALEN)) {
+      real_offset = N_ETH_HLEN + N_ISL_HDR_SIZE;
+      real_len    = ntohs(hdr->type);
+      real_len    -= (N_ISL_HDR_SIZE + 4);
+   
+      if ((real_offset+real_len) > tot_len)
+         return;
+   
+      /* Rewrite the destination MAC address */
+      hdr->daddr.eth_addr_byte[4] = 0x00;
+
+      /* Compute the internal FCS on the encapsulated packet */
+      ifcs = crc32_compute(0xFFFFFFFF,pkt+real_offset,real_len);
+      pkt[tot_len-4] = ifcs & 0xff;
+      pkt[tot_len-3] = (ifcs >> 8) & 0xff;
+      pkt[tot_len-2] = (ifcs >> 16) & 0xff;
+      pkt[tot_len-1] = ifcs >> 24;
+   }
+}

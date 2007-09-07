@@ -227,7 +227,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
                                      memop_fast_access op_handler)
 {
    m_uint64_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*test3,*p_exception,*p_exit;
+   u_char *test1,*test2,*test3,*p_exit;
 
    test3 = NULL;
 
@@ -310,14 +310,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 
-   /* Check for exception */
-   x86_test_reg_reg(b->jit_ptr,X86_EAX,X86_EAX);
-   p_exception = b->jit_ptr;
-   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-
    x86_patch(p_exit,b->jit_ptr);
-   x86_patch(p_exception,b->jit_ptr);
 }
 
 /* Fast memory operation (32-bit) */
@@ -327,7 +320,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
                                      memop_fast_access op_handler)
 {
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exception,*p_exit;
+   u_char *test1,*test2,*p_exit;
 
    test2 = NULL;
 
@@ -405,14 +398,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 
-   /* Check for exception */
-   x86_test_reg_reg(b->jit_ptr,X86_EAX,X86_EAX);
-   p_exception = b->jit_ptr;
-   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-
    x86_patch(p_exit,b->jit_ptr);
-   x86_patch(p_exception,b->jit_ptr);
 }
 
 /* Fast memory operation */
@@ -439,7 +425,6 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
                               int target,int keep_ll_bit)
 {
    m_uint64_t val = sign_extend(offset,16);
-   u_char *test1;
 
    /* Save PC for exception handling */
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
@@ -471,13 +456,6 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
    x86_push_reg(b->jit_ptr,X86_EBX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(op));
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
-
-   /* Exception ? */
-   x86_test_reg_reg(b->jit_ptr,X86_EAX,X86_EAX);
-   test1 = b->jit_ptr;
-   x86_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   mips64_jit_tcb_push_epilog(b);
-   x86_patch(test1,b->jit_ptr);
 }
 
 /* Coprocessor Register transfert operation */
@@ -501,8 +479,10 @@ static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void *f)
 /* Virtual Breakpoint */
 void mips64_emit_breakpoint(mips64_jit_tcb_t *b)
 {
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    mips64_emit_c_call(b,mips64_run_breakpoint);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Unknown opcode handler */
@@ -542,16 +522,14 @@ static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 /* Emit unhandled instruction code */
 int mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b)
 {   
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    mips64_emit_c_call(b,mips64_invalid_delay_slot);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
-
-/* Located in external assembly module */
-#ifdef FAST_ASM
-extern void mips64_inc_cp0_cnt_asm(void);
-#endif
 
 /* 
  * Increment count register and trigger the timer IRQ if value in compare 
@@ -560,15 +538,6 @@ extern void mips64_inc_cp0_cnt_asm(void);
 void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b)
 {
    x86_inc_membase(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,cp0_virt_cnt_reg));
-
-#if 0 /* TIMER_IRQ */
-#ifdef FAST_ASM
-   mips64_emit_basic_c_call(b,mips64_inc_cp0_cnt_asm);
-#else
-   x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
-   mips64_emit_basic_c_call(b,mips64_exec_inc_cp0_cnt);
-#endif
-#endif
 }
 
 /* Check if there are pending IRQ */
@@ -597,10 +566,7 @@ void mips64_check_pending_irq(mips64_jit_tcb_t *b)
 /* Increment the number of executed instructions (performance debugging) */
 void mips64_inc_perf_counter(mips64_jit_tcb_t *b)
 {
-   x86_alu_membase_imm(b->jit_ptr,X86_ADD,
-                       X86_EDI,OFFSET(cpu_mips_t,perf_counter),1);
-   x86_alu_membase_imm(b->jit_ptr,X86_ADC,
-                       X86_EDI,OFFSET(cpu_mips_t,perf_counter)+4,0);
+   x86_inc_membase(b->jit_ptr,X86_EDI,OFFSET(cpu_mips_t,perf_counter));
 }
 
 /* ADD */
@@ -1421,9 +1387,12 @@ DECLARE_INSN(BREAK)
 {	
    u_int code = bits(insn,6,25);
 
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_imm(b->jit_ptr,X86_EDX,code);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    mips64_emit_basic_c_call(b,mips64_exec_break);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
@@ -2823,8 +2792,11 @@ DECLARE_INSN(TEQ)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   
    mips64_jit_tcb_push_epilog(b);
 
    /* end */
@@ -2857,8 +2829,11 @@ DECLARE_INSN(TEQI)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+
    mips64_jit_tcb_push_epilog(b);
 
    /* end */

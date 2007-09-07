@@ -308,8 +308,8 @@ enum {
 typedef struct cpu_mips cpu_mips_t;
 
 /* Memory operation function prototype */
-typedef fastcall u_int (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
-                                        u_int reg);
+typedef fastcall void (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
+                                       u_int reg);
 
 /* TLB entry definition */
 typedef struct {
@@ -446,7 +446,7 @@ struct cpu_mips {
    mips_insn_t *njm_exec_ptr;
 
    /* Performance counter (number of instructions executed by CPU) */
-   m_uint64_t perf_counter;
+   m_uint32_t perf_counter;
 
    /* Breakpoints */
    m_uint64_t breakpoints[MIPS64_MAX_BREAKPOINTS];

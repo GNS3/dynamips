@@ -12,6 +12,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <signal.h>
 
 /* True/False definitions */
 #ifndef FALSE
@@ -49,6 +51,8 @@
 #elif defined(__i386) || defined(__i386__) || defined(i386)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__x86_64__)
+#define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
+#elif defined(__ia64__)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #endif
 
@@ -89,7 +93,7 @@
 
 #if __GNUC__ > 2
 /* http://kerneltrap.org/node/4705 */
-#define likely(x)    __builtin_expect((x),1)
+#define likely(x)    __builtin_expect(!!(x),1)
 #define unlikely(x)  __builtin_expect((x),0)
 #else
 #define likely(x)    (x)
@@ -115,6 +119,7 @@ typedef m_uint64_t m_tmcnt_t;
 /* Forward declarations */
 typedef struct cpu_gen cpu_gen_t;
 typedef struct vm_instance vm_instance_t;
+typedef struct vm_platform vm_platform_t;
 typedef struct mips64_jit_tcb mips64_jit_tcb_t;
 typedef struct ppc32_jit_tcb ppc32_jit_tcb_t;
 typedef struct jit_op jit_op_t;
@@ -167,6 +172,7 @@ typedef struct {
    m_uint64_t len;
    m_uint32_t cached;
    m_uint32_t tlb_index;
+   m_uint32_t offset;
 }mts_map_t;
 
 /* Invalid VTLB entry */
@@ -351,7 +357,7 @@ void m_log(char *module,char *fmt,...);
 char *m_fgets(char *buffer,int size,FILE *fd);
 
 /* Read a file and returns it in a buffer */
-ssize_t m_read_file(char *filename,char **buffer);
+ssize_t m_read_file(char *filename,u_char **buffer);
 
 /* Allocate aligned memory */
 void *m_memalign(size_t boundary,size_t size);

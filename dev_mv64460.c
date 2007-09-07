@@ -89,7 +89,6 @@
 #define MV64460_SDMA_SDC          0x0000  /* Configuration Register */
 #define MV64460_SDMA_SDCM         0x0008  /* Command Register */
 #define MV64460_SDMA_RX_DESC      0x0800  /* RX descriptor */
-#define MV64460_SDMA_RX_BUF_PTR   0x0808  /* Current buffer address ? */
 #define MV64460_SDMA_SCRDP        0x0810  /* Current RX descriptor */
 #define MV64460_SDMA_TX_DESC      0x0c00  /* TX descriptor */
 #define MV64460_SDMA_SCTDP        0x0c10  /* Current TX desc. pointer */
@@ -366,7 +365,7 @@ static int mv64460_sdma_access(struct mv64460_data *d,cpu_gen_t *cpu,
                                m_uint32_t offset,m_uint32_t op_type,
                                m_uint64_t *data)
 {
-   struct sdma_channel *chan;
+   struct sdma_channel *channel;
    int id = -1;
 
    /* Access to SDMA channel 0 registers ? */
@@ -391,38 +390,39 @@ static int mv64460_sdma_access(struct mv64460_data *d,cpu_gen_t *cpu,
    if (op_type == MTS_WRITE)
       *data = swap32(*data);
 
-   chan = &d->sdma[id];
+   channel = &d->sdma[id];
+
    switch(offset) {
       case MV64460_SDMA_SDCM:
          if (op_type == MTS_READ)
             ; //*data = chan->sdcm;
          else {
-            chan->sdcm = *data;
+            channel->sdcm = *data;
 
-            if (chan->sdcm & MV64460_SDCM_TXD)
-               mv64460_sdma_tx_start(d,chan);
+            if (channel->sdcm & MV64460_SDCM_TXD)
+               mv64460_sdma_tx_start(d,channel);
          }
          break;
 
       case MV64460_SDMA_SCRDP:
          if (op_type == MTS_READ)
-            *data = chan->scrdp;
+            *data = channel->scrdp;
          else
-            chan->scrdp = *data;
+            channel->scrdp = *data;
          break;
 
       case MV64460_SDMA_SCTDP:
          if (op_type == MTS_READ)
-            *data = chan->sctdp;
+            *data = channel->sctdp;
          else
-            chan->sctdp = *data;
+            channel->sctdp = *data;
          break;
 
       case MV64460_SDMA_SFTDP:
          if (op_type == MTS_READ)
-            *data = chan->sftdp;
+            *data = channel->sftdp;
          else
-            chan->sftdp = *data;
+            channel->sftdp = *data;
          break;
 
 #if DEBUG_UNKNOWN

@@ -1544,8 +1544,9 @@ static void ti1570_reset(struct pa_a1_data *d,int clear_ctrl_mem)
  *
  * Add a PA-A1 port adapter into specified slot.
  */
-int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
+int dev_c7200_pa_a1_init(vm_instance_t *vm,struct cisco_card *card)
 {   
+   u_int slot = card->slot_id;
    struct pci_device *pci_dev_ti,*pci_dev_plx;
    struct pa_a1_data *d;
    struct vdevice *dev;
@@ -1553,49 +1554,53 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
 
    /* Allocate the private data structure for TI1570 chip */
    if (!(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"%s (TI1570): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
    memset(d,0,sizeof(*d));
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-A1"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-A1"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Add PCI device TI1570 */
-   pci_dev_ti = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
+   pci_dev_ti = pci_dev_add(card->pci_bus,card->dev_name,
                             TI1570_PCI_VENDOR_ID,TI1570_PCI_PRODUCT_ID,
-                            0,0,c7200_net_irq_for_slot_port(pa_bay,0),d,
+                            0,0,c7200_net_irq_for_slot_port(slot,0),d,
                             NULL,pci_ti1570_read,pci_ti1570_write);
 
    if (!pci_dev_ti) {
-      fprintf(stderr,"%s (TI1570): unable to create PCI device TI1570.\n",
-              name);
+      vm_error(vm,"%s: unable to create PCI device TI1570.\n",
+               card->dev_name);
       return(-1);
    }
 
    /* Add PCI device PLX9060ES */
-   pci_dev_plx = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
+   pci_dev_plx = pci_dev_add(card->pci_bus,card->dev_name,
                              PLX_9060ES_PCI_VENDOR_ID,
                              PLX_9060ES_PCI_PRODUCT_ID,
                              1,0,-1,d,
                              NULL,pci_plx9060es_read,pci_plx9060es_write);
 
    if (!pci_dev_plx) {
-      fprintf(stderr,"%s (PLX_9060ES): unable to create PCI device "
-              "PLX 9060ES.\n",name);
+      vm_error(vm,"%s: unable to create PCI device PLX 9060ES.\n",
+               card->dev_name);
       return(-1);
    }
 
    /* Create the TI1570 structure */
-   d->name        = name;
-   d->vm          = router->vm;
+   d->name        = card->dev_name;
+   d->vm          = vm;
    d->pci_dev_ti  = pci_dev_ti;
    d->pci_dev_plx = pci_dev_plx;
 
    /* Allocate the control memory */
    if (!(d->ctrl_mem_ptr = malloc(TI1570_CTRL_MEM_SIZE))) {
-      fprintf(stderr,"%s (PA-A1): unable to create control memory.\n",name);
+      vm_error(vm,"%s: unable to create control memory.\n",card->dev_name);
       return(-1);
    }
 
@@ -1612,8 +1617,8 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    ti1570_reset(d,TRUE);
 
    /* Create the device itself */
-   if (!(dev = dev_create(name))) {
-      fprintf(stderr,"%s (PA-A1): unable to create device.\n",name);
+   if (!(dev = dev_create(card->dev_name))) {
+      vm_error(vm,"%s: unable to create device.\n",card->dev_name);
       return(-1);
    }
 
@@ -1626,30 +1631,26 @@ int dev_c7200_pa_a1_init(c7200_t *router,char *name,u_int pa_bay)
    d->dev = dev;
    
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+   card->drv_info = d;
+   return(0);
 }
 
 /* Remove a PA-A1 from the specified slot */
-int dev_c7200_pa_a1_shutdown(c7200_t *router,u_int pa_bay) 
+int dev_c7200_pa_a1_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa_a1_data *d;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   d = bay->drv_info;
+   struct pa_a1_data *d = card->drv_info;
 
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the PCI devices */
    pci_dev_remove(d->pci_dev_ti);
    pci_dev_remove(d->pci_dev_plx);
 
    /* Remove the device from the VM address space */
-   vm_unbind_device(router->vm,d->dev);
-   cpu_group_rebuild_mts(router->vm->cpu_group);
+   vm_unbind_device(vm,d->dev);
+   cpu_group_rebuild_mts(vm->cpu_group);
 
    /* Free the control memory */
    free(d->ctrl_mem_ptr);
@@ -1661,12 +1662,12 @@ int dev_c7200_pa_a1_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_a1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                            netio_desc_t *nio)
+int dev_c7200_pa_a1_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                            u_int port_id,netio_desc_t *nio)
 {
-   struct pa_a1_data *d;
+   struct pa_a1_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio != NULL)
@@ -1679,11 +1680,12 @@ int dev_c7200_pa_a1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
 }
 
 /* Unbind a Network IO descriptor to a specific port */
-int dev_c7200_pa_a1_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+int dev_c7200_pa_a1_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                              u_int port_id)
 {
-   struct pa_a1_data *d;
+   struct pa_a1_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio) {
@@ -1695,10 +1697,11 @@ int dev_c7200_pa_a1_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
 }
 
 /* PA-A1 driver */
-struct c7200_pa_driver dev_c7200_pa_a1_driver = {
-   "PA-A1", 1, 
+struct cisco_card_driver dev_c7200_pa_a1_driver = {
+   "PA-A1", 1, 0,
    dev_c7200_pa_a1_init,
    dev_c7200_pa_a1_shutdown,
+   NULL,
    dev_c7200_pa_a1_set_nio,
    dev_c7200_pa_a1_unset_nio,
    NULL,

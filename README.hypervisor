@@ -8,7 +8,7 @@ or Frame-Relay networks.
 Running dynamips in hypervisor mode
 ===================================
 
-dynamips -H <tcp_port>
+dynamips -H [<ip_address>:]<tcp_port>
 
 Managing the hypervisor
 =======================

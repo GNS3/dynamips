@@ -1,4 +1,4 @@
-# Makefile for Dynamips 0.2.6
+# Makefile for Dynamips 0.2.8
 # Copyright (c) 2005-2006 Christophe Fillot.
 
 # Replace x86 by amd64 for a build on x86_64.
@@ -12,9 +12,12 @@ HAS_RFC2553?=1
 # (WinPcap is used for Cygwin)
 HAS_PCAP?=1
 
+# Change this to 1 if your system has posix_memalign
+HAS_POSIX_MEMALIGN?=0
+
 # Current dynamips release
-VERSION_TRAIN=0.2.7
-VERSION_SUB=
+VERSION_TRAIN=0.2.8
+VERSION_SUB=-RC1
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -38,32 +41,34 @@ CFLAGS+=-g -Wall -O3 -fomit-frame-pointer \
 	-DPPC32_ARCH_INC_FILE=$(PPC32_ARCH_INC_FILE) \
 	-DDYNAMIPS_VERSION=\"$(VERSION)\" \
 	-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE \
-	-DHAS_RFC2553=$(HAS_RFC2553)
+	-DHAS_RFC2553=$(HAS_RFC2553) \
+	-DHAS_POSIX_MEMALIGN=$(HAS_POSIX_MEMALIGN)
 
-PCAP_LIB=/usr/local/lib/libpcap.a
-#PCAP_LIB=-lpcap
+#PCAP_LIB=/usr/local/lib/libpcap.a
+PCAP_LIB=-lpcap
 
 ifeq ($(shell uname), FreeBSD)
    PTHREAD_LIBS?=-pthread
-   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf $(PTHREAD_CFLAGS) \
-         -D_FILE_OFFSET_BITS=64
-   LIBS=-L/usr/local/lib -L. -lelf $(PTHREAD_LIBS)
+   LOCALBASE?=/usr/local
+   CFLAGS+=-I$(LOCALBASE)/include -I$(LOCALBASE)/include/libelf \
+	$(PTHREAD_CFLAGS) -D_FILE_OFFSET_BITS=64
+   LIBS=-L$(LOCALBASE)/lib -L. -ldl -lelf $(PTHREAD_LIBS) $(LDFLAGS)
 else
 ifeq ($(shell uname), Linux)
    PTHREAD_LIBS?=-lpthread
 #   PCAP_LIB=-lpcap
    CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. /usr/lib/libelf.a $(PTHREAD_LIBS)
+   LIBS=-L/usr/lib -L. -ldl /usr/lib/libelf.a $(PTHREAD_LIBS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
    CFLAGS+=-I/usr/local/include -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
-   LIBS=-L/usr/local/lib -L. -lelf -lpthread
+   LIBS=-L/usr/local/lib -L. -ldl -lelf -lpthread
 else
 ifeq ($(shell uname -s), SunOS)
    CFLAGS+=-I/usr/local/include -DINADDR_NONE=0xFFFFFFFF \
 	-I /opt/csw/include -DSUNOS
-   LIBS=-L/usr/local/lib -L. -lelf -lpthread -L/opt/csw/lib \
+   LIBS=-L/usr/local/lib -L. -ldl -lelf -lpthread -L/opt/csw/lib \
 	-lsocket -lnsl -lresolv
    PCAP_LIB=/opt/csw/lib/libpcap.a
 else
@@ -74,7 +79,7 @@ ifeq ($(shell uname -o), Cygwin)
    PCAP_LIB=-lpacket -lwpcap
 else
    CFLAGS+=-I/usr/include/libelf -D_FILE_OFFSET_BITS=64
-   LIBS=-L. /usr/lib/libelf.a -lpthread
+   LIBS=-L. -ldl /usr/lib/libelf.a -lpthread
 endif
 endif
 endif
@@ -89,56 +94,67 @@ PACKAGE_DEV=$(PROG)-$(VERSION_DEV)
 ARCHIVE_DEV=$(PACKAGE_DEV).tar.gz
 
 # Header and source files
-HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h \
+HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
 	crc.h sbox.h base64.h net.h net_io.h net_io_bridge.h net_io_filter.h \
 	atm.h frame_relay.h eth_switch.h \
 	ptask.h timer.h dev_vtty.h hypervisor.h dynamips.h insn_lookup.h \
 	vm.h cpu.h jit_op.h memory.h device.h \
 	mips64.h mips64_mem.h mips64_exec.h mips64_jit.h mips64_cp0.h \
 	ppc32.h ppc32_mem.h ppc32_exec.h ppc32_jit.h ppc32_vmtest.h \
-	nmc93cX6.h cisco_eeprom.h ds1620.h dev_rom.h \
+	nmc93cX6.h cisco_eeprom.h cisco_card.h ds1620.h dev_rom.h \
 	pci_dev.h pci_io.h dev_mpc860.h dev_gt.h dev_mv64460.h dev_plx.h \
-	dev_dec21140.h dev_am79c971.h dev_i8254x.h \
-	dev_mueslix.h dev_nm_16esw.h \
+	dev_dec21140.h dev_am79c971.h dev_i8254x.h dev_i8255x.h \
+	dev_mueslix.h dev_nm_16esw.h dev_wic_serial.h \
 	dev_c7200.h dev_c7200_mpfpga.h \
 	dev_c3600.h dev_c3600_iofpga.h dev_c3600_bay.h \
 	dev_c2691.h dev_c2691_iofpga.h \
 	dev_c3725.h dev_c3725_iofpga.h \
 	dev_c3745.h dev_c3745_iofpga.h \
 	dev_c2600.h dev_c2600_iofpga.h \
-	dev_msfc1.h dev_msfc1_mpfpga.h
+	dev_c1700.h dev_c1700_iofpga.h \
+	dev_c6msfc1.h dev_c6msfc1_mpfpga.h \
+	dev_c6sup1.h dev_c6sup1_mpfpga.h \
+	rommon_var.h
 
 SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
-	ptask.c timer.c crc.c base64.c \
+	plugin.c ptask.c timer.c crc.c base64.c \
 	net.c net_io.c net_io_bridge.c net_io_filter.c \
 	atm.c frame_relay.c eth_switch.c \
 	dynamips.c insn_lookup.c vm.c cpu.c jit_op.c \
 	mips64.c mips64_mem.c mips64_cp0.c mips64_jit.c mips64_exec.c \
 	ppc32.c ppc32_mem.c ppc32_jit.c ppc32_exec.c ppc32_vmtest.c \
-	memory.c device.c nmc93cX6.c cisco_eeprom.c \
+	memory.c device.c nmc93cX6.c cisco_eeprom.c cisco_card.c \
 	pci_dev.c pci_io.c \
 	dev_zero.c dev_bswap.c dev_vtty.c dev_ram.c dev_rom.c dev_nvram.c \
 	dev_bootflash.c dev_flash.c dev_mpc860.c \
 	dev_remote.c dev_clpd6729.c dev_pcmcia_disk.c dev_gt.c dev_mv64460.c \
 	dev_plx.c dev_dec21x50.c dev_pericom.c dev_ti2050b.c dev_ap1011.c \
-	dev_plx6520cb.c \
-	dev_ns16552.c dev_dec21140.c dev_am79c971.c dev_i8254x.c \
-	dev_mueslix.c \
+	dev_plx6520cb.c dev_ns16552.c \
+	dev_dec21140.c dev_am79c971.c dev_i8254x.c dev_i8255x.c \
+	dev_mueslix.c dev_wic_serial.c \
 	dev_c3600.c dev_c3600_bay.c dev_c3600_iofpga.c \
 	dev_c3600_eth.c dev_c3600_serial.c \
 	dev_c7200.c dev_c7200_iofpga.c dev_c7200_mpfpga.c \
 	dev_c7200_sram.c dev_c7200_eth.c dev_c7200_serial.c dev_c7200_pos.c \
 	dev_c7200_bri.c \
 	dev_c2691.c dev_c2691_iofpga.c dev_c2691_eth.c dev_c2691_serial.c \
+	dev_c2691_wic.c dev_c2691_pcmod.c \
 	dev_c3725.c dev_c3725_iofpga.c dev_c3725_eth.c dev_c3725_serial.c \
+	dev_c3725_wic.c dev_c3725_pcmod.c \
 	dev_c3745.c dev_c3745_iofpga.c dev_c3745_eth.c dev_c3745_serial.c \
-	dev_c2600.c dev_c2600_pci.c dev_c2600_iofpga.c dev_c2600_eth.c \
-	dev_msfc1.c dev_msfc1_iofpga.c dev_msfc1_mpfpga.c \
+	dev_c3745_wic.c dev_c3745_pcmod.c \
+	dev_c2600.c dev_c2600_pci.c dev_c2600_iofpga.c \
+	dev_c2600_eth.c dev_c2600_pcmod.c dev_c2600_wic.c \
+	dev_c1700.c dev_c1700_iofpga.c dev_c1700_eth.c dev_c1700_wic.c \
+	dev_c6msfc1.c dev_c6msfc1_iofpga.c dev_c6msfc1_mpfpga.c \
+	dev_c6sup1.c dev_c6sup1_iofpga.c dev_c6sup1_mpfpga.c \
 	dev_nm_16esw.c dev_pa_a1.c dev_pa_mc8te1.c \
 	dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
 	hv_nio.c hv_nio_bridge.c hv_frsw.c hv_atmsw.c hv_ethsw.c \
 	hv_vm.c hv_vm_debug.c \
-	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c hv_c2600.c
+	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c \
+	hv_c2600.c hv_c1700.c \
+	rommon_var.c
 
 # Profiling
 #SOURCES += profiler.c
@@ -193,7 +209,7 @@ FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	ppc32_nojit_trans.c ppc32_nojit_trans.h \
 	linux_eth.c linux_eth.h gen_eth.c gen_eth.h \
 	profiler.c profiler_resolve.pl bin2c.c rom2c.c \
-	nvram_export.c udp_send.c 
+	nvram_export.c udp_send.c udp_recv.c
 
 .PHONY: all
 all: $(PROG) nvram_export
@@ -206,6 +222,10 @@ $(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
 udp_send$(BIN_EXT): udp_send.c net.c
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) -o $@ udp_send.c net.c $(LIBS)
+
+udp_recv$(BIN_EXT): udp_recv.c net.c
+	@echo "Linking $@"
+	@$(CC) -Wall $(CFLAGS) -o $@ udp_recv.c net.c $(LIBS)
 
 rom2c$(BIN_EXT): rom2c.c
 	@echo "Linking $@"

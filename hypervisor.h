@@ -35,13 +35,17 @@
 #define HSC_ERR_FILE        211  /* file error */
 #define HSC_ERR_BAD_OBJ     212  /* Bad object */
 
-/* Hypervisor connection */
 typedef struct hypervisor_conn hypervisor_conn_t;
+typedef struct hypervisor_cmd hypervisor_cmd_t;
+typedef struct hypervisor_module hypervisor_module_t;
+
+/* Hypervisor connection */
 struct hypervisor_conn {
-   pthread_t tid;        /* Thread identifier */
-   volatile int active;  /* Connection is active ? */
-   int client_fd;        /* Client FD */
-   FILE *in,*out;        /* I/O buffered streams */
+   pthread_t tid;                    /* Thread identifier */
+   volatile int active;              /* Connection is active ? */
+   int client_fd;                    /* Client FD */
+   FILE *in,*out;                    /* I/O buffered streams */
+   hypervisor_module_t *cur_module;  /* Module of current command */
    hypervisor_conn_t *next,**pprev;
 };
 
@@ -50,7 +54,6 @@ typedef int (*hypervisor_cmd_handler)(hypervisor_conn_t *conn,int argc,
                                       char *argv[]);
 
 /* Hypervisor command */
-typedef struct hypervisor_cmd hypervisor_cmd_t;
 struct hypervisor_cmd {
    char *name;
    int min_param,max_param;
@@ -59,9 +62,9 @@ struct hypervisor_cmd {
 };
 
 /* Hypervisor module */
-typedef struct hypervisor_module hypervisor_module_t;
 struct hypervisor_module {
    char *name;
+   void *opt;
    hypervisor_cmd_t *cmd_list;
    hypervisor_module_t *next;
 };
@@ -87,24 +90,6 @@ extern int hypervisor_vm_init(void);
 /* Hypervisor VM debugging initialization */
 extern int hypervisor_vm_debug_init(void);
 
-/* Hypervisor C7200 initialization */
-extern int hypervisor_c7200_init(void);
-
-/* Hypervisor C3600 initialization */
-extern int hypervisor_c3600_init(void);
-
-/* Hypervisor C2691 initialization */
-extern int hypervisor_c2691_init(void);
-
-/* Hypervisor C3725 initialization */
-extern int hypervisor_c3725_init(void);
-
-/* Hypervisor C3745 initialization */
-extern int hypervisor_c3745_init(void);
-
-/* Hypervisor C2600 initialization */
-extern int hypervisor_c2600_init(void);
-
 /* Send a reply */
 int hypervisor_send_reply(hypervisor_conn_t *conn,int code,int done,
                           char *format,...);
@@ -119,10 +104,10 @@ hypervisor_cmd_t *hypervisor_find_cmd(hypervisor_module_t *module,char *name);
 void *hypervisor_find_object(hypervisor_conn_t *conn,char *name,int obj_type);
 
 /* Find a VM in the registry */
-void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name,int vm_type);
+void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name);
 
 /* Register a module */
-hypervisor_module_t *hypervisor_register_module(char *name);
+hypervisor_module_t *hypervisor_register_module(char *name,void *opt);
 
 /* Register a list of commands */
 int hypervisor_register_cmd_list(hypervisor_module_t *module,
@@ -136,6 +121,6 @@ int hypervisor_register_cmd_array(hypervisor_module_t *module,
 int hypervisor_stopsig(void);
 
 /* Hypervisor TCP server */
-int hypervisor_tcp_server(int tcp_port);
+int hypervisor_tcp_server(char *ip_addr,int tcp_port);
 
 #endif

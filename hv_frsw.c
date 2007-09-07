@@ -144,7 +144,7 @@ int hypervisor_frsw_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("frsw");
+   module = hypervisor_register_module("frsw",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,frsw_cmd_array);

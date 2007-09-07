@@ -379,7 +379,7 @@ int hypervisor_nio_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("nio");
+   module = hypervisor_register_module("nio",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,nio_cmd_array);

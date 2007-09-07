@@ -65,7 +65,7 @@ void parser_context_init(parser_context_t *ctx);
 void parser_context_free(parser_context_t *ctx);
 
 /* Send a buffer to the tokenizer */
-int parser_scan_buffer(parser_context_t *ctx,u_char *buf,size_t buf_size);
+int parser_scan_buffer(parser_context_t *ctx,char *buf,size_t buf_size);
 
 /* Tokenize a string */
 int parser_tokenize(char *str,struct parser_token **tokens,int *tok_count);

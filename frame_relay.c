@@ -23,9 +23,6 @@
 
 #define DEBUG_FRSW  0
 
-/* Number of LMI trailing bytes */
-#define LMI_TRAILING_SIZE  3
-
 extern FILE *log_file;
 
 /* ANSI LMI packet header */   
@@ -62,11 +59,9 @@ ssize_t frsw_handle_lmi_ansi_pkt(frsw_table_t *t,netio_desc_t *input,
    frsw_conn_t *sc;
    u_int dlci;
 
-   if ((len <= (sizeof(lmi_ansi_hdr) + LMI_TRAILING_SIZE)) || 
+   if ((len <= sizeof(lmi_ansi_hdr)) || 
        memcmp(pkt,lmi_ansi_hdr,sizeof(lmi_ansi_hdr)))
       return(-1);
-
-   len -= LMI_TRAILING_SIZE;
 
 #if DEBUG_FRSW
    m_log(input->name,"received an ANSI LMI packet:\n");
@@ -174,9 +169,6 @@ ssize_t frsw_handle_lmi_ansi_pkt(frsw_table_t *t,netio_desc_t *input,
       }
    }
 
-   /* it seems that a trailing is required */
-   memset(pres,0,LMI_TRAILING_SIZE);
-   pres += LMI_TRAILING_SIZE;
    rlen = pres - resp;
 
 #if DEBUG_FRSW
@@ -446,7 +438,7 @@ int frsw_delete_vc(frsw_table_t *t,char *nio_input,u_int dlci_in,
 
          /* Release NIOs */
          frsw_release_vc(p);
-         mp_free(vc);
+         mp_free(p);
          return(0);
       }
    }

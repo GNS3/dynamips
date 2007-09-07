@@ -1,8 +1,6 @@
 /*
  * Cisco 3745 simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
- *
- * This is very similar to c2691.
  */
 
 #include <stdio.h>
@@ -81,6 +79,12 @@ struct c3745_iofpga_data {
 
    /* EEPROM select */
    u_int eeprom_select;
+
+   /* WIC select */
+   u_int wic_select;
+   u_int wic_cmd_pos;
+   u_int wic_cmd_valid;
+   m_uint16_t wic_cmd[2];
 };
 
 /* Motherboard EEPROM definition */
@@ -103,7 +107,11 @@ static const struct nmc93cX6_eeprom_def eeprom_mp_def = {
 
 /* System EEPROM group */
 static const struct nmc93cX6_group eeprom_sys_group = {
-   EEPROM_TYPE_NMC93C46, 3, 0, "System EEPROM", 0, 
+   EEPROM_TYPE_NMC93C46, 3, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "System EEPROM", 
    { &eeprom_mb_def, &eeprom_io_def, &eeprom_mp_def }, 
 };
 
@@ -115,7 +123,12 @@ static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
 
 /* NM EEPROM */
 static const struct nmc93cX6_group eeprom_nm_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "NM EEPROM",
+   { &eeprom_nm_def },
 };
 
 /* Update network interrupt status */
@@ -158,6 +171,41 @@ void dev_c3745_iofpga_net_clear_irq(struct c3745_iofpga_data *d,
    dev_c3745_iofpga_net_update_irq(d);
 }
 
+/* Read a WIC EEPROM */
+static m_uint16_t dev_c3745_read_wic_eeprom(struct c3745_iofpga_data *d)
+{   
+   struct cisco_eeprom *eeprom;
+   u_int wic_port;
+   u_int eeprom_offset;
+   m_uint8_t val[2];
+
+   switch(d->wic_select) {
+      case 0x1700:
+         wic_port = 0x10;
+         break;
+      case 0x1D00:
+         wic_port = 0x20;
+         break;
+      case 0x3500:
+         wic_port = 0x30;
+         break;
+      default:
+         wic_port = 0;
+   }
+
+   /* No WIC in slot or no EEPROM: fake an empty EEPROM */
+   if (!wic_port || !(eeprom = vm_slot_get_eeprom(d->router->vm,0,wic_port)))
+      return(0xFFFF);
+
+   /* EEPROM offset is in the lowest 6 bits */
+   eeprom_offset = d->wic_cmd[0] & 0x3F;
+
+   cisco_eeprom_get_byte(eeprom,eeprom_offset,&val[0]);
+   cisco_eeprom_get_byte(eeprom,eeprom_offset+1,&val[1]);
+
+   return(((m_uint16_t)val[0] << 8) | val[1]);
+}
+
 /*
  * dev_c3745_iofpga_access()
  */
@@ -171,7 +219,7 @@ dev_c3745_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
    if (op_type == MTS_READ)
       *data = 0x0;
-
+   
 #if DEBUG_ACCESS
    if (op_type == MTS_READ) {
       cpu_log(cpu,"IO_FPGA","reading reg 0x%x at pc=0x%llx (size=%u)\n",
@@ -323,26 +371,72 @@ dev_c3745_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             *data = 0xFFFF;
             
-            if (c3745_nm_check_eeprom(d->router,1))
+            if (vm_slot_get_card_ptr(d->router->vm,1))
                *data &= ~0x0100;
 
-            if (c3745_nm_check_eeprom(d->router,2))
+            if (vm_slot_get_card_ptr(d->router->vm,2))
                *data &= ~0x0001;
 
-            if (c3745_nm_check_eeprom(d->router,3))
+            if (vm_slot_get_card_ptr(d->router->vm,3))
                *data &= ~0x1000;
 
-            if (c3745_nm_check_eeprom(d->router,4))
+            if (vm_slot_get_card_ptr(d->router->vm,4))
                *data &= ~0x0010;
          }
          break;
 
-      /* VWIC/WIC related */
+      /* 
+       * VWIC/WIC related 
+       * Bits 0-2: WIC presence
+       */
       case 0x100004:
+         if (op_type == MTS_READ) {
+           *data = 0xFFFF;
+
+           /* check WIC 0 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x10))
+               *data &= ~0x01;
+
+            /* check WIC 1 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x20))
+               *data &= ~0x02;
+
+            /* check WIC 2 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x30))
+               *data &= ~0x04;
+         } else {
+            d->wic_select = *data;
+         }
+         break;
+
       case 0x100006:
-      case 0x100008:
          if (op_type == MTS_READ)
-            *data = 0xFFFF;
+            *data = 0x0004;
+         break;
+
+      case 0x100008:
+         if (op_type == MTS_READ) {
+            if (d->wic_cmd_valid) {
+               *data = dev_c3745_read_wic_eeprom(d);
+               d->wic_cmd_valid = FALSE;
+            } else {
+               *data = 0xFFFF;
+            }
+         } else {
+            /* 
+             * Store the EEPROM command (in 2 words).
+             *
+             * For a read, we have:
+             *    Word 0: 0x180 (nmc93c46 READ) + offset (6-bits).
+             *    Word 1: 0 (no data).
+             */
+            d->wic_cmd[d->wic_cmd_pos++] = *data;
+            
+            if (d->wic_cmd_pos == 2) {
+               d->wic_cmd_pos = 0;
+               d->wic_cmd_valid = TRUE;
+            }
+         }
          break;
 
 #if DEBUG_UNKNOWN
@@ -380,7 +474,7 @@ void c3745_init_eeprom_groups(c3745_t *router)
    /* EEPROMs for Network Modules */
    for(i=1;i<=4;i++) {
       router->nm_eeprom_group[i-1] = eeprom_nm_group;
-      router->nm_eeprom_group[i-1].eeprom[0] = &router->nm_bay[i].eeprom;
+      router->nm_eeprom_group[i-1].eeprom[0] = NULL;
    }
 }
 

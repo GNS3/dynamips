@@ -20,6 +20,7 @@
 #include "device.h"
 #include "dev_vtty.h"
 #include "nmc93cX6.h"
+#include "dev_mpc860.h"
 #include "dev_c2600.h"
 
 /* Debugging flags */
@@ -58,6 +59,9 @@ struct c2600_iofpga_data {
 
    /* Interrupt mask */
    m_uint16_t intr_mask;
+
+   /* WIC SPI selection */
+   m_uint8_t wic_select;
 };
 
 /* Mainboard EEPROM definition */
@@ -68,7 +72,12 @@ static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
 
 /* Mainboard EEPROM */
 static const struct nmc93cX6_group eeprom_mb_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "Mainboard EEPROM",
+   { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
@@ -79,7 +88,12 @@ static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
 
 /* NM EEPROM */
 static const struct nmc93cX6_group eeprom_nm_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "NM EEPROM", 
+   { &eeprom_nm_def },
 };
 
 /* Update network interrupt status */
@@ -116,6 +130,45 @@ void dev_c2600_iofpga_net_clear_irq(struct c2600_iofpga_data *d,
    dev_c2600_iofpga_net_update_irq(d);
 }
 
+/* Callback for MPC860 SPI Transmit */
+static void dev_c2600_mpc860_spi_tx_callback(struct mpc860_data *mpc_data,
+                                             u_char *buffer,u_int len,
+                                             void *user_arg)
+{
+   struct c2600_iofpga_data *d = user_arg;
+   struct cisco_eeprom *eeprom;
+   u_char reply_buf[4];
+   u_int wic_port;
+   u_int eeprom_offset;
+
+   if (d->wic_select & 0x20)
+      wic_port = 0x10;
+   else if (d->wic_select & 0x08)
+      wic_port = 0x20;
+   else {
+      vm_error(d->router->vm,"unknown value for wic_select (0x%8.8x)\n",
+               d->wic_select);
+      wic_port = 0;
+   }
+
+   /* No WIC in slot or no EEPROM: fake an empty EEPROM */
+   if (!wic_port || !(eeprom = vm_slot_get_eeprom(d->router->vm,0,wic_port))) {
+      memset(reply_buf,0xFF,sizeof(reply_buf));
+      mpc860_spi_receive(mpc_data,reply_buf,sizeof(reply_buf));
+      return;
+   }
+
+   /* Read request: 0x03 offset 0x00 0x00 */
+   eeprom_offset = buffer[1];
+
+   reply_buf[0] = 0;
+   reply_buf[1] = 0;
+   cisco_eeprom_get_byte(eeprom,eeprom_offset,&reply_buf[2]);
+   cisco_eeprom_get_byte(eeprom,eeprom_offset+1,&reply_buf[3]);
+
+   mpc860_spi_receive(mpc_data,reply_buf,sizeof(reply_buf));
+}
+     
 /*
  * dev_c2600_iofpga_access()
  */
@@ -160,9 +213,16 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          break;
 
       case 0x10:
+         if (op_type == MTS_READ)
+            *data = d->wic_select;
+         else {
+            d->wic_select = *data;
+         }
+         break;
+
       case 0x14:
          if (op_type == MTS_READ)
-            *data = 0xFFFFFFFF;
+            *data = 0; //0xFFFFFFFF;
          break;
 
       /* 
@@ -173,12 +233,19 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        *
        * Other bits unknown.
        */
-#if 1
       case 0x0c:
-         if (op_type == MTS_READ)
-            *data = 0x10; //0x10;
+         if (op_type == MTS_READ) {
+            *data = 0x10;
+
+            /* check WIC 0 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x10))
+               *data |= 0x02;
+
+            /* check WIC 1 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x20))
+               *data |= 0x04;
+         }
          break;
-#endif
 
       /* NM EEPROM */
       case 0x1c:
@@ -204,20 +271,6 @@ dev_c2600_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    }
 
    return NULL;
-}
-
-/* Initialize EEPROM groups */
-void c2600_init_eeprom_groups(c2600_t *router)
-{
-   /* Initialize Mainboard EEPROM */
-   router->mb_eeprom_group = eeprom_mb_group;
-   router->mb_eeprom_group.eeprom[0] = &router->mb_eeprom;
-   router->mb_eeprom.data = NULL;
-   router->mb_eeprom.len  = 0;
-
-   /* EEPROM for NM slot 1 */
-   router->nm_eeprom_group = eeprom_nm_group;
-   router->nm_eeprom_group.eeprom[0] = &router->nm_bay[1].eeprom;
 }
 
 /* Shutdown the IO FPGA device */
@@ -263,8 +316,25 @@ int dev_c2600_iofpga_init(c2600_t *router,m_uint64_t paddr,m_uint32_t len)
    d->dev.priv_data = d;
    d->dev.handler   = dev_c2600_iofpga_access;
 
+   /* Initialize the MPC860 SPI TX callback to read mainboard WIC EEPROMs */
+   mpc860_spi_set_tx_callback(router->mpc_data,
+                              dev_c2600_mpc860_spi_tx_callback,d);
+                              
    /* Map this device to the VM */
    vm_bind_device(router->vm,&d->dev);
    vm_object_add(vm,&d->vm_obj);
    return(0);
+}
+
+/* Initialize EEPROM groups */
+void c2600_init_eeprom_groups(c2600_t *router)
+{
+   /* Initialize Mainboard EEPROM */
+   router->mb_eeprom_group = eeprom_mb_group;
+   router->mb_eeprom_group.eeprom[0] = &router->mb_eeprom;
+   router->mb_eeprom.data = NULL;
+   router->mb_eeprom.len  = 0;
+
+   /* EEPROM for NM slot 1 */
+   router->nm_eeprom_group = eeprom_nm_group;
 }

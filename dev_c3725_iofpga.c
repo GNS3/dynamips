@@ -64,6 +64,12 @@ struct c3725_iofpga_data {
 
    /* Interrupt mask */
    m_uint16_t intr_mask;
+
+   /* WIC select */
+   u_int wic_select;
+   u_int wic_cmd_pos;
+   u_int wic_cmd_valid;
+   m_uint16_t wic_cmd[2];
 };
 
 /* Mainboard EEPROM definition */
@@ -74,7 +80,12 @@ static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
 
 /* Mainboard EEPROM */
 static const struct nmc93cX6_group eeprom_mb_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "Mainboard EEPROM", 
+   { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
@@ -85,7 +96,12 @@ static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
 
 /* NM EEPROM */
 static const struct nmc93cX6_group eeprom_nm_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+   EEPROM_TYPE_NMC93C46, 1, 0,
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "NM EEPROM", 
+   { &eeprom_nm_def },
 };
 
 /* Update network interrupt status */
@@ -126,6 +142,41 @@ void dev_c3725_iofpga_net_clear_irq(struct c3725_iofpga_data *d,
    irq_dist = &net_irq_dist[slot];
    d->net_irq_status[irq_dist->reg] |= (1 << (irq_dist->offset + port));
    dev_c3725_iofpga_net_update_irq(d);
+}
+
+/* Read a WIC EEPROM */
+static m_uint16_t dev_c3725_read_wic_eeprom(struct c3725_iofpga_data *d)
+{   
+   struct cisco_eeprom *eeprom;
+   u_int wic_port;
+   u_int eeprom_offset;
+   m_uint8_t val[2];
+
+   switch(d->wic_select) {
+      case 0x1700:
+         wic_port = 0x10;
+         break;
+      case 0x1D00:
+         wic_port = 0x20;
+         break;
+      case 0x3500:
+         wic_port = 0x30;
+         break;
+      default:
+         wic_port = 0;
+   }
+
+   /* No WIC in slot or no EEPROM: fake an empty EEPROM */
+   if (!wic_port || !(eeprom = vm_slot_get_eeprom(d->router->vm,0,wic_port)))
+      return(0xFFFF);
+
+   /* EEPROM offset is in the lowest 6 bits */
+   eeprom_offset = d->wic_cmd[0] & 0x3F;
+
+   cisco_eeprom_get_byte(eeprom,eeprom_offset,&val[0]);
+   cisco_eeprom_get_byte(eeprom,eeprom_offset+1,&val[1]);
+
+   return(((m_uint16_t)val[0] << 8) | val[1]);
 }
 
 /*
@@ -172,12 +223,27 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       case 0x12:
          /* 
-          * Bit 0: 1=No WIC in slot 0 ?
-          * Bit 1: 1=No WIC in slot 1 ?
-          * Bit 2: 1=No WIC in slot 2 ?
+          * Bit 0: 1=No WIC in slot 0.
+          * Bit 1: 1=No WIC in slot 1.
+          * Bit 2: 1=No WIC in slot 2.
           */
-         if (op_type == MTS_READ)
-            *data = 0x0007;
+         if (op_type == MTS_READ) {
+            *data = 0xFFFF;
+            
+            /* check WIC 0 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x10))
+               *data &= ~0x01;
+
+            /* check WIC 1 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x20))
+               *data &= ~0x02;
+
+            /* check WIC 2 */
+            if (vm_slot_check_eeprom(d->router->vm,0,0x30))
+               *data &= ~0x04;
+         } else {
+            d->wic_select = *data;
+         }
          break;
 
       case 0x14:
@@ -198,6 +264,28 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* WIC related: 16-bit data */
       case 0x42:
+         if (op_type == MTS_READ) {
+            if (d->wic_cmd_valid) {
+               *data = dev_c3725_read_wic_eeprom(d);
+               d->wic_cmd_valid = FALSE;
+            } else {
+               *data = 0xFFFF;
+            }
+         } else {
+            /* 
+             * Store the EEPROM command (in 2 words).
+             *
+             * For a read, we have:
+             *    Word 0: 0x180 (nmc93c46 READ) + offset (6-bits).
+             *    Word 1: 0 (no data).
+             */
+            d->wic_cmd[d->wic_cmd_pos++] = *data;
+            
+            if (d->wic_cmd_pos == 2) {
+               d->wic_cmd_pos = 0;
+               d->wic_cmd_valid = TRUE;
+            }
+         }
          break;
 
       /* NM Slot 1 EEPROM */
@@ -239,10 +327,10 @@ dev_c3725_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             *data = 0xFFFF;
 
-            if (c3725_nm_check_eeprom(d->router,1))
+            if (vm_slot_get_card_ptr(d->router->vm,1))
                *data &= ~0x0008;
 
-            if (c3725_nm_check_eeprom(d->router,2))
+            if (vm_slot_get_card_ptr(d->router->vm,2))
                *data &= ~0x0800;
          }
          break;
@@ -357,11 +445,11 @@ void c3725_init_eeprom_groups(c3725_t *router)
 
    /* EEPROM for NM slot 1 */
    router->nm_eeprom_group[0] = eeprom_nm_group;
-   router->nm_eeprom_group[0].eeprom[0] = &router->nm_bay[1].eeprom;
+   router->nm_eeprom_group[0].eeprom[0] = NULL;
 
    /* EEPROM for NM slot 2 */
    router->nm_eeprom_group[1] = eeprom_nm_group;
-   router->nm_eeprom_group[1].eeprom[0] = &router->nm_bay[2].eeprom;
+   router->nm_eeprom_group[1].eeprom[0] = NULL;
 }
 
 /* Shutdown the IO FPGA device */

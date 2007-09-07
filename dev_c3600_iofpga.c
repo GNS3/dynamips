@@ -95,7 +95,12 @@ static const struct nmc93cX6_eeprom_def eeprom_mb_def = {
 
 /* Mainboard EEPROM */
 static const struct nmc93cX6_group eeprom_mb_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "Mainboard EEPROM", 0, { &eeprom_mb_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "Mainboard EEPROM", 
+   { &eeprom_mb_def },
 };
 
 /* NM EEPROM definition */
@@ -106,7 +111,12 @@ static const struct nmc93cX6_eeprom_def eeprom_nm_def = {
 
 /* NM EEPROM */
 static const struct nmc93cX6_group eeprom_nm_group = {
-   EEPROM_TYPE_NMC93C46, 1, 0, "NM EEPROM", 0, { &eeprom_nm_def },
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "NM EEPROM", 
+   { &eeprom_nm_def },
 };
 
 /* C3660 NM presence masks */
@@ -122,7 +132,15 @@ static const m_uint16_t c3660_nm_masks[6] = {
 /* Select the current NM EEPROM */
 static void nm_eeprom_select(struct c3600_iofpga_data *d,u_int slot)
 {
-   d->router->nm_eeprom_group.eeprom[0] = &d->router->nm_bay[slot].eeprom;
+   struct cisco_eeprom *eeprom = NULL;
+   struct cisco_card *card;
+
+   card = vm_slot_get_card_ptr(d->router->vm,slot);
+
+   if (card != NULL)
+      eeprom = &card->eeprom;
+
+   d->router->nm_eeprom_group.eeprom[0] = eeprom;
 }
 
 /* Return the NM status register given the detected EEPROM (3620/3640) */
@@ -132,7 +150,7 @@ static u_int nm_get_status_1(struct c3600_iofpga_data *d)
    int i;
 
    for(i=0;i<4;i++) {
-      if (c3600_nm_check_eeprom(d->router,i))
+      if (vm_slot_get_card_ptr(d->router->vm,i))
          res &= ~(0x1111 << i);
    }
    
@@ -160,7 +178,7 @@ static u_int nm_get_status_2(struct c3600_iofpga_data *d,u_int pos)
    }
 
    for(i=start;i<=end;i++) {
-      if (c3600_nm_check_eeprom(d->router,i))
+      if (vm_slot_get_card_ptr(d->router->vm,i))
          res &= c3660_nm_masks[i-1];
    }
    
@@ -710,7 +728,7 @@ void c3600_init_eeprom_groups(c3600_t *router)
    /* Initialize NM EEPROM for 3660 */
    for(i=0;i<C3600_MAX_NM_BAYS;i++) {
       router->c3660_nm_eeprom_group[i] = eeprom_nm_group;
-      router->c3660_nm_eeprom_group[i].eeprom[0] = &router->nm_bay[i].eeprom;
+      router->c3660_nm_eeprom_group[i].eeprom[0] = NULL;
    }
 }
 

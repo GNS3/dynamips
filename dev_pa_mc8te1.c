@@ -227,41 +227,46 @@ static void pci_pos_write(cpu_gen_t *cpu,struct pci_device *dev,
  *
  * Add a PA-MC-8TE1 port adapter into specified slot.
  */
-int dev_c7200_pa_mc8te1_init(c7200_t *router,char *name,u_int pa_bay)
+int dev_c7200_pa_mc8te1_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa_mc_data *d;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for PA-MC-8TE1 chip */
    if (!(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"%s (PA-MC-8TE1): out of memory\n",name);
+      vm_error(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
    memset(d,0,sizeof(*d));
-   d->name = name;
-   d->vm   = router->vm;
-   d->irq  = c7200_net_irq_for_slot_port(pa_bay,0);
+   d->name = card->dev_name;
+   d->vm   = vm;
+   d->irq  = c7200_net_irq_for_slot_port(slot,0);
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-MC-8TE1"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-MC-8TE1"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the PM7380 */
-   d->pci_dev = pci_dev_add(router->pa_bay[pa_bay].pci_map,name,
+   d->pci_dev = pci_dev_add(card->pci_bus,card->dev_name,
                             0x11f8, 0x7380,
                             0,0,d->irq,d,
                             NULL,pci_pos_read,pci_pos_write);
 
    /* Initialize SSRAM device */
-   d->ssram_name = dyn_sprintf("%s_ssram",name);
+   d->ssram_name = dyn_sprintf("%s_ssram",card->dev_name);
    dev_init(&d->ssram_dev);
    d->ssram_dev.name      = d->ssram_name;
    d->ssram_dev.priv_data = d;
    d->ssram_dev.handler   = dev_ssram_access;
 
    /* Create the PLX9054 */
-   d->plx_name = dyn_sprintf("%s_plx",name);
-   d->plx_obj = dev_plx9054_init(d->vm,d->plx_name,
-                                 router->pa_bay[pa_bay].pci_map,1,
+   d->plx_name = dyn_sprintf("%s_plx",card->dev_name);
+   d->plx_obj = dev_plx9054_init(vm,d->plx_name,
+                                 card->pci_bus,1,
                                  &d->ssram_dev,NULL);
 
    /* Set callback function for PLX9054 PCI-To-Local doorbell */
@@ -271,34 +276,30 @@ int dev_c7200_pa_mc8te1_init(c7200_t *router,char *name,u_int pa_bay)
                                     d);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,d));
+   card->drv_info = d;
+   return(0);
 }
 
 /* Remove a PA-POS-OC3 from the specified slot */
-int dev_c7200_pa_mc8te1_shutdown(c7200_t *router,u_int pa_bay)
+int dev_c7200_pa_mc8te1_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa_mc_data *d;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   d = bay->drv_info;
+   struct pa_mc_data *d = card->drv_info;
 
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the PCI device */
    pci_dev_remove(d->pci_dev);
 
    /* Remove the PLX9054 chip */
-   vm_object_remove(d->vm,d->plx_obj);
+   vm_object_remove(vm,d->plx_obj);
 
    /* Remove the device from the CPU address space */
-   //vm_unbind_device(router->vm,&d->dev);
-   vm_unbind_device(router->vm,&d->ssram_dev);
+   //vm_unbind_device(vm,&d->dev);
+   vm_unbind_device(vm,&d->ssram_dev);
 
-   cpu_group_rebuild_mts(router->vm->cpu_group);
+   cpu_group_rebuild_mts(vm->cpu_group);
 
    /* Free the device structure itself */
    free(d);
@@ -306,12 +307,12 @@ int dev_c7200_pa_mc8te1_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_mc8te1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                                netio_desc_t *nio)
+int dev_c7200_pa_mc8te1_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                                u_int port_id,netio_desc_t *nio)
 {
-   struct pa_mc_data *d;
+   struct pa_mc_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio != NULL)
@@ -324,11 +325,12 @@ int dev_c7200_pa_mc8te1_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_mc8te1_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+int dev_c7200_pa_mc8te1_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                                  u_int port_id)
 {
-   struct pa_mc_data *d;
+   struct pa_mc_data *d = card->drv_info;
 
-   if ((port_id > 0) || !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id > 0))
       return(-1);
 
    if (d->nio) {
@@ -340,10 +342,11 @@ int dev_c7200_pa_mc8te1_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
 }
 
 /* PA-MC-8TE1 driver */
-struct c7200_pa_driver dev_c7200_pa_mc8te1_driver = {
-   "PA-MC-8TE1", 0, 
+struct cisco_card_driver dev_c7200_pa_mc8te1_driver = {
+   "PA-MC-8TE1", 0, 0,
    dev_c7200_pa_mc8te1_init,
    dev_c7200_pa_mc8te1_shutdown,
+   NULL,
    dev_c7200_pa_mc8te1_set_nio,
    dev_c7200_pa_mc8te1_unset_nio,
    NULL,

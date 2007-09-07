@@ -23,6 +23,12 @@ const struct cisco_eeprom *cisco_eeprom_find_nm(char *name);
 /* Find a PA EEPROM */
 const struct cisco_eeprom *cisco_eeprom_find_pa(char *name);
 
+/* Find a WIC EEPROM */
+const struct cisco_eeprom *cisco_eeprom_find_wic(char *name);
+
+/* Find a C6k EEPROM */
+const struct cisco_eeprom *cisco_eeprom_find_c6k(char *name);
+
 /* Find an EEPROM in the specified EEPROM array */
 const struct cisco_eeprom *
 cisco_eeprom_find(const struct cisco_eeprom *eeproms,char *name);

@@ -303,7 +303,7 @@ void ppc32_set_ia(u_char **ptr,m_uint32_t new_ia);
 void ppc32_set_page_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b);
 
 /* Increment the number of executed instructions (performance debugging) */
-void ppc32_inc_perf_counter(ppc32_jit_tcb_t *b);
+void ppc32_inc_perf_counter(cpu_ppc_t *cpu);
 
 /* ======================================================================== */
 

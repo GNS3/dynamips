@@ -54,7 +54,8 @@ static void nmc93cX6_check_cs(struct nmc93cX6_group *g,u_int old,u_int new)
 
    for(i=0;i<g->nr_eeprom;i++)
    {
-      g->state[i].dataout_val = 1;
+      if (g->dout_status == EEPROM_DOUT_HIGH)
+         g->state[i].dataout_val = 1;
 
       if (g->debug)
       {
@@ -68,6 +69,7 @@ static void nmc93cX6_check_cs(struct nmc93cX6_group *g,u_int old,u_int new)
       if ((res = check_bit(old,new,g->def[i]->select_bit)) != 0) {
          g->state[i].cmd_len = 0;     /* no bit for command sent now */
          g->state[i].cmd_val = 0;
+         //g->state[i].dataout_val = 1;
 
          if (res == 2)
             g->state[i].state = EEPROM_STATE_WAIT_CMD;
@@ -94,7 +96,7 @@ static void nmc93cX6_check_clk_group(struct nmc93cX6_group *g,int group_id,
       printf("EEPROM %s(%d): check_clk: check_bit(old,new,select_bit) "
              "[%8.8x, %8.8x, %d (mask = %8.8x)] = %d\n",
              g->description, group_id,
-             old,new, clk_bit, 1 << clk_bit, check_bit(old,new,clk_bit));
+             old, new, clk_bit, 1 << clk_bit, check_bit(old,new,clk_bit));
    }
 
    /* CLK bit set ? */
@@ -104,6 +106,10 @@ static void nmc93cX6_check_clk_group(struct nmc93cX6_group *g,int group_id,
    switch(g->state[group_id].state)
    {
       case EEPROM_STATE_WAIT_CMD:
+         /* The first bit must be set to "1" */
+         if ((g->state[group_id].cmd_len == 0) && !(new & (1 << din_bit)))
+            break;
+
          /* Read DATAIN bit */
          if (new & (1 << din_bit))
             g->state[group_id].cmd_val |= (1 << g->state[group_id].cmd_len);
@@ -113,8 +119,7 @@ static void nmc93cX6_check_clk_group(struct nmc93cX6_group *g,int group_id,
          cmd_len = nmc94cX6_get_cmd_len(g);
 
          /* Command is complete ? */
-         if ((g->state[group_id].cmd_len == cmd_len) &&
-             (g->state[group_id].cmd_val & 1))
+         if (g->state[group_id].cmd_len == cmd_len)
          {
 #if DEBUG_EEPROM
             printf("nmc93cX6: %s(%d): command = %x\n", 
@@ -125,7 +130,7 @@ static void nmc93cX6_check_clk_group(struct nmc93cX6_group *g,int group_id,
             /* we have the command! extract the opcode */
             cmd = g->state[group_id].cmd_val;
             op = cmd & 0x7;
-             
+
             switch(op) {
                case NMC93CX6_CMD_READ:
                   g->state[group_id].state = EEPROM_STATE_DATAOUT;
@@ -143,20 +148,27 @@ static void nmc93cX6_check_clk_group(struct nmc93cX6_group *g,int group_id,
       case EEPROM_STATE_DATAOUT:
          /* 
           * user want to read data. we read 16-bits.
-          * extract address (6 bits) from command.
+          * extract address (6/9 bits) from command.
           */
           
          cmd = g->state[group_id].cmd_val;
          addr = nmc94cX6_get_addr(g,cmd);
 
 #if DEBUG_EEPROM
-         if (g->state[group_id].dataout_pos == 0)
-            printf("nmc93cX6: %s(%d): read addr=%x (%d), val = %4.4x\n",
+         if (g->state[group_id].dataout_pos == 0) {
+            printf("nmc93cX6: %s(%d): "
+                   "read addr=%x (%d), val=%4.4x [eeprom=%p]\n",
                    g->description,group_id,addr,addr,
-                   g->state[group_id].cmd_val);
+                   g->state[group_id].cmd_val,
+                   g->eeprom[group_id]);
+         }
 #endif
           
          pos = g->state[group_id].dataout_pos++;
+
+         if (g->reverse_data)
+            pos = 15 - pos;
+
          eeprom = g->eeprom[group_id];
 
          if (eeprom && eeprom->data && (addr < eeprom->len)) {
@@ -196,6 +208,21 @@ void nmc93cX6_write(struct nmc93cX6_group *g,u_int data)
    nmc93cX6_check_cs(g,old,new);
    nmc93cX6_check_clk(g,old,new);
    g->eeprom_reg = new;
+}
+
+/* Returns the TRUE if the EEPROM is active */
+u_int nmc93cX6_is_active(struct nmc93cX6_group *g,u_int group_id)
+{
+   return(g->eeprom_reg & (1 << g->def[group_id]->select_bit));
+}
+
+/* Returns the DOUT bit value */
+u_int nmc93cX6_get_dout(struct nmc93cX6_group *g,u_int group_id)
+{
+   if (g->state[group_id].dataout_val)
+      return(1 << g->def[group_id]->dout_bit);
+   else
+      return(0);
 }
 
 /* Handle read */

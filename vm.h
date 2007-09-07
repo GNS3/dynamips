@@ -14,6 +14,9 @@
 #include "memory.h"
 #include "cpu.h"
 #include "dev_vtty.h"
+#include "cisco_eeprom.h"
+#include "cisco_card.h"
+#include "rommon_var.h"
 
 #define VM_PAGE_SHIFT  12
 #define VM_PAGE_SIZE   (1 << VM_PAGE_SHIFT)
@@ -56,18 +59,6 @@ enum {
    VM_STATUS_SUSPENDED,       /* VM is suspended */
 };
 
-/* VM types */
-enum {
-   VM_TYPE_C7200 = 0,
-   VM_TYPE_C3600,
-   VM_TYPE_C2691,
-   VM_TYPE_C3725,
-   VM_TYPE_C3745,
-   VM_TYPE_C2600,
-   VM_TYPE_MSFC1,
-   VM_TYPE_PPC32_TEST,
-};
-
 /* Ghost RAM status */
 enum {
    VM_GHOST_RAM_NONE = 0,
@@ -77,6 +68,9 @@ enum {
 
 /* Timer IRQ check interval */
 #define VM_TIMER_IRQ_CHECK_ITV  1000
+
+/* Max slots per VM */
+#define VM_MAX_SLOTS  16
 
 /* forward declarations */
 typedef struct vm_obj vm_obj_t;
@@ -95,31 +89,35 @@ struct vm_obj {
 /* VM instance */
 struct vm_instance {
    char *name;
-   int type;                       /* C7200, C3600, ... */
-   int status;                     /* Instance status */
-   int instance_id;                /* Instance Identifier */
-   char *lock_file;                /* Lock file */
-   char *log_file;                 /* Log filename */
-   int log_file_enabled;           /* Logging enabled */
-   u_int ram_size,rom_size;        /* RAM and ROM size in Mb */
-   u_int iomem_size;               /* IOMEM size in Mb */
-   u_int nvram_size;               /* NVRAM size in Kb */
-   u_int pcmcia_disk_size[2];      /* PCMCIA disk0 and disk1 sizes (in Mb) */
-   u_int conf_reg,conf_reg_setup;  /* Config register */
-   u_int clock_divisor;            /* Clock Divisor (see cp0.c) */
-   u_int ram_mmap;                 /* Memory-mapped RAM ? */
-   u_int restart_ios;              /* Restart IOS on reload ? */
-   u_int elf_machine_id;           /* ELF machine identifier */
-   u_int exec_area_size;           /* Size of execution area for CPU */
-   m_uint32_t ios_entry_point;     /* IOS entry point */
-   char *ios_image;                /* IOS image filename */
-   char *ios_config;               /* IOS configuration file */
-   char *rom_filename;             /* ROM filename */
-   char *sym_filename;             /* Symbol filename */
-   FILE *lock_fd,*log_fd;          /* Lock/Log file descriptors */
-   int debug_level;                /* Debugging Level */
-   int jit_use;                    /* CPUs use JIT */
-   int sparse_mem;                 /* Use sparse virtual memory */
+   vm_platform_t *platform;       /* Platform specific helpers */
+   int status;                    /* Instance status */
+   int instance_id;               /* Instance Identifier */
+   char *lock_file;               /* Lock file */
+   char *log_file;                /* Log filename */
+   int log_file_enabled;          /* Logging enabled */
+   u_int ram_size,rom_size;       /* RAM and ROM size in Mb */
+   u_int iomem_size;              /* IOMEM size in Mb */
+   u_int nvram_size;              /* NVRAM size in Kb */
+   u_int pcmcia_disk_size[2];     /* PCMCIA disk0 and disk1 sizes (in Mb) */
+   u_int conf_reg,conf_reg_setup; /* Config register */
+   u_int clock_divisor;           /* Clock Divisor (see cp0.c) */
+   u_int ram_mmap;                /* Memory-mapped RAM ? */
+   u_int restart_ios;             /* Restart IOS on reload ? */
+   u_int elf_machine_id;          /* ELF machine identifier */
+   u_int exec_area_size;          /* Size of execution area for CPU */
+   m_uint32_t ios_entry_point;    /* IOS entry point */
+   char *ios_image;               /* IOS image filename */
+   char *ios_config;              /* IOS configuration file */
+   char *rom_filename;            /* ROM filename */
+   char *sym_filename;            /* Symbol filename */
+   FILE *lock_fd,*log_fd;         /* Lock/Log file descriptors */
+   int debug_level;               /* Debugging Level */
+   int jit_use;                   /* CPUs use JIT */
+   int sparse_mem;                /* Use sparse virtual memory */
+   u_int nm_iomem_size;           /* IO mem size to be passed to Smart Init */
+
+   /* ROMMON variables */
+   struct rommon_var_list rommon_vars;
 
    /* Memory chunks */
    vm_chunk_t *chunks;
@@ -138,6 +136,13 @@ struct vm_instance {
    /* IRQ routing */
    void (*set_irq)(vm_instance_t *vm,u_int irq);
    void (*clear_irq)(vm_instance_t *vm,u_int irq);
+
+   /* Slots for PA/NM/... */
+   u_int nr_slots;
+   u_int slots_type;
+   struct cisco_card *slots[VM_MAX_SLOTS];
+   struct cisco_card_driver **slots_drivers;
+   struct pci_bus *slots_pci_bus[VM_MAX_SLOTS];
 
    /* Filename for ghosted RAM */
    char *ghost_ram_filename;
@@ -168,10 +173,6 @@ struct vm_instance {
    /* Space reserved in NVRAM by ROM monitor */
    u_int nvram_rom_space;
 
-   /* Extract and push IOS configuration */
-   ssize_t (*nvram_extract_config)(vm_instance_t *vm,char **buffer);
-   int (*nvram_push_config)(vm_instance_t *vm,char *buffer,size_t len);
-
    /* Chassis cookie (for c2600 and maybe other routers) */
    m_uint16_t chassis_cookie[64];
 
@@ -182,13 +183,29 @@ struct vm_instance {
    struct vm_obj *vm_object_list;   
 };
 
-#define VM_C7200(vm) ((c7200_t *)vm->hw_data)
-#define VM_C3600(vm) ((c3600_t *)vm->hw_data)
-#define VM_C2691(vm) ((c2691_t *)vm->hw_data)
-#define VM_C3725(vm) ((c3725_t *)vm->hw_data)
-#define VM_C3745(vm) ((c3745_t *)vm->hw_data)
-#define VM_C2600(vm) ((c2600_t *)vm->hw_data)
-#define VM_MSFC1(vm) ((msfc1_t *)vm->hw_data)
+/* VM Platform definition */
+struct vm_platform {
+   char *name;
+   char *log_name;
+   char *cli_name;
+   int (*create_instance)(vm_instance_t *vm);
+   int (*delete_instance)(vm_instance_t *vm);
+   int (*init_instance)(vm_instance_t *vm);
+   int (*stop_instance)(vm_instance_t *vm);
+   ssize_t (*nvram_extract_config)(vm_instance_t *vm,u_char **buffer);
+   int (*nvram_push_config)(vm_instance_t *vm,u_char *buffer,size_t len);
+   u_int (*get_mac_addr_msb)(void);
+   void (*save_config)(vm_instance_t *vm,FILE *fd);
+   int (*cli_parse_options)(vm_instance_t *vm,int option);
+   void (*cli_show_options)(vm_instance_t *vm);
+   void (*show_spec_drivers)(void);
+};
+
+/* VM platform list item */
+struct vm_platform_list {
+   struct vm_platform_list *next;
+   struct vm_platform *platform;
+};
 
 extern int vm_file_naming_type;
 
@@ -253,9 +270,6 @@ int vm_create_log(vm_instance_t *vm);
 
 /* Error message */
 void vm_error(vm_instance_t *vm,char *format,...);
-
-/* Create a new VM instance */
-vm_instance_t *vm_create(char *name,int instance_id,int machine_type);
 
 /* Shutdown hardware resources used by a VM */
 int vm_hardware_shutdown(vm_instance_t *vm);
@@ -347,5 +361,32 @@ int vm_nvram_push_config(vm_instance_t *vm,char *filename);
 
 /* Save general VM configuration into the specified file */
 void vm_save_config(vm_instance_t *vm,FILE *fd);
+
+/* Find a platform */
+vm_platform_t *vm_platform_find(char *name);
+
+/* Find a platform given its CLI name */
+vm_platform_t *vm_platform_find_cli_name(char *name);
+
+/* Register a platform */
+int vm_platform_register(vm_platform_t *platform);
+
+/* Create an instance of the specified type */
+vm_instance_t *vm_create_instance(char *name,int instance_id,char *type);
+
+/* Delete a VM instance */
+int vm_delete_instance(char *name);
+
+/* Initialize a VM instance */
+int vm_init_instance(vm_instance_t *vm);
+
+/* Stop a VM instance */
+int vm_stop_instance(vm_instance_t *vm);
+
+/* Delete all VM instances */
+int vm_delete_all_instances(void);
+
+/* Save all VM configs */
+int vm_save_config_all(FILE *fd);
 
 #endif

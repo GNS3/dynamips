@@ -30,6 +30,8 @@
 /* Debugging flags */
 #define DEBUG_UNKNOWN   0
 #define DEBUG_DMA       0
+#define DEBUG_SDMA      0
+#define DEBUG_MPSC      0
 #define DEBUG_MII       0
 #define DEBUG_ETH_TX    0
 #define DEBUG_ETH_RX    0
@@ -42,7 +44,7 @@
 #define PCI_PRODUCT_GALILEO_GT64120  0x4620  /* GT-64120 */
 #define PCI_PRODUCT_GALILEO_GT96100  0x9653  /* GT-96100 */
 
-/* === Global definitions === */
+/* === Global definitions ================================================= */
 
 /* Interrupt High Cause Register */
 #define GT_IHCR_ETH0_SUM     0x00000001
@@ -53,8 +55,10 @@
 #define GT_SCR_ETH0_SUM      0x00000001
 #define GT_SCR_ETH1_SUM      0x00000002
 #define GT_SCR_SDMA_SUM      0x00000010
+#define GT_SCR_SDMA0_SUM     0x00000100
+#define GT_SCR_MPSC0_SUM     0x00000200
 
-/* === DMA definitions === */
+/* === DMA definitions ==================================================== */
 #define GT_DMA_CHANNELS   4
 
 #define GT_DMA_FLYBY_ENABLE  0x00000001  /* FlyBy Enable */  
@@ -89,7 +93,117 @@ struct dma_channel {
    m_uint32_t ctrl;
 };
 
-/* === Ethernet definitions === */
+/* === Serial DMA (SDMA) ================================================== */
+
+/* SDMA: 2 groups of 8 channels */
+#define GT_SDMA_CHANNELS     8
+#define GT_SDMA_GROUPS       2
+
+/* SDMA channel */
+struct sdma_channel {
+   u_int id;
+   
+   m_uint32_t sdc;
+   m_uint32_t sdcm;
+   m_uint32_t rx_desc;
+   m_uint32_t rx_buf_ptr;
+   m_uint32_t scrdp;
+   m_uint32_t tx_desc;
+   m_uint32_t sctdp;
+   m_uint32_t sftdp;
+};
+
+/* SGCR: SDMA Group Register */
+#define GT_REG_SGC           0x101af0
+
+/* SDMA cause register: 8 fields (1 for each channel) of 4 bits */
+#define GT_SDMA_CAUSE_RXBUF0   0x01
+#define GT_SDMA_CAUSE_RXERR0   0x02
+#define GT_SDMA_CAUSE_TXBUF0   0x04
+#define GT_SDMA_CAUSE_TXEND0   0x08
+
+/* SDMA channel register offsets */
+#define GT_SDMA_SDC          0x000900  /* Configuration Register */
+#define GT_SDMA_SDCM         0x000908  /* Command Register */
+#define GT_SDMA_RX_DESC      0x008900  /* RX descriptor */
+#define GT_SDMA_SCRDP        0x008910  /* Current RX descriptor */
+#define GT_SDMA_TX_DESC      0x00c900  /* TX descriptor */
+#define GT_SDMA_SCTDP        0x00c910  /* Current TX desc. pointer */
+#define GT_SDMA_SFTDP        0x00c914  /* First TX desc. pointer */
+
+/* SDMA RX/TX descriptor */
+struct sdma_desc {
+   m_uint32_t buf_size;
+   m_uint32_t cmd_stat;
+   m_uint32_t next_ptr;
+   m_uint32_t buf_ptr;
+};
+
+/* SDMA Descriptor Command/Status word */
+#define GT_SDMA_CMD_O    0x80000000    /* Owner bit */
+#define GT_SDMA_CMD_AM   0x40000000    /* Auto-mode */
+#define GT_SDMA_CMD_EI   0x00800000    /* Enable Interrupt */
+#define GT_SDMA_CMD_F    0x00020000    /* First buffer */
+#define GT_SDMA_CMD_L    0x00010000    /* Last buffer */
+
+/* SDCR: SDMA Configuration Register */
+#define GT_SDCR_RFT      0x00000001    /* Receive FIFO Threshold */
+#define GT_SDCR_SFM      0x00000002    /* Single Frame Mode */
+#define GT_SDCR_RC       0x0000003c    /* Retransmit count */
+#define GT_SDCR_BLMR     0x00000040    /* Big/Little Endian RX mode */
+#define GT_SDCR_BLMT     0x00000080    /* Big/Litlle Endian TX mode */
+#define GT_SDCR_POVR     0x00000100    /* PCI override */
+#define GT_SDCR_RIFB     0x00000200    /* RX IRQ on frame boundary */
+#define GT_SDCR_BSZ      0x00003000    /* Burst size */
+
+/* SDCMR: SDMA Command Register */
+#define GT_SDCMR_ERD     0x00000080    /* Enable RX DMA */
+#define GT_SDCMR_AR      0x00008000    /* Abort Receive */
+#define GT_SDCMR_STD     0x00010000    /* Stop TX */
+#define GT_SDCMR_STDH    GT_SDCMR_STD  /* Stop TX High */
+#define GT_SDCMR_STDL    0x00020000    /* Stop TX Low */
+#define GT_SDCMR_TXD     0x00800000    /* TX Demand */
+#define GT_SDCMR_TXDH    GT_SDCMR_TXD  /* Start TX High */
+#define GT_SDCMR_TXDL    0x01000000    /* Start TX Low */
+#define GT_SDCMR_AT      0x80000000    /* Abort Transmit */
+
+/* === MultiProtocol Serial Controller (MPSC) ============================= */
+
+/* 8 MPSC channels */
+#define GT_MPSC_CHANNELS  8
+
+/* MPSC channel */
+struct mpsc_channel {
+   m_uint32_t mmcrl;
+   m_uint32_t mmcrh;
+   m_uint32_t mpcr;
+   m_uint32_t chr[10];
+
+   vtty_t *vtty;
+   netio_desc_t *nio;
+};
+
+#define GT_MPSC_MMCRL    0x000A00      /* Main Config Register Low */
+#define GT_MPSC_MMCRH    0x000A04      /* Main Config Register High */
+#define GT_MPSC_MPCR     0x000A08      /* Protocol Config Register */
+#define GT_MPSC_CHR1     0x000A0C
+#define GT_MPSC_CHR2     0x000A10
+#define GT_MPSC_CHR3     0x000A14
+#define GT_MPSC_CHR4     0x000A18
+#define GT_MPSC_CHR5     0x000A1C
+#define GT_MPSC_CHR6     0x000A20
+#define GT_MPSC_CHR7     0x000A24
+#define GT_MPSC_CHR8     0x000A28
+#define GT_MPSC_CHR9     0x000A2C
+#define GT_MPSC_CHR10    0x000A30
+
+#define GT_MMCRL_MODE_MASK   0x0000007
+
+#define GT_MPSC_MODE_HDLC    0
+#define GT_MPSC_MODE_UART    4
+#define GT_MPSC_MODE_BISYNC  5
+
+/* === Ethernet definitions =============================================== */
 #define GT_ETH_PORTS     2
 #define GT_MAX_PKT_SIZE  2048
 
@@ -148,23 +262,6 @@ struct dma_channel {
 #define GT_PSR_TXLOW           0x00000020    /* TX Low priority status */
 #define GT_PSR_TXHIGH          0x00000040    /* TX High priority status */
 #define GT_PSR_TXINP           0x00000080    /* TX in Progress */
-
-/* SDCR: SDMA Configuration Register */
-#define GT_SDCR_RC             0x0000003c    /* Retransmit count */
-#define GT_SDCR_BLMR           0x00000040    /* Big/Little Endian RX mode */
-#define GT_SDCR_BLMT           0x00000080    /* Big/Litlle Endian TX mode */
-#define GT_SDCR_POVR           0x00000100    /* PCI override */
-#define GT_SDCR_RIFB           0x00000200    /* RX IRQ on frame boundary */
-#define GT_SDCR_BSZ            0x00003000    /* Burst size */
-
-/* SDCMR: SDMA Command Register */
-#define GT_SDCMR_ERD           0x00000080    /* Enable RX DMA */
-#define GT_SDCMR_AR            0x00008000    /* Abort Receive */
-#define GT_SDCMR_STDH          0x00010000    /* Stop TX High */
-#define GT_SDCMR_STDL          0x00020000    /* Stop TX Low */
-#define GT_SDCMR_TXDH          0x00800000    /* Start TX High */
-#define GT_SDCMR_TXDL          0x01000000    /* Start TX Low */
-#define GT_SDCMR_AT            0x80000000    /* Abort Transmit */
 
 /* ICR: Interrupt Cause Register */
 #define GT_ICR_RXBUF           0x00000001    /* RX Buffer returned to host */
@@ -243,14 +340,6 @@ enum {
 #define GT_RXDESC_BS_MASK      0xFFFF0000    /* Buffer size */
 #define GT_RXDESC_BS_SHIFT     16
 
-/* RX/TX descriptor */
-struct eth_desc {
-   m_uint32_t buf_size;
-   m_uint32_t cmd_stat;
-   m_uint32_t next_ptr;
-   m_uint32_t buf_ptr;
-};
-
 /* Galileo Ethernet port */
 struct eth_port {
    netio_desc_t *nio;
@@ -277,6 +366,8 @@ struct eth_port {
    m_uint32_t rx_bytes,tx_bytes,rx_frames,tx_frames;
 };
 
+/* ======================================================================== */
+
 /* Galileo GT64xxx/GT96xxx system controller */
 struct gt_data {
    char *name;
@@ -284,25 +375,50 @@ struct gt_data {
    struct vdevice dev;
    struct pci_device *pci_dev;
    vm_instance_t *vm;
+   pthread_mutex_t lock;
 
    struct pci_bus *bus[2];
    struct dma_channel dma[GT_DMA_CHANNELS];
+
+   /* Interrupts (common) */
    m_uint32_t int_cause_reg;
+   m_uint32_t int_high_cause_reg;
    m_uint32_t int_mask_reg;
 
-   /* Ethernet ports (GT-96100) */
+   /* Interrupts (GT96100) */
+   m_uint32_t int0_main_mask_reg,int0_high_mask_reg;
+   m_uint32_t int1_main_mask_reg,int1_high_mask_reg;
+   m_uint32_t ser_cause_reg;
+   m_uint32_t serint0_mask_reg,serint1_mask_reg;
+   u_int int0_irq,int1_irq,serint0_irq,serint1_irq;
+
+   /* SDMA - Serial DMA (GT96100) */
+   m_uint32_t sgcr;
+   m_uint32_t sdma_cause_reg,sdma_mask_reg;
+   struct sdma_channel sdma[GT_SDMA_GROUPS][GT_SDMA_CHANNELS];
+
+   /* MPSC - MultiProtocol Serial Controller (GT96100) */
+   struct mpsc_channel mpsc[GT_MPSC_CHANNELS];
+   
+   /* Ethernet ports (GT96100) */
    u_int eth_irq;
    ptask_id_t eth_tx_tid;
    struct eth_port eth_ports[GT_ETH_PORTS];
    m_uint32_t smi_reg;
    m_uint16_t mii_regs[32][32];
+
+   /* IRQ status update */
+   void (*gt_update_irq_status)(struct gt_data *gt_data);
 };
+
+#define GT_LOCK(d)   pthread_mutex_lock(&(d)->lock)
+#define GT_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
 
 /* Log a GT message */
 #define GT_LOG(d,msg...) vm_log((d)->vm,(d)->name,msg)
 
 /* Update the interrupt status */
-static void gt_update_irq_status(struct gt_data *gt_data)
+static void gt64k_update_irq_status(struct gt_data *gt_data)
 {
    if (gt_data->pci_dev) {
       if (gt_data->int_cause_reg & gt_data->int_mask_reg)
@@ -376,15 +492,15 @@ static void gt_dma_handle_ctrl(struct gt_data *gt_data,int chan_id)
 #endif
       /* Trigger DMA interrupt */
       gt_data->int_cause_reg |= 1 << (4 + chan_id);
-      gt_update_irq_status(gt_data);
+      gt_data->gt_update_irq_status(gt_data);
    }
 }
 
 #define DMA_REG(ch,reg_name) \
    if (op_type == MTS_WRITE) \
-      gt_data->dma[ch].reg_name = swap32(*data); \
+      gt_data->dma[ch].reg_name = *data; \
    else \
-      *data = swap32(gt_data->dma[ch].reg_name);
+      *data = gt_data->dma[ch].reg_name;
 
 /* Handle a DMA channel */
 static int gt_dma_access(cpu_gen_t *cpu,struct vdevice *dev,
@@ -464,103 +580,106 @@ void *dev_gt64010_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 {
    struct gt_data *gt_data = dev->priv_data;
 	
-   if (op_type == MTS_READ)
+   if (op_type == MTS_READ) {
       *data = 0;
+   } else {
+      *data = swap32(*data);
+   }
 
    if (gt_dma_access(cpu,dev,offset,op_size,op_type,data) != 0)
-      return NULL;
+      goto done;
 
    switch(offset) {
       /* ===== DRAM Settings (completely faked, 128 Mb) ===== */
       case 0x008:    /* ras10_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x000);
+            *data = 0x000;
          break;
       case 0x010:    /* ras10_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x018:    /* ras32_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x080);
+            *data = 0x080;
          break;
       case 0x020:    /* ras32_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x400:    /* ras0_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x404:    /* ras0_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x408:    /* ras1_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x40c:    /* ras1_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x410:    /* ras2_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x414:    /* ras2_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x418:    /* ras3_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x41c:    /* ras3_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0xc08:    /* pci0_cs10 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
       case 0xc0c:    /* pci0_cs32 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
 
       case 0xc00:    /* pci_cmd */
          if (op_type == MTS_READ)
-            *data = swap32(0x00008001);
+            *data = 0x00008001;
          break;
 
       /* ===== Interrupt Cause Register ===== */
       case 0xc18:
          if (op_type == MTS_READ) {
-            *data = swap32(gt_data->int_cause_reg);
+            *data = gt_data->int_cause_reg;
          } else {
-            gt_data->int_cause_reg &= swap32(*data);
-            gt_update_irq_status(gt_data);
+            gt_data->int_cause_reg &= *data;
+            gt64k_update_irq_status(gt_data);
          }
          break;
 
       /* ===== Interrupt Mask Register ===== */
       case 0xc1c:
          if (op_type == MTS_READ)
-            *data = swap32(gt_data->int_mask_reg);
+            *data = gt_data->int_mask_reg;
          else {
-            gt_data->int_mask_reg = swap32(*data);
-            gt_update_irq_status(gt_data);
+            gt_data->int_mask_reg = *data;
+            gt64k_update_irq_status(gt_data);
          }
          break;
 
       /* ===== PCI Configuration ===== */
       case PCI_BUS_ADDR:    /* pci configuration address (0xcf8) */
-         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
       case PCI_BUS_DATA:    /* pci data address (0xcfc) */
-         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
 #if DEBUG_UNKNOWN
@@ -575,6 +694,9 @@ void *dev_gt64010_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #endif
    }
 
+ done:
+   if (op_type == MTS_READ)
+      *data = swap32(*data);
    return NULL;
 }
 
@@ -586,111 +708,114 @@ void *dev_gt64120_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 {
    struct gt_data *gt_data = dev->priv_data;
    
-   if (op_type == MTS_READ)
+   if (op_type == MTS_READ) {
       *data = 0;
+   } else {
+      *data = swap32(*data);
+   }
 
    if (gt_dma_access(cpu,dev,offset,op_size,op_type,data) != 0)
-      return NULL;
+      goto done;
 
    switch(offset) {
       case 0x008:    /* ras10_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x000);
+            *data = 0x000;
          break;
       case 0x010:    /* ras10_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x018:    /* ras32_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x100);
+            *data = 0x100;
          break;
       case 0x020:    /* ras32_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x400:    /* ras0_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x404:    /* ras0_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x408:    /* ras1_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x40c:    /* ras1_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x410:    /* ras2_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x414:    /* ras2_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x418:    /* ras3_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x41c:    /* ras3_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0xc08:    /* pci0_cs10 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
       case 0xc0c:    /* pci0_cs32 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
 
       case 0xc00:    /* pci_cmd */
          if (op_type == MTS_READ)
-            *data = swap32(0x00008001);
+            *data = 0x00008001;
          break;
 
       /* ===== Interrupt Cause Register ===== */
       case 0xc18:
          if (op_type == MTS_READ)
-            *data = swap32(gt_data->int_cause_reg);
+            *data = gt_data->int_cause_reg;
          else {
-            gt_data->int_cause_reg &= swap32(*data);
-            gt_update_irq_status(gt_data);
+            gt_data->int_cause_reg &= *data;
+            gt64k_update_irq_status(gt_data);
          }
          break;
 
       /* ===== Interrupt Mask Register ===== */
       case 0xc1c:
          if (op_type == MTS_READ) {
-            *data = swap32(gt_data->int_mask_reg);
+            *data = gt_data->int_mask_reg;
          } else {
-            gt_data->int_mask_reg = swap32(*data);
-            gt_update_irq_status(gt_data);
+            gt_data->int_mask_reg = *data;
+            gt64k_update_irq_status(gt_data);
          }
          break;
 
       /* ===== PCI Bus 1 ===== */
       case 0xcf0:
-         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,FALSE,data);
          break;
 
       case 0xcf4:
-         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
+         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,FALSE,data);
          break;
          
       /* ===== PCI Bus 0 ===== */
       case PCI_BUS_ADDR:    /* pci configuration address (0xcf8) */
-         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
       case PCI_BUS_DATA:    /* pci data address (0xcfc) */
-         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
 #if DEBUG_UNKNOWN
@@ -705,17 +830,627 @@ void *dev_gt64120_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #endif
    }
 
+ done:
+   if (op_type == MTS_READ)
+      *data = swap32(*data);
    return NULL;
 }
+
+/* ======================================================================== */
+/* GT96k Interrupts                                                         */
+/* ======================================================================== */
+static void gt96k_update_irq_status(struct gt_data *d)
+{
+   /* Interrupt0* active ? */
+   if ((d->int_cause_reg & d->int0_main_mask_reg) || 
+       (d->int_high_cause_reg & d->int0_high_mask_reg)) 
+   {
+      d->int_cause_reg |= 1 << 30;
+      vm_set_irq(d->vm,d->int0_irq);
+   }
+   else
+   {
+      d->int_cause_reg &= ~(1 << 30);
+      vm_clear_irq(d->vm,d->int0_irq);
+   }
+
+   /* Interrupt1* active ? */
+   if ((d->int_cause_reg & d->int1_main_mask_reg) || 
+       (d->int_high_cause_reg & d->int1_high_mask_reg)) 
+   {
+      d->int_cause_reg |= 1 << 31;
+      vm_set_irq(d->vm,d->int1_irq);
+   }
+   else
+   {
+      d->int_cause_reg &= ~(1 << 31);
+      vm_clear_irq(d->vm,d->int1_irq);
+   }
+
+   /* SerInt0* active ? */
+   if (d->ser_cause_reg & d->serint0_mask_reg) {
+      vm_set_irq(d->vm,d->serint0_irq);
+   } else {
+      vm_clear_irq(d->vm,d->serint0_irq);
+   }
+
+   /* SerInt1* active ? */
+   if (d->ser_cause_reg & d->serint1_mask_reg) {
+      vm_set_irq(d->vm,d->serint1_irq);
+   } else {
+      vm_clear_irq(d->vm,d->serint1_irq);
+   }
+}
+
+/* ======================================================================== */
+/* SDMA (Serial DMA)                                                        */
+/* ======================================================================== */
+
+/* Update SDMA interrupt status */
+static void gt_sdma_update_int_status(struct gt_data *d)
+{
+   /* Update general SDMA status */
+   if (d->sdma_cause_reg & d->sdma_mask_reg) {
+      d->ser_cause_reg |= GT_SCR_SDMA_SUM;
+      d->int_high_cause_reg |= GT_IHCR_SDMA_SUM;
+   } else {
+      d->ser_cause_reg &= ~GT_SCR_SDMA_SUM;
+      d->int_high_cause_reg &= ~GT_IHCR_SDMA_SUM;
+   }
+
+   gt96k_update_irq_status(d);
+}
+
+/* Update SDMA interrupt status for the specified channel */
+static void gt_sdma_update_channel_int_status(struct gt_data *d,u_int chan_id)
+{
+   m_uint32_t ch_st;
+
+   /* Get the status of the specified SDMA channel */
+   ch_st = d->sdma_cause_reg & (0x0000000F << (chan_id << 2));
+
+   if (ch_st)
+      d->ser_cause_reg |= GT_SCR_SDMA0_SUM << (chan_id << 1);
+   else
+      d->ser_cause_reg &= ~(GT_SCR_SDMA0_SUM << (chan_id << 1));
+
+   gt_sdma_update_int_status(d);
+}
+
+/* Set SDMA cause register for a channel */
+static inline void gt_sdma_set_cause(struct gt_data *d,u_int chan_id,
+                                     u_int value)
+{
+   d->sdma_cause_reg |= value << (chan_id << 2);
+}
+
+/* Read a SDMA descriptor from memory */
+static void gt_sdma_desc_read(struct gt_data *d,m_uint32_t addr,
+                              struct sdma_desc *desc)
+{
+   physmem_copy_from_vm(d->vm,desc,addr,sizeof(struct sdma_desc));
+
+   /* byte-swapping */
+   desc->buf_size = vmtoh32(desc->buf_size);
+   desc->cmd_stat = vmtoh32(desc->cmd_stat);
+   desc->next_ptr = vmtoh32(desc->next_ptr);
+   desc->buf_ptr  = vmtoh32(desc->buf_ptr);
+}
+
+/* Write a SDMA descriptor to memory */
+static void gt_sdma_desc_write(struct gt_data *d,m_uint32_t addr,
+                               struct sdma_desc *desc)
+{
+   struct sdma_desc tmp;
+   
+   /* byte-swapping */
+   tmp.cmd_stat = vmtoh32(desc->cmd_stat);
+   tmp.buf_size = vmtoh32(desc->buf_size);
+   tmp.next_ptr = vmtoh32(desc->next_ptr);
+   tmp.buf_ptr  = vmtoh32(desc->buf_ptr);
+
+   physmem_copy_to_vm(d->vm,&tmp,addr,sizeof(struct sdma_desc));
+}
+
+/* Send contents of a SDMA buffer */
+static void gt_sdma_send_buffer(struct gt_data *d,u_int chan_id,
+                                u_char *buffer,m_uint32_t len)
+{
+   struct mpsc_channel *channel;
+   u_int mode;
+
+   channel = &d->mpsc[chan_id];
+   mode = channel->mmcrl & GT_MMCRL_MODE_MASK;
+
+   switch(mode) {
+      case GT_MPSC_MODE_HDLC:
+         if (channel->nio != NULL)
+            netio_send(channel->nio,buffer,len);
+         break;
+
+      case GT_MPSC_MODE_UART:
+         if (channel->vtty != NULL)
+            vtty_put_buffer(channel->vtty,(char *)buffer,len);
+         break;
+   }
+}
+
+/* Start TX DMA process */
+static int gt_sdma_tx_start(struct gt_data *d,struct sdma_channel *chan)
+{   
+   u_char pkt[GT_MAX_PKT_SIZE],*pkt_ptr;
+   struct sdma_desc txd0,ctxd,*ptxd;
+   m_uint32_t tx_start,tx_current;
+   m_uint32_t len,tot_len;
+   int abort = FALSE;
+
+   tx_start = tx_current = chan->sctdp;
+
+   if (!tx_start)
+      return(FALSE);
+
+   ptxd = &txd0;
+   gt_sdma_desc_read(d,tx_start,ptxd);
+
+   /* If we don't own the first descriptor, we cannot transmit */
+   if (!(txd0.cmd_stat & GT_TXDESC_OWN))
+      return(FALSE);
+
+   /* Empty packet for now */
+   pkt_ptr = pkt;
+   tot_len = 0;
+
+   for(;;)
+   {
+      /* Copy packet data to the buffer */
+      len = (ptxd->buf_size & GT_TXDESC_BC_MASK) >> GT_TXDESC_BC_SHIFT;
+
+      physmem_copy_from_vm(d->vm,pkt_ptr,ptxd->buf_ptr,len);
+      pkt_ptr += len;
+      tot_len += len;
+
+      /* Clear the OWN bit if this is not the first descriptor */
+      if (!(ptxd->cmd_stat & GT_TXDESC_F)) {
+         ptxd->cmd_stat &= ~GT_TXDESC_OWN;
+         physmem_copy_u32_to_vm(d->vm,tx_current,ptxd->cmd_stat);
+      }
+
+      tx_current = ptxd->next_ptr;
+
+      /* Last descriptor or no more desc available ? */
+      if (ptxd->cmd_stat & GT_TXDESC_L)
+         break;
+
+      if (!tx_current) {
+         abort = TRUE;
+         break;
+      }
+
+      /* Fetch the next descriptor */
+      gt_sdma_desc_read(d,tx_current,&ctxd);
+      ptxd = &ctxd;
+   }
+
+   if ((tot_len != 0) && !abort) {
+#if DEBUG_SDMA
+      GT_LOG(d,"SDMA%u: sending packet of %u bytes\n",tot_len);
+      mem_dump(log_file,pkt,tot_len);
+#endif
+      /* send it on wire */
+      gt_sdma_send_buffer(d,chan->id,pkt,tot_len);
+
+      /* Signal that a TX buffer has been transmitted */
+      gt_sdma_set_cause(d,chan->id,GT_SDMA_CAUSE_TXBUF0);
+   }
+
+   /* Clear the OWN flag of the first descriptor */
+   txd0.cmd_stat &= ~GT_TXDESC_OWN;
+   physmem_copy_u32_to_vm(d->vm,tx_start+4,txd0.cmd_stat);
+
+   chan->sctdp = tx_current;
+
+   if (abort || !tx_current) {
+      gt_sdma_set_cause(d,chan->id,GT_SDMA_CAUSE_TXEND0);
+      chan->sdcm &= ~GT_SDCMR_TXD;
+   }
+
+   /* Update interrupt status $*/
+   gt_sdma_update_channel_int_status(d,chan->id);
+   return(TRUE);
+}
+
+/* Put a packet in buffer of a descriptor */
+static void gt_sdma_rxdesc_put_pkt(struct gt_data *d,struct sdma_desc *rxd,
+                                   u_char **pkt,ssize_t *pkt_len)
+{
+   ssize_t len,cp_len;
+
+   len = (rxd->buf_size & GT_RXDESC_BS_MASK) >> GT_RXDESC_BS_SHIFT;
+   
+   /* compute the data length to copy */
+   cp_len = m_min(len,*pkt_len);
+   
+   /* copy packet data to the VM physical RAM */
+   physmem_copy_to_vm(d->vm,*pkt,rxd->buf_ptr,cp_len);
+      
+   /* set the byte count in descriptor */
+   rxd->buf_size |= cp_len;
+
+   *pkt += cp_len;
+   *pkt_len -= cp_len;
+}
+
+/* Put a packet into SDMA buffers */
+static int gt_sdma_handle_rxqueue(struct gt_data *d,
+                                  struct sdma_channel *channel,
+                                  u_char *pkt,ssize_t pkt_len)
+{
+   m_uint32_t rx_start,rx_current;
+   struct sdma_desc rxd0,rxdn,*rxdc;
+   ssize_t tot_len = pkt_len;
+   u_char *pkt_ptr = pkt;
+   int i;
+
+   /* Truncate the packet if it is too big */
+   pkt_len = m_min(pkt_len,GT_MAX_PKT_SIZE);
+
+   /* Copy the first RX descriptor */
+   if (!(rx_start = rx_current = channel->scrdp))
+      goto dma_error;
+
+   /* Load the first RX descriptor */
+   gt_sdma_desc_read(d,rx_start,&rxd0);
+
+#if DEBUG_SDMA
+   GT_LOG(d,"SDMA channel %u: reading desc at 0x%8.8x "
+          "[buf_size=0x%8.8x,cmd_stat=0x%8.8x,"
+          "next_ptr=0x%8.8x,buf_ptr=0x%8.8x]\n",
+          channel->id,rx_start,rxd0.buf_size,rxd0.cmd_stat,
+          rxd0.next_ptr,rxd0.buf_ptr);
+#endif
+
+   for(i=0,rxdc=&rxd0;tot_len>0;i++)
+   {
+      /* We must own the descriptor */
+      if (!(rxdc->cmd_stat & GT_RXDESC_OWN))
+         goto dma_error;
+
+      /* Put data into the descriptor buffer */
+      gt_sdma_rxdesc_put_pkt(d,rxdc,&pkt_ptr,&tot_len);
+
+      /* Clear the OWN bit */
+      rxdc->cmd_stat &= ~GT_RXDESC_OWN;
+
+      /* We have finished if the complete packet has been stored */
+      if (tot_len == 0) {
+         rxdc->cmd_stat |= GT_RXDESC_L;
+         rxdc->buf_size += 4;  /* Add 4 bytes for CRC */
+      }
+
+      /* Update the descriptor in host memory (but not the 1st) */
+      if (i != 0)
+         gt_sdma_desc_write(d,rx_current,rxdc);
+
+      /* Get address of the next descriptor */
+      rx_current = rxdc->next_ptr;
+
+      if (tot_len == 0)
+         break;
+
+      if (!rx_current)
+         goto dma_error;
+
+      /* Read the next descriptor from VM physical RAM */
+      gt_sdma_desc_read(d,rx_current,&rxdn);
+      rxdc = &rxdn;
+   }
+
+   /* Update the RX pointers */
+   channel->scrdp = rx_current;
+       
+   /* Update the first RX descriptor */
+   rxd0.cmd_stat |= GT_RXDESC_F;
+   gt_sdma_desc_write(d,rx_start,&rxd0);
+
+   /* Indicate that we have a frame ready */
+   gt_sdma_set_cause(d,channel->id,GT_SDMA_CAUSE_RXBUF0);
+   gt_sdma_update_channel_int_status(d,channel->id);
+   return(TRUE);
+
+ dma_error:
+   gt_sdma_set_cause(d,channel->id,GT_SDMA_CAUSE_RXERR0);
+   gt_sdma_update_channel_int_status(d,channel->id);
+   return(FALSE);
+}
+
+/* Handle RX packet for a SDMA channel*/
+static int gt_sdma_handle_rx_pkt(netio_desc_t *nio,
+                                 u_char *pkt,ssize_t pkt_len,
+                                 struct gt_data *d,void *arg)
+{
+   struct sdma_channel *channel;
+   u_int chan_id = (int)arg;
+   u_int group_id;
+
+   GT_LOCK(d);
+
+   /* Find the SDMA group associated to the MPSC channel for receiving */
+   group_id = (d->sgcr >> chan_id) & 0x01;
+   channel  = &d->sdma[group_id][chan_id];
+   
+   gt_sdma_handle_rxqueue(d,channel,pkt,pkt_len);
+   GT_UNLOCK(d);
+   return(TRUE);
+}
+
+/* Handle a SDMA channel */
+static int gt_sdma_access(cpu_gen_t *cpu,struct vdevice *dev,
+                          m_uint32_t offset,u_int op_size,u_int op_type,
+                          m_uint64_t *data)
+{
+   struct gt_data *gt_data = dev->priv_data;
+   struct sdma_channel *channel;
+   u_int group,chan_id,reg;
+
+   if ((offset & 0x000F00) != 0x000900)
+      return(FALSE);
+
+   /* Decode group, channel and register */
+   group   = (offset >> 20) & 0x0F;
+   chan_id = (offset >> 16) & 0x0F;
+   reg     = offset & 0xFFFF;
+
+   if ((group >= GT_SDMA_GROUPS) || (chan_id >= GT_SDMA_CHANNELS)) {
+      cpu_log(cpu,"GT96100","invalid SDMA register 0x%8.8x\n",offset);
+      return(TRUE);
+   }
+
+   channel = &gt_data->sdma[group][chan_id];
+
+#if 0
+   printf("SDMA: access to reg 0x%6.6x (group=%u, channel=%u)\n",
+          offset, group, chan_id);
+#endif   
+
+   switch(reg) {
+      /* Configuration Register */
+      case GT_SDMA_SDC:
+         break;
+
+      /* Command Register */
+      case GT_SDMA_SDCM:   
+         if (op_type == MTS_WRITE) {
+            channel->sdcm = *data;
+
+            if (channel->sdcm & GT_SDCMR_TXD) {
+#if DEBUG_SDMA
+               cpu_log(cpu,"GT96100-SDMA","starting TX transfer (%u/%u)\n",
+                       group,chan_id);
+#endif
+               gt_sdma_tx_start(gt_data,channel);
+            }
+         } else {
+            *data = 0xFF; //0xFFFFFFFF;
+         }
+         break;
+
+      /* Current RX descriptor */
+      case GT_SDMA_SCRDP:
+         if (op_type == MTS_READ)
+            *data = channel->scrdp;
+         else
+            channel->scrdp = *data;
+         break;
+
+      /* Current TX desc. pointer */
+      case GT_SDMA_SCTDP:
+         if (op_type == MTS_READ)
+            *data = channel->sctdp;
+         else
+            channel->sctdp = *data;
+         break;
+
+      /* First TX desc. pointer */
+      case GT_SDMA_SFTDP:
+         if (op_type == MTS_READ)
+            *data = channel->sftdp;
+         else
+            channel->sftdp = *data;
+         break;
+
+      default:
+         /* unknown/unmanaged register */
+         return(FALSE);
+   }
+
+   return(TRUE);
+}
+
+/* ======================================================================== */
+/* MPSC (MultiProtocol Serial Controller)                                   */
+/* ======================================================================== */
+
+/* Handle a MPSC channel */
+static int gt_mpsc_access(cpu_gen_t *cpu,struct vdevice *dev,
+                          m_uint32_t offset,u_int op_size,u_int op_type,
+                          m_uint64_t *data)
+{
+   struct gt_data *gt_data = dev->priv_data;
+   struct mpsc_channel *channel;
+   u_int chan_id,reg,reg2;
+
+   if ((offset & 0x000F00) != 0x000A00)
+      return(FALSE);
+
+   /* Decode channel ID and register */
+   chan_id = offset >> 15;
+   reg     = offset & 0xFFF;
+
+   if (chan_id >= GT_MPSC_CHANNELS)
+      return(FALSE);
+
+   channel = &gt_data->mpsc[chan_id];
+
+   switch(reg) {
+      /* Main Config Register Low */
+      case GT_MPSC_MMCRL:
+         if (op_type == MTS_READ) {
+            *data = channel->mmcrl;
+         } else {
+#if DEBUG_MPSC            
+            GT_LOG(gt_data,"MPSC channel %u set in mode %llu\n",
+                   chan_id,*data & 0x07);
+#endif
+            channel->mmcrl = *data;
+         }
+         break;
+
+      /* Main Config Register High */
+      case GT_MPSC_MMCRH:
+         if (op_type == MTS_READ)
+            *data = channel->mmcrh;
+         else
+            channel->mmcrh = *data;
+         break;
+
+      /* Protocol Config Register */
+      case GT_MPSC_MPCR:
+         if (op_type == MTS_READ)
+            *data = channel->mpcr;
+         else
+            channel->mpcr = *data;
+         break;
+
+      /* Channel registers */
+      case GT_MPSC_CHR1: 
+      case GT_MPSC_CHR2: 
+      case GT_MPSC_CHR3:
+      case GT_MPSC_CHR4: 
+      case GT_MPSC_CHR5: 
+      case GT_MPSC_CHR6:
+      case GT_MPSC_CHR7: 
+      case GT_MPSC_CHR8: 
+      case GT_MPSC_CHR9:
+         //case GT_MPSC_CHR10:
+         reg2 = (reg - GT_MPSC_CHR1) >> 2;
+         if (op_type == MTS_READ)
+            *data = channel->chr[reg2];
+         else
+            channel->chr[reg2] = *data;
+         break;
+
+      case GT_MPSC_CHR10:
+         if (op_type == MTS_READ)
+            *data = channel->chr[9] | 0x20;
+         else
+            channel->chr[9] = *data;
+         break;
+
+      default:
+         /* unknown/unmanaged register */
+         return(FALSE);
+   }
+
+   return(TRUE);
+}
+
+/* Set NIO for a MPSC channel */
+int dev_gt96100_mpsc_set_nio(struct gt_data *d,u_int chan_id,netio_desc_t *nio)
+{
+   struct mpsc_channel *channel;
+
+   if (chan_id >= GT_MPSC_CHANNELS)
+      return(-1);
+
+   channel = &d->mpsc[chan_id];
+
+   if (channel->nio != NULL)
+      return(-1);
+
+   channel->nio = nio;
+   netio_rxl_add(nio,(netio_rx_handler_t)gt_sdma_handle_rx_pkt,
+                 d,(void *)chan_id);
+   return(0);
+}
+
+/* Unset NIO for a MPSC channel */
+int dev_gt96100_mpsc_unset_nio(struct gt_data *d,u_int chan_id)
+{   
+   struct mpsc_channel *channel;
+
+   if (chan_id >= GT_MPSC_CHANNELS)
+      return(-1);
+
+   channel = &d->mpsc[chan_id];
+
+   if (channel->nio != NULL) {
+      netio_rxl_remove(channel->nio);
+      channel->nio = NULL;
+   }
+
+   return(0);
+}
+
+/* Set a VTTY for a MPSC channel */
+int dev_gt96100_mpsc_set_vtty(struct gt_data *d,u_int chan_id,vtty_t *vtty)
+{
+   struct mpsc_channel *channel;
+
+   if (chan_id >= GT_MPSC_CHANNELS)
+      return(-1);
+
+   channel = &d->mpsc[chan_id];
+
+   if (channel->vtty != NULL)
+      return(-1);
+
+   channel->vtty = vtty;
+   return(0);
+}
+
+/* Unset a VTTY for a MPSC channel */
+int dev_gt96100_mpsc_unset_vtty(struct gt_data *d,u_int chan_id)
+{   
+   struct mpsc_channel *channel;
+
+   if (chan_id >= GT_MPSC_CHANNELS)
+      return(-1);
+
+   channel = &d->mpsc[chan_id];
+
+   if (channel->vtty != NULL) {
+      channel->vtty = NULL;
+   }
+
+   return(0);
+}
+
+/* ======================================================================== */
+/* Ethernet                                                                 */
+/* ======================================================================== */
 
 /* Trigger/clear Ethernet interrupt if one or both port have pending events */
 static void gt_eth_set_int_status(struct gt_data *d)
 {
-   if ((d->eth_ports[0].icr & GT_ICR_INT_SUM) ||
-       (d->eth_ports[1].icr & GT_ICR_INT_SUM))
-      vm_set_irq(d->vm,d->eth_irq);
-   else
-      vm_clear_irq(d->vm,d->eth_irq);
+   /* Compute Ether0 summary */
+   if (d->eth_ports[0].icr & GT_ICR_INT_SUM) {
+      d->ser_cause_reg |= GT_SCR_ETH0_SUM;
+      d->int_high_cause_reg |= GT_IHCR_ETH0_SUM;
+   } else {
+      d->ser_cause_reg &= ~GT_SCR_ETH0_SUM;
+      d->int_high_cause_reg &= ~GT_IHCR_ETH0_SUM;
+   }
+
+   /* Compute Ether1 summary */
+   if (d->eth_ports[1].icr & GT_ICR_INT_SUM) {
+      d->ser_cause_reg |= GT_SCR_ETH1_SUM;
+      d->int_high_cause_reg |= GT_IHCR_ETH1_SUM;
+   } else {
+      d->ser_cause_reg &= ~GT_SCR_ETH1_SUM;
+      d->int_high_cause_reg &= ~GT_IHCR_ETH1_SUM;
+   }
+
+   gt96k_update_irq_status(d);
 }
 
 /* Update the Ethernet port interrupt status */
@@ -821,24 +1556,17 @@ static int gt_eth_access(cpu_gen_t *cpu,struct vdevice *dev,
                          m_uint64_t *data)
 {
    struct gt_data *d = dev->priv_data;
-   struct eth_port *port;
-   u_int port_id = 0;
+   struct eth_port *port = NULL;
    u_int queue;
 
    if ((offset < 0x80000) || (offset >= 0x90000))
       return(FALSE);
 
-   if (op_type == MTS_WRITE)
-      *data = swap32(*data);
-
-   /* Detemine the Ethernet port */
+   /* Determine the Ethernet port */
    if ((offset >= 0x84800) && (offset < 0x88800))
-      port_id = 0;
-
-   if ((offset >= 0x88800) && (offset < 0x8c800))
-      port_id = 1;
-
-   port = &d->eth_ports[port_id];   
+      port = &d->eth_ports[0];
+   else if ((offset >= 0x88800) && (offset < 0x8c800))
+      port = &d->eth_ports[1];
 
    switch(offset) {
       /* SMI register */
@@ -1063,9 +1791,6 @@ static int gt_eth_access(cpu_gen_t *cpu,struct vdevice *dev,
 #endif
    }
 
-   if (op_type == MTS_READ)
-      *data = swap32(*data);
-
    return(TRUE);
 }
 
@@ -1076,15 +1801,42 @@ void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct gt_data *gt_data = dev->priv_data;
-   
-   if (op_type == MTS_READ)
+
+   GT_LOCK(gt_data);
+
+   if (op_type == MTS_READ) {
       *data = 0;
+   } else {
+      if (op_size == 4)
+         *data = swap32(*data);
+   }
 
+#if 0 /* DEBUG */
+   if (offset != 0x101a80) {
+      if (op_type == MTS_READ) {
+         cpu_log(cpu,"GT96100","READ OFFSET 0x%6.6x\n",offset);
+      } else {
+         cpu_log(cpu,"GT96100","WRITE OFFSET 0x%6.6x, DATA=0x%8.8llx\n",
+                 offset,*data);
+      }
+   }
+#endif
+
+   /* DMA registers */
    if (gt_dma_access(cpu,dev,offset,op_size,op_type,data) != 0)
-      return NULL;
+      goto done;
 
+   /* Serial DMA channel registers */
+   if (gt_sdma_access(cpu,dev,offset,op_size,op_type,data) != 0)
+      goto done;
+
+   /* MPSC registers */
+   if (gt_mpsc_access(cpu,dev,offset,op_size,op_type,data) != 0)
+      goto done;
+
+   /* Ethernet registers */
    if (gt_eth_access(cpu,dev,offset,op_size,op_type,data) != 0)
-      return NULL;
+      goto done;
 
    switch(offset) {
       /* Watchdog configuration register */
@@ -1097,142 +1849,219 @@ void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
       case 0x008:    /* ras10_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x000);
+            *data = 0x000;
          break;
       case 0x010:    /* ras10_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x018:    /* ras32_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x100);
+            *data = 0x100;
          break;
       case 0x020:    /* ras32_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x400:    /* ras0_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x404:    /* ras0_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x408:    /* ras1_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x40c:    /* ras1_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x410:    /* ras2_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0x414:    /* ras2_high */
          if (op_type == MTS_READ)
-            *data = swap32(0xFF);
+            *data = 0xFF;
          break;
       case 0x418:    /* ras3_low */
          if (op_type == MTS_READ)
-            *data = swap32(0x7F);
+            *data = 0x7F;
          break;
       case 0x41c:    /* ras3_high */
          if (op_type == MTS_READ)
-            *data = swap32(0x00);
+            *data = 0x00;
          break;
       case 0xc08:    /* pci0_cs10 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
       case 0xc0c:    /* pci0_cs32 */
          if (op_type == MTS_READ)
-            *data = swap32(0xFFF);
+            *data = 0xFFF;
          break;
 
       case 0xc00:    /* pci_cmd */
          if (op_type == MTS_READ)
-            *data = swap32(0x00008001);
+            *data = 0x00008001;
          break;
 
       /* ===== Interrupt Main Cause Register ===== */
       case 0xc18:
          if (op_type == MTS_READ) {
             *data = gt_data->int_cause_reg;
-         
-            /* TODO: signal Eth0/Eth1 */
-            //*data |= (1 << 30) | (1 << 31) | 1;
-
-            *data = swap32(*data);
          } else {
-            gt_data->int_cause_reg &= swap32(*data);
-            gt_update_irq_status(gt_data);
-         }
-         break;
-
-      /* ===== Interrupt Mask Register ===== */
-      case 0xc1c:
-         if (op_type == MTS_READ) {
-            *data = swap32(gt_data->int_mask_reg);
-         } else {
-            gt_data->int_mask_reg = swap32(*data);
-            gt_update_irq_status(gt_data);
+            /* Don't touch bit 0, 30 and 31 which are read-only */
+            gt_data->int_cause_reg &= (*data | 0xC0000001);
+            gt96k_update_irq_status(gt_data);
          }
          break;
 
       /* ===== Interrupt High Cause Register ===== */
       case 0xc98:
+         if (op_type == MTS_READ)
+            *data = gt_data->int_high_cause_reg;
+         break;
+
+      /* ===== Interrupt0 Main Mask Register ===== */
+      case 0xc1c:
          if (op_type == MTS_READ) {
-            *data = 0;
-
-            /* interrupt on ethernet port 0 ? */
-            if (gt_data->eth_ports[0].icr & GT_ICR_INT_SUM)
-               *data |= GT_IHCR_ETH0_SUM;
-
-            /* interrupt on ethernet port 1 ? */
-            if (gt_data->eth_ports[1].icr & GT_ICR_INT_SUM)
-               *data |= GT_IHCR_ETH1_SUM;
-
-            *data = swap32(*data);
+            *data = gt_data->int0_main_mask_reg;
+         } else {
+            gt_data->int0_main_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
          }
          break;
 
-      /* Serial Cause Register */
-      case 0x103a00:
+      /* ===== Interrupt0 High Mask Register ===== */
+      case 0xc9c:
          if (op_type == MTS_READ) {
-            *data = 0;
-
-            /* interrupt on ethernet port 0 ? */
-            if (gt_data->eth_ports[0].icr & GT_ICR_INT_SUM)
-               *data |= GT_SCR_ETH0_SUM;
-
-            /* interrupt on ethernet port 1 ? */
-            if (gt_data->eth_ports[1].icr & GT_ICR_INT_SUM)
-               *data |= GT_SCR_ETH1_SUM;
-
-            gt_update_irq_status(gt_data);
-            *data = swap32(*data);
+            *data = gt_data->int0_high_mask_reg;
+         } else {
+            gt_data->int0_high_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
          }
+         break;
+
+      /* ===== Interrupt1 Main Mask Register ===== */
+      case 0xc24:
+         if (op_type == MTS_READ) {
+            *data = gt_data->int1_main_mask_reg;
+         } else {
+            gt_data->int1_main_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
+         }
+         break;
+
+      /* ===== Interrupt1 High Mask Register ===== */
+      case 0xca4:
+         if (op_type == MTS_READ) {
+            *data = gt_data->int1_high_mask_reg;
+         } else {
+            gt_data->int1_high_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
+         }
+         break;
+
+      /* ===== Serial Cause Register (read-only) ===== */
+      case 0x103a00:
+         if (op_type == MTS_READ)
+            *data = gt_data->ser_cause_reg;
+         break;
+
+      /* ===== SerInt0 Mask Register ===== */
+      case 0x103a80:
+         if (op_type == MTS_READ) {
+            *data = gt_data->serint0_mask_reg;
+         } else {
+            gt_data->serint0_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
+         }
+         break;
+
+      /* ===== SerInt1 Mask Register ===== */
+      case 0x103a88:
+         if (op_type == MTS_READ) {
+            *data = gt_data->serint1_mask_reg;
+         } else {
+            gt_data->serint1_mask_reg = *data;
+            gt96k_update_irq_status(gt_data);
+         }
+         break;
+
+      /* ===== SDMA cause register ===== */
+      case 0x103a10:
+         if (op_type == MTS_READ) {
+            *data = gt_data->sdma_cause_reg;
+         } else {
+            gt_data->sdma_cause_reg &= *data;
+            gt_sdma_update_int_status(gt_data);
+         }
+         break;
+
+      case 0x103a13:
+         if (op_type == MTS_WRITE) {
+            //printf("Writing 0x103a13, *data = 0x%8.8llx, "
+            //       "sdma_cause_reg=0x%8.8x\n",
+            //       *data, gt_data->sdma_cause_reg);
+
+            gt_data->sdma_cause_reg = 0;
+            gt_sdma_update_channel_int_status(gt_data,6);
+            gt_sdma_update_channel_int_status(gt_data,7);
+         }
+         break;
+
+      /* ==== SDMA mask register */
+      case 0x103a90:
+         if (op_type == MTS_READ) {
+            *data = gt_data->sdma_mask_reg;
+         } else {
+            gt_data->sdma_mask_reg = *data;
+            gt_sdma_update_int_status(gt_data);
+         }
+         break;
+
+      case 0x103a38:
+      case 0x103a3c:
+      case 0x100A48:
+         if (op_type == MTS_READ) {
+            //*data = 0xFFFFFFFF;
+         }
+         break;
+
+      /* CIU Arbiter Configuration Register */
+      case 0x101ac0:
+         if (op_type == MTS_READ)
+            *data = 0x80000000;
+         break;
+
+      /* SGCR - SDMA Global Configuration Register */
+      case GT_REG_SGC:
+         if (op_type == MTS_READ)
+            *data = gt_data->sgcr;
+         else
+            gt_data->sgcr = *data;
          break;
 
       /* ===== PCI Bus 1 ===== */
       case 0xcf0:
-         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[1],op_type,FALSE,data);
          break;
 
       case 0xcf4:
-         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,TRUE,data);
+         pci_dev_data_handler(cpu,gt_data->bus[1],op_type,FALSE,data);
          break;
          
       /* ===== PCI Bus 0 ===== */
       case PCI_BUS_ADDR:    /* pci configuration address (0xcf8) */
-         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_addr_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
       case PCI_BUS_DATA:    /* pci data address (0xcfc) */
-         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,TRUE,data);
+         pci_dev_data_handler(cpu,gt_data->bus[0],op_type,FALSE,data);
          break;
 
 #if DEBUG_UNKNOWN
@@ -1247,35 +2076,11 @@ void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 #endif
    }
 
+ done:
+   GT_UNLOCK(gt_data);
+   if ((op_type == MTS_READ) && (op_size == 4))
+      *data = swap32(*data);
    return NULL;
-}
-
-/* Read an Ethernet descriptor */
-static void gt_eth_desc_read(struct gt_data *d,m_uint32_t addr,
-                             struct eth_desc *desc)
-{
-   physmem_copy_from_vm(d->vm,desc,addr,sizeof(struct eth_desc));
-   
-   /* byte-swapping */
-   desc->cmd_stat = vmtoh32(desc->cmd_stat);
-   desc->buf_size = vmtoh32(desc->buf_size);
-   desc->next_ptr = vmtoh32(desc->next_ptr);
-   desc->buf_ptr  = vmtoh32(desc->buf_ptr);
-}
-
-/* Write an Ethernet descriptor */
-static void gt_eth_desc_write(struct gt_data *d,m_uint32_t addr,
-                              struct eth_desc *desc)
-{
-   struct eth_desc tmp;
-   
-   /* byte-swapping */
-   tmp.cmd_stat = vmtoh32(desc->cmd_stat);
-   tmp.buf_size = vmtoh32(desc->buf_size);
-   tmp.next_ptr = vmtoh32(desc->next_ptr);
-   tmp.buf_ptr  = vmtoh32(desc->buf_ptr);
-
-   physmem_copy_to_vm(d->vm,&tmp,addr,sizeof(struct eth_desc));
 }
 
 /* Handle a TX queue (single packet) */
@@ -1283,7 +2088,7 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
                                  int queue)
 {   
    u_char pkt[GT_MAX_PKT_SIZE],*pkt_ptr;
-   struct eth_desc txd0,ctxd,*ptxd;
+   struct sdma_desc txd0,ctxd,*ptxd;
    m_uint32_t tx_start,tx_current;
    m_uint32_t len,tot_len;
    int abort = FALSE;
@@ -1302,7 +2107,7 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
       return(FALSE);
 
    ptxd = &txd0;
-   gt_eth_desc_read(d,tx_start,ptxd);
+   gt_sdma_desc_read(d,tx_start,ptxd);
 
    /* If we don't own the first descriptor, we cannot transmit */
    if (!(txd0.cmd_stat & GT_TXDESC_OWN))
@@ -1350,7 +2155,7 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
       }
 
       /* Fetch the next descriptor */
-      gt_eth_desc_read(d,tx_current,&ctxd);
+      gt_sdma_desc_read(d,tx_current,&ctxd);
       ptxd = &ctxd;
    }
 
@@ -1414,9 +2219,12 @@ static int gt_eth_handle_txqueues(struct gt_data *d)
 {
    int i;
 
+   GT_LOCK(d);
+
    for(i=0;i<GT_ETH_PORTS;i++)
       gt_eth_handle_port_txqueues(d,i);
 
+   GT_UNLOCK(d);
    return(TRUE);
 }
 
@@ -1569,34 +2377,13 @@ static inline int gt_eth_handle_rx_daddr(struct gt_data *d,
    return(0);
 }
 
-/* Put a packet in buffer of a descriptor */
-static void gt_eth_rxdesc_put_pkt(struct gt_data *d,struct eth_desc *rxd,
-                                  u_char **pkt,ssize_t *pkt_len)
-{
-   ssize_t len,cp_len;
-
-   len = (rxd->buf_size & GT_RXDESC_BS_MASK) >> GT_RXDESC_BS_SHIFT;
-   
-   /* compute the data length to copy */
-   cp_len = m_min(len,*pkt_len);
-   
-   /* copy packet data to the VM physical RAM */
-   physmem_copy_to_vm(d->vm,*pkt,rxd->buf_ptr,cp_len);
-      
-   /* set the byte count in descriptor */
-   rxd->buf_size |= cp_len;
-
-   *pkt += cp_len;
-   *pkt_len -= cp_len;
-}
-
 /* Put a packet in the specified RX queue */
 static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
                                  u_char *pkt,ssize_t pkt_len)
 {
    struct eth_port *port = &d->eth_ports[port_id];
    m_uint32_t rx_start,rx_current;
-   struct eth_desc rxd0,rxdn,*rxdc;
+   struct sdma_desc rxd0,rxdn,*rxdc;
    ssize_t tot_len = pkt_len;
    u_char *pkt_ptr = pkt;
    n_eth_dot1q_hdr_t *hdr;
@@ -1624,7 +2411,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
       return(FALSE);
 
    /* Load the first RX descriptor */
-   gt_eth_desc_read(d,rx_start,&rxd0);
+   gt_sdma_desc_read(d,rx_start,&rxd0);
 
 #if DEBUG_ETH_RX
    GT_LOG(d,"port %u/queue %u: reading desc at 0x%8.8x "
@@ -1641,7 +2428,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
          goto dma_error;
 
       /* Put data into the descriptor buffer */
-      gt_eth_rxdesc_put_pkt(d,rxdc,&pkt_ptr,&tot_len);
+      gt_sdma_rxdesc_put_pkt(d,rxdc,&pkt_ptr,&tot_len);
 
       /* Clear the OWN bit */
       rxdc->cmd_stat &= ~GT_RXDESC_OWN;
@@ -1654,7 +2441,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
 
       /* Update the descriptor in host memory (but not the 1st) */
       if (i != 0)
-         gt_eth_desc_write(d,rx_current,rxdc);
+         gt_sdma_desc_write(d,rx_current,rxdc);
 
       /* Get address of the next descriptor */
       rx_current = rxdc->next_ptr;
@@ -1666,7 +2453,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
          goto dma_error;
 
       /* Read the next descriptor from VM physical RAM */
-      gt_eth_desc_read(d,rx_current,&rxdn);
+      gt_sdma_desc_read(d,rx_current,&rxdn);
       rxdc = &rxdn;
    }
 
@@ -1685,7 +2472,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
    if (ntohs(hdr->type) <= N_ETH_MTU)   /* 802.3 frame */
       rxd0.cmd_stat |= GT_RXDESC_FT;
 
-   gt_eth_desc_write(d,rx_start,&rxd0);
+   gt_sdma_desc_write(d,rx_start,&rxd0);
 
    /* Update MIB counters */
    port->rx_bytes += pkt_len;
@@ -1712,12 +2499,17 @@ static int gt_eth_handle_rx_pkt(netio_desc_t *nio,
 
    port = &d->eth_ports[port_id];
 
-  /* Check if RX DMA is active */
-   if (!(port->sdcmr & GT_SDCMR_ERD))
+   GT_LOCK(d);
+
+   /* Check if RX DMA is active */
+   if (!(port->sdcmr & GT_SDCMR_ERD)) {
+      GT_UNLOCK(d);
       return(FALSE);
+   }
 
    queue = 0;  /* At this time, only put packet in queue 0 */
    gt_eth_handle_rxqueue(d,port_id,queue,pkt,pkt_len);
+   GT_UNLOCK(d);
    return(TRUE);
 }
 
@@ -1751,8 +2543,10 @@ int dev_gt64010_init(vm_instance_t *vm,char *name,
    }
 
    memset(d,0,sizeof(*d));
+   pthread_mutex_init(&d->lock,NULL);
    d->vm = vm;   
    d->bus[0] = vm->pci_bus[0];
+   d->gt_update_irq_status = gt64k_update_irq_status;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = name;
@@ -1812,9 +2606,11 @@ int dev_gt64120_init(vm_instance_t *vm,char *name,
    }
 
    memset(d,0,sizeof(*d));
+   pthread_mutex_init(&d->lock,NULL);
    d->vm = vm;
    d->bus[0] = vm->pci_bus[0];
    d->bus[1] = vm->pci_bus[1];
+   d->gt_update_irq_status = gt64k_update_irq_status;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = name;
@@ -1864,9 +2660,11 @@ static m_uint32_t pci_gt96100_read(cpu_gen_t *cpu,struct pci_device *dev,
 /* Create a new GT96100 controller */
 int dev_gt96100_init(vm_instance_t *vm,char *name,
                      m_uint64_t paddr,m_uint32_t len,
-                     u_int dma_irq,u_int eth_irq)
+                     u_int int0_irq,u_int int1_irq,
+                     u_int serint0_irq,u_int serint1_irq)
 {
    struct gt_data *d;
+   u_int i;
 
    if (!(d = malloc(sizeof(*d)))) {
       fprintf(stderr,"gt96100: unable to create device data.\n");
@@ -1874,9 +2672,22 @@ int dev_gt96100_init(vm_instance_t *vm,char *name,
    }
 
    memset(d,0,sizeof(*d));
+   pthread_mutex_init(&d->lock,NULL);
    d->name = name;
    d->vm = vm;
-   d->eth_irq = eth_irq;
+   d->gt_update_irq_status = gt96k_update_irq_status;
+
+   for(i=0;i<GT_SDMA_CHANNELS;i++) {
+      d->sdma[0][i].id = i;
+      d->sdma[1][i].id = i;
+   }
+
+   /* IRQ setup */
+   d->int0_irq = int0_irq;
+   d->int1_irq = int1_irq;
+   d->serint0_irq = serint0_irq;
+   d->serint1_irq = serint1_irq;
+
    d->bus[0] = vm->pci_bus[0];
    d->bus[1] = vm->pci_bus[1];
 
@@ -1896,7 +2707,7 @@ int dev_gt96100_init(vm_instance_t *vm,char *name,
    if (!pci_dev_lookup(d->bus[0],0,0,0)) {
       d->pci_dev = pci_dev_add(d->bus[0],name,
                                PCI_VENDOR_GALILEO,PCI_PRODUCT_GALILEO_GT96100,
-                               0,0,dma_irq,d,NULL,pci_gt96100_read,NULL);
+                               0,0,-1,d,NULL,pci_gt96100_read,NULL);
       if (!d->pci_dev) {
          fprintf(stderr,"gt96100: unable to create PCI device.\n");
          return(-1);
@@ -1912,12 +2723,12 @@ int dev_gt96100_init(vm_instance_t *vm,char *name,
    return(0);
 }
 
-/* Bind a NIO to GT96100 device */
-int dev_gt96100_set_nio(struct gt_data *d,u_int port_id,netio_desc_t *nio)
+/* Bind a NIO to GT96100 Ethernet device */
+int dev_gt96100_eth_set_nio(struct gt_data *d,u_int port_id,netio_desc_t *nio)
 {
    struct eth_port *port;
 
-   if (port_id >= GT_ETH_PORTS)
+   if (!d || (port_id >= GT_ETH_PORTS))
       return(-1);
 
    port = &d->eth_ports[port_id];
@@ -1933,11 +2744,11 @@ int dev_gt96100_set_nio(struct gt_data *d,u_int port_id,netio_desc_t *nio)
 }
 
 /* Unbind a NIO from a GT96100 device */
-int dev_gt96100_unset_nio(struct gt_data *d,u_int port_id)
+int dev_gt96100_eth_unset_nio(struct gt_data *d,u_int port_id)
 {
    struct eth_port *port;
 
-   if (port_id >= GT_ETH_PORTS)
+   if (!d || (port_id >= GT_ETH_PORTS))
       return(-1);
 
    port = &d->eth_ports[port_id];
@@ -1947,5 +2758,33 @@ int dev_gt96100_unset_nio(struct gt_data *d,u_int port_id)
       port->nio = NULL;
    }
 
+   return(0);
+}
+
+/* Show debugging information */
+static void dev_gt96100_show_eth_info(struct gt_data *d,u_int port_id)
+{
+   struct eth_port *port;
+
+   port = &d->eth_ports[port_id];
+
+   printf("GT96100 Ethernet port %u:\n",port_id);
+   printf("  PCR  = 0x%8.8x\n",port->pcr);
+   printf("  PCXR = 0x%8.8x\n",port->pcxr);
+   printf("  PCMR = 0x%8.8x\n",port->pcmr);
+   printf("  PSR  = 0x%8.8x\n",port->psr);
+   printf("  ICR  = 0x%8.8x\n",port->icr);
+   printf("  IMR  = 0x%8.8x\n",port->imr);
+
+   printf("\n");
+}
+
+/* Show debugging information */
+int dev_gt96100_show_info(struct gt_data *d)
+{   
+   GT_LOCK(d);
+   dev_gt96100_show_eth_info(d,0);
+   dev_gt96100_show_eth_info(d,1);
+   GT_UNLOCK(d);
    return(0);
 }

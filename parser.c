@@ -84,7 +84,7 @@ char **parser_map_array(parser_context_t *ctx)
 }
 
 /* Add a character to temporary token (resize if necessary) */
-static int tmp_token_add_char(parser_context_t *ctx,u_char c)
+static int tmp_token_add_char(parser_context_t *ctx,char c)
 {
    size_t new_size;
    char *new_str;
@@ -196,7 +196,7 @@ static int parser_get_char_type(u_char c)
 }
 
 /* Send a buffer to the tokenizer */
-int parser_scan_buffer(parser_context_t *ctx,u_char *buf,size_t buf_size)
+int parser_scan_buffer(parser_context_t *ctx,char *buf,size_t buf_size)
 {
    int i,type;
    u_char c;

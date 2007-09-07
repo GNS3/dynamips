@@ -462,7 +462,7 @@ fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
           cpu->gpr[MIPS_GPR_A0], cpu->gpr[MIPS_GPR_A1], 
           cpu->gpr[MIPS_GPR_A2], cpu->gpr[MIPS_GPR_A3]);
 #endif
-
+   
    /* XXX TODO: Branch Delay slot */
    mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_SYSCALL,0);
 }

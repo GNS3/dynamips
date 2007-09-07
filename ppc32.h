@@ -250,8 +250,8 @@ enum {
 typedef struct cpu_ppc cpu_ppc_t;
 
 /* Memory operation function prototype */
-typedef fastcall u_int (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
-                                       u_int reg);
+typedef fastcall void (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
+                                      u_int reg);
 
 /* BAT type indexes */
 enum {
@@ -282,6 +282,12 @@ typedef struct {
 /* Maximum number of breakpoints */
 #define PPC32_MAX_BREAKPOINTS  8
 
+/* zzz */
+struct ppc32_vtlb_entry {
+   m_uint32_t vaddr;
+   m_uint32_t haddr;
+};
+
 /* PowerPC CPU definition */
 struct cpu_ppc {
    /* Instruction address */
@@ -289,6 +295,8 @@ struct cpu_ppc {
 
    /* General Purpose registers */
    m_uint32_t gpr[PPC32_GPR_NR];
+
+   struct ppc32_vtlb_entry vtlb[PPC32_GPR_NR];
 
    /* Pending IRQ */
    volatile m_uint32_t irq_pending,irq_check;
@@ -320,7 +328,7 @@ struct cpu_ppc {
    mts32_entry_t *(*mts_slow_lookup)(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                      u_int cid,u_int op_code,u_int op_size,
                                      u_int op_type,m_uint64_t *data,
-                                     u_int *exc,mts32_entry_t *alt_entry);
+                                     mts32_entry_t *alt_entry);
 
    /* IRQ counters */
    m_uint64_t irq_count,timer_irq_count,irq_fp_count;
@@ -386,6 +394,9 @@ struct cpu_ppc {
    struct ppc405_tlb_entry ppc405_tlb[PPC405_TLB_ENTRIES];
    m_uint32_t ppc405_pid;
 
+   /* MPC860 IMMR register */
+   m_uint32_t mpc860_immr;
+
    /* FPU */
    ppc_fpu_t fpu;
 
@@ -415,7 +426,7 @@ struct cpu_ppc {
    mips_insn_t *njm_exec_ptr;
 
    /* Performance counter (non-JIT) */
-   m_uint64_t perf_counter;
+   m_uint32_t perf_counter;
 
    /* non-JIT mode instruction counter */
    m_uint64_t insn_exec_count;

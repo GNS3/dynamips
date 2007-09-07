@@ -55,6 +55,16 @@ extern const char *sw_version;
 /* Software version specific tag */
 extern const char *sw_version_tag;
 
+/* Command Line long options */
+#define OPT_DISK0_SIZE  0x100
+#define OPT_DISK1_SIZE  0x101
+#define OPT_EXEC_AREA   0x102
+#define OPT_IDLE_PC     0x103
+#define OPT_TIMER_ITV   0x104
+#define OPT_VM_DEBUG    0x105
+#define OPT_IOMEM_SIZE  0x106
+#define OPT_SPARSE_MEM  0x107
+
 /* Delete all objects */
 void dynamips_reset(void);
 

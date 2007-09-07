@@ -34,14 +34,25 @@
 
 #define DEBUG_ACCESS 0
 
+#define ROMMON_SET_VAR   0x01
+#define ROMMON_GET_VAR   0x02
+#define ROMMON_CLEAR_VAR_STAT  0x03
+
 /* Remote control private data */
 struct remote_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
 
-   char buffer[512];
-   u_int buf_pos;
+   /* Console buffer */
+   char con_buffer[512];
+   u_int con_buf_pos;
 
+   /* ROMMON variables buffer */
+   char var_buffer[512];
+   u_int var_buf_pos;
+   u_int var_status;
+
+   /* Position for cookie reading */
    u_int cookie_pos;
 };
 
@@ -155,25 +166,27 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x038:
          if (op_type == MTS_WRITE) {
             len = physmem_strlen(vm,*data);
-            if (len < sizeof(d->buffer)) {
-               physmem_copy_from_vm(vm,d->buffer,*data,len+1);
-               vm_log(vm,"ROM",d->buffer);
+            if (len < sizeof(d->con_buffer)) {
+               physmem_copy_from_vm(vm,d->con_buffer,*data,len+1);
+               vm_log(vm,"ROM",d->con_buffer);
             }
          }
          break;
 
-      /* Buffering */
+      /* Console Buffering */
       case 0x03c:
-         if (d->buf_pos < (sizeof(d->buffer)-1)) {
-            d->buffer[d->buf_pos++] = *data & 0xFF;
-            d->buffer[d->buf_pos] = 0;
+         if (op_type == MTS_WRITE) {
+            if (d->con_buf_pos < (sizeof(d->con_buffer)-1)) {
+               d->con_buffer[d->con_buf_pos++] = *data & 0xFF;
+               d->con_buffer[d->con_buf_pos] = 0;
 
-            if (d->buffer[d->buf_pos-1] == '\n') {
-               vm_log(vm,"ROM","%s",d->buffer);
-               d->buf_pos = 0;
-            }
-         } else
-            d->buf_pos = 0;
+               if (d->con_buffer[d->con_buf_pos-1] == '\n') {
+                  vm_log(vm,"ROM","%s",d->con_buffer);
+                  d->con_buf_pos = 0;
+               }
+            } else
+               d->con_buf_pos = 0;
+         }
          break;
 
       /* Console output */
@@ -198,27 +211,8 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* IO memory size for Smart-Init (C3600, others ?) */
       case 0x048:
-         if (op_type == MTS_READ) {
-            switch(vm->type) {
-               case VM_TYPE_C3600:
-                  *data = VM_C3600(vm)->nm_iomem_size;
-                  break;
-               case VM_TYPE_C2691:
-                  *data = VM_C2691(vm)->nm_iomem_size;
-                  break;
-               case VM_TYPE_C3725:
-                  *data = VM_C3725(vm)->nm_iomem_size;
-                  break;
-               case VM_TYPE_C3745:
-                  *data = VM_C3745(vm)->nm_iomem_size;
-                  break;
-               case VM_TYPE_C2600:
-                  *data = VM_C2600(vm)->nm_iomem_size;
-                  break;
-               default:
-                  *data = 0;
-            }
-         }
+         if (op_type == MTS_READ)
+            *data = vm->nm_iomem_size;
          break;
 
       /* Cookie position selector */
@@ -233,6 +227,51 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x050:
          if ((op_type == MTS_READ) && (d->cookie_pos < 64))
             *data = vm->chassis_cookie[d->cookie_pos];
+         break;
+
+      /* ROMMON variable */
+      case 0x054:
+         if (op_type == MTS_WRITE) {
+            if (d->var_buf_pos < (sizeof(d->var_buffer)-1)) {
+               d->var_buffer[d->var_buf_pos++] = *data & 0xFF;
+               d->var_buffer[d->var_buf_pos] = 0;
+            } else
+               d->var_buf_pos = 0;
+         } else {
+            if (d->var_buf_pos < (sizeof(d->var_buffer)-1)) {
+               *data = d->var_buffer[d->var_buf_pos++];
+            } else {
+               d->var_buf_pos = 0;
+               *data = 0;
+            }
+         }
+         break;
+
+      /* ROMMON variable command */
+      case 0x058:
+         if (op_type == MTS_WRITE) {
+            switch(*data & 0xFF) {
+               case ROMMON_SET_VAR:
+                  d->var_status = rommon_var_add_str(&vm->rommon_vars,
+                                                     d->var_buffer);
+                  d->var_buf_pos = 0;
+                  break;
+               case ROMMON_GET_VAR:
+                  d->var_status = rommon_var_get(&vm->rommon_vars,
+                                                 d->var_buffer,
+                                                 d->var_buffer,
+                                                 sizeof(d->var_buffer));
+                  d->var_buf_pos = 0;
+                  break;
+               case ROMMON_CLEAR_VAR_STAT:
+                  d->var_buf_pos = 0;
+                  break;
+               default:
+                  d->var_status = -1;
+            }
+         } else {
+            *data = d->var_status;
+         }
          break;
    }
 

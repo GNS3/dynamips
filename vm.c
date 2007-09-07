@@ -33,6 +33,9 @@
 /* Type of VM file naming (0=use VM name, 1=use instance ID) */
 int vm_file_naming_type = 0;
 
+/* Platform list */
+static struct vm_platform_list *vm_platforms = NULL;
+
 /* Pool of ghost images */
 static vm_ghost_image_t *vm_ghost_pool = NULL;
 
@@ -133,104 +136,27 @@ void vm_object_dump(vm_instance_t *vm)
 /* Get VM type */
 char *vm_get_type(vm_instance_t *vm)
 {
-   char *machine;
-
-   switch(vm->type) {
-      case VM_TYPE_C3600:
-         machine = "c3600";
-         break;
-      case VM_TYPE_C7200:
-         machine = "c7200";
-         break;
-      case VM_TYPE_C2691:
-         machine = "c2691";
-         break;
-      case VM_TYPE_C3725:
-         machine = "c3725";
-         break;
-     case VM_TYPE_C3745:
-         machine = "c3745";
-         break;
-     case VM_TYPE_C2600:
-         machine = "c2600";
-         break;
-     case VM_TYPE_MSFC1:
-         machine = "msfc1";
-         break;
-     case VM_TYPE_PPC32_TEST:
-         machine = "ppc32_test";
-         break;
-      default:
-         machine = "unknown";
-         break;
-   }
-
-   return machine;
+   return vm->platform->name;
 }
 
-/* Get platform type */
-char *vm_get_platform_type(vm_instance_t *vm)
+/* Get log name */
+static char *vm_get_log_name(vm_instance_t *vm)
 {
-   char *machine;
+   if (vm->platform->log_name != NULL)
+      return vm->platform->log_name;
 
-   switch(vm->type) {
-      case VM_TYPE_C3600:
-         machine = "C3600";
-         break;
-      case VM_TYPE_C7200:
-         machine = "C7200";
-         break;     
-      case VM_TYPE_C2691:
-         machine = "C2691";
-         break;
-      case VM_TYPE_C3725:
-         machine = "C3725";
-         break;
-      case VM_TYPE_C3745:
-         machine = "C3745";
-         break;
-      case VM_TYPE_C2600:
-         machine = "C2600";
-         break;
-      case VM_TYPE_MSFC1:
-         machine = "MSFC1";
-         break;
-      case VM_TYPE_PPC32_TEST:
-         machine = "PPC32_TEST";
-         break;
-      default:
-         machine = "VM";
-         break;
-   }
-
-   return machine;
+   /* default value */
+   return "VM";
 }
 
 /* Get MAC address MSB */
 u_int vm_get_mac_addr_msb(vm_instance_t *vm)
 {
-   switch(vm->type) {
-      case VM_TYPE_C3600:
-         return(0xCC);
-
-      case VM_TYPE_C7200:
-         return(0xCA);
-
-      case VM_TYPE_C2691:
-         return(0xC0);
-
-      case VM_TYPE_C3725:
-         return(0xC2);
-
-      case VM_TYPE_C3745:
-         return(0xC4);
-
-      case VM_TYPE_C2600:
-         return(0xC8);
-
-      default:
-         return(0xC6);
-   }
+   if (vm->platform->get_mac_addr_msb != NULL)
+      return(vm->platform->get_mac_addr_msb());
+   
+   /* default value */
+   return(0xC6);
 }
 
 /* Generate a filename for use by the instance */
@@ -373,11 +299,12 @@ void vm_error(vm_instance_t *vm,char *format,...)
    vsnprintf(buffer,sizeof(buffer),format,ap);
    va_end(ap);
 
-   fprintf(stderr,"%s '%s': %s",vm_get_platform_type(vm),vm->name,buffer);
+   fprintf(stderr,"%s '%s': %s",vm_get_log_name(vm),vm->name,buffer);
 }
 
 /* Create a new VM instance */
-vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
+static vm_instance_t *vm_create(char *name,int instance_id,
+                                vm_platform_t *platform)
 {
    vm_instance_t *vm;
 
@@ -387,8 +314,14 @@ vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
    }
    
    memset(vm,0,sizeof(*vm));
+
+   if (!(vm->name = strdup(name))) {
+      fprintf(stderr,"VM %s: unable to store instance name!\n",name);
+      goto err_name;
+   }
+
    vm->instance_id          = instance_id;
-   vm->type                 = machine_type;
+   vm->platform             = platform;
    vm->status               = VM_STATUS_HALTED;
    vm->jit_use              = JIT_SUPPORT;
    vm->exec_blk_direct_jump = TRUE;
@@ -396,11 +329,13 @@ vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
    vm->vtty_aux_type        = VTTY_TYPE_NONE;
    vm->timer_irq_check_itv  = VM_TIMER_IRQ_CHECK_ITV;
    vm->log_file_enabled     = TRUE;
+   vm->rommon_vars.filename = vm_build_filename(vm,"rommon_vars");
 
-   if (!(vm->name = strdup(name))) {
-      fprintf(stderr,"VM %s: unable to store instance name!\n",name);
-      goto err_name;
-   }
+   if (!vm->rommon_vars.filename)
+      goto err_rommon;
+
+   /* XXX */
+   rommon_load_file(&vm->rommon_vars);
 
    /* create lock file */
    if (vm_get_lock(vm) == -1)
@@ -423,6 +358,8 @@ vm_instance_t *vm_create(char *name,int instance_id,int machine_type)
  err_log:
    free(vm->lock_file);
  err_lock:
+   free(vm->rommon_vars.filename);
+ err_rommon:
    free(vm->name);
  err_name:
    free(vm);
@@ -446,10 +383,6 @@ int vm_hardware_shutdown(vm_instance_t *vm)
 
    /* Mark the VM as halted */
    vm->status = VM_STATUS_HALTED;
-
-   /* Disable NVRAM operations */
-   vm->nvram_extract_config = NULL;
-   vm->nvram_push_config = NULL;
 
    /* Free the object list */
    vm_object_free_list(vm);
@@ -504,6 +437,7 @@ void vm_free(vm_instance_t *vm)
       vm_chunk_free_all(vm);
 
       /* Free various elements */
+      free(vm->rommon_vars.filename);
       free(vm->ghost_ram_filename);
       free(vm->sym_filename);
       free(vm->ios_image);
@@ -984,15 +918,15 @@ int vm_ios_set_config(vm_instance_t *vm,char *ios_config)
 /* Extract IOS configuration from NVRAM and write it to a file */
 int vm_nvram_extract_config(vm_instance_t *vm,char *filename)
 {
-   char *cfg_buffer;
+   u_char *cfg_buffer;
    ssize_t cfg_len;
    FILE *fd;
 
-   if (!vm->nvram_extract_config)
+   if (!vm->platform->nvram_extract_config)
       return(-1);
 
    /* Extract the IOS configuration */
-   if (((cfg_len = vm->nvram_extract_config(vm,&cfg_buffer)) < 0) || 
+   if (((cfg_len = vm->platform->nvram_extract_config(vm,&cfg_buffer)) < 0) || 
        (cfg_buffer == NULL))
       return(-1);
 
@@ -1013,11 +947,11 @@ int vm_nvram_extract_config(vm_instance_t *vm,char *filename)
 /* Read an IOS configuraton from a file and push it to NVRAM */
 int vm_nvram_push_config(vm_instance_t *vm,char *filename)
 {
-   char *cfg_buffer;
+   u_char *cfg_buffer;
    ssize_t len;
    int res;
 
-   if (!vm->nvram_push_config)
+   if (!vm->platform->nvram_push_config)
       return(-1);
 
    /* Read configuration */
@@ -1025,7 +959,7 @@ int vm_nvram_push_config(vm_instance_t *vm,char *filename)
       return(-1);
 
    /* Push it! */
-   res = vm->nvram_push_config(vm,cfg_buffer,len);
+   res = vm->platform->nvram_push_config(vm,cfg_buffer,len);
    free(cfg_buffer);
    return(res);
 }
@@ -1033,6 +967,9 @@ int vm_nvram_push_config(vm_instance_t *vm,char *filename)
 /* Save general VM configuration into the specified file */
 void vm_save_config(vm_instance_t *vm,FILE *fd)
 {
+   fprintf(fd,"vm create %s %u %s\n",
+           vm->name,vm->instance_id,vm->platform->name);
+
    if (vm->ios_image)
       fprintf(fd,"vm set_ios %s %s\n",vm->name,vm->ios_image);
 
@@ -1047,4 +984,132 @@ void vm_save_config(vm_instance_t *vm,FILE *fd)
 
    if (vm->vtty_aux_type == VTTY_TYPE_TCP)
       fprintf(fd,"vm set_aux_tcp_port %s %d\n",vm->name,vm->vtty_aux_tcp_port);
+
+   /* Save slot config */
+   vm_slot_save_all_config(vm,fd);
+}
+
+/* Find a platform */
+vm_platform_t *vm_platform_find(char *name)
+{
+   struct vm_platform_list *p;
+
+   for(p=vm_platforms;p;p=p->next)
+      if (!strcmp(p->platform->name,name))
+         return(p->platform);
+
+   return NULL;
+}
+
+/* Find a platform given its CLI name */
+vm_platform_t *vm_platform_find_cli_name(char *name)
+{
+   struct vm_platform_list *p;
+
+   for(p=vm_platforms;p;p=p->next)
+      if (!strcmp(p->platform->cli_name,name))
+         return(p->platform);
+
+   return NULL;
+}
+
+/* Register a platform */
+int vm_platform_register(vm_platform_t *platform)
+{
+   struct vm_platform_list *p;
+
+   if (vm_platform_find(platform->name) != NULL) {
+      fprintf(stderr,"vm_platform_register: platform '%s' already exists.\n",
+              platform->name);
+      return(-1);
+   }
+
+   if (!(p = malloc(sizeof(*p)))) {
+      fprintf(stderr,"vm_platform_register: unable to record platform.\n");
+      return(-1);
+   }
+
+   p->platform = platform;
+   p->next = vm_platforms;
+   vm_platforms = p;
+   return(0);
+}
+
+/* Create an instance of the specified type */
+vm_instance_t *vm_create_instance(char *name,int instance_id,char *type)
+{
+   vm_platform_t *platform;
+   vm_instance_t *vm = NULL;
+
+   if (!(platform = vm_platform_find(type))) {
+      fprintf(stderr,"VM %s: unknown platform '%s'\n",name,type);
+      goto error;
+   }
+
+   /* Create a generic VM instance */
+   if (!(vm = vm_create(name,instance_id,platform)))
+      goto error;
+
+   /* Initialize specific parts */
+   if (vm->platform->create_instance(vm) == -1)
+      goto error;
+
+   return vm;
+
+ error:
+   fprintf(stderr,"VM %s: unable to create instance!\n",name);
+   vm_free(vm);
+   return NULL;
+}
+
+/* Free resources used by a VM instance */
+static int vm_reg_delete_instance(void *data,void *arg)
+{
+   vm_instance_t *vm = data;
+   return(vm->platform->delete_instance(vm));
+}
+
+/* Delete a VM instance */
+int vm_delete_instance(char *name)
+{
+   return(registry_delete_if_unused(name,OBJ_TYPE_VM,
+                                    vm_reg_delete_instance,NULL));
+}
+
+/* Initialize a VM instance */
+int vm_init_instance(vm_instance_t *vm)
+{
+   return(vm->platform->init_instance(vm));
+}
+
+/* Stop a VM instance */
+int vm_stop_instance(vm_instance_t *vm)
+{
+   return(vm->platform->stop_instance(vm));
+}
+
+/* Delete all VM instances */
+int vm_delete_all_instances(void)
+{
+   return(registry_delete_type(OBJ_TYPE_VM,vm_reg_delete_instance,NULL));
+}
+
+/* Save configurations of all VM instances */
+static void vm_reg_save_config(registry_entry_t *entry,void *opt,int *err)
+{
+   vm_instance_t *vm = entry->data;
+   FILE *fd = opt;
+   
+   vm_save_config(vm,fd);
+
+   /* Save specific platform options */
+   if (vm->platform->save_config != NULL)
+      vm->platform->save_config(vm,fd);
+}
+
+/* Save all VM configs */
+int vm_save_config_all(FILE *fd)
+{   
+   registry_foreach_type(OBJ_TYPE_VM,vm_reg_save_config,fd,NULL);
+   return(0);
 }

@@ -122,57 +122,13 @@ enum {
    C7200_NPE_FAMILY_PPC,
 };
 
+#define VM_C7200(vm) ((c7200_t *)vm->hw_data)
+
 /* C7200 router */
 typedef struct c7200_router c7200_t;
 
 /* Prototype of NPE driver initialization function */
 typedef int (*c7200_npe_init_fn)(c7200_t *router);
-
-/* Prototype of PA driver initialization function */
-typedef int (*c7200_pa_init_fn)(c7200_t *router,char *name,u_int pa_bay);
-
-/* Prototype of PA driver shutdown function */
-typedef int (*c7200_pa_shutdown_fn)(c7200_t *router,u_int pa_bay);
-
-/* Prototype of PA NIO set function */
-typedef int (*c7200_pa_set_nio_fn)(c7200_t *router,u_int pa_bay,u_int port_id,
-                                   netio_desc_t *nio);
-
-/* Prototype of PA NIO unset function */
-typedef int (*c7200_pa_unset_nio_fn)(c7200_t *router,u_int pa_bay,
-                                     u_int port_id);
-
-/* Prototype of NM NIO show info function */
-typedef int (*c7200_pa_show_info_fn)(c7200_t *router,u_int pa_bay);
-
-/* C7200 Port Adapter Driver */
-struct c7200_pa_driver {
-   char *dev_type;
-   int supported;
-   c7200_pa_init_fn pa_init;
-   c7200_pa_shutdown_fn pa_shutdown;
-   c7200_pa_set_nio_fn pa_set_nio;
-   c7200_pa_unset_nio_fn pa_unset_nio;
-   c7200_pa_show_info_fn pa_show_info;
-};
-
-/* C7200 NIO binding to a slot/port */
-struct c7200_nio_binding {
-   netio_desc_t *nio;
-   u_int port_id;
-   struct c7200_nio_binding *prev,*next;
-};
-
-/* C7200 PA bay */
-struct c7200_pa_bay {
-   char *dev_name;                       /* Device Name */
-   char *dev_type;                       /* Device Type */
-   struct cisco_eeprom eeprom;           /* PA EEPROM */
-   struct pci_bus *pci_map;              /* PCI bus */
-   struct c7200_pa_driver *pa_driver;    /* PA driver */
-   void *drv_info;                       /* Private driver info */
-   struct c7200_nio_binding *nio_list;   /* NIO bindings to ports */
-};
 
 /* C7200 NPE Driver */
 struct c7200_npe_driver {
@@ -205,9 +161,8 @@ struct c7200_router {
    /* Midplane FPGA */
    struct c7200_mpfpga_data *mpfpga_data;
 
-   /* NPE and PA information */
+   /* NPE and OIR status */
    struct c7200_npe_driver *npe_driver;
-   struct c7200_pa_bay pa_bay[C7200_MAX_PA_BAYS];
    m_uint8_t oir_status;
 
    /* Hidden I/O bridge hack to support PCMCIA */
@@ -223,98 +178,18 @@ struct c7200_router {
    struct nmc93cX6_group pa_eeprom_g2;     /* EEPROMs for bays 2, 5, 6 */
 };
 
-/* Initialize EEPROM groups */
-void c7200_init_eeprom_groups(c7200_t *router);
+/* Initialize system EEPROM groups */
+void c7200_init_sys_eeprom_groups(c7200_t *router);
 
-/* Create a new router instance */
-c7200_t *c7200_create_instance(char *name,int instance_id);
+/* Initialize midplane EEPROM groups */
+void c7200_init_mp_eeprom_groups(c7200_t *router);
 
-/* Delete a router instance */
-int c7200_delete_instance(char *name);
-
-/* Delete all router instances */
-int c7200_delete_all_instances(void);
-
-/* Save configuration of a C7200 instance */
-void c7200_save_config(c7200_t *router,FILE *fd);
-
-/* Save configurations of all C7200 instances */
-void c7200_save_config_all(FILE *fd);
+/* Set EEPROM for the specified slot */
+int c7200_set_slot_eeprom(c7200_t *router,u_int slot,
+                          struct cisco_eeprom *eeprom);
 
 /* Get network IRQ for specified slot/port */
 u_int c7200_net_irq_for_slot_port(u_int slot,u_int port);
-
-/* Set PA EEPROM definition */
-int c7200_pa_set_eeprom(c7200_t *router,u_int pa_bay,
-                        const struct cisco_eeprom *eeprom);
-
-/* Unset PA EEPROM definition (empty bay) */
-int c7200_pa_unset_eeprom(c7200_t *router,u_int pa_bay);
-
-/* Check if a bay has a port adapter */
-int c7200_pa_check_eeprom(c7200_t *router,u_int pa_bay);
-
-/* Get bay info */
-struct c7200_pa_bay *c7200_pa_get_info(c7200_t *router,u_int pa_bay);
-
-/* Get PA type */
-char *c7200_pa_get_type(c7200_t *router,u_int pa_bay);
-
-/* Get driver info about the specified slot */
-void *c7200_pa_get_drvinfo(c7200_t *router,u_int pa_bay);
-
-/* Set driver info for the specified slot */
-int c7200_pa_set_drvinfo(c7200_t *router,u_int pa_bay,void *drv_info);
-
-/* Add a PA binding */
-int c7200_pa_add_binding(c7200_t *router,char *dev_type,u_int pa_bay);
-
-/* Remove a PA binding */
-int c7200_pa_remove_binding(c7200_t *router,u_int pa_bay);
-
-/* Find a NIO binding */
-struct c7200_nio_binding *
-c7200_pa_find_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id);
-
-/* Add a network IO binding */
-int c7200_pa_add_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id,
-                             char *nio_name);
-
-/* Remove a NIO binding */
-int c7200_pa_remove_nio_binding(c7200_t *router,u_int pa_bay,u_int port_id);
-
-/* Remove all NIO bindings for the specified PA */
-int c7200_pa_remove_all_nio_bindings(c7200_t *router,u_int pa_bay);
-
-/* Enable a Network IO descriptor for a Port Adapter */
-int c7200_pa_enable_nio(c7200_t *router,u_int pa_bay,u_int port_id);
-
-/* Disable Network IO descriptor of a Port Adapter */
-int c7200_pa_disable_nio(c7200_t *router,u_int pa_bay,u_int port_id);
-
-/* Enable all NIO of the specified PA */
-int c7200_pa_enable_all_nio(c7200_t *router,u_int pa_bay);
-
-/* Disable all NIO of the specified PA */
-int c7200_pa_disable_all_nio(c7200_t *router,u_int pa_bay);
-
-/* Initialize a Port Adapter */
-int c7200_pa_init(c7200_t *router,u_int pa_bay);
-
-/* Shutdown a Port Adapter */
-int c7200_pa_shutdown(c7200_t *router,u_int pa_bay);
-
-/* Shutdown all PA of a router */
-int c7200_pa_shutdown_all(c7200_t *router);
-
-/* Show info about all NMs */
-int c7200_pa_show_all_info(c7200_t *router);
-
-/* Create a Port Adapter (command line) */
-int c7200_cmd_pa_create(c7200_t *router,char *str);
-
-/* Add a Network IO descriptor binding (command line) */
-int c7200_cmd_add_nio(c7200_t *router,char *str);
 
 /* Show the list of available PA drivers */
 void c7200_pa_show_drivers(void);
@@ -325,9 +200,6 @@ struct c7200_npe_driver *c7200_npe_get_driver(char *npe_type);
 /* Set the NPE type */
 int c7200_npe_set_type(c7200_t *router,char *npe_type);
 
-/* Show the list of available NPE drivers */
-void c7200_npe_show_drivers(void);
-
 /* Set Midplane type */
 int c7200_midplane_set_type(c7200_t *router,char *midplane_type);
 
@@ -336,15 +208,6 @@ int c7200_midplane_set_mac_addr(c7200_t *router,char *mac_addr);
 
 /* Show C7200 hardware info */
 void c7200_show_hardware(c7200_t *router);
-
-/* Initialize default parameters for a C7200 */
-void c7200_init_defaults(c7200_t *router);
-
-/* Initialize a Cisco 7200 instance */
-int c7200_init_instance(c7200_t *router);
-
-/* Stop a Cisco 7200 instance */
-int c7200_stop_instance(c7200_t *router);
 
 /* Trigger an OIR event */
 int c7200_trigger_oir_event(c7200_t *router,u_int slot_mask);
@@ -358,20 +221,26 @@ int c7200_pa_stop_online(c7200_t *router,u_int pa_bay);
 /* dev_c7200_iofpga_init() */
 int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 
+/* Register the c7200 platform */
+int c7200_platform_register(void);
+
+/* Hypervisor C7200 initialization */
+extern int hypervisor_c7200_init(vm_platform_t *platform);
+
 /* PA drivers */
-extern struct c7200_pa_driver dev_c7200_iocard_fe_driver;
-extern struct c7200_pa_driver dev_c7200_iocard_2fe_driver;
-extern struct c7200_pa_driver dev_c7200_iocard_ge_e_driver;
-extern struct c7200_pa_driver dev_c7200_pa_fe_tx_driver;
-extern struct c7200_pa_driver dev_c7200_pa_2fe_tx_driver;
-extern struct c7200_pa_driver dev_c7200_pa_ge_driver;
-extern struct c7200_pa_driver dev_c7200_pa_4e_driver;
-extern struct c7200_pa_driver dev_c7200_pa_8e_driver;
-extern struct c7200_pa_driver dev_c7200_pa_4t_driver;
-extern struct c7200_pa_driver dev_c7200_pa_8t_driver;
-extern struct c7200_pa_driver dev_c7200_pa_a1_driver;
-extern struct c7200_pa_driver dev_c7200_pa_pos_oc3_driver;
-extern struct c7200_pa_driver dev_c7200_pa_4b_driver;
-extern struct c7200_pa_driver dev_c7200_pa_mc8te1_driver;
+extern struct cisco_card_driver dev_c7200_iocard_fe_driver;
+extern struct cisco_card_driver dev_c7200_iocard_2fe_driver;
+extern struct cisco_card_driver dev_c7200_iocard_ge_e_driver;
+extern struct cisco_card_driver dev_c7200_pa_fe_tx_driver;
+extern struct cisco_card_driver dev_c7200_pa_2fe_tx_driver;
+extern struct cisco_card_driver dev_c7200_pa_ge_driver;
+extern struct cisco_card_driver dev_c7200_pa_4e_driver;
+extern struct cisco_card_driver dev_c7200_pa_8e_driver;
+extern struct cisco_card_driver dev_c7200_pa_4t_driver;
+extern struct cisco_card_driver dev_c7200_pa_8t_driver;
+extern struct cisco_card_driver dev_c7200_pa_a1_driver;
+extern struct cisco_card_driver dev_c7200_pa_pos_oc3_driver;
+extern struct cisco_card_driver dev_c7200_pa_4b_driver;
+extern struct cisco_card_driver dev_c7200_pa_mc8te1_driver;
 
 #endif

@@ -44,66 +44,71 @@
  *
  * Add a PA-4T port adapter into specified slot.
  */
-int dev_c7200_pa_4t_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_4t_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct mueslix_data *data;
+   u_int slot = card->slot_id;
+
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-4T+"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-4T+"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the Mueslix chip */
-   data = dev_mueslix_init(router->vm,name,1,
-                           router->pa_bay[pa_bay].pci_map,0,
-                           c7200_net_irq_for_slot_port(pa_bay,0));
+   data = dev_mueslix_init(vm,card->dev_name,1,
+                           card->pci_bus,0,
+                           c7200_net_irq_for_slot_port(slot,0));
    if (!data) return(-1);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove a PA-4T+ from the specified slot */
-int dev_c7200_pa_4t_shutdown(c7200_t *router,u_int pa_bay) 
+static int dev_c7200_pa_4t_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   c7200_pa_unset_eeprom(router,pa_bay);
-   dev_mueslix_remove(bay->drv_info);
+   /* Remove the PA EEPROM */
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
+   
+   /* Remove the Mueslix chip */
+   dev_mueslix_remove(card->drv_info);
    return(0);
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_4t_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                            netio_desc_t *nio)
+static int dev_c7200_pa_4t_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                                   u_int port_id,netio_desc_t *nio)
 {
-   struct mueslix_data *data;
+   struct mueslix_data *data = card->drv_info;
 
-   if ((port_id >= MUESLIX_NR_CHANNELS) || 
-       !(data = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!data || (port_id >= MUESLIX_NR_CHANNELS))
       return(-1);
 
    return(dev_mueslix_set_nio(data,port_id,nio));
 }
 
 /* Unbind a Network IO descriptor to a specific port */
-int dev_c7200_pa_4t_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+static int dev_c7200_pa_4t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                                     u_int port_id)
 {
-   struct mueslix_data *d;
+   struct mueslix_data *data = card->drv_info;
 
-   if ((port_id >= MUESLIX_NR_CHANNELS) || 
-       !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!data || (port_id >= MUESLIX_NR_CHANNELS))
       return(-1);
    
-   return(dev_mueslix_unset_nio(d,port_id));
+   return(dev_mueslix_unset_nio(data,port_id));
 }
 
 /* PA-4T+ driver */
-struct c7200_pa_driver dev_c7200_pa_4t_driver = {
-   "PA-4T+", 1, 
+struct cisco_card_driver dev_c7200_pa_4t_driver = {
+   "PA-4T+", 1, 0,
    dev_c7200_pa_4t_init, 
    dev_c7200_pa_4t_shutdown,
+   NULL,
    dev_c7200_pa_4t_set_nio,
    dev_c7200_pa_4t_unset_nio,
 };
@@ -122,48 +127,49 @@ struct pa8t_data {
  *
  * Add a PA-8T port adapter into specified slot.
  */
-int dev_c7200_pa_8t_init(c7200_t *router,char *name,u_int pa_bay)
+static int dev_c7200_pa_8t_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct pa8t_data *data;
+   u_int slot = card->slot_id;
 
    /* Allocate the private data structure for the PA-8T */
    if (!(data = malloc(sizeof(*data)))) {
-      fprintf(stderr,"%s (PA-8T): out of memory\n",name);
+      vm_log(vm,"%s: out of memory\n",card->dev_name);
       return(-1);
    }
 
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
+
    /* Set the EEPROM */
-   c7200_pa_set_eeprom(router,pa_bay,cisco_eeprom_find_pa("PA-8T"));
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_pa("PA-8T"));
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Create the 1st Mueslix chip */
-   data->mueslix[0] = dev_mueslix_init(router->vm,name,1,
-                                       router->pa_bay[pa_bay].pci_map,0,
-                                       c7200_net_irq_for_slot_port(pa_bay,0));
+   data->mueslix[0] = dev_mueslix_init(vm,card->dev_name,1,
+                                       card->pci_bus,0,
+                                       c7200_net_irq_for_slot_port(slot,0));
    if (!data->mueslix[0]) return(-1);
 
    /* Create the 2nd Mueslix chip */
-   data->mueslix[1] = dev_mueslix_init(router->vm,name,1,
-                                       router->pa_bay[pa_bay].pci_map,1,
-                                       c7200_net_irq_for_slot_port(pa_bay,1));
+   data->mueslix[1] = dev_mueslix_init(vm,card->dev_name,1,
+                                       card->pci_bus,1,
+                                       c7200_net_irq_for_slot_port(slot,1));
    if (!data->mueslix[1]) return(-1);
 
    /* Store device info into the router structure */
-   return(c7200_pa_set_drvinfo(router,pa_bay,data));
+   card->drv_info = data;
+   return(0);
 }
 
 /* Remove a PA-8T from the specified slot */
-int dev_c7200_pa_8t_shutdown(c7200_t *router,u_int pa_bay) 
+static int dev_c7200_pa_8t_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct c7200_pa_bay *bay;
-   struct pa8t_data *data;
-
-   if (!(bay = c7200_pa_get_info(router,pa_bay)))
-      return(-1);
-
-   data = bay->drv_info;
+   struct pa8t_data *data = card->drv_info;
 
    /* Remove the PA EEPROM */
-   c7200_pa_unset_eeprom(router,pa_bay);
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),card->slot_id,NULL);
 
    /* Remove the two Mueslix chips */
    dev_mueslix_remove(data->mueslix[0]);
@@ -173,35 +179,35 @@ int dev_c7200_pa_8t_shutdown(c7200_t *router,u_int pa_bay)
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_8t_set_nio(c7200_t *router,u_int pa_bay,u_int port_id,
-                            netio_desc_t *nio)
+static int dev_c7200_pa_8t_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                                   u_int port_id,netio_desc_t *nio)
 {
-   struct pa8t_data *d;
+   struct pa8t_data *d = card->drv_info;
 
-   if ((port_id >= (MUESLIX_NR_CHANNELS*2)) || 
-       !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id >= (MUESLIX_NR_CHANNELS*2)))
       return(-1);
 
    return(dev_mueslix_set_nio(d->mueslix[port_id>>2],(port_id&0x03),nio));
 }
 
 /* Bind a Network IO descriptor to a specific port */
-int dev_c7200_pa_8t_unset_nio(c7200_t *router,u_int pa_bay,u_int port_id)
+static int dev_c7200_pa_8t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
+                                     u_int port_id)
 {
-   struct pa8t_data *d;
+   struct pa8t_data *d = card->drv_info;
 
-   if ((port_id >= (MUESLIX_NR_CHANNELS*2)) || 
-       !(d = c7200_pa_get_drvinfo(router,pa_bay)))
+   if (!d || (port_id >= (MUESLIX_NR_CHANNELS*2)))
       return(-1);
 
    return(dev_mueslix_unset_nio(d->mueslix[port_id>>2],port_id&0x03));
 }
 
 /* PA-8T driver */
-struct c7200_pa_driver dev_c7200_pa_8t_driver = {
-   "PA-8T", 1, 
+struct cisco_card_driver dev_c7200_pa_8t_driver = {
+   "PA-8T", 1, 0,
    dev_c7200_pa_8t_init, 
    dev_c7200_pa_8t_shutdown, 
+   NULL,
    dev_c7200_pa_8t_set_nio,
    dev_c7200_pa_8t_unset_nio,
 };

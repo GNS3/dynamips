@@ -2238,9 +2238,203 @@
 -----------
   - C3725: fixed interrupt problems with slot 2 (bad shift - only 4 irq
     lines per port).
+
+28-Apr-2007
+-----------
+  - Changed instruction counters to 32-bit type, to get more accurate
+    results.
+
+29-Apr-2007
+-----------
+  - Experimenting with a per-register memory translation cache.
+
+30-Apr-2007
+-----------
+  - C2600: playing with MPC860 SPI to access WIC eeproms (slot 0 only).
+
+01-May-2007
+-----------
+  - MPC860: continuing on SPI.
+  - Rewriting/Refactoring code to handle network interfaces (required for WIC
+    support).
+
+02-May-2007
+-----------
+  - Continuing rework of network interfaces.
+
+03-May-2007
+-----------
+  - Added slot handling hypervisor commands to VM module.
+  - Fixed some bugs/lacking checks in network card module.
+  - C2600: added WIC EEPROM read through MPC860 SPI code.
+  - C2600: beginning of work for basic SCC implementation.
 	
+04-May-2007
+-----------
+  - C2600: continuing on SCC.
+  - C2600: WIC-1T is now working!
+  - C2600: added WIC-2T (async mode is not supported).
+  - C1700: introduction of this platform (took c2600 as base model).
+	
+05-May-2007
+-----------
+  - MPC860: added SPI relocation support (required for c1700).
+  - C1700: added NVRAM.
+  - C1700: added WIC detection / correct EEPROM support.
+  - MPC860: beginning of work on Fast Ethernet Controller.
+	
+07-May-2007
+-----------
+  - MPC860: Fast Ethernet Controller basically working (MII registers 
+    required).
+  - MPC860: better handling of interrupt levels.
+  - C1700: added WIC support (WIC-1T/WIC-2T).
+
+14/15-May-2007
+--------------
+  - Flash code rework (required for c1700) to have something more generic.
+	
+16-May-2007
+-----------
+  - New flash code re-enabled for all routers requiring it (NPE-G2 bootflash
+    is broken however).
+  - C1700: added WIC-1ENET code base with EEPROM MAC address programming.
+
+18-May-2007
+-----------
+  - Memory exceptions are now handled through setjmp/longjmp, avoiding error
+    checks in memory access functions.
+
+19-May-2007
+-----------
+  - C2600: fixed PCI handling which prevented i82559 device to work.
+    In fact, the PCI bridge is in a Xilinx device, and the output of 
+    "sh pci hardware" was very different from a real router.
+  - i8255x (eepro100): added basic code (no RX/TX, only MII working).
+
+20-May-2007
+-----------
+  - Continuing on i8255x.
+
+21-May-2007
+-----------
+  - i8255x: Intel doesn't provide enough info in its documentation for
+    the RX flexible mode...
+
+22-May-2007
+-----------
+  - i8255x: RX flexible mode works similarly to the 82596CA chipset.
+    Packet TX and RX seems ok.
+
 23-May-2007
 -----------
-  - GT96100/ETH: fixed interrupt handling for TX packets (the interrupt was
+  - C2691/C3725/C3745: fixed GT96100 binding to slot 0.
+  - GT96100/ETH: fixed interrupt handling for TX packets (the interrupt was 
     incorrectly disabled when no packet was available on a ring, causing
     packet loss when the two ports were enabled) - BTS entry #171.
+
+25-May-2007
+-----------
+  - C3660: correct support of mainboard FastEthernet ports with the new
+    card subsystem.
+  - C7200: fixed I/O card definition with new card subsystem.
+  - Added compatibility mode with old version for slot binding in the
+    command line.
+
+01-Jun-2007
+-----------
+  - Heavily fixed/tested the Serial drivers to correctly transmit/receive
+    frames. Now the CRC is not anymore transmitted and the correct size is
+    set for RX rings (TODO: crc-32 for Mueslix and PA-POS-OC3).
+
+03-Jun-2007
+-----------
+  - Fixed incorrect free in deletion of frame-relay switch VC.
+
+04-Jun-2007
+-----------
+  - PA-POS-OC3/Mueslix: added correct handling of crc-16/crc-32.
+
+10-Jun-2007
+-----------
+  - MIPS64: correct handling of stack for MacOS X (alignment).
+  - MSFC1: cleaned up module to use the new card infrastructure.
+  - Frame-Relay switch: removed "trailing" handling which was in fact
+    only the CRC + final byte. 
+  
+09-Jul-2007
+-----------
+  - Fixed PA-FE-TX initialization (EEPROM setting lacking).
+
+11-Jul-2007
+-----------
+  - PPC32-JIT: fixed stack alignment for MacOSX/Darwin.
+  - PPC32-JIT: fixed perf counter and breakpoints.
+
+13-Jul-2007
+-----------
+  - Integrated patches from FreeBSD (Pavel I Volkov), excepted for the vtty
+    part.
+
+14-17-Jul-2007
+--------------
+  - Rework of VM infrastructure.
+
+17-Jul-2007
+-----------
+  - Added basic plugin subsystem.
+  - CPU: added custom handler support for undefined memory accesses.
+
+21-22-Jul-2007
+--------------
+  - GT96100: working on SDMA and MPSC.
+	
+23-Jul-2007
+-----------
+  - C3745: finally understood how to handle WIC EEPROMs.
+
+24-Jul-2007
+-----------
+  - C3745: added support of WIC-1T & WIC-2T.
+  - GT96100: fixed SDMA handling.
+	
+25-Jul-2007
+-----------
+  - C2691/C3725: added WIC-1T and WIC-2T similarly to C3745.
+  - C1700: fixed mainboard definitions, added proper support of C1710
+    (no WIC port, Ethernet port connected on MPC860 SCC1).
+  - C1700: added 1751 and 1760 definitions.
+
+29-Jul-2007
+-----------
+  - MPC860: fixed MII registers for 1710, 1721 and 1760.
+
+01-Aug-2007
+-----------
+  - C2600/C2691/C3725/C3745: Added NM-CIDS/NM-NAM which can be connected
+    to a PC emulator.
+  - C2600: added a check for NM-CIDS/NM-NAM which require XM models.
+
+18-Aug-2007
+-----------
+  - Added WIC address space definitions for platforms that support them.
+
+19-Aug-2007
+-----------
+  - Added ISL support for am79c970 based cards (NM-1FE-TX and others).
+
+27-Aug-2007
+-----------
+  - GT96100: missing check for NULL pointer in set_nio/unset_nio.
+  - MPC860: same bugfix (SCC and FEC).
+
+31-Aug-2007
+-----------
+  - MIPS/PPC: modified device memory access to allow devices not at a 4k
+    page boundary (like WICs on 2600). 
+  - Added fake WIC serial drivers, just to catch the memory accesses.
+
+06-Sep-2007
+-----------
+  - PPC32: Fixed BCTR instruction on amd64 jit.
+	

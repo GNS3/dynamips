@@ -228,7 +228,7 @@ static struct ppc32_insn_tag *insn_tag_find(ppc_insn_t ins)
    struct ppc32_insn_tag *tag = NULL;
    int index;
 
-   index = ilt_lookup(ilt,ins);
+   index = ilt_lookup(ilt,ins);   
    tag = ppc32_jit_get_insn(index);
    return tag;
 }
@@ -1053,6 +1053,14 @@ static int ppc32_op_gen_page(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
       if (ppc32_jit_tcb_get_target_bit(b,cur_ia))
          ppc32_op_emit_basic_opcode(cpu,JIT_OP_BRANCH_TARGET);
 
+#if DEBUG_INSN_PERF_CNT
+      ppc32_inc_perf_counter(cpu);
+#endif
+#if BREAKPOINT_ENABLE
+      if (cpu->breakpoints_enabled)
+         insn_emit_breakpoint(cpu,b);
+#endif
+
       if (unlikely(!(tag = ppc32_jit_fetch_and_emit(cpu,b)))) {
          fprintf(stderr,"ppc32_op_gen_page: unable to fetch instruction.\n");
          return(-1);
@@ -1073,14 +1081,6 @@ static int ppc32_op_gen_page(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
    for(i=0;i<PPC32_INSN_PER_PAGE;i++) 
    {
       jit_ptr = b->jit_ptr;
-
-#if DEBUG_INSN_PERF_CNT
-      ppc32_inc_perf_counter(b);
-#endif
-#if BREAKPOINT_ENABLE
-      if (cpu->breakpoints_enabled)
-         insn_emit_breakpoint(cpu,b);
-#endif
 
       /* Generate output code */
       ppc32_op_gen_list(b,i,gcpu->jit_op_array[i],jit_ptr);
@@ -1191,7 +1191,7 @@ int ppc32_jit_tcb_recompile(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
 }
 
 /* Run a compiled PowerPC instruction block */
-static forced_inline 
+static forced_inline
 void ppc32_jit_tcb_run(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
 {
    if (unlikely(cpu->ia & 0x03)) {
@@ -1227,6 +1227,7 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
    }
 
    gen->cpu_thread_running = TRUE;
+   cpu_exec_loop_set(gen);
 
  start_cpu:   
    gen->idle_count = 0;

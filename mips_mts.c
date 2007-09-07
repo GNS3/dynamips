@@ -11,8 +11,7 @@
 /* Forward declarations */
 static forced_inline void *MTS_PROTO(access)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                              u_int op_code,u_int op_size,
-                                             u_int op_type,m_uint64_t *data,
-                                             u_int *exc);
+                                             u_int op_type,m_uint64_t *data);
 
 static fastcall int MTS_PROTO(translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                          m_uint32_t *phys_page);
@@ -117,10 +116,9 @@ MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
    }
 
    if (!dev->host_addr || (dev->flags & VDEVICE_FLAG_NO_MTS_MMAP)) {
-      offset = map->paddr - dev->phys_addr;
+      offset = (map->paddr + map->offset) - dev->phys_addr;
 
-      alt_entry->gvpa  = map->vaddr;
-      alt_entry->gppa  = map->paddr;
+      /* device entries are never stored in virtual TLB */
       alt_entry->hpa   = (dev->id << MTS_DEVID_SHIFT) + offset;
       alt_entry->flags = MTS_FLAG_DEV;
       return alt_entry;
@@ -138,288 +136,244 @@ MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
 static void *MTS_PROTO(lookup)(cpu_mips_t *cpu,m_uint64_t vaddr)
 {
    m_uint64_t data;
-   u_int exc;
-   return(MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LOOKUP,4,MTS_READ,
-                            &data,&exc));
+   return(MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LOOKUP,4,MTS_READ,&data));
 }
 
 /* === MIPS Memory Operations ============================================= */
 
 /* LB: Load Byte */
-fastcall u_int MTS_PROTO(lb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LB,1,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LB,1,MTS_READ,&data);
    if (likely(haddr != NULL)) data = *(m_uint8_t *)haddr;
-   if (likely(!exc)) cpu->gpr[reg] = sign_extend(data,8);
-   return(exc);
+   cpu->gpr[reg] = sign_extend(data,8);
 }
 
 /* LBU: Load Byte Unsigned */
-fastcall u_int MTS_PROTO(lbu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lbu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LBU,1,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LBU,1,MTS_READ,&data);
    if (likely(haddr != NULL)) data = *(m_uint8_t *)haddr;
-   if (likely(!exc)) cpu->gpr[reg] = data & 0xff;
-   return(exc);
+   cpu->gpr[reg] = data & 0xff;
 }
 
 /* LH: Load Half-Word */
-fastcall u_int MTS_PROTO(lh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LH,2,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LH,2,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh16(*(m_uint16_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = sign_extend(data,16);
-   return(exc);
+   cpu->gpr[reg] = sign_extend(data,16);
 }
 
 /* LHU: Load Half-Word Unsigned */
-fastcall u_int MTS_PROTO(lhu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lhu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LHU,2,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LHU,2,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh16(*(m_uint16_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = data & 0xffff;
-   return(exc);
+   cpu->gpr[reg] = data & 0xffff;
 }
 
 /* LW: Load Word */
-fastcall u_int MTS_PROTO(lw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LW,4,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LW,4,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh32(*(m_uint32_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = sign_extend(data,32);
-   return(exc);
+   cpu->gpr[reg] = sign_extend(data,32);
 }
 
 /* LWU: Load Word Unsigned */
-fastcall u_int MTS_PROTO(lwu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lwu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LWU,4,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LWU,4,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh32(*(m_uint32_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = data & 0xffffffff;
-   return(exc);
+   cpu->gpr[reg] = data & 0xffffffff;
 }
 
 /* LD: Load Double-Word */
-fastcall u_int MTS_PROTO(ld)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(ld)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LD,8,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LD,8,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh64(*(m_uint64_t *)haddr);
-   if (likely(!exc)) cpu->gpr[reg] = data;
-   return(exc);
+   cpu->gpr[reg] = data;
 }
 
 /* SB: Store Byte */
-fastcall u_int MTS_PROTO(sb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg] & 0xff;
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SB,1,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SB,1,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint8_t *)haddr = data;
-   return(exc);
 }
 
 /* SH: Store Half-Word */
-fastcall u_int MTS_PROTO(sh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg] & 0xffff;
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SH,2,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SH,2,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint16_t *)haddr = htovm16(data);
-   return(exc);
 }
 
 /* SW: Store Word */
-fastcall u_int MTS_PROTO(sw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg] & 0xffffffff;
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SW,4,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SW,4,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
-   return(exc);
 }
 
 /* SD: Store Double-Word */
-fastcall u_int MTS_PROTO(sd)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sd)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->gpr[reg];
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SD,8,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SD,8,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint64_t *)haddr = htovm64(data);
-   return(exc);
 }
 
 /* LDC1: Load Double-Word To Coprocessor 1 */
-fastcall u_int MTS_PROTO(ldc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(ldc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LDC1,8,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LDC1,8,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh64(*(m_uint64_t *)haddr);
-   if (likely(!exc)) cpu->fpu.reg[reg] = data;
-   return(exc);
+   cpu->fpu.reg[reg] = data;
 }
 
 /* LWL: Load Word Left */
-fastcall u_int MTS_PROTO(lwl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lwl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
    u_int m_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x03);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LWL,4,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LWL,4,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh32(*(m_uint32_t *)haddr);
 
-   if (likely(!exc)) {
-      m_shift = (vaddr & 0x03) << 3;
-      r_mask = (1ULL << m_shift) - 1;
-      data <<= m_shift;
+   m_shift = (vaddr & 0x03) << 3;
+   r_mask = (1ULL << m_shift) - 1;
+   data <<= m_shift;
 
-      cpu->gpr[reg] &= r_mask;
-      cpu->gpr[reg] |= data;
-      cpu->gpr[reg] = sign_extend(cpu->gpr[reg],32);
-   }
-   return(exc);
+   cpu->gpr[reg] &= r_mask;
+   cpu->gpr[reg] |= data;
+   cpu->gpr[reg] = sign_extend(cpu->gpr[reg],32);
 }
 
 /* LWR: Load Word Right */
-fastcall u_int MTS_PROTO(lwr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(lwr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
    u_int m_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x03);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LWR,4,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LWR,4,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh32(*(m_uint32_t *)haddr);
 
-   if (likely(!exc)) {
-      m_shift = ((vaddr & 0x03) + 1) << 3;
-      r_mask = (1ULL << m_shift) - 1;
+   m_shift = ((vaddr & 0x03) + 1) << 3;
+   r_mask = (1ULL << m_shift) - 1;
 
-      data = sign_extend(data >> (32 - m_shift),32);
-      r_mask = sign_extend(r_mask,32);
+   data = sign_extend(data >> (32 - m_shift),32);
+   r_mask = sign_extend(r_mask,32);
 
-      cpu->gpr[reg] &= ~r_mask;
-      cpu->gpr[reg] |= data;
-   }
-   return(exc);
+   cpu->gpr[reg] &= ~r_mask;
+   cpu->gpr[reg] |= data;
 }
 
 /* LDL: Load Double-Word Left */
-fastcall u_int MTS_PROTO(ldl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(ldl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
    u_int m_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x07);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LDL,8,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LDL,8,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh64(*(m_uint64_t *)haddr);
 
-   if (likely(!exc)) {
-      m_shift = (vaddr & 0x07) << 3;
-      r_mask = (1ULL << m_shift) - 1;
-      data <<= m_shift;
+   m_shift = (vaddr & 0x07) << 3;
+   r_mask = (1ULL << m_shift) - 1;
+   data <<= m_shift;
 
-      cpu->gpr[reg] &= r_mask;
-      cpu->gpr[reg] |= data;
-   }
-   return(exc);
+   cpu->gpr[reg] &= r_mask;
+   cpu->gpr[reg] |= data;
 }
 
 /* LDR: Load Double-Word Right */
-fastcall u_int MTS_PROTO(ldr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(ldr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
    u_int m_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x07);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LDR,8,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_LDR,8,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh64(*(m_uint64_t *)haddr);
 
-   if (likely(!exc)) {
-      m_shift = ((vaddr & 0x07) + 1) << 3;
-      r_mask = (1ULL << m_shift) - 1;
-      data >>= (64 - m_shift);
-
-      cpu->gpr[reg] &= ~r_mask;
-      cpu->gpr[reg] |= data;
-   }
-   return(exc);
+   m_shift = ((vaddr & 0x07) + 1) << 3;
+   r_mask = (1ULL << m_shift) - 1;
+   data >>= (64 - m_shift);
+   
+   cpu->gpr[reg] &= ~r_mask;
+   cpu->gpr[reg] |= data;
 }
 
 /* SWL: Store Word Left */
-fastcall u_int MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
    u_int r_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x03ULL);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWL,4,MTS_READ,&data,&exc);
-   if (unlikely(exc)) return(exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWL,4,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh32(*(m_uint32_t *)haddr);
@@ -430,23 +384,20 @@ fastcall u_int MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
    data &= ~d_mask;
    data |= (cpu->gpr[reg] & 0xffffffff) >> r_shift;
 
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWL,4,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWL,4,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
-   return(exc);
 }
 
 /* SWR: Store Word Right */
-fastcall u_int MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
    u_int r_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x03);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWR,4,MTS_READ,&data,&exc);
-   if (unlikely(exc)) return(exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWR,4,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh32(*(m_uint32_t *)haddr);
@@ -457,23 +408,20 @@ fastcall u_int MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
    data &= d_mask;
    data |= (cpu->gpr[reg] << (32 - r_shift)) & 0xffffffff;
 
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWR,4,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SWR,4,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
-   return(exc);
 }
 
 /* SDL: Store Double-Word Left */
-fastcall u_int MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
    u_int r_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x07);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDL,8,MTS_READ,&data,&exc);
-   if (unlikely(exc)) return(exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDL,8,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh64(*(m_uint64_t *)haddr);
@@ -484,23 +432,20 @@ fastcall u_int MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
    data &= ~d_mask;
    data |= cpu->gpr[reg] >> r_shift;
 
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDL,8,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDL,8,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint64_t *)haddr = htovm64(data);
-   return(exc);
 }
 
 /* SDR: Store Double-Word Right */
-fastcall u_int MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
    u_int r_shift;
    void *haddr;
-   u_int exc;
 
    naddr = vaddr & ~(0x07);
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDR,8,MTS_READ,&data,&exc);
-   if (unlikely(exc)) return(exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDR,8,MTS_READ,&data);
 
    if (likely(haddr != NULL))
       data = vmtoh64(*(m_uint64_t *)haddr);
@@ -511,64 +456,51 @@ fastcall u_int MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
    data &= d_mask;
    data |= cpu->gpr[reg] << (64 - r_shift);
 
-   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDR,8,MTS_WRITE,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,naddr,MIPS_MEMOP_SDR,8,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint64_t *)haddr = htovm64(data);
-   return(exc);
 }
 
 /* LL: Load Linked */
-fastcall u_int MTS_PROTO(ll)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(ll)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LL,4,MTS_READ,&data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LL,4,MTS_READ,&data);
    if (likely(haddr != NULL)) data = vmtoh32(*(m_uint32_t *)haddr);
 
-   if (likely(!exc)) {
-      cpu->gpr[reg] = sign_extend(data,32);
-      cpu->ll_bit = 1;
-   }
-
-   return(exc);
+   cpu->gpr[reg] = sign_extend(data,32);
+   cpu->ll_bit = 1;
 }
 
 /* SC: Store Conditional */
-fastcall u_int MTS_PROTO(sc)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sc)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc = 0;
 
    if (cpu->ll_bit) {
       data = cpu->gpr[reg] & 0xffffffff;
-      haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SC,4,MTS_WRITE,
-                                &data,&exc);
+      haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SC,4,MTS_WRITE,&data);
       if (likely(haddr != NULL)) *(m_uint32_t *)haddr = htovm32(data);
    }
 
-   if (likely(!exc))
-      cpu->gpr[reg] = cpu->ll_bit;
-   return(exc);
+   cpu->gpr[reg] = cpu->ll_bit;
 }
 
 /* SDC1: Store Double-Word from Coprocessor 1 */
-fastcall u_int MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+fastcall void MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
-   u_int exc;
 
    data = cpu->fpu.reg[reg];
-   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SDC1,8,MTS_WRITE,
-                             &data,&exc);
+   haddr = MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_SDC1,8,MTS_WRITE,&data);
    if (likely(haddr != NULL)) *(m_uint64_t *)haddr = htovm64(data);
-   return(exc);
 }
 
 /* CACHE: Cache operation */
-fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
+fastcall void MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 {
    mips64_jit_tcb_t *block;
    m_uint32_t pc_hash;
@@ -598,12 +530,9 @@ fastcall u_int MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
          cpu_log(cpu->gen,"MTS",
                  "CACHE: trying to remove page 0x%llx with pc=0x%llx\n",
                  vaddr, cpu->pc);
-#endif
-         
+#endif         
       }
    }
-
-   return(0);
 }
 
 /* === MTS Cache Management ============================================= */

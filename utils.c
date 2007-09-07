@@ -208,6 +208,7 @@ void mem_dump(FILE *f_output,u_char *pkt,u_int len)
    }
 
    fprintf(f_output,"\n");
+   fflush(f_output);
 }
 
 /* Logging function */
@@ -256,9 +257,9 @@ char *m_fgets(char *buffer,int size,FILE *fd)
 }
 
 /* Read a file and returns it in a buffer */
-ssize_t m_read_file(char *filename,char **buffer)
+ssize_t m_read_file(char *filename,u_char **buffer)
 {
-   char tmp[256],*ptr,*nptr;
+   u_char tmp[256],*ptr,*nptr;
    size_t len,tot_len;
    FILE *fd;
 
@@ -296,7 +297,7 @@ void *m_memalign(size_t boundary,size_t size)
 {
    void *p;
 
-#ifdef __linux__
+#if defined(__linux__) || HAS_POSIX_MEMALIGN
    if (posix_memalign((void *)&p,boundary,size))
 #else
 #if defined(__CYGWIN__) || defined(SUNOS)

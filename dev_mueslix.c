@@ -144,6 +144,12 @@ struct mueslix_channel {
    /* Channel status (0=disabled) */
    u_int status;
 
+   /* CRC control register */
+   u_int crc_ctrl_reg;
+
+   /* CRC size */
+   u_int crc_size;
+
    /* NetIO descriptor */
    netio_desc_t *nio;
 
@@ -243,6 +249,31 @@ void dev_mueslix_chan_access(cpu_gen_t *cpu,struct mueslix_channel *channel,
                              m_uint64_t *data)
 {
    switch(offset) {
+      case 0x00: /* CRC control register ? */
+         if (op_type == MTS_READ) {
+            *data = channel->crc_ctrl_reg;
+         } else {
+            channel->crc_ctrl_reg = *data;
+            
+            switch(channel->crc_ctrl_reg) {
+               case 0x08:
+               case 0x0a:
+                  channel->crc_size = channel->crc_ctrl_reg - 0x06;
+                  break;
+
+               default:
+                  MUESLIX_LOG(channel->parent,"channel %u: unknown value "
+                              "for CRC ctrl reg 0x%4.4x\n",
+                              channel->id,channel->crc_ctrl_reg);
+
+                  channel->crc_size = 2;
+            }
+            MUESLIX_LOG(channel->parent,
+                        "channel %u: CRC size set to 0x%4.4x\n",
+                        channel->id,channel->crc_size);
+         }
+         break;
+
       case 0x60: /* signals ? */
          if ((op_type == MTS_READ) && (channel->nio != NULL))
             *data = 0xFFFFFFFF;
@@ -613,7 +644,7 @@ static void dev_mueslix_receive_pkt(struct mueslix_channel *channel,
       /* We have finished if the complete packet has been stored */
       if (tot_len == 0) {
          rxdc->rdes[0] = MUESLIX_RXDESC_LS;
-         rxdc->rdes[0] |= cp_len;
+         rxdc->rdes[0] |= cp_len + channel->crc_size + 1;
 
          if (i != 0)
             physmem_copy_u32_to_vm(d->vm,channel->rx_current,rxdc->rdes[0]);
@@ -775,7 +806,7 @@ static int dev_mueslix_handle_txring_single(struct mueslix_channel *channel)
       /* Be sure that we have length not null */
       if (clen != 0) {
          //printf("pkt_ptr = %p, ptxd->tdes[1] = 0x%x, clen = %d\n",
-         //pkt_ptr, ptxd->tdes[1], clen);
+         //       pkt_ptr, ptxd->tdes[1], clen);
          physmem_copy_from_vm(d->vm,pkt_ptr,ptxd->tdes[1],clen);
       }
 
@@ -806,8 +837,8 @@ static int dev_mueslix_handle_txring_single(struct mueslix_channel *channel)
 
       pad = ptxd->tdes[0] & MUESLIX_TXDESC_PAD;
       pad >>= MUESLIX_TXDESC_PAD_SHIFT;
-      tot_len += (pad - 1) & 0x03;
- 
+      tot_len -= (4 - pad) & 0x03;
+
       /* send it on wire */
       netio_send(channel->nio,pkt,tot_len);
    }
@@ -892,8 +923,10 @@ dev_mueslix_init(vm_instance_t *vm,char *name,int chip_mode,
    pthread_mutex_init(&d->lock,NULL);
    d->chip_mode = chip_mode;
 
-   for(i=0;i<MUESLIX_NR_CHANNELS;i++)
+   for(i=0;i<MUESLIX_NR_CHANNELS;i++) {
       d->channel[i].id = i;
+      d->channel[i].parent = d;
+   }
 
    /* Add as PCI device */
    pci_dev = pci_dev_add(pci_bus,name,
@@ -956,7 +989,6 @@ int dev_mueslix_set_nio(struct mueslix_data *d,u_int channel_id,
 
    /* define the new NIO */
    channel->nio = nio;
-   channel->parent = d;
    channel->tx_tid = ptask_add((ptask_callback)dev_mueslix_handle_txring,
                                channel,NULL);
    netio_rxl_add(nio,(netio_rx_handler_t)dev_mueslix_handle_rxring,

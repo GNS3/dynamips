@@ -390,7 +390,6 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                              int op,int base,int offset,int target,int update)
 {
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1;
    jit_op_t *iop;
 
    /* 
@@ -424,13 +423,6 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    /* Call memory function */
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(op));
 
-   /* Exception ? */
-   amd64_test_reg_reg_size(iop->ob_ptr,AMD64_RAX,AMD64_RAX,4);
-   test1 = iop->ob_ptr;
-   amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-   amd64_patch(test1,iop->ob_ptr);
-
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,base,AMD64_R14);
 }
@@ -439,7 +431,6 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                                  int op,int ra,int rb,int target,int update)
 {
-   u_char *test1;
    jit_op_t *iop;
 
    /* 
@@ -472,13 +463,6 @@ static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    /* Call memory function */
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(op));
-
-   /* Exception ? */
-   amd64_test_reg_reg_size(iop->ob_ptr,AMD64_RAX,AMD64_RAX,4);
-   test1 = iop->ob_ptr;
-   amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-   amd64_patch(test1,iop->ob_ptr);
 
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,ra,AMD64_R14);
@@ -524,7 +508,7 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                                   memop_fast_access op_handler)
 {   
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exception,*p_exit;
+   u_char *test1,*test2,*p_exit;
    jit_op_t *iop;
 
    /* 
@@ -601,14 +585,7 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    /* Call memory access function */
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
 
-   /* Exception ? */
-   amd64_test_reg_reg_size(iop->ob_ptr,AMD64_RAX,AMD64_RAX,4);
-   p_exception = iop->ob_ptr;
-   amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
-   ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
-
    amd64_patch(p_exit,iop->ob_ptr);
-   amd64_patch(p_exception,iop->ob_ptr);
 }
 
 /* Emit unhandled instruction code */
@@ -655,9 +632,13 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 }
 
 /* Increment the number of executed instructions (performance debugging) */
-void ppc32_inc_perf_counter(ppc32_jit_tcb_t *b)
-{ 
-   amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_ppc_t,perf_counter));
+void ppc32_inc_perf_counter(cpu_ppc_t *cpu)
+{    
+   jit_op_t *iop;
+   
+   iop = ppc32_op_emit_insn_output(cpu,1,"perf_cnt");
+   amd64_inc_membase_size(iop->ob_ptr,
+                          AMD64_R15,OFFSET(cpu_ppc_t,perf_counter),4);
 }
 
 /* ======================================================================== */
@@ -706,7 +687,7 @@ DECLARE_INSN(BCTR)
 
    /* set the return address */
    if (insn & 1)
-      ppc32_set_lr(iop,b->start_ia + (b->ppc_trans_pos << 2));
+      ppc32_set_lr(iop,b->start_ia + ((b->ppc_trans_pos+1) << 2));
 
    ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
    ppc32_op_emit_basic_opcode(cpu,JIT_OP_EOB);
@@ -2588,7 +2569,7 @@ DECLARE_INSN(MTCRF)
 
    ppc32_op_emit_load_gpr(cpu,hreg_rs,rs);
 
-   iop = ppc32_op_emit_insn_output(cpu,3,"mtcrf");
+   iop = ppc32_op_emit_insn_output(cpu,4,"mtcrf");
 
    for(i=0;i<8;i++)
       if (crm & (1 << (7 - i))) {

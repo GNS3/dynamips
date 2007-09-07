@@ -70,6 +70,9 @@ int ppc32_init(cpu_ppc_t *cpu)
    cpu->gen->set_idle_pc = (void *)ppc32_set_idle_pc;
    cpu->gen->get_idling_pc = (void *)ppc32_get_idling_pc;
 
+   /* zzz */
+   memset(cpu->vtlb,0xFF,sizeof(cpu->vtlb));
+
    /* Set the startup parameters */
    ppc32_reset(cpu);
    return(0);

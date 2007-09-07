@@ -41,6 +41,7 @@
 #include "dev_c3725.h"
 #include "dev_c3745.h"
 #include "dev_c2600.h"
+#include "dev_c1700.h"
 #include "hypervisor.h"
 #include "net_io.h"
 #include "net_io_bridge.h"
@@ -136,12 +137,7 @@ static int cmd_save_config(hypervisor_conn_t *conn,int argc,char *argv[])
    frsw_save_config_all(fd);
    atmsw_save_config_all(fd);
    netio_bridge_save_config_all(fd);
-   c7200_save_config_all(fd);
-   c3600_save_config_all(fd);
-   c2691_save_config_all(fd);
-   c3725_save_config_all(fd);
-   c3745_save_config_all(fd);
-   c2600_save_config_all(fd);
+   vm_save_config_all(fd);
 
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -243,8 +239,9 @@ void *hypervisor_find_object(hypervisor_conn_t *conn,char *name,int obj_type)
 }
 
 /* Find a VM in the registry */
-void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name,int vm_type)
+void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name)
 {
+   vm_platform_t *platform = conn->cur_module->opt;
    vm_instance_t *vm;
 
    if (!(vm = vm_acquire(name))) {
@@ -253,11 +250,11 @@ void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name,int vm_type)
       return NULL;
    }
 
-   if (vm->type != vm_type) {
+   if (vm->platform != platform) {
       vm_release(vm);
       hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,
-                            "VM '%s' is not a VM type %d",
-                            name,vm_type);
+                            "VM '%s' is not a VM type %s",
+                            name,platform->name);
       return NULL;
    }
 
@@ -265,7 +262,7 @@ void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name,int vm_type)
 }
 
 /* Register a module */
-hypervisor_module_t *hypervisor_register_module(char *name)
+hypervisor_module_t *hypervisor_register_module(char *name,void *opt)
 {
    hypervisor_module_t *m;
 
@@ -280,6 +277,7 @@ hypervisor_module_t *hypervisor_register_module(char *name)
    }
 
    m->name = name;
+   m->opt  = opt;
    m->cmd_list = NULL;
 
    m->next = module_list;
@@ -341,6 +339,8 @@ static int hypervisor_exec_cmd(hypervisor_conn_t *conn,
                             argc,cmd->min_param,cmd->max_param);
       return(-1);
    }
+
+   conn->cur_module = module;
 
    return(cmd->handler(conn,argc,argv));
 }
@@ -417,7 +417,7 @@ int hypervisor_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("hypervisor");
+   module = hypervisor_register_module("hypervisor",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,hypervisor_cmd_array);
@@ -535,7 +535,7 @@ int hypervisor_stopsig(void)
 }
 
 /* Hypervisor TCP server */
-int hypervisor_tcp_server(int tcp_port)
+int hypervisor_tcp_server(char *ip_addr,int tcp_port)
 {
    int fd_array[HYPERVISOR_MAX_FD];
    struct sockaddr_storage remote_addr;
@@ -553,19 +553,14 @@ int hypervisor_tcp_server(int tcp_port)
    hypervisor_ethsw_init();
    hypervisor_vm_init();
    hypervisor_vm_debug_init();
-   hypervisor_c7200_init();
-   hypervisor_c3600_init();
-   hypervisor_c2691_init();
-   hypervisor_c3725_init();
-   hypervisor_c3745_init();
-   hypervisor_c2600_init();
 
    signal(SIGPIPE,sigpipe_handler);
 
    if (!tcp_port)
       tcp_port = HYPERVISOR_TCP_PORT;
 
-   fd_count = ip_listen(tcp_port,SOCK_STREAM,HYPERVISOR_MAX_FD,fd_array);
+   fd_count = ip_listen(ip_addr,tcp_port,SOCK_STREAM,
+                        HYPERVISOR_MAX_FD,fd_array);
 
    if (fd_count <= 0) {
       fprintf(stderr,"Hypervisor: unable to create TCP sockets.\n");

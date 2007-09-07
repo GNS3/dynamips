@@ -315,19 +315,34 @@ static void ilt_compile(insn_lookup_t *ilt)
 }
 
 /* Dump an instruction lookup table */
-static void ilt_dump(insn_lookup_t *ilt)
+static int ilt_dump(char *table_name,insn_lookup_t *ilt)
 {
    rfc_array_t *rfct;
+   char *filename;
+   FILE *fd;
    int i,j;
    
-   printf("ILT %p: nr_insn=%d, cbm_size=%d\n",ilt,ilt->nr_insn,ilt->cbm_size);
+   filename = dyn_sprintf("ilt_dump_%s_%s.txt",sw_version_tag,table_name);
+   assert(filename != NULL);
+
+   fd = fopen(filename,"w");
+   assert(fd != NULL);
+   
+   fprintf(fd,"ILT %p: nr_insn=%d, cbm_size=%d\n",
+         ilt,ilt->nr_insn,ilt->cbm_size);
 
    for(i=0;i<RFC_ARRAY_NUMBER;i++) {
       rfct = ilt->rfct[i];
       
+      fprintf(fd,"RFCT %d: nr_elements=%d, nr_eqid=%d\n",
+              i,rfct->nr_elements,rfct->nr_eqid);
+      
       for(j=0;j<rfct->nr_elements;j++)
-         printf("  (0x%4.4x,0x%4.4x) = 0x%4.4x\n",i,j,rfct->eqID[j]);
+         fprintf(fd,"  (0x%4.4x,0x%4.4x) = 0x%4.4x\n",i,j,rfct->eqID[j]);
    }
+   
+   fclose(fd);
+   return(0);
 }
 
 /* Write the specified RFC array to disk */
@@ -338,7 +353,7 @@ static void ilt_store_rfct(FILE *fd,int id,rfc_array_t *rfct)
    fwrite(&rfct->nr_elements,sizeof(rfct->nr_elements),1,fd);
    fwrite(&rfct->nr_eqid,sizeof(rfct->nr_eqid),1,fd);
 
-   fwrite(rfct->eqID,rfct->nr_elements,sizeof(int),fd);
+   fwrite(rfct->eqID,sizeof(int),rfct->nr_elements,fd);
 }
 
 /* Write the full instruction lookup table */
@@ -363,7 +378,7 @@ static int ilt_load_rfct(FILE *fd,insn_lookup_t *ilt)
        (fread(&nr_elements,sizeof(nr_elements),1,fd) != 1) ||
        (fread(&nr_eqid,sizeof(nr_eqid),1,fd) != 1))
       return(-1);
-
+      
    if ((id >= RFC_ARRAY_NUMBER) || (nr_elements > RFC_ARRAY_MAXSIZE))
       return(-1);
 
@@ -376,9 +391,12 @@ static int ilt_load_rfct(FILE *fd,insn_lookup_t *ilt)
    memset(rfct,0,sizeof(*rfct));
    rfct->nr_elements = nr_elements;
    rfct->nr_eqid = nr_eqid;
-
+   
    /* Read the equivalent ID array */
-   fread(rfct->eqID,rfct->nr_elements,sizeof(int),fd);
+   if (fread(rfct->eqID,sizeof(int),nr_elements,fd) != nr_elements) {
+      free(rfct);
+      return(-1);
+   }
 
    ilt->rfct[id] = rfct;
    return(0);
@@ -401,15 +419,17 @@ static int ilt_check_cached_table(insn_lookup_t *ilt)
 static insn_lookup_t *ilt_load_table(FILE *fd)
 {
    insn_lookup_t *ilt;
-
+   int i;
+   
    if (!(ilt = malloc(sizeof(*ilt))))
       return NULL;
 
    memset(ilt,0,sizeof(*ilt));
+   fseek(fd,0,SEEK_SET);
 
-   while(!feof(fd)) {
+   for(i=0;i<RFC_ARRAY_NUMBER;i++) {
       if (ilt_load_rfct(fd,ilt) == -1)
-         break;
+         return NULL;
    }
 
    if (ilt_check_cached_table(ilt) == -1)
@@ -434,7 +454,7 @@ static insn_lookup_t *ilt_cache_load(char *table_name)
    if (!(filename = ilt_build_filename(table_name)))
       return NULL;
 
-   if (!(fd = fopen(filename,"r"))) {
+   if (!(fd = fopen(filename,"rb"))) {
       free(filename);
       return NULL;
    }
@@ -453,13 +473,14 @@ static int ilt_cache_store(char *table_name,insn_lookup_t *ilt)
    if (!(filename = ilt_build_filename(table_name)))
       return(-1);
 
-   if (!(fd = fopen(filename,"w"))) {
+   if (!(fd = fopen(filename,"wb"))) {
       free(filename);
       return(-1);
    }
 
    ilt_store_table(fd,ilt);
    fclose(fd);
+   free(filename);
    return(0);
 }
 

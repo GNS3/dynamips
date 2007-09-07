@@ -279,28 +279,28 @@ void mips64_dump_insn_block(cpu_mips_t *cpu,m_uint64_t pc,u_int count,
 }
 
 /* Execute a memory operation */
-static forced_inline int mips64_exec_memop(cpu_mips_t *cpu,int memop,
-                                           m_uint64_t vaddr,u_int dst_reg,
-                                           int keep_ll_bit)
+static forced_inline void mips64_exec_memop(cpu_mips_t *cpu,int memop,
+                                            m_uint64_t vaddr,u_int dst_reg,
+                                            int keep_ll_bit)
 {     
    fastcall mips_memop_fn fn;
 
    if (!keep_ll_bit) cpu->ll_bit = 0;
    fn = cpu->mem_op_fn[memop];
-   return(fn(cpu,vaddr,dst_reg));
+   fn(cpu,vaddr,dst_reg);
 }
 
 /* Execute a memory operation (2) */
-static forced_inline int mips64_exec_memop2(cpu_mips_t *cpu,int memop,
-                                            m_uint64_t base,int offset,
-                                            u_int dst_reg,int keep_ll_bit)
+static forced_inline void mips64_exec_memop2(cpu_mips_t *cpu,int memop,
+                                             m_uint64_t base,int offset,
+                                             u_int dst_reg,int keep_ll_bit)
 {
    m_uint64_t vaddr = cpu->gpr[base] + sign_extend(offset,16);
    fastcall mips_memop_fn fn;
-
+      
    if (!keep_ll_bit) cpu->ll_bit = 0;
    fn = cpu->mem_op_fn[memop];
-   return(fn(cpu,vaddr,dst_reg));
+   fn(cpu,vaddr,dst_reg);
 }
 
 /* Fetch an instruction */
@@ -359,10 +359,9 @@ mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
       char buffer[80];
       
       if (mips64_dump_insn(buffer,sizeof(buffer),0,cpu->pc,instruction)!=-1)
-         fprintf(log_file,"0x%llx: %s\n",cpu->pc,buffer);
+         cpu_log(cpu->gen,"EXEC","0x%llx: %s\n",cpu->pc,buffer);
    }
 #endif
-
    return(exec(cpu,instruction));
 }
 
@@ -396,6 +395,7 @@ void *mips64_exec_run_cpu(cpu_gen_t *gen)
    }
 
    gen->cpu_thread_running = TRUE;
+   cpu_exec_loop_set(gen);
 
  start_cpu:
    gen->idle_count = 0;
@@ -1076,7 +1076,8 @@ static fastcall int mips64_exec_CACHE(cpu_mips_t *cpu,mips_insn_t insn)
    int op     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_CACHE,base,offset,op,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_CACHE,base,offset,op,FALSE);
+   return(0);
 }
 
 /* CFC0 */
@@ -1394,7 +1395,8 @@ static fastcall int mips64_exec_LB(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LB,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LB,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LBU (Load Byte Unsigned) */
@@ -1404,7 +1406,8 @@ static fastcall int mips64_exec_LBU(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LBU,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LBU,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LD (Load Double-Word) */
@@ -1414,7 +1417,8 @@ static fastcall int mips64_exec_LD(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LD,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LD,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LDC1 (Load Double-Word to Coprocessor 1) */
@@ -1424,7 +1428,8 @@ static fastcall int mips64_exec_LDC1(cpu_mips_t *cpu,mips_insn_t insn)
    int ft     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LDC1,base,offset,ft,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LDC1,base,offset,ft,TRUE);
+   return(0);
 }
 
 /* LDL (Load Double-Word Left) */
@@ -1434,7 +1439,8 @@ static fastcall int mips64_exec_LDL(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LDL,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LDL,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LDR (Load Double-Word Right) */
@@ -1444,7 +1450,8 @@ static fastcall int mips64_exec_LDR(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LDR,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LDR,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LH (Load Half-Word) */
@@ -1454,7 +1461,8 @@ static fastcall int mips64_exec_LH(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LH,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LH,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LHU (Load Half-Word Unsigned) */
@@ -1464,7 +1472,8 @@ static fastcall int mips64_exec_LHU(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LHU,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LHU,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LI (virtual) */
@@ -1484,7 +1493,8 @@ static fastcall int mips64_exec_LL(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LL,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LL,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LUI */
@@ -1504,7 +1514,8 @@ static fastcall int mips64_exec_LW(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LW,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LW,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LWL (Load Word Left) */
@@ -1514,7 +1525,8 @@ static fastcall int mips64_exec_LWL(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LWL,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LWL,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LWR (Load Word Right) */
@@ -1524,7 +1536,8 @@ static fastcall int mips64_exec_LWR(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LWR,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LWR,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* LWU (Load Word Unsigned) */
@@ -1534,7 +1547,8 @@ static fastcall int mips64_exec_LWU(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_LWU,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_LWU,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* MFC0 */
@@ -1724,7 +1738,8 @@ static fastcall int mips64_exec_SB(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SB,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SB,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SC (Store Conditional) */
@@ -1734,7 +1749,8 @@ static fastcall int mips64_exec_SC(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SC,base,offset,rt,TRUE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SC,base,offset,rt,TRUE);
+   return(0);
 }
 
 /* SD (Store Double-Word) */
@@ -1744,7 +1760,8 @@ static fastcall int mips64_exec_SD(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SD,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SD,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SDL (Store Double-Word Left) */
@@ -1754,7 +1771,8 @@ static fastcall int mips64_exec_SDL(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
    
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SDL,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SDL,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SDR (Store Double-Word Right) */
@@ -1764,7 +1782,8 @@ static fastcall int mips64_exec_SDR(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SDR,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SDR,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SDC1 (Store Double-Word from Coprocessor 1) */
@@ -1774,7 +1793,8 @@ static fastcall int mips64_exec_SDC1(cpu_mips_t *cpu,mips_insn_t insn)
    int ft     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SDC1,base,offset,ft,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SDC1,base,offset,ft,FALSE);
+   return(0);
 }
 
 /* SH (Store Half-Word) */
@@ -1784,7 +1804,8 @@ static fastcall int mips64_exec_SH(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SH,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SH,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SLL */
@@ -1961,7 +1982,8 @@ static fastcall int mips64_exec_SW(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SW,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SW,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SWL (Store Word Left) */
@@ -1971,7 +1993,8 @@ static fastcall int mips64_exec_SWL(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
    
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SWL,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SWL,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SWR (Store Word Right) */
@@ -1981,7 +2004,8 @@ static fastcall int mips64_exec_SWR(cpu_mips_t *cpu,mips_insn_t insn)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   return(mips64_exec_memop2(cpu,MIPS_MEMOP_SWR,base,offset,rt,FALSE));
+   mips64_exec_memop2(cpu,MIPS_MEMOP_SWR,base,offset,rt,FALSE);
+   return(0);
 }
 
 /* SYNC */

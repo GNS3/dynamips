@@ -737,6 +737,8 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
    }
 
    gen->cpu_thread_running = TRUE;
+   cpu_exec_loop_set(gen);
+   
  start_cpu:   
    gen->idle_count = 0;
 

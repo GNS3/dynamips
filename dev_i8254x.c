@@ -247,8 +247,6 @@
 #define I8254X_RXDESC_EOP       0x00000002  /* End Of Packet */
 #define I8254X_RXDESC_DD        0x00000001  /* Descriptor Done */
 
-
-
 /* Intel i8254x private data */
 struct i8254x_data {
    char *name;
@@ -477,7 +475,7 @@ static inline void dev_i8254x_update_irq_status(struct i8254x_data *d)
 {
    if (d->icr & d->imr)
       pci_dev_trigger_irq(d->vm,d->pci_dev);
-   else
+   else 
       pci_dev_clear_irq(d->vm,d->pci_dev);
 }
 
@@ -551,7 +549,7 @@ void *dev_i8254x_access(cpu_gen_t *cpu,struct vdevice *dev,
 #if 0 /* TODO */
       case 0x180:
          if (op_type == MTS_READ)
-            *data = 0xDC004020; //1 << 31;
+            *data = 0xFFFFFFFF; //0xDC004020; //1 << 31;
          break;
 #endif
 
@@ -847,7 +845,7 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
       return(FALSE);
 
    LVG_LOCK(d);
-
+   
    /* Empty packet for now */
    pkt_ptr = d->tx_buffer;
    tot_len = 0;
@@ -861,6 +859,7 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
       buf_addr = ((m_uint64_t)txd.tdes[1] << 32) | txd.tdes[0];
       buf_len  = txd.tdes[2] & I8254X_TXDESC_LEN_MASK;
 
+      //printf("COPYING DATA FROM 0x%8.8llx\n",buf_addr);
       norm_len = normalize_size(buf_len,4,0);
       physmem_copy_from_vm(d->vm,pkt_ptr,buf_addr,norm_len);
       mem_bswap32(pkt_ptr,norm_len);
@@ -881,6 +880,10 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
 
       /* End of packet ? */
       if (txd.tdes[2] & I8254X_TXDESC_EOP) {
+#if DEBUG_TRANSMIT
+         LVG_LOG(d,"sending packet of %u bytes\n",tot_len);
+         mem_dump(log_file,d->tx_buffer,tot_len);
+#endif
          netio_send(d->nio,d->tx_buffer,tot_len);
          break;
       }
@@ -1012,7 +1015,7 @@ static int dev_i8254x_handle_rxring(netio_desc_t *nio,
  * Read a PCI register.
  */
 static m_uint32_t pci_i8254x_read(cpu_gen_t *cpu,struct pci_device *dev,
-                                    int reg)
+                                  int reg)
 {
    struct i8254x_data *d = dev->priv_data;
 
@@ -1038,7 +1041,7 @@ static m_uint32_t pci_i8254x_read(cpu_gen_t *cpu,struct pci_device *dev,
  * Write a PCI register.
  */
 static void pci_i8254x_write(cpu_gen_t *cpu,struct pci_device *dev,
-                               int reg,m_uint32_t value)
+                             int reg,m_uint32_t value)
 {
    struct i8254x_data *d = dev->priv_data;
 

@@ -14,10 +14,10 @@
 #include "device.h"
 #include "net_io.h"
 
-/* Generic AMD I8254x initialization code */
+/* Generic Intel i8254x initialization code */
 struct i8254x_data *
 dev_i8254x_init(vm_instance_t *vm,char *name,int interface_type,
-                  struct pci_bus *pci_bus,int pci_device,int irq);
+                struct pci_bus *pci_bus,int pci_device,int irq);
 
 /* Remove an Intel i8254x device */
 void dev_i8254x_remove(struct i8254x_data *d);

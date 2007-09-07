@@ -7,6 +7,7 @@
 #define __CPU_H__
 
 #include <pthread.h>
+#include <setjmp.h>
 #include "utils.h"
 #include "jit_op.h"
 
@@ -49,6 +50,11 @@ struct memlog_access {
    m_uint32_t op_type;
 };
 
+/* Undefined memory access handler */
+typedef int (*cpu_undefined_mem_handler_t)(cpu_gen_t *cpu,m_uint64_t vaddr,
+                                           u_int op_size,u_int op_type,
+                                           m_uint64_t *data);
+
 /* Generic CPU definition */
 struct cpu_gen {
    /* CPU type and identifier for MP systems */
@@ -61,6 +67,9 @@ struct cpu_gen {
    /* Thread running this CPU */
    pthread_t cpu_thread;
    int cpu_thread_running;
+
+   /* Exception restore point */
+   jmp_buf exec_loop_env;
 
    /* "Idle" loop management */
    u_int idle_count,idle_max,idle_sleep_time;
@@ -94,6 +103,8 @@ struct cpu_gen {
    void (*get_idling_pc)(cpu_gen_t *cpu);   
    void (*mts_rebuild)(cpu_gen_t *cpu);
    void (*mts_show_stats)(cpu_gen_t *cpu);
+
+   cpu_undefined_mem_handler_t undef_mem_handler;
 
    /* Memory access log for fault debugging */
    u_int memlog_pos;
@@ -136,7 +147,7 @@ static forced_inline m_uint64_t cpu_get_pc(cpu_gen_t *cpu)
 }
 
 /* Get CPU performance counter */
-static forced_inline m_uint64_t cpu_get_perf_counter(cpu_gen_t *cpu)
+static forced_inline m_uint32_t cpu_get_perf_counter(cpu_gen_t *cpu)
 {
    switch(cpu->type) {
       case CPU_TYPE_MIPS64:
@@ -204,5 +215,14 @@ void cpu_idle_loop(cpu_gen_t *cpu);
 
 /* Break idle wait state */
 void cpu_idle_break_wait(cpu_gen_t *cpu);
+
+/* Returns to the CPU exec loop */
+static inline void cpu_exec_loop_enter(cpu_gen_t *cpu)
+{
+   longjmp(cpu->exec_loop_env,1);
+}
+
+/* Set the exec loop entry point */
+#define cpu_exec_loop_set(cpu) setjmp((cpu)->exec_loop_env)
 
 #endif

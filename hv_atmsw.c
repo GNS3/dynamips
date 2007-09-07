@@ -201,7 +201,7 @@ int hypervisor_atmsw_init(void)
 {
    hypervisor_module_t *module;
 
-   module = hypervisor_register_module("atmsw");
+   module = hypervisor_register_module("atmsw",NULL);
    assert(module != NULL);
 
    hypervisor_register_cmd_array(module,atmsw_cmd_array);
