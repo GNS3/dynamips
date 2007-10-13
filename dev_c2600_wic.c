@@ -181,7 +181,7 @@ dev_c2600_mb_wic2t_set_nio(vm_instance_t *vm,struct cisco_card *card,
    if ((port_id > 1) || 
        (dev_c2600_mb_wic_get_scc_chan(card,port_id,&scc_chan) == -1))
       return(-1);
-
+   
    return(mpc860_scc_set_nio(VM_C2600(vm)->mpc_data,scc_chan,nio));
 }
 

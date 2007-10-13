@@ -17,7 +17,7 @@ HAS_POSIX_MEMALIGN?=0
 
 # Current dynamips release
 VERSION_TRAIN=0.2.8
-VERSION_SUB=-RC1
+VERSION_SUB=-RC2
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -96,7 +96,7 @@ ARCHIVE_DEV=$(PACKAGE_DEV).tar.gz
 # Header and source files
 HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
 	crc.h sbox.h base64.h net.h net_io.h net_io_bridge.h net_io_filter.h \
-	atm.h frame_relay.h eth_switch.h \
+	atm.h atm_vsar.h atm_bridge.h frame_relay.h eth_switch.h \
 	ptask.h timer.h dev_vtty.h hypervisor.h dynamips.h insn_lookup.h \
 	vm.h cpu.h jit_op.h memory.h device.h \
 	mips64.h mips64_mem.h mips64_exec.h mips64_jit.h mips64_cp0.h \
@@ -119,7 +119,7 @@ HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
 SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 	plugin.c ptask.c timer.c crc.c base64.c \
 	net.c net_io.c net_io_bridge.c net_io_filter.c \
-	atm.c frame_relay.c eth_switch.c \
+	atm.c atm_vsar.c atm_bridge.c frame_relay.c eth_switch.c \
 	dynamips.c insn_lookup.c vm.c cpu.c jit_op.c \
 	mips64.c mips64_mem.c mips64_cp0.c mips64_jit.c mips64_exec.c \
 	ppc32.c ppc32_mem.c ppc32_jit.c ppc32_exec.c ppc32_vmtest.c \
@@ -150,8 +150,9 @@ SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 	dev_c6sup1.c dev_c6sup1_iofpga.c dev_c6sup1_mpfpga.c \
 	dev_nm_16esw.c dev_pa_a1.c dev_pa_mc8te1.c \
 	dev_sb1.c dev_sb1_io.c dev_sb1_pci.c hypervisor.c \
-	hv_nio.c hv_nio_bridge.c hv_frsw.c hv_atmsw.c hv_ethsw.c \
-	hv_vm.c hv_vm_debug.c \
+	hv_nio.c hv_nio_bridge.c \
+	hv_frsw.c hv_atmsw.c hv_atm_bridge.c hv_ethsw.c \
+	hv_vm.c hv_vm_debug.c hv_store.c \
 	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c \
 	hv_c2600.c hv_c1700.c \
 	rommon_var.c
@@ -219,13 +220,13 @@ $(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
 	@echo "Linking $@"
 	@$(CC) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
 
-udp_send$(BIN_EXT): udp_send.c net.c
+udp_send$(BIN_EXT): udp_send.c net.c crc.c
 	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) -o $@ udp_send.c net.c $(LIBS)
+	@$(CC) -Wall $(CFLAGS) -o $@ udp_send.c net.c crc.c $(LIBS)
 
-udp_recv$(BIN_EXT): udp_recv.c net.c
+udp_recv$(BIN_EXT): udp_recv.c net.c crc.c
 	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) -o $@ udp_recv.c net.c $(LIBS)
+	@$(CC) -Wall $(CFLAGS) -o $@ udp_recv.c net.c crc.c $(LIBS)
 
 rom2c$(BIN_EXT): rom2c.c
 	@echo "Linking $@"

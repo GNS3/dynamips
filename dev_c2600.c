@@ -918,6 +918,10 @@ int c2600_stop_instance(vm_instance_t *vm)
    /* Free resources that were used during execution to emulate hardware */
    vm_slot_shutdown_all(vm);
    vm_hardware_shutdown(vm);
+
+   /* Cleanup */   
+   VM_C2600(vm)->iofpga_data = NULL;
+   VM_C2600(vm)->mpc_data = NULL;
    return(0);
 }
 

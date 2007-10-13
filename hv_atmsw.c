@@ -26,7 +26,6 @@
 #include "utils.h"
 #include "net.h"
 #include "atm.h"
-#include "frame_relay.h"
 #include "crc.h"
 #include "net_io.h"
 #include "registry.h"

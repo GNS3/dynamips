@@ -27,7 +27,9 @@ enum {
    OBJ_TYPE_NIO_BRIDGE,  /* Network IO bridge */
    OBJ_TYPE_FRSW,        /* Frame-Relay switch */
    OBJ_TYPE_ATMSW,       /* ATM switch */
+   OBJ_TYPE_ATM_BRIDGE,  /* ATM bridge */
    OBJ_TYPE_ETHSW,       /* Ethernet switch */
+   OBJ_TYPE_STORE,       /* Hypervisor store */
 };
 
 /* Registry entry */

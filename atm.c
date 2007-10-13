@@ -20,11 +20,15 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-
 #include "utils.h"
 #include "registry.h"
 #include "atm.h"
 #include "net_io.h"
+
+/* RFC1483 bridged mode header */
+m_uint8_t atm_rfc1483b_header[ATM_RFC1483B_HLEN] = { 
+   0xaa, 0xaa, 0x03, 0x00, 0x80, 0xc2, 0x00, 0x07, 0x00, 0x00,
+};
 
 /********************************************************************/
 #define HEC_GENERATOR   0x107               /* x^8 + x^2 +  x  + 1  */
@@ -123,10 +127,10 @@ void atmsw_vp_switch(atmsw_vp_conn_t *vpc,m_uint8_t *cell)
    m_uint32_t atm_hdr;
 
    /* rewrite the atm header with new vpi */
-   atm_hdr =  ntohl(*(m_uint32_t *)cell);
-   atm_hdr =  atm_hdr & ~ATM_HDR_VPI_MASK;
+   atm_hdr =  m_ntoh32(cell);
+   atm_hdr &= ~ATM_HDR_VPI_MASK;
    atm_hdr |= vpc->vpi_out << ATM_HDR_VPI_SHIFT;
-   *(m_uint32_t *)cell = htonl(atm_hdr);
+   m_hton32(cell,atm_hdr);
 
    /* recompute HEC field */
    atm_insert_hec(cell);
@@ -141,12 +145,12 @@ void atmsw_vc_switch(atmsw_vc_conn_t *vcc,m_uint8_t *cell)
    m_uint32_t atm_hdr;
 
    /* rewrite the atm header with new vpi/vci */
-   atm_hdr = ntohl(*(m_uint32_t *)cell);
+   atm_hdr = m_ntoh32(cell);
 
-   atm_hdr =  atm_hdr & ~(ATM_HDR_VPI_MASK|ATM_HDR_VCI_MASK);
+   atm_hdr &= ~(ATM_HDR_VPI_MASK|ATM_HDR_VCI_MASK);
    atm_hdr |= vcc->vpi_out << ATM_HDR_VPI_SHIFT;
    atm_hdr |= vcc->vci_out << ATM_HDR_VCI_SHIFT;
-   *(m_uint32_t *)cell = htonl(atm_hdr);
+   m_hton32(cell,atm_hdr);
 
    /* recompute HEC field */
    atm_insert_hec(cell);
@@ -166,7 +170,7 @@ ssize_t atmsw_handle_cell(atmsw_table_t *t,netio_desc_t *input,
    ssize_t len;
 
    /* Extract VPI/VCI information */
-   atm_hdr = ntohl(*(m_uint32_t *)cell);
+   atm_hdr = m_ntoh32(cell);
 
    vpi = (atm_hdr & ATM_HDR_VPI_MASK) >> ATM_HDR_VPI_SHIFT;
    vci = (atm_hdr & ATM_HDR_VCI_MASK) >> ATM_HDR_VCI_SHIFT;

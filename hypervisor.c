@@ -550,9 +550,11 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
    hypervisor_nio_bridge_init();
    hypervisor_frsw_init();
    hypervisor_atmsw_init();
+   hypervisor_atm_bridge_init();
    hypervisor_ethsw_init();
    hypervisor_vm_init();
    hypervisor_vm_debug_init();
+   hypervisor_store_init();
 
    signal(SIGPIPE,sigpipe_handler);
 

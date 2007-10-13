@@ -81,6 +81,9 @@ extern int hypervisor_frsw_init(void);
 /* Hypervisor ATM switch initialization */
 extern int hypervisor_atmsw_init(void);
 
+/* Hypervisor ATM bridge initialization */
+extern int hypervisor_atm_bridge_init(void);
+
 /* Hypervisor Ethernet switch initialization */
 extern int hypervisor_ethsw_init(void);
 
@@ -89,6 +92,9 @@ extern int hypervisor_vm_init(void);
 
 /* Hypervisor VM debugging initialization */
 extern int hypervisor_vm_debug_init(void);
+
+/* Hypervisor store initialization */
+extern int hypervisor_store_init(void);
 
 /* Send a reply */
 int hypervisor_send_reply(hypervisor_conn_t *conn,int code,int done,

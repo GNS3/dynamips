@@ -234,6 +234,16 @@ void c1700_save_config(vm_instance_t *vm,FILE *fd)
    fprintf(fd,"c1700 set_chassis %s %s\n\n",vm->name,router->mainboard_type);
 }
 
+/* Get WIC device address for the specified onboard port */
+int c1700_get_onboard_wic_addr(u_int slot,m_uint64_t *phys_addr)
+{
+   if (slot >= C1700_MAX_WIC_BAYS)
+      return(-1);
+
+   *phys_addr = C1700_WIC_ADDR + (slot * C1700_WIC_SIZE);
+   return(0);
+}
+
 /* Set EEPROM for the specified slot */
 int c1700_set_slot_eeprom(c1700_t *router,u_int slot,
                           struct cisco_eeprom *eeprom)
@@ -740,6 +750,10 @@ static int c1700_stop_instance(vm_instance_t *vm)
    /* Free resources that were used during execution to emulate hardware */
    vm_slot_shutdown_all(vm);
    vm_hardware_shutdown(vm);
+
+   /* Cleanup */   
+   VM_C1700(vm)->iofpga_data = NULL;
+   VM_C1700(vm)->mpc_data = NULL;
    return(0);
 }
 

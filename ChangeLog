@@ -2437,4 +2437,56 @@
 06-Sep-2007
 -----------
   - PPC32: Fixed BCTR instruction on amd64 jit.
+
+08-Sep-2007
+-----------
+  - Added an object store (through hypervisor) for Dynagen.
 	
+11-Sep-2007
+-----------
+  - Proper cleanup of gt_data/mpc_data fields for MPC860 and GT96100 based
+    platforms (start/stop/exit/crash symptom with Dynagen).
+
+12-Sep-2007
+-----------
+  - Fixed udp_recv simple program which was broken.
+  - Added "delete_all" command for hypervisor object store.
+  - Added appropriate code for serial WIC drivers on 1700.
+
+14-Sep-2007
+-----------
+  - Added TCP keepalives on VTTY connections (xabrouck@cisco.com)
+  - Fixed Flash code.
+
+18-Sep-2007
+-----------
+  - Added a virtual ATM SAR (segmentation and reassembly) engine.
+  - Added a virtual ATM bridge device (RFC1483).
+
+21-Sep-2007
+-----------
+  - GT96100: fixed CRC handling in MPSC HDLC channels (2 bytes, not 4!)
+
+30-Sep-2007
+-----------
+  - PPC32-JIT: fixed CR signed evaluation in case of overflow.
+
+04-Oct-2007
+-----------
+  - Added ISL support for integrated ports on 2691/3725/3745.
+	
+07-Oct-2007
+-----------
+  - Fixed non-JIT build for PPC32.
+
+08-Oct-2007
+-----------
+  - MV64460: rewrite of SDMA code to follow GT96100 model.
+
+09-Oct-2007
+-----------
+  - MV64460: added MPSC registers (as for GT96100).
+
+10-Oct-2007
+-----------
+  - MV64460: added SRAM.

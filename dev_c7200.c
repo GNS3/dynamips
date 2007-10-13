@@ -597,11 +597,14 @@ int c7200_npe_set_type(c7200_t *router,char *npe_type)
       return(-1);
    }
 
+#if 1 /* FIXME - for a later release */
    /* Use a C7200-IO-FE by default in slot 0 if an I/O card is required */
    if (driver->iocard_required) {
       vm_slot_add_binding(router->vm,"C7200-IO-FE",0,0);
       vm_slot_set_flag(router->vm,0,0,CISCO_CARD_FLAG_OVERRIDE);
    }
+#endif
+
    return(0);
 }
 
@@ -1354,6 +1357,12 @@ static int c7200_checklist(c7200_t *router)
 /* Initialize Port Adapters */
 static int c7200_init_platform_pa(c7200_t *router)
 {
+#if 0 /* FIXME - for a later release */
+   /* Use a C7200-IO-FE by default in slot 0 if an I/O card is required */
+   if (router->npe_driver->iocard_required && !vm_slot_active(router->vm,0,0))
+      vm_slot_add_binding(router->vm,"C7200-IO-FE",0,0);
+#endif
+
    return(vm_slot_init_all(router->vm));
 }
 
@@ -1570,9 +1579,11 @@ static int c7200p_init_platform(c7200_t *router)
                    C7200_G2_ROM_ADDR,vm->rom_size*1048576);
    }
 
-   /* Byte swapping */
-   dev_bswap_init(vm,"mem_bswap",C7200_G2_BSWAP_ADDR,512*1048576,
+   /* Byte swapping - FIXME */
+   dev_bswap_init(vm,"mem_bswap0",C7200_G2_BSWAP_ADDR,32*1048576,
                   0x00000000ULL);
+   //dev_bswap_init(vm,"mem_bswap0",C7200_G2_BSWAP_ADDR+0x10000000,32*1048576,
+   //               0x00000000ULL);
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C7200_G2_PCI_IO_ADDR)))
@@ -1901,15 +1912,19 @@ static int c7200p_init_instance(c7200_t *router)
    ppc32_map_zone(cpu0,cpu0->sr[0xDC000000 >> 28],
                   0xDC000000,0xDC000000,0x400000,0,0x02);
 
+   /* FIXME */
+   ppc32_map_zone(cpu0,cpu0->sr[0xDF000000 >> 28],
+                  0xDF000000,0xDF000000,0x400000,0,0x02);
+
    /* INST */
-   cpu0->bat[PPC32_IBAT_IDX][0].reg[0] = 0x00003FFE;
+   cpu0->bat[PPC32_IBAT_IDX][0].reg[0] = 0x00007FFE;
    cpu0->bat[PPC32_IBAT_IDX][0].reg[1] = 0x00000003;
 
    cpu0->bat[PPC32_IBAT_IDX][3].reg[0] = 0xF0001FFE;
    cpu0->bat[PPC32_IBAT_IDX][3].reg[1] = 0xF0000003;
 
    /* DATA */
-   cpu0->bat[PPC32_DBAT_IDX][0].reg[0] = 0x00003FFE;
+   cpu0->bat[PPC32_DBAT_IDX][0].reg[0] = 0x00007FFE;
    cpu0->bat[PPC32_DBAT_IDX][0].reg[1] = 0x00000003;
 
    cpu0->bat[PPC32_DBAT_IDX][3].reg[0] = 0xF0001FFE;

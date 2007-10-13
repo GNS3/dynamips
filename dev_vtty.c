@@ -130,6 +130,13 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
       goto error;
    }
 
+   if (setsockopt(vtty->accept_fd,SOL_SOCKET,SO_KEEPALIVE,
+                  &one,sizeof(one)) < 0)
+   {
+      perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
+      goto error;
+   }
+
    memset(&serv,0,sizeof(serv));
    serv.sin_family = AF_INET;
    serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -1009,6 +1016,8 @@ void vtty_put_buffer(vtty_t *vtty,char *buf,size_t len)
 
    for(i=0;i<len;i++)
       vtty_put_char(vtty,buf[i]);
+   
+   vtty_flush(vtty);
 }
 
 /* Flush VTTY output */

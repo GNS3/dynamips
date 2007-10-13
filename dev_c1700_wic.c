@@ -22,6 +22,7 @@
 #include "dev_nm_16esw.h"
 #include "dev_mpc860.h"
 #include "dev_c1700.h"
+#include "dev_wic_serial.h"
 
 /* Get the SCC channel associated to a WIC sub-slot */
 static int dev_c1700_mb_wic_get_scc_chan(struct cisco_card *card,u_int port_id,
@@ -66,11 +67,30 @@ static int dev_c1700_mb_wic_get_scc_chan(struct cisco_card *card,u_int port_id,
 /* Initialize a WIC-1T in the specified slot */
 static int dev_c1700_mb_wic1t_init(vm_instance_t *vm,struct cisco_card *card)
 {
+   struct wic_serial_data *wic_data;
+   m_uint64_t phys_addr;
+   u_int wic_id;
+
+   /* Create the WIC device */
+   wic_id = (card->subslot_id >> 4) - 1;
+   
+   if (c1700_get_onboard_wic_addr(wic_id,&phys_addr) == -1) {
+      vm_error(vm,"WIC","invalid slot %u (subslot_id=%u)\n",
+               wic_id,card->subslot_id);
+      return(-1);
+   }
+
+   wic_data = dev_wic_serial_init(vm,card->dev_name,WIC_SERIAL_MODEL_1T,
+                                  phys_addr,C1700_WIC_SIZE);
+
+   if (!wic_data)
+      return(-1);
+
    /* Set the EEPROM */
    cisco_card_set_eeprom(vm,card,cisco_eeprom_find_wic("WIC-1T"));
 
    /* Store device info into the router structure */
-   card->drv_info = VM_C1700(vm)->mpc_data;
+   card->drv_info = wic_data;
    return(0);
 }
 
@@ -78,6 +98,9 @@ static int dev_c1700_mb_wic1t_init(vm_instance_t *vm,struct cisco_card *card)
 static int 
 dev_c1700_mb_wic1t_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
+   /* Remove the WIC device */
+   dev_wic_serial_remove(card->drv_info);
+
    /* Remove the WIC EEPROM */
    cisco_card_unset_eeprom(card);
    return(0);
@@ -88,14 +111,13 @@ static int
 dev_c1700_mb_wic1t_set_nio(vm_instance_t *vm,struct cisco_card *card,
                            u_int port_id,netio_desc_t *nio)
 {
-   struct mpc860_data *mpc_data = card->drv_info;
    u_int scc_chan;
 
    if ((port_id > 0) || 
        (dev_c1700_mb_wic_get_scc_chan(card,port_id,&scc_chan) == -1))
       return(-1);
 
-   return(mpc860_scc_set_nio(mpc_data,scc_chan,nio));
+   return(mpc860_scc_set_nio(VM_C1700(vm)->mpc_data,scc_chan,nio));
 }
 
 /* Unbind a Network IO descriptor */
@@ -103,14 +125,13 @@ static int
 dev_c1700_mb_wic1t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
                              u_int port_id)
 {
-   struct mpc860_data *mpc_data = card->drv_info;
    u_int scc_chan;
 
    if ((port_id > 0) || 
        (dev_c1700_mb_wic_get_scc_chan(card,port_id,&scc_chan) == -1))
       return(-1);
 
-   return(mpc860_scc_unset_nio(mpc_data,scc_chan));
+   return(mpc860_scc_unset_nio(VM_C1700(vm)->mpc_data,scc_chan));
 }
 
 /* ======================================================================== */
@@ -120,11 +141,30 @@ dev_c1700_mb_wic1t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
 /* Initialize a WIC-2T in the specified slot */
 static int dev_c1700_mb_wic2t_init(vm_instance_t *vm,struct cisco_card *card)
 {
+   struct wic_serial_data *wic_data;
+   m_uint64_t phys_addr;
+   u_int wic_id;
+
+   /* Create the WIC device */
+   wic_id = (card->subslot_id >> 4) - 1;
+   
+   if (c1700_get_onboard_wic_addr(wic_id,&phys_addr) == -1) {
+      vm_error(vm,"WIC","invalid slot %u (subslot_id=%u)\n",
+               wic_id,card->subslot_id);
+      return(-1);
+   }
+
+   wic_data = dev_wic_serial_init(vm,card->dev_name,WIC_SERIAL_MODEL_2T,
+                                  phys_addr,C1700_WIC_SIZE);
+
+   if (!wic_data)
+      return(-1);
+
    /* Set the EEPROM */
    cisco_card_set_eeprom(vm,card,cisco_eeprom_find_wic("WIC-2T"));
 
    /* Store device info into the router structure */
-   card->drv_info = VM_C1700(vm)->mpc_data;
+   card->drv_info = wic_data;
    return(0);
 }
 
@@ -132,6 +172,9 @@ static int dev_c1700_mb_wic2t_init(vm_instance_t *vm,struct cisco_card *card)
 static int 
 dev_c1700_mb_wic2t_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
+   /* Remove the WIC device */
+   dev_wic_serial_remove(card->drv_info);
+
    /* Remove the WIC EEPROM */
    cisco_card_unset_eeprom(card);
    return(0);
@@ -142,14 +185,13 @@ static int
 dev_c1700_mb_wic2t_set_nio(vm_instance_t *vm,struct cisco_card *card,
                            u_int port_id,netio_desc_t *nio)
 {
-   struct mpc860_data *mpc_data = card->drv_info;
    u_int scc_chan;
 
    if ((port_id > 1) || 
        (dev_c1700_mb_wic_get_scc_chan(card,port_id,&scc_chan) == -1))
       return(-1);
 
-   return(mpc860_scc_set_nio(mpc_data,scc_chan,nio));
+   return(mpc860_scc_set_nio(VM_C1700(vm)->mpc_data,scc_chan,nio));
 }
 
 /* Unbind a Network IO descriptor */
@@ -157,14 +199,13 @@ static int
 dev_c1700_mb_wic2t_unset_nio(vm_instance_t *vm,struct cisco_card *card,
                              u_int port_id)
 {
-   struct mpc860_data *mpc_data = card->drv_info;
    u_int scc_chan;
 
    if ((port_id > 1) || 
        (dev_c1700_mb_wic_get_scc_chan(card,port_id,&scc_chan) == -1))
       return(-1);
 
-   return(mpc860_scc_unset_nio(mpc_data,scc_chan));
+   return(mpc860_scc_unset_nio(VM_C1700(vm)->mpc_data,scc_chan));
 }
 
 /* ======================================================================== */

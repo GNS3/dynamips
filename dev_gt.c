@@ -131,21 +131,6 @@ struct sdma_channel {
 #define GT_SDMA_SCTDP        0x00c910  /* Current TX desc. pointer */
 #define GT_SDMA_SFTDP        0x00c914  /* First TX desc. pointer */
 
-/* SDMA RX/TX descriptor */
-struct sdma_desc {
-   m_uint32_t buf_size;
-   m_uint32_t cmd_stat;
-   m_uint32_t next_ptr;
-   m_uint32_t buf_ptr;
-};
-
-/* SDMA Descriptor Command/Status word */
-#define GT_SDMA_CMD_O    0x80000000    /* Owner bit */
-#define GT_SDMA_CMD_AM   0x40000000    /* Auto-mode */
-#define GT_SDMA_CMD_EI   0x00800000    /* Enable Interrupt */
-#define GT_SDMA_CMD_F    0x00020000    /* First buffer */
-#define GT_SDMA_CMD_L    0x00010000    /* Last buffer */
-
 /* SDCR: SDMA Configuration Register */
 #define GT_SDCR_RFT      0x00000001    /* Receive FIFO Threshold */
 #define GT_SDCR_SFM      0x00000002    /* Single Frame Mode */
@@ -166,6 +151,21 @@ struct sdma_desc {
 #define GT_SDCMR_TXDH    GT_SDCMR_TXD  /* Start TX High */
 #define GT_SDCMR_TXDL    0x01000000    /* Start TX Low */
 #define GT_SDCMR_AT      0x80000000    /* Abort Transmit */
+
+/* SDMA RX/TX descriptor */
+struct sdma_desc {
+   m_uint32_t buf_size;
+   m_uint32_t cmd_stat;
+   m_uint32_t next_ptr;
+   m_uint32_t buf_ptr;
+};
+
+/* SDMA Descriptor Command/Status word */
+#define GT_SDMA_CMD_O    0x80000000    /* Owner bit */
+#define GT_SDMA_CMD_AM   0x40000000    /* Auto-mode */
+#define GT_SDMA_CMD_EI   0x00800000    /* Enable Interrupt */
+#define GT_SDMA_CMD_F    0x00020000    /* First buffer */
+#define GT_SDMA_CMD_L    0x00010000    /* Last buffer */
 
 /* === MultiProtocol Serial Controller (MPSC) ============================= */
 
@@ -1012,7 +1012,7 @@ static int gt_sdma_tx_start(struct gt_data *d,struct sdma_channel *chan)
       /* Clear the OWN bit if this is not the first descriptor */
       if (!(ptxd->cmd_stat & GT_TXDESC_F)) {
          ptxd->cmd_stat &= ~GT_TXDESC_OWN;
-         physmem_copy_u32_to_vm(d->vm,tx_current,ptxd->cmd_stat);
+         physmem_copy_u32_to_vm(d->vm,tx_current+4,ptxd->cmd_stat);
       }
 
       tx_current = ptxd->next_ptr;
@@ -1054,7 +1054,7 @@ static int gt_sdma_tx_start(struct gt_data *d,struct sdma_channel *chan)
       chan->sdcm &= ~GT_SDCMR_TXD;
    }
 
-   /* Update interrupt status $*/
+   /* Update interrupt status */
    gt_sdma_update_channel_int_status(d,chan->id);
    return(TRUE);
 }
@@ -1124,7 +1124,7 @@ static int gt_sdma_handle_rxqueue(struct gt_data *d,
       /* We have finished if the complete packet has been stored */
       if (tot_len == 0) {
          rxdc->cmd_stat |= GT_RXDESC_L;
-         rxdc->buf_size += 4;  /* Add 4 bytes for CRC */
+         rxdc->buf_size += 2;  /* Add 2 bytes for CRC */
       }
 
       /* Update the descriptor in host memory (but not the 1st) */
@@ -1163,7 +1163,7 @@ static int gt_sdma_handle_rxqueue(struct gt_data *d,
    return(FALSE);
 }
 
-/* Handle RX packet for a SDMA channel*/
+/* Handle RX packet for a SDMA channel */
 static int gt_sdma_handle_rx_pkt(netio_desc_t *nio,
                                  u_char *pkt,ssize_t pkt_len,
                                  struct gt_data *d,void *arg)
@@ -1227,7 +1227,8 @@ static int gt_sdma_access(cpu_gen_t *cpu,struct vdevice *dev,
                cpu_log(cpu,"GT96100-SDMA","starting TX transfer (%u/%u)\n",
                        group,chan_id);
 #endif
-               gt_sdma_tx_start(gt_data,channel);
+               while(gt_sdma_tx_start(gt_data,channel))
+                  ;
             }
          } else {
             *data = 0xFF; //0xFFFFFFFF;
@@ -2164,6 +2165,9 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
       GT_LOG(d,"Ethernet: sending packet of %u bytes\n",tot_len);
       mem_dump(log_file,pkt,tot_len);
 #endif
+      /* rewrite ISL header if required */
+      cisco_isl_rewrite(pkt,tot_len);
+
       /* send it on wire */
       netio_send(port->nio,pkt,tot_len);
 

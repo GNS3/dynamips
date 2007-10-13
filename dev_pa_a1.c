@@ -344,7 +344,7 @@ static inline void dev_pa_a1_update_irq_status(struct pa_a1_data *d)
 {
    if (d->iregs[TI1570_REG_STATUS] & d->iregs[TI1570_REG_IMASK]) {
       pci_dev_trigger_irq(d->vm,d->pci_dev_ti);
-   } else {
+   } else {     
       pci_dev_clear_irq(d->vm,d->pci_dev_ti);
    }
 }
@@ -377,7 +377,7 @@ void *dev_pa_a1_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
          if (op_type == MTS_READ) {
             *data = d->iregs[TI1570_REG_STATUS];
 
-            if (++d->irq_clear_count == 2) {
+            if (++d->irq_clear_count == 5) {
                d->iregs[TI1570_REG_STATUS] &= ~0x3FF;
                d->irq_clear_count = 0;
             }

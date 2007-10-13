@@ -32,7 +32,8 @@
 #define C1700_DEFAULT_IOMEM_SIZE   15  /* Percents! */
 
 /* 1700 characteristics: only mainboard (considered as fake NM) */
-#define C1700_MAX_NM_BAYS  1
+#define C1700_MAX_NM_BAYS   1
+#define C1700_MAX_WIC_BAYS  2
 
 /* C1700 Virtual Timer Interrupt */
 #define C1700_VTIMER_IRQ  0
@@ -104,6 +105,9 @@ struct c1700_router {
    /* MPC860 device private data */
    struct mpc860_data *mpc_data;
 };
+
+/* Get WIC device address for the specified onboard port */
+int c1700_get_onboard_wic_addr(u_int slot,m_uint64_t *phys_addr);
 
 /* Set EEPROM for the specified slot */
 int c1700_set_slot_eeprom(c1700_t *router,u_int slot,

@@ -47,8 +47,8 @@ enum {
 
 /* Flash access mode (byte or word) */
 enum {
-   FLASH_MODE_BYTE,
-   FLASH_MODE_WORD,
+   FLASH_MODE_BYTE = 1,
+   FLASH_MODE_WORD = 2,
 };
 
 #define MAX_FLASH  4
@@ -89,7 +89,8 @@ struct flashset_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
    char *filename;
-
+   
+   u_int mode;
    u_int nr_flash_bits;
    u_int nr_flash_count;
    struct flash_data flash[MAX_FLASH];
@@ -150,7 +151,8 @@ static int flashset_init(struct flashset_data *d,
 {
    struct flash_data *flash;
    u_int i,offset_shift;
-
+   
+   d->mode = mode;
    d->nr_flash_bits  = nr_flash_bits;
    d->nr_flash_count = 1 << d->nr_flash_bits;
 
@@ -411,8 +413,8 @@ void *dev_bootflash_access(cpu_gen_t *cpu,struct vdevice *dev,
                            m_uint64_t *data)
 {
    struct flashset_data *d = dev->priv_data;
-   u_int flash_data[MAX_FLASH];
-   u_int i;
+   u_int flash_data[8];
+   u_int i,fi,d_off;
 
 #if DEBUG_ACCESS
    if (op_type == MTS_READ)
@@ -426,15 +428,23 @@ void *dev_bootflash_access(cpu_gen_t *cpu,struct vdevice *dev,
    if (op_type == MTS_READ) {
       *data = 0;
 
-      for(i=0;i<d->nr_flash_count;i++) {
-         flash_access(&d->flash[i],(offset >> d->nr_flash_bits),op_type,
+      for(i=0;i<op_size;i+=d->mode) {
+         fi = (offset+i) & (d->nr_flash_count-1);
+
+         flash_access(&d->flash[fi],((offset+i) >> d->nr_flash_bits),op_type,
                       &flash_data[i]);
-         *data |= flash_data[i] << (8 * (d->nr_flash_count - i - 1));
+
+         d_off = (op_size - i - d->mode) << 3;
+         *data |= (m_uint64_t)flash_data[i] << d_off;
       }
    } else {
-      for(i=0;i<d->nr_flash_count;i++) {
-         flash_data[i] = *data >> (8 * (d->nr_flash_count - i - 1));
-         flash_access(&d->flash[i],(offset >> d->nr_flash_bits),op_type,
+      for(i=0;i<op_size;i+=d->mode) {
+         fi = (offset+i) & (d->nr_flash_count-1);
+
+         d_off = (op_size - i - d->mode) << 3;
+         flash_data[i] = *data >> d_off;
+
+         flash_access(&d->flash[fi],((offset+i) >> d->nr_flash_bits),op_type,
                       &flash_data[i]);
       }
    }

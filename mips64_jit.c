@@ -815,7 +815,7 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
          case CPU_STATE_HALTED:
             gen->cpu_thread_running = FALSE;
             pthread_join(timer_irq_thread,NULL);
-            break;
+            return NULL;
       }
       
       /* CPU is paused */

@@ -13,6 +13,8 @@
 #include "utils.h"
 #include "rommon_var.h"
 
+#define DEBUG_OPEN  0
+
 /* Load file containing ROMMON variables */
 int rommon_load_file(struct rommon_var_list *rvl)
 {
@@ -23,8 +25,10 @@ int rommon_load_file(struct rommon_var_list *rvl)
       return(-1);
 
    if (!(fd = fopen(rvl->filename,"r"))) {
-      fprintf(stderr,"%s: unable to create file %s (%s)\n",
+#if DEBUG_OPEN
+      fprintf(stderr,"%s: unable to open file %s (%s)\n",
               __func__,rvl->filename,strerror(errno));
+#endif
       return(-1);
    }
 

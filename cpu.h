@@ -66,7 +66,7 @@ struct cpu_gen {
 
    /* Thread running this CPU */
    pthread_t cpu_thread;
-   int cpu_thread_running;
+   volatile int cpu_thread_running;
 
    /* Exception restore point */
    jmp_buf exec_loop_env;

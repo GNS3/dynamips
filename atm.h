@@ -71,6 +71,10 @@ struct atmsw_table {
 #define ATMSW_LOCK(t)   pthread_mutex_lock(&(t)->lock)
 #define ATMSW_UNLOCK(t) pthread_mutex_unlock(&(t)->lock)
 
+/* RFC1483 bridged mode header */
+#define ATM_RFC1483B_HLEN  10
+extern m_uint8_t atm_rfc1483b_header[ATM_RFC1483B_HLEN];
+
 /* Compute HEC field for ATM header */
 m_uint8_t atm_compute_hec(m_uint8_t *cell_header);
 

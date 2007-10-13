@@ -329,6 +329,37 @@ static inline m_tmcnt_t m_gettime_adj(void)
    return(((m_tmcnt_t)tvp.tv_sec * 1000) + ((m_tmcnt_t)tvp.tv_usec / 1000));
 }
 
+/* Get a byte-swapped 16-bit value on a non-aligned area */
+static inline m_uint16_t m_ntoh16(m_uint8_t *ptr)
+{
+   m_uint16_t val = (ptr[0] << 8) | ptr[1];
+   return(val);
+}
+
+/* Get a byte-swapped 32-bit value on a non-aligned area */
+static inline m_uint32_t m_ntoh32(m_uint8_t *ptr)
+{
+   m_uint32_t val = (ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3];
+   return(val);
+}
+
+/* Set a byte-swapped 16-bit value on a non-aligned area */
+static inline void m_hton16(m_uint8_t *ptr,m_uint16_t val)
+{
+   ptr[0] = val >> 8;
+   ptr[1] = val;
+}
+
+/* Set a byte-swapped 32-bit value on a non-aligned area */
+static inline void m_hton32(m_uint8_t *ptr,m_uint32_t val)
+{
+   ptr[0] = val >> 24;
+   ptr[1] = val >> 16;
+   ptr[2] = val >> 8;
+   ptr[3] = val;
+}
+
+
 /* Add an element to a list */
 m_list_t *m_list_add(m_list_t **head,void *data);
 

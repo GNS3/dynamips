@@ -20,7 +20,7 @@ int main(int argc,char *argv[])
    FILE *fd;
 
    /* Wait connection */
-   if (ip_listen(atoi(argv[2]),SOCK_DGRAM,1,&sck) < 1) {
+   if (ip_listen(NULL,atoi(argv[2]),SOCK_DGRAM,1,&sck) < 1) {
       perror("ip_listen");
       exit(EXIT_FAILURE);
    }

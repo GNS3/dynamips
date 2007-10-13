@@ -75,6 +75,7 @@ struct virtual_tty {
    pthread_mutex_t lock;
    vtty_t *next,**pprev;
    void *priv_data;
+   u_long user_arg;
 
    /* Read notification */
    void (*read_notifier)(vtty_t *);

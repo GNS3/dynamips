@@ -769,6 +769,10 @@ static int c3745_stop_instance(vm_instance_t *vm)
    /* Free resources that were used during execution to emulate hardware */
    vm_slot_shutdown_all(vm);
    vm_hardware_shutdown(vm);
+
+   /* Cleanup */   
+   VM_C3745(vm)->iofpga_data = NULL;
+   VM_C3745(vm)->gt_data = NULL;
    return(0);
 }
 

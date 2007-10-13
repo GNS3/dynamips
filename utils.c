@@ -216,11 +216,14 @@ void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
 {
    struct timeval now;
    static char buf[256];
+   struct tm tmn;
    time_t ct;
 
    gettimeofday(&now,0);
    ct = now.tv_sec;
-   strftime(buf,sizeof(buf),"%b %d %H:%M:%S",localtime(&ct));
+   localtime_r(&ct,&tmn);
+
+   strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
    if (fd) {
       fprintf(fd,"%s.%03ld %s: ",buf,(long)now.tv_usec/1000,module);
       vfprintf(fd,fmt,ap);

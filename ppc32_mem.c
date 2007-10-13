@@ -217,7 +217,8 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
       offset = (map->paddr + map->offset) - dev->phys_addr;
 
       /* device entries are never stored in virtual TLB */
-      alt_entry->hpa   = (dev->id << MTS_DEVID_SHIFT) + offset;
+      alt_entry->gppa  = dev->id;
+      alt_entry->hpa   = offset;
       alt_entry->flags = MTS_FLAG_DEV;
       return alt_entry;
    }
@@ -414,8 +415,8 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
          return NULL;
 
       if (entry->flags & MTS_FLAG_DEV) {
-         dev_id = (entry->hpa & MTS_DEVID_MASK) >> MTS_DEVID_SHIFT;
-         haddr  = entry->hpa & MTS_DEVOFF_MASK;
+         dev_id = entry->gppa;
+         haddr  = entry->hpa;
          return(dev_access_fast(cpu->gen,dev_id,haddr,op_size,op_type,data));
       }
    }
