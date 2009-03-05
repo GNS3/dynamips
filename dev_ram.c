@@ -101,7 +101,7 @@ int dev_ram_ghost_init(vm_instance_t *vm,char *name,int sparse,char *filename,
 
    /* allocate the private data structure */
    if (!filename || !(d = malloc(sizeof(*d)))) {
-      fprintf(stderr,"RAM_ghost: unable to create device.\n");
+      vm_error(vm,"RAM_ghost: unable to create device (filename=%s).\n",filename);
       return(-1);
    }
 
@@ -119,7 +119,7 @@ int dev_ram_ghost_init(vm_instance_t *vm,char *name,int sparse,char *filename,
    if (!(d->dev = dev_create_ghost_ram(vm,name,sparse,d->filename,
                                        paddr,len))) 
    {
-      fprintf(stderr,"RAM_ghost: unable to create device.\n");
+      vm_error(vm,"RAM_ghost: unable to create device (filename=%s)\n",d->filename);
       goto err_dev_create;
    }
 

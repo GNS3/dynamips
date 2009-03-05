@@ -145,6 +145,7 @@ extern struct cisco_card_driver dev_c3745_nm_1fe_tx_driver;
 extern struct cisco_card_driver dev_c3745_gt96100_fe_driver;
 extern struct cisco_card_driver dev_c3745_nm_4t_driver;
 extern struct cisco_card_driver dev_c3745_nm_16esw_driver;
+extern struct cisco_card_driver dev_c3745_nmd_36esw_driver;
 extern struct cisco_card_driver dev_c3745_nm_nam_driver;
 extern struct cisco_card_driver dev_c3745_nm_cids_driver;
 

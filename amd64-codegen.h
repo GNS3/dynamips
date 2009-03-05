@@ -892,4 +892,9 @@ typedef union {
 #define amd64_prolog(inst,frame,reg_mask) amd64_prolog_size(inst,frame,reg_mask,8)
 #define amd64_epilog(inst,reg_mask) amd64_epilog_size(inst,reg_mask,8)
 
+static inline void amd64_jump_code_fn(u_char **instp,u_char *target)
+{
+   amd64_jump_code(*instp,target);
+}
+
 #endif // AMD64_H

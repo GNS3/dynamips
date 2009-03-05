@@ -145,6 +145,26 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Set translation sharing group */
+static int cmd_set_tsg(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   int res;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   res = vm_set_tsg(vm,atoi(argv[1]));
+
+   vm_release(vm);
+
+   if (res < 0)
+      hypervisor_send_reply(conn,HSC_ERR_BAD_PARAM,1,"unable to set group");
+   else
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set debugging level */
 static int cmd_set_debug_level(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -156,7 +176,7 @@ static int cmd_set_debug_level(hypervisor_conn_t *conn,int argc,char *argv[])
    vm->debug_level = atoi(argv[1]);
 
    vm_release(vm);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"O",argv[0]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
 
@@ -969,6 +989,56 @@ static int cmd_slot_disable_nio(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* OIR to start a slot/subslot */
+static int cmd_slot_oir_start(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,subslot;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   subslot = atoi(argv[2]);
+
+   if (vm_oir_start(vm,slot,subslot) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_START,1,
+                            "VM %s: unable to engage OIR for slot %u/%u",
+                            argv[0],slot,subslot);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* OIR to stop a slot/subslot */
+static int cmd_slot_oir_stop(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   u_int slot,subslot;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   slot = atoi(argv[1]);
+   subslot = atoi(argv[2]);
+
+   if (vm_oir_stop(vm,slot,subslot) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_STOP,1,
+                            "VM %s: unable to engage OIR for slot %u/%u",
+                            argv[0],slot,subslot);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Show info about VM object */
 static void cmd_show_vm_list(registry_entry_t *entry,void *opt,int *err)
 {
@@ -1015,6 +1085,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "delete", 1, 1, cmd_delete, NULL },
    { "start", 1, 1, cmd_start, NULL },
    { "stop", 1, 1, cmd_stop, NULL },
+   { "set_tsg", 2, 2, cmd_set_tsg, NULL },
    { "set_debug_level", 2, 2, cmd_set_debug_level, NULL },
    { "set_ios", 2, 2, cmd_set_ios, NULL },
    { "set_config", 2, 2, cmd_set_config, NULL },
@@ -1054,6 +1125,8 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "slot_remove_nio_binding", 3, 3, cmd_slot_remove_nio_binding, NULL },
    { "slot_enable_nio", 3, 3, cmd_slot_enable_nio, NULL },
    { "slot_disable_nio", 3, 3, cmd_slot_disable_nio, NULL },
+   { "slot_oir_start", 3, 3, cmd_slot_oir_start, NULL },
+   { "slot_oir_stop", 3, 3, cmd_slot_oir_stop, NULL },
    { "list", 0, 0, cmd_vm_list, NULL },
    { "list_con_ports", 0, 0, cmd_vm_list_con_ports, NULL },
    { NULL, -1, -1, NULL, NULL },

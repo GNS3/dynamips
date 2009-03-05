@@ -54,6 +54,7 @@ struct cisco_eeprom eeprom_c3725_mainboard = {
 static struct cisco_card_driver *nm_drivers[] = {
    &dev_c3725_nm_1fe_tx_driver,
    &dev_c3725_nm_16esw_driver,
+   &dev_c3725_nmd_36esw_driver,
    &dev_c3725_gt96100_fe_driver,
    &dev_c3725_nm_4t_driver,
    &dev_c3725_nm_nam_driver,
@@ -777,6 +778,8 @@ static vm_platform_t c3725_platform = {
    c3725_delete_instance,
    c3725_init_instance,
    c3725_stop_instance,
+   NULL,
+   NULL,
    c3725_nvram_extract_config,
    c3725_nvram_push_config,
    c3725_get_mac_addr_msb,

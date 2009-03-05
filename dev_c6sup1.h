@@ -15,6 +15,7 @@
 #include "device.h"
 #include "pci_dev.h"
 #include "nmc93cX6.h"
+#include "dev_ds1620.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -84,6 +85,9 @@
 /* MSFC1 ELF Platform ID */
 #define C6SUP1_ELF_MACHINE_ID  0x19
 
+/* 2 temperature sensors in a SUP1: chassis inlet and oulet */
+#define C6SUP1_TEMP_SENSORS  2
+
 #define VM_C6SUP1(vm) ((c6sup1_t *)vm->hw_data)
 
 /* MSFC1 router */
@@ -107,6 +111,9 @@ struct c6sup1_router {
    struct nmc93cX6_group bp_eeprom_group;
    struct nmc93cX6_group sup_eeprom_group;
    struct nmc93cX6_group slot_eeprom_group;
+
+   /* Temperature sensors */
+   struct ds1620_data ds1620_sensors[C6SUP1_TEMP_SENSORS];
 
    /* Slot of this supervisor */
    u_int sup_slot;

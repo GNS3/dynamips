@@ -397,7 +397,6 @@ static int c6msfc1_delete_instance(vm_instance_t *vm)
    /* Free EEPROMs */
    cisco_eeprom_free(&router->cpu_eeprom);
    cisco_eeprom_free(&router->mp_eeprom);
-   cisco_eeprom_free(&router->pem_eeprom);
 
    /* Free all resources used by VM */
    vm_free(vm);
@@ -829,6 +828,8 @@ static vm_platform_t c6msfc1_platform = {
    c6msfc1_delete_instance,
    c6msfc1_init_instance,
    c6msfc1_stop_instance,
+   NULL,
+   NULL,
    c6msfc1_nvram_extract_config,
    c6msfc1_nvram_push_config,
    c6msfc1_get_mac_addr_msb,

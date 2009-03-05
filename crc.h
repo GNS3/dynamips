@@ -46,7 +46,7 @@ static forced_inline m_uint32_t crc16_hash_u32(m_uint32_t val)
 static forced_inline 
 m_uint32_t crc32_compute(m_uint32_t crc_accum,m_uint8_t *ptr,int len)
 {
-   unsigned long c = crc_accum;
+   register m_uint32_t c = crc_accum;
    int n;
    
    for (n = 0; n < len; n++) {

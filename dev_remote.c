@@ -113,7 +113,7 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* RAM size */
       case 0x014: 
          if (op_type == MTS_READ)
-            *data = vm->ram_size;
+            *data = vm->ram_size - vm->ram_res_size;
          break;
 
       /* ROM size */

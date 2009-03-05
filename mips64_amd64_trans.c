@@ -13,6 +13,8 @@
 #include <fcntl.h>
 
 #include "cpu.h"
+#include "vm.h"
+#include "tcb.h"
 #include "mips64_jit.h"
 #include "mips64_amd64_trans.h"
 #include "mips64_cp0.h"
@@ -24,7 +26,7 @@
 #define MEMOP_OFFSET(op)      (OFFSET(cpu_mips_t,mem_op_fn[(op)]))
 
 #define DECLARE_INSN(name) \
-   static int mips64_emit_##name(cpu_mips_t *cpu,mips64_jit_tcb_t *b, \
+   static int mips64_emit_##name(cpu_mips_t *cpu,cpu_tc_t *b,\
                                  mips_insn_t insn)
 
 /* Set an IRQ */
@@ -47,8 +49,7 @@ void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq)
 }
 
 /* Load a 64 bit immediate value */
-static inline void mips64_load_imm(mips64_jit_tcb_t *b,u_int reg,
-                                   m_uint64_t value)
+static inline void mips64_load_imm(cpu_tc_t *b,u_int reg,m_uint64_t value)
 {
    if (value > 0xffffffffULL)
       amd64_mov_reg_imm_size(b->jit_ptr,reg,value,8);
@@ -57,7 +58,7 @@ static inline void mips64_load_imm(mips64_jit_tcb_t *b,u_int reg,
 }
 
 /* Set the Pointer Counter (PC) register */
-void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc)
+void mips64_set_pc(cpu_tc_t *b,m_uint64_t new_pc)
 {
    mips64_load_imm(b,AMD64_RAX,new_pc);
    amd64_mov_membase_reg(b->jit_ptr,
@@ -66,7 +67,7 @@ void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc)
 }
 
 /* Set the Return Address (RA) register */
-void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc)
+void mips64_set_ra(cpu_tc_t *b,m_uint64_t ret_pc)
 {
    mips64_load_imm(b,AMD64_RAX,ret_pc);
    amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,
@@ -76,22 +77,26 @@ void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc)
 
 /* 
  * Try to branch directly to the specified JIT block without returning to 
- * main loop.
+ * the main loop.
  */
-static void mips64_try_direct_far_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+static void mips64_try_direct_far_jump(cpu_mips_t *cpu,cpu_tc_t *b,
                                        m_uint64_t new_pc)
 {
    m_uint64_t new_page;
    m_uint32_t pc_hash,pc_offset;
-   u_char *test1,*test2,*test3;
+   u_char *test1,*test2,*test3,*test4;
 
    new_page = new_pc & MIPS_MIN_PAGE_MASK;
    pc_offset = (new_pc & MIPS_MIN_PAGE_IMASK) >> 2;
-   pc_hash = mips64_jit_get_pc_hash(new_pc);
-   
+   pc_hash = mips64_jit_get_virt_hash(new_pc);
+
+   /* Get generic CPU pointer */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RSI,
+                         AMD64_R15,OFFSET(cpu_mips_t,gen),8);
+
    /* Get JIT block info in %rdx */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
-                         AMD64_R15,OFFSET(cpu_mips_t,exec_blk_map),8);
+                         AMD64_RSI,OFFSET(cpu_gen_t,tb_virt_hash),8);
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,
                          AMD64_RBX,pc_hash*sizeof(void *),8);
 
@@ -100,35 +105,44 @@ static void mips64_try_direct_far_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
    test1 = b->jit_ptr;
    amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
 
-   /* Check block IA */
+   /* Check block virtual address */
    mips64_load_imm(b,AMD64_RAX,new_page);
-   amd64_alu_reg_membase_size(b->jit_ptr,X86_CMP,X86_EAX,AMD64_RDX,
-                              OFFSET(mips64_jit_tcb_t,start_pc),4);
+   amd64_alu_reg_membase_size(b->jit_ptr,X86_CMP,AMD64_RAX,AMD64_RDX,
+                              OFFSET(cpu_tb_t,vaddr),8);
    test2 = b->jit_ptr;
    amd64_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
-   /* Jump to the code */
-   amd64_mov_reg_membase(b->jit_ptr,AMD64_RSI,
-                         AMD64_RDX,OFFSET(mips64_jit_tcb_t,jit_insn_ptr),8);
+   /* Get pointer to the Translated Code block */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RBX,
-                         AMD64_RSI,pc_offset * sizeof(void *),8);
-   
+                         AMD64_RDX,OFFSET(cpu_tb_t,tc),8);
+
    amd64_test_reg_reg(b->jit_ptr,AMD64_RBX,AMD64_RBX);
    test3 = b->jit_ptr;
    amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
-   amd64_jump_reg(b->jit_ptr,AMD64_RBX);
+
+   /* Jump to the code */
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RSI,
+                         AMD64_RBX,OFFSET(cpu_tc_t,jit_insn_ptr),8);
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,
+                         AMD64_RSI,pc_offset * sizeof(void *),8);
+
+   amd64_test_reg_reg(b->jit_ptr,AMD64_RAX,AMD64_RAX);
+   test4 = b->jit_ptr;
+   amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
+   amd64_jump_reg(b->jit_ptr,AMD64_RAX);
 
    /* Returns to caller... */
    amd64_patch(test1,b->jit_ptr);
    amd64_patch(test2,b->jit_ptr);
    amd64_patch(test3,b->jit_ptr);
+   amd64_patch(test4,b->jit_ptr);
 
    mips64_set_pc(b,new_pc);
    mips64_jit_tcb_push_epilog(b);
 }
 
 /* Set Jump */
-static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+static void mips64_set_jump(cpu_mips_t *cpu,cpu_tc_t *b,
                             m_uint64_t new_pc,int local_jump)
 {      
    int return_to_caller = FALSE;
@@ -148,11 +162,11 @@ static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
             return;
          }
 
-         mips64_jit_tcb_record_patch(b,b->jit_ptr,new_pc);
+         mips64_jit_tcb_record_patch(cpu,b,b->jit_ptr,new_pc);
          amd64_jump32(b->jit_ptr,0);
       }
    } else {
-      if (cpu->exec_blk_direct_jump) {
+      if (1 /*cpu->exec_blk_direct_jump*/) {  /* zzz */
          /* Block lookup optimization */
          mips64_try_direct_far_jump(cpu,b,new_pc);
       } else {
@@ -163,23 +177,22 @@ static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
 }
 
 /* Basic C call */
-static forced_inline 
-void mips64_emit_basic_c_call(mips64_jit_tcb_t *b,void *f)
+static forced_inline void mips64_emit_basic_c_call(cpu_tc_t *b,void *f)
 {
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RCX,f);
    amd64_call_reg(b->jit_ptr,AMD64_RCX);
 }
 
 /* Emit a simple call to a C function without any parameter */
-static void mips64_emit_c_call(mips64_jit_tcb_t *b,void *f)
+static void mips64_emit_c_call(cpu_tc_t *b,void *f)
 {   
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RCX,f);
    amd64_call_reg(b->jit_ptr,AMD64_RCX);
 }
 
 /* Single-step operation */
-void mips64_emit_single_step(mips64_jit_tcb_t *b,mips_insn_t insn)
+void mips64_emit_single_step(cpu_tc_t *b,mips_insn_t insn)
 {
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,insn);
@@ -187,10 +200,10 @@ void mips64_emit_single_step(mips64_jit_tcb_t *b,mips_insn_t insn)
 }
 
 /* Fast memory operation prototype */
-typedef void (*memop_fast_access)(mips64_jit_tcb_t *b,int target);
+typedef void (*memop_fast_access)(cpu_tc_t *b,int target);
 
 /* Fast LW */
-static void mips64_memop_fast_lw(mips64_jit_tcb_t *b,int target)
+static void mips64_memop_fast_lw(cpu_tc_t *b,int target)
 {
    amd64_mov_reg_memindex(b->jit_ptr,AMD64_RAX,AMD64_RBX,0,AMD64_RSI,0,4);
    amd64_bswap32(b->jit_ptr,X86_EAX);
@@ -201,7 +214,7 @@ static void mips64_memop_fast_lw(mips64_jit_tcb_t *b,int target)
 }
 
 /* Fast SW */
-static void mips64_memop_fast_sw(mips64_jit_tcb_t *b,int target)
+static void mips64_memop_fast_sw(cpu_tc_t *b,int target)
 {
    /* Load value from register */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(target),4);
@@ -210,15 +223,18 @@ static void mips64_memop_fast_sw(mips64_jit_tcb_t *b,int target)
 }
 
 /* Fast memory operation (64-bit) */
-static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
+static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
                                      int opcode,int base,int offset,
                                      int target,int keep_ll_bit,
                                      memop_fast_access op_handler)
 {   
-   m_uint32_t val = sign_extend(offset,16);
+   m_uint64_t val = sign_extend(offset,16);
    u_char *test1,*test2,*p_exit;
 
    test2 = NULL;
+
+   /* XXX */
+   amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,mts_lookups));
 
    /* RSI = GPR[base] + sign-extended offset */
    mips64_load_imm(b,AMD64_RSI,val);
@@ -227,10 +243,15 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
 
    /* RBX = mts64_entry index */
    amd64_mov_reg_reg_size(b->jit_ptr,X86_EBX,X86_ESI,4);
-   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS64_HASH_SHIFT,4);
-   amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS64_HASH_MASK,4);
+   amd64_mov_reg_reg_size(b->jit_ptr,X86_EAX,X86_ESI,4);
 
-   /* RCX = mts32 entry */
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS64_HASH_SHIFT1,4);
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EAX,MTS64_HASH_SHIFT2,4);
+   amd64_alu_reg_reg(b->jit_ptr,X86_XOR,AMD64_RBX,AMD64_RAX);
+
+   amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS64_HASH_MASK,8);
+
+   /* RCX = mts64 entry */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RCX,
                          AMD64_R15,
                          OFFSET(cpu_mips_t,mts_u.mts64_cache),8);
@@ -250,7 +271,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    if (write_op) {
       amd64_test_membase_imm_size(b->jit_ptr,
                                   AMD64_RCX,OFFSET(mts64_entry_t,flags),
-                                  MTS_FLAG_COW,4);
+                                  MTS_FLAG_WRCATCH,4);
       test2 = b->jit_ptr;
       amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
    }
@@ -272,10 +293,10 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    amd64_patch(test1,b->jit_ptr);
 
    /* Save PC for exception handling */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    /* Sign-extend virtual address */
-   amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RSI,X86_ESI);
+   //amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RSI,X86_ESI);
 
    /* RDX = target register */
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
@@ -284,13 +305,15 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
 
    /* Call memory access function */
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
 
    amd64_patch(p_exit,b->jit_ptr);
 }
 
 /* Fast memory operation (32-bit) */
-static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
+static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
                                      int opcode,int base,int offset,
                                      int target,int keep_ll_bit,
                                      memop_fast_access op_handler)
@@ -300,6 +323,9 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
 
    test2 = NULL;
 
+   /* XXX */
+   amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,mts_lookups));
+
    /* ESI = GPR[base] + sign-extended offset */
    amd64_mov_reg_imm(b->jit_ptr,X86_ESI,val);
    amd64_alu_reg_membase_size(b->jit_ptr,X86_ADD,
@@ -307,7 +333,12 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
 
    /* RBX = mts32_entry index */
    amd64_mov_reg_reg_size(b->jit_ptr,X86_EBX,X86_ESI,4);
-   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS32_HASH_SHIFT,4);
+   amd64_mov_reg_reg_size(b->jit_ptr,X86_EAX,X86_ESI,4);
+
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EBX,MTS32_HASH_SHIFT1,4);
+   amd64_shift_reg_imm_size(b->jit_ptr,X86_SHR,X86_EAX,MTS32_HASH_SHIFT2,4);
+   amd64_alu_reg_reg(b->jit_ptr,X86_XOR,AMD64_RBX,AMD64_RAX);
+
    amd64_alu_reg_imm_size(b->jit_ptr,X86_AND,X86_EBX,MTS32_HASH_MASK,4);
 
    /* RCX = mts32 entry */
@@ -330,7 +361,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    if (write_op) {
       amd64_test_membase_imm_size(b->jit_ptr,
                                   AMD64_RCX,OFFSET(mts32_entry_t,flags),
-                                  MTS_FLAG_COW,4);
+                                  MTS_FLAG_WRCATCH,4);
       test2 = b->jit_ptr;
       amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
    }
@@ -352,7 +383,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
       amd64_patch(test2,b->jit_ptr);
 
    /* Save PC for exception handling */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    /* Sign-extend virtual address */
    amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RSI,X86_ESI);
@@ -364,13 +395,15 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
 
    /* Call memory access function */
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(b->jit_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
 
    amd64_patch(p_exit,b->jit_ptr);
 }
 
 /* Fast memory operation */
-static void mips64_emit_memop_fast(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+static void mips64_emit_memop_fast(cpu_mips_t *cpu,cpu_tc_t *b,
                                    int write_op,int opcode,
                                    int base,int offset,
                                    int target,int keep_ll_bit,
@@ -389,13 +422,13 @@ static void mips64_emit_memop_fast(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
 }
 
 /* Memory operation */
-static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
+static void mips64_emit_memop(cpu_tc_t *b,int op,int base,int offset,
                               int target,int keep_ll_bit)
 {
    m_uint64_t val = sign_extend(offset,16);
 
    /* Save PC for exception handling */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    /* RDI = CPU instance */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
@@ -415,14 +448,16 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,target);
 
    /* Call memory access function */
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(b->jit_ptr,AMD64_RDI,MEMOP_OFFSET(op));
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
 {
    /* update pc */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    /* cp0 register */
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RDX,rd);
@@ -433,14 +468,18 @@ static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void *f)
    /* cpu instance */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
 
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,f);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
 }
 
 /* Virtual Breakpoint */
-void mips64_emit_breakpoint(mips64_jit_tcb_t *b)
+void mips64_emit_breakpoint(cpu_tc_t *b)
 {
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_c_call(b,mips64_run_breakpoint);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
 }
 
 /* Unknown opcode handler */
@@ -455,13 +494,15 @@ static fastcall void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
 }
 
 /* Emit unhandled instruction code */
-static int mips64_emit_unknown(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
+static int mips64_emit_unknown(cpu_mips_t *cpu,cpu_tc_t *b,
                                mips_insn_t opcode)
 {  
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,opcode);
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
 
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_c_call(b,mips64_unknown_opcode);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
    return(0);
 }
 
@@ -478,10 +519,12 @@ static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 }
 
 /* Emit unhandled instruction code */
-int mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b)
+int mips64_emit_invalid_delay_slot(cpu_tc_t *b)
 {  
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_c_call(b,mips64_invalid_delay_slot);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
    return(0);
 }
 
@@ -489,9 +532,10 @@ int mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b)
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b)
+void mips64_inc_cp0_count_reg(cpu_tc_t *b)
 {   
-   amd64_inc_membase(b->jit_ptr,AMD64_R15,OFFSET(cpu_mips_t,cp0_virt_cnt_reg));
+   amd64_inc_membase_size(b->jit_ptr,
+                          AMD64_R15,OFFSET(cpu_mips_t,cp0_virt_cnt_reg),4);
 
 #if 0 /* TIMER_IRQ */
    u_char *test1;
@@ -519,7 +563,7 @@ void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b)
 }
 
 /* Check if there are pending IRQ */
-void mips64_check_pending_irq(mips64_jit_tcb_t *b)
+void mips64_check_pending_irq(cpu_tc_t *b)
 {
    u_char *test1;
 
@@ -532,18 +576,20 @@ void mips64_check_pending_irq(mips64_jit_tcb_t *b)
    amd64_branch8(b->jit_ptr, X86_CC_Z, 0, 1);
 
    /* Update PC */
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    /* Trigger the IRQ */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_trigger_irq);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
    mips64_jit_tcb_push_epilog(b);
 
    amd64_patch(test1,b->jit_ptr);
 }
 
 /* Increment the number of executed instructions (performance debugging) */
-void mips64_inc_perf_counter(mips64_jit_tcb_t *b)
+void mips64_inc_perf_counter(cpu_tc_t *b)
 { 
    amd64_inc_membase_size(b->jit_ptr,
                           AMD64_R15,OFFSET(cpu_mips_t,perf_counter),4);
@@ -657,7 +703,7 @@ DECLARE_INSN(B)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* insert the instruction in the delay slot */
@@ -675,11 +721,11 @@ DECLARE_INSN(BAL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* insert the instruction in the delay slot */
    mips64_jit_fetch_and_emit(cpu,b,1);
@@ -699,7 +745,7 @@ DECLARE_INSN(BEQ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* 
@@ -734,7 +780,7 @@ DECLARE_INSN(BEQL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
    
    /* 
@@ -765,7 +811,7 @@ DECLARE_INSN(BEQZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* 
@@ -798,7 +844,7 @@ DECLARE_INSN(BNEZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* 
@@ -831,7 +877,7 @@ DECLARE_INSN(BGEZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* If sign bit is set, don't take the branch */
@@ -862,11 +908,11 @@ DECLARE_INSN(BGEZAL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* If sign bit is set, don't take the branch */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
@@ -896,11 +942,11 @@ DECLARE_INSN(BGEZALL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* If sign bit is set, don't take the branch */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
@@ -927,7 +973,7 @@ DECLARE_INSN(BGEZL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* If sign bit is set, don't take the branch */
@@ -955,7 +1001,7 @@ DECLARE_INSN(BGTZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* compare reg to zero */
@@ -988,7 +1034,7 @@ DECLARE_INSN(BGTZL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* compare reg to zero */
@@ -1018,7 +1064,7 @@ DECLARE_INSN(BLEZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* compare reg to zero */
@@ -1051,7 +1097,7 @@ DECLARE_INSN(BLEZL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* compare reg to zero */
@@ -1081,7 +1127,7 @@ DECLARE_INSN(BLTZ)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* If sign bit isn't set, don't take the branch */
@@ -1112,11 +1158,11 @@ DECLARE_INSN(BLTZAL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* If sign bit isn't set, don't take the branch */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
@@ -1146,11 +1192,11 @@ DECLARE_INSN(BLTZALL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* If sign bit isn't set, don't take the branch */
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rs),8);
@@ -1177,7 +1223,7 @@ DECLARE_INSN(BLTZL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
 
    /* If sign bit isn't set, don't take the branch */
@@ -1206,7 +1252,7 @@ DECLARE_INSN(BNE)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
    
    /* 
@@ -1241,7 +1287,7 @@ DECLARE_INSN(BNEL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc += sign_extend(offset << 2,18);
    
    /* 
@@ -1270,7 +1316,11 @@ DECLARE_INSN(BREAK)
 
    amd64_mov_reg_imm(b->jit_ptr,AMD64_RSI,code);
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_exec_break);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
@@ -1574,9 +1624,13 @@ DECLARE_INSN(DSUBU)
 /* ERET */
 DECLARE_INSN(ERET)
 {
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_exec_eret);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
@@ -1588,7 +1642,7 @@ DECLARE_INSN(J)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc &= ~((1 << 28) - 1);
    new_pc |= instr_index << 2;
 
@@ -1607,12 +1661,12 @@ DECLARE_INSN(JAL)
    m_uint64_t new_pc;
 
    /* compute the new pc */
-   new_pc = b->start_pc + (b->mips_trans_pos << 2);
+   new_pc = b->vaddr + (b->trans_pos << 2);
    new_pc &= ~((1 << 28) - 1);
    new_pc |= instr_index << 2;
 
    /* set the return address (instruction after the delay slot) */
-   mips64_set_ra(b,b->start_pc + ((b->mips_trans_pos + 1) << 2));
+   mips64_set_ra(b,b->vaddr + ((b->trans_pos + 1) << 2));
 
    /* insert the instruction in the delay slot */
    mips64_jit_fetch_and_emit(cpu,b,1);
@@ -1630,7 +1684,7 @@ DECLARE_INSN(JALR)
    m_uint64_t ret_pc;
 
    /* set the return pc (instruction after the delay slot) in GPR[rd] */
-   ret_pc = b->start_pc + ((b->mips_trans_pos + 1) << 2);
+   ret_pc = b->vaddr + ((b->trans_pos + 1) << 2);
    mips64_load_imm(b,AMD64_RAX,ret_pc);
    amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,REG_OFFSET(rd),AMD64_RAX,8);
 
@@ -1645,7 +1699,11 @@ DECLARE_INSN(JALR)
       test1 = b->jit_ptr;
       amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
       amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+      
+      amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
       mips64_emit_c_call(b,mips64_debug_jr0);
+      amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
       amd64_patch(test1,b->jit_ptr);
    }
 #endif
@@ -1678,7 +1736,11 @@ DECLARE_INSN(JR)
       test1 = b->jit_ptr;
       amd64_branch8(b->jit_ptr, X86_CC_NZ, 0, 1);
       amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+      amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
       mips64_emit_c_call(b,mips64_debug_jr0);
+      amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
       amd64_patch(test1,b->jit_ptr);
    }
 #endif
@@ -1928,6 +1990,26 @@ DECLARE_INSN(MOVE)
    amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,AMD64_R15,REG_OFFSET(rs),4);
    amd64_movsxd_reg_reg(b->jit_ptr,AMD64_RDX,X86_EDX);
    amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,REG_OFFSET(rd),AMD64_RDX,8);
+   return(0);
+}
+
+/* MOVZ */
+DECLARE_INSN(MOVZ)
+{
+   int rs = bits(insn,21,25);
+   int rt = bits(insn,16,20);
+   int rd = bits(insn,11,15);
+   u_char *test1;
+
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RAX,AMD64_R15,REG_OFFSET(rt),8);
+   amd64_test_reg_reg(b->jit_ptr,AMD64_RAX,AMD64_RAX);
+   test1 = b->jit_ptr;
+   amd64_branch32(b->jit_ptr, X86_CC_NZ, 0, 1);
+
+   amd64_mov_reg_membase(b->jit_ptr,AMD64_RDX,AMD64_R15,REG_OFFSET(rs),8);
+   amd64_mov_membase_reg(b->jit_ptr,AMD64_R15,REG_OFFSET(rd),AMD64_RDX,8);
+
+   amd64_patch(test1,b->jit_ptr);
    return(0);
 }
 
@@ -2487,9 +2569,13 @@ DECLARE_INSN(SYNC)
 /* SYSCALL */
 DECLARE_INSN(SYSCALL)
 {
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_exec_syscall);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
@@ -2512,7 +2598,11 @@ DECLARE_INSN(TEQ)
 
    /* Generate trap exception */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    mips64_jit_tcb_push_epilog(b);
 
    /* end */
@@ -2540,7 +2630,11 @@ DECLARE_INSN(TEQI)
 
    /* Generate trap exception */
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    mips64_jit_tcb_push_epilog(b);
 
    /* end */
@@ -2551,36 +2645,52 @@ DECLARE_INSN(TEQI)
 /* TLBP */
 DECLARE_INSN(TLBP)
 {
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbp);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    return(0);
 }
 
 /* TLBR */
 DECLARE_INSN(TLBR)
 {  
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbr);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    return(0);
 }
 
 /* TLBWI */
 DECLARE_INSN(TLBWI)
 {   
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwi);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    return(0);
 }
 
 /* TLBWR */
 DECLARE_INSN(TLBWR)
 {   
-   mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
+   mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    amd64_mov_reg_reg(b->jit_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(b->jit_ptr,X86_SUB,AMD64_RSP,8);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwr);
+   amd64_alu_reg_imm(b->jit_ptr,X86_ADD,AMD64_RSP,8);
+
    return(0);
 }
 
@@ -2690,6 +2800,7 @@ struct mips64_insn_tag mips64_insn_tags[] = {
    { mips64_emit_MFC1    , 0xffe007ff , 0x44000000, 1 },
    { mips64_emit_MFHI    , 0xffff07ff , 0x00000010, 1 },
    { mips64_emit_MFLO    , 0xffff07ff , 0x00000012, 1 },
+   { mips64_emit_MOVZ    , 0xfc0007ff , 0x0000000a, 1 },
    { mips64_emit_MTC0    , 0xffe007ff , 0x40800000, 1 },
    { mips64_emit_MTC1    , 0xffe007ff , 0x44800000, 1 },
    { mips64_emit_MTHI    , 0xfc1fffff , 0x00000011, 1 },

@@ -49,6 +49,9 @@ struct symbol {
 /* Global log file */
 extern FILE *log_file;
 
+/* Operating system name */
+extern const char *os_name;
+
 /* Software version */
 extern const char *sw_version;
 

@@ -43,4 +43,10 @@ int atm_bridge_unconfigure(atm_bridge_t *t);
 /* Delete an ATM bridge */
 int atm_bridge_delete(char *name);
 
+/* Delete all ATM switches */
+int atm_bridge_delete_all(void);
+
+/* Start a virtual ATM bridge */
+int atm_bridge_start(char *filename);
+
 #endif

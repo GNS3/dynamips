@@ -40,6 +40,9 @@ typedef struct {
    u_int net_mask;
 }n_ipv6_network_t;
 
+/* IP header minimum length */
+#define N_IP_MIN_HLEN      5
+
 /* IP: Common Protocols */
 #define N_IP_PROTO_ICMP    1
 #define N_IP_PROTO_IGMP    2
@@ -56,6 +59,8 @@ typedef struct {
 #define N_IP_PROTO_SCTP    132
 #define N_IP_PROTO_MAX     256
 
+#define N_IP_FLAG_DF   0x4000
+#define N_IP_FLAG_MF   0x2000
 #define N_IP_OFFMASK   0x1fff
 
 /* Maximum number of ports */
@@ -88,6 +93,9 @@ typedef struct {
 /* Ethernet Constants */
 #define N_ETH_ALEN  6
 #define N_ETH_HLEN  sizeof(n_eth_hdr_t)
+
+/* CRC Length */
+#define N_ETH_CRC_LEN  4
 
 /* Minimum size for ethernet payload */
 #define N_ETH_MIN_DATA_LEN   46
@@ -169,12 +177,102 @@ typedef struct {
    m_uint16_t unk3;       /* Unknown */
 } __attribute__ ((__packed__)) n_scp_hdr_t;
 
+/* ----- ARP Header for the IPv4 protocol over Ethernet ------------------ */
+typedef struct {
+   m_uint16_t  hw_type;                /* Hardware type */
+   m_uint16_t  proto_type;             /* L3 protocol */
+   m_uint8_t   hw_len;                 /* Length of hardware address */
+   m_uint8_t   proto_len;              /* Length of L3 address */
+   m_uint16_t  opcode;                 /* ARP Opcode */
+   n_eth_addr_t eth_saddr;             /* Source hardware address */
+   m_uint32_t  ip_saddr;               /* Source IP address */
+   n_eth_addr_t eth_daddr;             /* Dest. hardware address */
+   m_uint32_t  ip_daddr;               /* Dest. IP address */
+} __attribute__ ((__packed__)) n_arp_hdr_t;
+
+/* ----- IP Header ------------------------------------------------------- */
+typedef struct {
+   m_uint8_t  ihl;
+   m_uint8_t  tos;
+   m_uint16_t tot_len;
+   m_uint16_t id;
+   m_uint16_t frag_off;
+   m_uint8_t  ttl;
+   m_uint8_t  proto;
+   m_uint16_t cksum;
+   m_uint32_t saddr;
+   m_uint32_t daddr;
+}n_ip_hdr_t;
+
+
+/* ----- UDP Header ------------------------------------------------------ */
+typedef struct {
+   m_uint16_t sport;
+   m_uint16_t dport;
+   m_uint16_t len;
+   m_uint16_t cksum;
+}n_udp_hdr_t;
+
+/* ----- TCP Header ------------------------------------------------------ */
+typedef struct {
+   m_uint16_t sport;
+   m_uint16_t dport;
+   m_uint32_t seq;
+   m_uint32_t ack_seq;
+   m_uint8_t  offset;
+   m_uint8_t  flags;
+   m_uint16_t window;
+   m_uint16_t cksum;
+   m_uint16_t urg_ptr;
+}n_tcp_hdr_t;
+
+/* ----- Packet Context -------------------------------------------------- */
+#define N_PKT_CTX_FLAG_ETHV2         0x0001
+#define N_PKT_CTX_FLAG_VLAN          0x0002
+#define N_PKT_CTX_FLAG_L3_ARP        0x0008
+#define N_PKT_CTX_FLAG_L3_IP         0x0010
+#define N_PKT_CTX_FLAG_L4_UDP        0x0020
+#define N_PKT_CTX_FLAG_L4_TCP        0x0040
+#define N_PKT_CTX_FLAG_L4_ICMP       0x0080
+#define N_PKT_CTX_FLAG_IPH_OK        0x0100
+#define N_PKT_CTX_FLAG_IP_FRAG       0x0200
+
+typedef struct {
+   /* full packet */
+   m_uint8_t *pkt;
+   size_t pkt_len;
+
+   /* Packet flags */
+   m_uint32_t flags;
+
+   /* VLAN information */
+   m_uint16_t vlan_id;
+
+   /* L4 protocol for IP */
+   u_int ip_l4_proto;
+
+   /* L3 header */
+   union {
+      n_arp_hdr_t *arp;
+      n_ip_hdr_t *ip;
+      void *l3;
+   };
+
+   /* L4 header */
+   union {
+      n_udp_hdr_t *udp;
+      n_tcp_hdr_t *tcp;
+      void *l4;
+   };
+}n_pkt_ctx_t;
+
+/* ----------------------------------------------------------------------- */
+
 /* Check for a broadcast ethernet address */
 static inline int eth_addr_is_bcast(n_eth_addr_t *addr)
 {
    static const char *bcast_addr = "\xff\xff\xff\xff\xff\xff";
    return(!memcmp(addr,bcast_addr,6));
-
 }
 
 /* Check for a broadcast/multicast ethernet address */
@@ -243,7 +341,42 @@ int udp_connect(int local_port,char *remote_host,int remote_port);
 /* Listen on the specified port */
 int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[]);
 
+/* Listen on a TCP/UDP port - port is choosen in the specified rnaage */
+int ip_listen_range(char *ip_addr,int port_start,int port_end,int *port,
+                    int sock_type);
+
+/* Create a socket UDP listening in a port of specified range */
+int udp_listen_range(char *ip_addr,int port_start,int port_end,int *port);
+
+/* Connect an existing socket to connect to specified host */
+int ip_connect_fd(int fd,char *remote_host,int remote_port);
+
+/* Open a multicast socket */
+int udp_mcast_socket(char *mcast_group,int mcast_port,
+                     struct sockaddr *sa,int *sa_len);
+
+/* Set TTL for a multicast socket */
+int udp_mcast_set_ttl(int sck,int ttl);
+
 /* ISL rewrite */
 void cisco_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len);
+
+/* Verify checksum of an IP header */
+int ip_verify_cksum(n_ip_hdr_t *hdr);
+
+/* Compute an IP checksum */
+void ip_compute_cksum(n_ip_hdr_t *hdr);
+
+/* Compute TCP/UDP checksum */
+m_uint16_t pkt_ctx_tcp_cksum(n_pkt_ctx_t *ctx,int ph);
+
+/* Analyze L4 for an IP packet */
+int pkt_ctx_ip_analyze_l4(n_pkt_ctx_t *ctx);
+
+/* Analyze a packet */
+int pkt_ctx_analyze(n_pkt_ctx_t *ctx,m_uint8_t *pkt,size_t pkt_len);
+
+/* Dump packet context */
+void pkt_ctx_dump(n_pkt_ctx_t *ctx);
 
 #endif

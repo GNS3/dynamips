@@ -804,6 +804,8 @@ static vm_platform_t c1700_platform = {
    c1700_delete_instance,
    c1700_init_instance,
    c1700_stop_instance,
+   NULL,
+   NULL,
    c1700_nvram_extract_config,
    c1700_nvram_push_config,
    c1700_get_mac_addr_msb,

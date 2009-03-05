@@ -776,6 +776,8 @@ static vm_platform_t c6sup1_platform = {
    c6sup1_delete_instance,
    c6sup1_init_instance,
    c6sup1_stop_instance,
+   NULL,
+   NULL,
    c6sup1_nvram_extract_config,
    c6sup1_nvram_push_config,
    c6sup1_get_mac_addr_msb,

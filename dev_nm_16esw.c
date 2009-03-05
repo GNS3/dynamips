@@ -313,6 +313,7 @@
 /* ======================================================================= */
 
 #define BCM5600_REG_HASH_SIZE  8192
+#define BCM5600_MAX_PORTS      32
 
 /* BCM5600 register */
 struct bcm5600_reg {
@@ -336,7 +337,7 @@ struct bcm5600_pkt {
    u_char *pkt;
    ssize_t pkt_len;
 
-   /* Rewritten packet (802.1Q tag pushed or poped) */
+   /* Rewritten packet (802.1Q tag pushed or popped) */
    u_char *rewr_pkt;
    int rewrite_done;
 
@@ -364,10 +365,19 @@ struct bcm5600_port {
    char name[32];
 };
 
-/* NM-16ESW private data */
-struct nm_16esw_data {
+/* Physical port mapping from IOS to BCM */
+struct bcm5600_port_mapping {
+   int chip;
+   int port;
+};
+
+/* BCM5600 chip data */
+struct bcm5600_chip {
    char *name;
-   u_int nr_port;
+   int id;
+
+   /* Parent card */
+   struct esw_data *parent;
 
    vm_instance_t *vm;
    struct vdevice *dev;
@@ -386,6 +396,8 @@ struct nm_16esw_data {
 
    /* Interrupt mask */
    m_uint32_t intr_mask;
+
+   int irq_count;
 
    /* MII registers */
    m_uint16_t mii_regs[64][32];
@@ -417,7 +429,7 @@ struct nm_16esw_data {
    struct bcm5600_table *t_tbmap,*t_ttr;
 
    /* Ports (only 16 are "real" and usable) */
-   struct bcm5600_port ports[32];
+   struct bcm5600_port ports[BCM5600_MAX_PORTS];
    
    /* CPU port */
    u_int cpu_port;
@@ -444,9 +456,56 @@ struct nm_16esw_data {
    m_uint32_t *ptable;
 };
 
-/* NM-16ESW Port physical port mapping table (Cisco => BCM) */
-static int nm16esw_port_mapping[] = {
-   2, 0, 6, 4, 10, 8, 14, 12, 3, 1, 7, 5, 11, 9, 15, 13,
+#define BCM5600_MAX_CHIPS  4
+
+/* ESW model description */
+struct esw_model {
+   char *name;
+   int nr_chip;
+   int nr_port;
+   struct bcm5600_port_mapping *port_map;
+};
+
+/* Cisco ESW card private data */
+struct esw_data {
+   /* Number of BCM chips */
+   int nr_chip;
+   struct bcm5600_chip *chip[BCM5600_MAX_CHIPS];
+
+   /* ESW model info */
+   struct esw_model *model;
+};
+
+/* NMD-36ESW port mapping */
+static struct bcm5600_port_mapping nmd36esw_port_mapping[] = {
+   { 1, 18 }, { 1, 16 }, { 1, 14 }, { 1, 12 },   /* FaX/0 - 3 */
+   { 1, 10 }, { 1,  8 }, { 1, 6  }, { 1,  4 },   /* FaX/4 - 7 */
+   { 1,  2 }, { 1,  0 }, { 0, 14 }, { 0, 12 },   /* FaX/8 - 11 */
+   { 0, 10 }, { 0,  8 }, { 0, 6  }, { 0,  4 },   /* FaX/12 - 15 */
+   { 0,  2 }, { 0,  0 }, { 1, 19 }, { 1, 17 },   /* FaX/16 - 19 */
+   { 1, 15 }, { 1, 13 }, { 1, 11 }, { 1,  9 },   /* FaX/20 - 23 */
+   { 1,  7 }, { 1,  5 }, { 1,  3 }, { 1,  1 },   /* FaX/24 - 27 */
+   { 0, 15 }, { 0, 13 }, { 0, 11 }, { 0,  9 },   /* FaX/28 - 31 */
+   { 0,  7 }, { 0,  5 }, { 0,  3 }, { 0,  1 },   /* FaX/32 - 35 */
+};
+
+/* NM-16ESW port mapping */
+static struct bcm5600_port_mapping nm16esw_port_mapping[] = {
+   { 0,  2 }, { 0,  0 }, { 0,  6 }, { 0,  4 },
+   { 0, 10 }, { 0,  8 }, { 0, 14 }, { 0, 12 },
+   { 0,  3 }, { 0,  1 }, { 0,  7 }, { 0,  5 },
+   { 0, 11 }, { 0,  9 }, { 0, 15 }, { 0, 13 },
+};
+
+enum {
+   ESW_MODEL_NM_16ESW = 0,
+   ESW_MODEL_NMD_36ESW,
+   ESW_MODEL_MAX
+};
+
+static struct esw_model esw_models[ESW_MODEL_MAX] = {
+   { "NM-16ESW"  , 1, 16, nm16esw_port_mapping },
+   { "NMD-36ESW" , 2, 36, nmd36esw_port_mapping },
 };
 
 /* Log a BCM message */
@@ -473,7 +532,7 @@ static struct bcm5600_tg_info tg_info[8] = {
 };
 
 /* Return port status (up or down), based on the MII register */
-static int bcm5600_mii_port_status(struct nm_16esw_data *d,u_int port)
+static int bcm5600_mii_port_status(struct bcm5600_chip *d,u_int port)
 {
    u_int mii_ctrl;
 
@@ -484,12 +543,12 @@ static int bcm5600_mii_port_status(struct nm_16esw_data *d,u_int port)
 }
 
 /* Build port status bitmap */
-static m_uint32_t bcm5600_mii_port_status_bmp(struct nm_16esw_data *d)
+static m_uint32_t bcm5600_mii_port_status_bmp(struct bcm5600_chip *d)
 {
    m_uint32_t bmp;
    int i;
-   
-   for(i=0,bmp=0;i<d->nr_port;i++)
+
+   for(i=0,bmp=0;i<BCM5600_MAX_PORTS;i++)
       if (bcm5600_mii_port_status(d,i))
          bmp |= 1 << i;
 
@@ -497,7 +556,7 @@ static m_uint32_t bcm5600_mii_port_status_bmp(struct nm_16esw_data *d)
 }
 
 /* Read a MII register */
-static void bcm5600_mii_read(struct nm_16esw_data *d)
+static void bcm5600_mii_read(struct bcm5600_chip *d)
 {
    m_uint8_t port,reg;
 
@@ -511,7 +570,7 @@ static void bcm5600_mii_read(struct nm_16esw_data *d)
          case 0x00:
             d->mii_output &= ~0x8200;
             break;
-         case 0x01:
+         case 0x01:            
             if (d->ports[port].nio && bcm5600_mii_port_status(d,port))
                d->mii_output = 0x782C;
             else
@@ -536,7 +595,7 @@ static void bcm5600_mii_read(struct nm_16esw_data *d)
 }
 
 /* Write a MII register */
-static void bcm5600_mii_write(struct nm_16esw_data *d)
+static void bcm5600_mii_write(struct bcm5600_chip *d)
 {
    m_uint8_t port,reg;
    m_uint16_t isolation;
@@ -563,7 +622,7 @@ static void bcm5600_mii_write(struct nm_16esw_data *d)
             pci_dev_trigger_irq(d->vm,d->pci_dev);
          }
       }
-      
+     
       d->mii_regs[port][reg] = d->mii_input & 0xFFFF;
    }
 }
@@ -575,7 +634,7 @@ static u_int bcm5600_reg_get_hash(m_uint32_t addr)
 }
 
 /* Find a register entry */
-static struct bcm5600_reg *bcm5600_reg_find(struct nm_16esw_data *d,
+static struct bcm5600_reg *bcm5600_reg_find(struct bcm5600_chip *d,
                                             m_uint32_t addr)
 {   
    struct bcm5600_reg *reg;
@@ -590,7 +649,7 @@ static struct bcm5600_reg *bcm5600_reg_find(struct nm_16esw_data *d,
 }
 
 /* Read a register */
-static m_uint32_t bcm5600_reg_read(struct nm_16esw_data *d,m_uint32_t addr)
+static m_uint32_t bcm5600_reg_read(struct bcm5600_chip *d,m_uint32_t addr)
 {
    struct bcm5600_reg *reg;
 
@@ -601,7 +660,7 @@ static m_uint32_t bcm5600_reg_read(struct nm_16esw_data *d,m_uint32_t addr)
 }
 
 /* Write a register */
-static int bcm5600_reg_write(struct nm_16esw_data *d,m_uint32_t addr,
+static int bcm5600_reg_write(struct bcm5600_chip *d,m_uint32_t addr,
                              m_uint32_t value)
 {
    struct bcm5600_reg *reg;
@@ -628,7 +687,7 @@ static int bcm5600_reg_write(struct nm_16esw_data *d,m_uint32_t addr,
 }
 
 /* Register special handling */
-static void bcm5600_reg_write_special(struct nm_16esw_data *d,
+static void bcm5600_reg_write_special(struct bcm5600_chip *d,
                                       m_uint32_t addr,m_uint32_t value)
 {
    switch(addr) {
@@ -647,7 +706,7 @@ static void bcm5600_reg_write_special(struct nm_16esw_data *d,
 }
 
 /* Free memory used to store register info */
-static void bcm5600_reg_free(struct nm_16esw_data *d)
+static void bcm5600_reg_free(struct bcm5600_chip *d)
 {  
    struct bcm5600_reg *reg,*next;
    int i;
@@ -660,7 +719,7 @@ static void bcm5600_reg_free(struct nm_16esw_data *d)
 }
 
 /* Dump all known registers */
-static void bcm5600_reg_dump(struct nm_16esw_data *d,int show_null)
+static void bcm5600_reg_dump(struct bcm5600_chip *d,int show_null)
 {
    struct bcm5600_reg *reg;
    int i;
@@ -675,7 +734,7 @@ static void bcm5600_reg_dump(struct nm_16esw_data *d,int show_null)
 }
 
 /* Fill a string buffer with all ports of the specified bitmap */
-static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
+static char *bcm5600_port_bitmap_str(struct bcm5600_chip *d,
                                      char *buffer,m_uint32_t bitmap)
 {
    char *ptr = buffer;
@@ -683,7 +742,7 @@ static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
 
    *ptr = 0;
 
-   for(i=0;i<d->nr_port;i++)
+   for(i=0;i<BCM5600_MAX_PORTS;i++)
       if (bitmap & (1 << i)) {
          ptr += sprintf(ptr,"%s ",d->ports[i].name);
       }
@@ -692,7 +751,7 @@ static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
 }
 
 /* BCM5600 tables */
-#define BCM_OFFSET(x) (OFFSET(struct nm_16esw_data,x))
+#define BCM_OFFSET(x) (OFFSET(struct bcm5600_chip,x))
 
 static struct bcm5600_table bcm5600_tables[] = {
    /* ARL tables */
@@ -740,7 +799,7 @@ static inline u_int bcm5600_table_get_size(struct bcm5600_table *table)
 }
 
 /* Create automatically tables */
-static int bcm5600_table_create(struct nm_16esw_data *d)
+static int bcm5600_table_create(struct bcm5600_chip *d)
 {
    struct bcm5600_table *table;
    m_uint32_t *array;
@@ -764,7 +823,7 @@ static int bcm5600_table_create(struct nm_16esw_data *d)
 }
 
 /* Free tables */
-static void bcm5600_table_free(struct nm_16esw_data *d)
+static void bcm5600_table_free(struct bcm5600_chip *d)
 {
    struct bcm5600_table *table;
    m_uint32_t **array;
@@ -781,7 +840,7 @@ static void bcm5600_table_free(struct nm_16esw_data *d)
 }
 
 /* Find a table given its address */
-static struct bcm5600_table *bcm5600_table_find(struct nm_16esw_data *d,
+static struct bcm5600_table *bcm5600_table_find(struct bcm5600_chip *d,
                                                 m_uint32_t addr)
 {
    int i;
@@ -797,7 +856,7 @@ static struct bcm5600_table *bcm5600_table_find(struct nm_16esw_data *d,
 }
 
 /* Get a table entry */
-static inline m_uint32_t *bcm5600_table_get_entry(struct nm_16esw_data *d,
+static inline m_uint32_t *bcm5600_table_get_entry(struct bcm5600_chip *d,
                                                   struct bcm5600_table *table,
                                                   m_uint32_t index)
 {
@@ -811,7 +870,7 @@ static inline m_uint32_t *bcm5600_table_get_entry(struct nm_16esw_data *d,
 }
 
 /* Read a table entry */
-static int bcm5600_table_read_entry(struct nm_16esw_data *d)
+static int bcm5600_table_read_entry(struct bcm5600_chip *d)
 {
    struct bcm5600_table *table;
    m_uint32_t addr,index,*entry;
@@ -841,7 +900,7 @@ static int bcm5600_table_read_entry(struct nm_16esw_data *d)
 }
 
 /* Write a table entry */
-static int bcm5600_table_write_entry(struct nm_16esw_data *d)
+static int bcm5600_table_write_entry(struct bcm5600_chip *d)
 {
    struct bcm5600_table *table;
    m_uint32_t addr,index,*entry;
@@ -874,7 +933,7 @@ static int bcm5600_table_write_entry(struct nm_16esw_data *d)
 }
 
 /* Dump a table (for debugging) */
-static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
+static int bcm5600_table_dump(struct bcm5600_chip *d,m_uint32_t addr)
 {
    struct bcm5600_table *table;
    m_uint32_t *entry;
@@ -902,7 +961,7 @@ static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
 }
 
 /* Dump the VLAN table */
-static int bcm5600_dump_vtable(struct nm_16esw_data *d)
+static int bcm5600_dump_vtable(struct bcm5600_chip *d)
 {   
    struct bcm5600_table *table;
    struct bcm5600_port *port;
@@ -927,9 +986,9 @@ static int bcm5600_dump_vtable(struct nm_16esw_data *d)
 
       printf("  VLAN %4u: ",vlan);
 
-      for(j=0;j<d->nr_port;j++) {
-         tbmp = entry[1] & (1 << j);
-         ubmp = entry[2] & (1 << j);
+      for(j=0;j<BCM5600_MAX_PORTS;j++) {
+         tbmp = (entry[1] & (1 << j)) & BCM5600_VTABLE_PORT_BMAP_MASK;
+         ubmp = (entry[2] & (1 << j)) & BCM5600_VTABLE_UT_PORT_BMAP_MASK;
 
          if (tbmp || ubmp) {
             port = &d->ports[j];
@@ -951,12 +1010,43 @@ static int bcm5600_dump_vtable(struct nm_16esw_data *d)
    return(0);
 }
 
+/* Dump the VLAN table */
+static int bcm5600_dump_vtable_raw(struct bcm5600_chip *d)
+{   
+   struct bcm5600_table *table;
+   m_uint32_t *entry;
+   u_int vlan;
+   int i;
+
+   if (!(table = bcm5600_table_find(d,BCM5600_ADDR_VTABLE0)))
+      return(-1);
+
+   printf("%s: dumping VLAN table:\n",d->name);
+
+   for(i=table->min_index;i<=table->max_index;i++) {
+      if (!(entry = bcm5600_table_get_entry(d,table,i)))
+         break;
+
+      /* Extract the VLAN info */
+      vlan = entry[0] & BCM5600_VTABLE_VLAN_TAG_MASK;
+
+      if (vlan == VLAN_INVALID)
+         continue;
+
+      printf("  VLAN %4u: 0x%8.8x 0x%8.8x 0x%8.8x 0x%8.8x\n",
+             vlan,entry[0],entry[1],entry[2],entry[3]);
+   }
+
+   printf("\n");
+   return(0);
+}
+
 /* Dump the "trunk" ports */
-static int bcm5600_dump_trunks(struct nm_16esw_data *d)
+static int bcm5600_dump_trunks(struct bcm5600_chip *d)
 {   
    struct bcm5600_table *table;
    struct bcm5600_port *port;
-   m_uint32_t *entry;
+   m_uint32_t *entry,val;
    int i,j;
 
    if (!(table = bcm5600_table_find(d,BCM5600_ADDR_TBMAP0)))
@@ -973,8 +1063,10 @@ static int bcm5600_dump_trunks(struct nm_16esw_data *d)
 
       printf("  Trunk %d: ",i);
 
-      for(j=0;j<d->nr_port;j++) {
-         if (entry[0] & (1 << j)) {
+      for(j=0;j<BCM5600_MAX_PORTS;j++) {
+         val = entry[0] & BCM5600_TBMAP_MASK;
+
+         if (val & (1 << j)) {
             port = &d->ports[j];
             printf("%s ",port->name);
          }
@@ -988,8 +1080,8 @@ static int bcm5600_dump_trunks(struct nm_16esw_data *d)
 }
 
 /* Dump the physical port info */
-static int bcm5600_dump_ports(struct nm_16esw_data *d)
-{   
+static int bcm5600_dump_ports(struct bcm5600_chip *d)
+{
    struct bcm5600_table *table;
    struct bcm5600_port *port;
    m_uint32_t *entry;
@@ -1001,7 +1093,7 @@ static int bcm5600_dump_ports(struct nm_16esw_data *d)
 
    printf("%s: physical ports:\n",d->name);
 
-   for(i=0;i<d->nr_port;i++) {
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
       if (!(entry = bcm5600_table_get_entry(d,table,i)))
          break;
 
@@ -1024,8 +1116,32 @@ static int bcm5600_dump_ports(struct nm_16esw_data *d)
    return(0);
 }
 
+/* Dump the physical port info */
+static int bcm5600_dump_ports_raw(struct bcm5600_chip *d)
+{   
+   struct bcm5600_table *table;
+   m_uint32_t *entry;
+   int i;
+
+   if (!(table = bcm5600_table_find(d,BCM5600_ADDR_PTABLE0)))
+      return(-1);
+
+   printf("%s: BCM ports:\n",d->name);
+
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
+      if (!(entry = bcm5600_table_get_entry(d,table,i)))
+         break;
+      
+      printf("  %2.2d: 0x%8.8x 0x%8.8x 0x%8.8x 0x%8.8x 0x%8.8x\n",
+             i,entry[0],entry[1],entry[2],entry[3],entry[4]);
+   }
+
+   printf("\n");
+   return(0);
+}
+
 /* Dump the physical port bitmaps */
-static int bcm5600_dump_port_bitmaps(struct nm_16esw_data *d)
+static int bcm5600_dump_port_bitmaps(struct bcm5600_chip *d)
 {   
    struct bcm5600_table *table;
    struct bcm5600_port *port;
@@ -1037,7 +1153,7 @@ static int bcm5600_dump_port_bitmaps(struct nm_16esw_data *d)
 
    printf("%s: dumping bitmaps of the port table:\n",d->name);
 
-   for(i=0;i<d->nr_port;i++) {
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
       if (!(entry = bcm5600_table_get_entry(d,table,i)))
          break;
 
@@ -1045,9 +1161,9 @@ static int bcm5600_dump_port_bitmaps(struct nm_16esw_data *d)
 
       printf("  %-10s: ",port->name);
 
-      for(j=0;j<d->nr_port;j++) {
-         tbmp = entry[1] & (1 << j);
-         ubmp = entry[2] & (1 << j);
+      for(j=0;j<BCM5600_MAX_PORTS;j++) {
+         tbmp = (entry[1] & (1 << j)) & BCM5600_PTABLE_PORT_BMAP_MASK;
+         ubmp = (entry[2] & (1 << j)) & BCM5600_PTABLE_UT_PORT_BMAP_MASK;
 
          if (tbmp || ubmp) {
             printf("%s (",d->ports[j].name);
@@ -1068,16 +1184,18 @@ static int bcm5600_dump_port_bitmaps(struct nm_16esw_data *d)
 }
 
 /* Dump main tables */
-static void bcm5600_dump_main_tables(struct nm_16esw_data *d)
+static void bcm5600_dump_main_tables(struct bcm5600_chip *d)
 {
    bcm5600_dump_ports(d);
+   bcm5600_dump_ports_raw(d);
    bcm5600_dump_port_bitmaps(d);
    bcm5600_dump_vtable(d);
+   bcm5600_dump_vtable_raw(d);
    bcm5600_dump_trunks(d);
 }
 
 /* Find a free ARL entry */
-static int bcm5600_find_free_arl_entry(struct nm_16esw_data *d)
+static int bcm5600_find_free_arl_entry(struct bcm5600_chip *d)
 {   
    struct bcm5600_table *table = d->t_arl;
 
@@ -1088,7 +1206,7 @@ static int bcm5600_find_free_arl_entry(struct nm_16esw_data *d)
 }
 
 /* ARL Lookup. TODO: this must be optimized in the future. */
-static inline int bcm5600_gen_arl_lookup(struct nm_16esw_data *d,
+static inline int bcm5600_gen_arl_lookup(struct bcm5600_chip *d,
                                          struct bcm5600_table *table,
                                          u_int index_start,u_int index_end,
                                          n_eth_addr_t *mac_addr,
@@ -1118,7 +1236,7 @@ static inline int bcm5600_gen_arl_lookup(struct nm_16esw_data *d,
 }
 
 /* ARL Lookup */
-static inline int bcm5600_arl_lookup(struct nm_16esw_data *d,
+static inline int bcm5600_arl_lookup(struct bcm5600_chip *d,
                                      n_eth_addr_t *mac_addr,
                                      u_int vlan)
 {
@@ -1127,7 +1245,7 @@ static inline int bcm5600_arl_lookup(struct nm_16esw_data *d,
 }
 
 /* MARL Lookup */
-static inline int bcm5600_marl_lookup(struct nm_16esw_data *d,
+static inline int bcm5600_marl_lookup(struct bcm5600_chip *d,
                                       n_eth_addr_t *mac_addr,
                                       u_int vlan)
 {
@@ -1143,7 +1261,7 @@ static void bcm5600_invalidate_arl_entry(m_uint32_t *entry)
 }
 
 /* Insert an entry into the ARL table */
-static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
+static int bcm5600_insert_arl_entry(struct bcm5600_chip *d)
 {   
    struct bcm5600_table *table = d->t_arl;
    m_uint32_t *entry,mask;
@@ -1177,7 +1295,7 @@ static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
 }
 
 /* Delete an entry from the ARL table */
-static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
+static int bcm5600_delete_arl_entry(struct bcm5600_chip *d)
 {  
    struct bcm5600_table *table;
    m_uint32_t *entry,*last_entry,mac_msb;
@@ -1219,7 +1337,7 @@ static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
 }
 
 /* Reset the ARL tables */
-static int bcm5600_reset_arl(struct nm_16esw_data *d)
+static int bcm5600_reset_arl(struct bcm5600_chip *d)
 {
    struct bcm5600_table *table;
    m_uint32_t *entry;
@@ -1237,7 +1355,7 @@ static int bcm5600_reset_arl(struct nm_16esw_data *d)
 }
 
 /* MAC Address Ager */
-static int bcm5600_arl_ager(struct nm_16esw_data *d)
+static int bcm5600_arl_ager(struct bcm5600_chip *d)
 {
    m_uint32_t *entry,*last_entry;
    int i;
@@ -1271,7 +1389,7 @@ static int bcm5600_arl_ager(struct nm_16esw_data *d)
 }
 
 /* Get the VTABLE entry matching the specified VLAN */
-static m_uint32_t *bcm5600_vtable_get_entry_by_vlan(struct nm_16esw_data *d,
+static m_uint32_t *bcm5600_vtable_get_entry_by_vlan(struct bcm5600_chip *d,
                                                     u_int vlan)
 {
    struct bcm5600_table *table = d->t_vtable;
@@ -1290,7 +1408,7 @@ static m_uint32_t *bcm5600_vtable_get_entry_by_vlan(struct nm_16esw_data *d,
 }
 
 /* Read memory command */
-static void bcm5600_handle_read_mem_cmd(struct nm_16esw_data *d)
+static void bcm5600_handle_read_mem_cmd(struct bcm5600_chip *d)
 {
    int i;
 
@@ -1303,14 +1421,14 @@ static void bcm5600_handle_read_mem_cmd(struct nm_16esw_data *d)
 }
 
 /* Write memory command */
-static void bcm5600_handle_write_mem_cmd(struct nm_16esw_data *d)
+static void bcm5600_handle_write_mem_cmd(struct bcm5600_chip *d)
 {
    bcm5600_table_write_entry(d);
    d->dw[0] = BCM5600_OP_WRITE_MEM_ACK << BCM5600_CMD_OP_SHIFT;
 }
 
 /* Handle a "general" command */
-static void bcm5600_handle_gen_cmd(struct nm_16esw_data *d)
+static void bcm5600_handle_gen_cmd(struct bcm5600_chip *d)
 {
    m_uint32_t op,src,dst,len;
 
@@ -1379,12 +1497,16 @@ static void bcm5600_handle_gen_cmd(struct nm_16esw_data *d)
          break;
 
       default:
-         BCM_LOG(d,"unknown opcode 0x%8.8x (cmd=0x%8.8x)\n",op,d->dw[0]);
+         BCM_LOG(d,"unknown opcode 0x%2.2x "
+                 "[src=0x%2.2x,dst=0x%2.2x,len=0x%2.2x] "
+                 "(dw[0]=0x%8.8x, dw[1]=0x%8.8x, "
+                 "dw[2]=0x%8.8x, dw[3]=0x%8.8x)\n",
+                 op,src,dst,len,d->dw[0],d->dw[1],d->dw[2],d->dw[3]);
    }
 }
 
 /* Handle a s-channel command */
-static void bcm5600_handle_schan_cmd(struct nm_16esw_data *d,m_uint32_t cmd)
+static void bcm5600_handle_schan_cmd(struct bcm5600_chip *d,m_uint32_t cmd)
 {
    d->schan_cmd = cmd;
 
@@ -1413,7 +1535,7 @@ static void bcm5600_handle_schan_cmd(struct nm_16esw_data *d,m_uint32_t cmd)
          break;
 
       default:
-#if DEBUG_UNKNOWN
+#if 1 //DEBUG_UNKNOWN
          BCM_LOG(d,"unknown s-chan command 0x%8.8x\n",cmd);
 #endif
          d->schan_cmd_res = 0xFFFFFFFF;
@@ -1426,7 +1548,7 @@ static void bcm5600_handle_schan_cmd(struct nm_16esw_data *d,m_uint32_t cmd)
 void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                          u_int op_size,u_int op_type,m_uint64_t *data)
 {
-   struct nm_16esw_data *d = dev->priv_data;
+   struct bcm5600_chip *d = dev->priv_data;
    u_int reg;
 
    if (op_type == MTS_READ)
@@ -1445,6 +1567,12 @@ void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
    BCM_LOCK(d);
 
    switch(offset) {
+      case 0x0:
+         if (op_type == MTS_READ) {
+            *data = d->id;
+         }
+         break;
+
       case 0x50:
          if (op_type == MTS_WRITE) {
             bcm5600_handle_schan_cmd(d,*data);
@@ -1512,15 +1640,14 @@ void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
             if (d->rx_end_scan)
                *data |= BCM5600_INTR_RX_UNDERRUN;
 
-            /* RX packet available */
-            *data |= BCM5600_INTR_RX_AVAIL;
-
             /* Link status changed */
             if (d->mii_intr) {
                *data |= BCM5600_INTR_LINKSTAT_MOD;
                d->mii_intr = FALSE;
             }
 
+            /* RX packet available */
+            *data |= BCM5600_INTR_RX_AVAIL;
             pci_dev_clear_irq(d->vm,d->pci_dev);
          }
          break;
@@ -1562,7 +1689,7 @@ void *dev_bcm5605_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 }
 
 /* Show mirroring status */
-static int bcm5600_mirror_show_status(struct nm_16esw_data *d)
+static int bcm5600_mirror_show_status(struct bcm5600_chip *d)
 {
    m_uint32_t *port,dst_port;
    int i;
@@ -1586,7 +1713,7 @@ static int bcm5600_mirror_show_status(struct nm_16esw_data *d)
    /* Ingress info */
    printf("  Ingress Ports: ");
 
-   for(i=0;i<d->nr_port;i++) {
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
       port = bcm5600_table_get_entry(d,d->t_ptable,i);
       if (port[1] & BCM5600_PTABLE_MI_FLAG)
          printf("%s ",d->ports[i].name);
@@ -1597,7 +1724,7 @@ static int bcm5600_mirror_show_status(struct nm_16esw_data *d)
    /* Egress info */
    printf("  Egress Ports: ");
   
-   for(i=0;i<d->nr_port;i++)
+   for(i=0;i<BCM5600_MAX_PORTS;i++)
       if (d->mirror_egress_ports & (1 << i))
          printf("%s ",d->ports[i].name);
 
@@ -1606,7 +1733,7 @@ static int bcm5600_mirror_show_status(struct nm_16esw_data *d)
 }
 
 /* Mirror a packet */
-static int bcm5600_mirror_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p,
+static int bcm5600_mirror_pkt(struct bcm5600_chip *d,struct bcm5600_pkt *p,
                               int reason)
 {
    u_int mport;
@@ -1632,7 +1759,7 @@ static int bcm5600_mirror_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p,
 }
 
 /* Put a packet into the RX ring (tag it if necessary) */
-static int bcm5600_send_pkt_to_cpu(struct nm_16esw_data *d,
+static int bcm5600_send_pkt_to_cpu(struct bcm5600_chip *d,
                                    struct bcm5600_pkt *p)
 {
    m_uint32_t pkt_addr,pkt_len,dot1q_data;
@@ -1673,7 +1800,7 @@ static int bcm5600_send_pkt_to_cpu(struct nm_16esw_data *d,
 }
 
 /* Source MAC address learning */
-static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
+static int bcm5600_src_mac_learning(struct bcm5600_chip *d,
                                     struct bcm5600_pkt *p)
 {  
    n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
@@ -1781,7 +1908,7 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
 }
 
 /* Select an egress port the specified trunk */
-static int bcm5600_trunk_egress_port(struct nm_16esw_data *d,
+static int bcm5600_trunk_egress_port(struct bcm5600_chip *d,
                                      struct bcm5600_pkt *p,
                                      u_int trunk_id)
 {   
@@ -1823,7 +1950,7 @@ static int bcm5600_trunk_egress_port(struct nm_16esw_data *d,
 }
 
 /* Destination address lookup (take the forwarding decision) */
-static int bcm5600_dst_mac_lookup(struct nm_16esw_data *d,
+static int bcm5600_dst_mac_lookup(struct bcm5600_chip *d,
                                   struct bcm5600_pkt *p)
 {
    n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
@@ -1933,12 +2060,12 @@ static int bcm5600_dst_mac_lookup(struct nm_16esw_data *d,
 }
 
 /* Prototype for a packet sending function */
-typedef void (*bcm5600_send_pkt_t)(struct nm_16esw_data *d,
+typedef void (*bcm5600_send_pkt_t)(struct bcm5600_chip *d,
                                    struct bcm5600_pkt *p,
                                    netio_desc_t *nio);
 
 /* Directly forward a packet (not rewritten) */
-static void bcm5600_send_pkt_direct(struct nm_16esw_data *d,
+static void bcm5600_send_pkt_direct(struct bcm5600_chip *d,
                                     struct bcm5600_pkt *p,
                                     netio_desc_t *nio)
 {
@@ -1946,7 +2073,7 @@ static void bcm5600_send_pkt_direct(struct nm_16esw_data *d,
 }
 
 /* Send a packet with a 802.1Q tag */
-static void bcm5600_send_pkt_push_dot1q(struct nm_16esw_data *d,
+static void bcm5600_send_pkt_push_dot1q(struct bcm5600_chip *d,
                                         struct bcm5600_pkt *p,
                                         netio_desc_t *nio)
 {
@@ -1970,7 +2097,7 @@ static void bcm5600_send_pkt_push_dot1q(struct nm_16esw_data *d,
 }
 
 /* Send a packet deleting its 802.1Q tag */
-static void bcm5600_send_pkt_pop_dot1q(struct nm_16esw_data *d,
+static void bcm5600_send_pkt_pop_dot1q(struct bcm5600_chip *d,
                                        struct bcm5600_pkt *p,
                                        netio_desc_t *nio)
 {
@@ -1988,7 +2115,7 @@ static void bcm5600_send_pkt_pop_dot1q(struct nm_16esw_data *d,
 }
 
 /* Forward a packet on physical ports (egress bitmap must be defined) */
-static int bcm5600_forward_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
+static int bcm5600_forward_pkt(struct bcm5600_chip *d,struct bcm5600_pkt *p)
 {
    u_char rewr_pkt[BCM5600_MAX_PKT_SIZE];
    bcm5600_send_pkt_t send_pkt;
@@ -2013,7 +2140,7 @@ static int bcm5600_forward_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
    if (p->egress_bitmap & (1 << d->cpu_port))
       bcm5600_send_pkt_to_cpu(d,p);
 
-   for(i=0;i<d->nr_port;i++) {
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
       if (!(p->egress_bitmap & (1 << i)))
          continue;
 
@@ -2088,7 +2215,7 @@ static inline int bcm5600_is_bpdu(n_eth_addr_t *m)
 }
 
 /* Handle a received packet */
-static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
+static int bcm5600_handle_rx_pkt(struct bcm5600_chip *d,struct bcm5600_pkt *p)
 {
    m_uint32_t *port_entry;
    n_eth_dot1q_hdr_t *eth_hdr;
@@ -2177,7 +2304,7 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
 }
 
 /* Handle a packet to transmit */
-static int bcm5600_handle_tx_pkt(struct nm_16esw_data *d,
+static int bcm5600_handle_tx_pkt(struct bcm5600_chip *d,
                                  struct bcm5600_pkt *p,
                                  u_int egress_bitmap)
 {   
@@ -2227,7 +2354,7 @@ static int bcm5600_handle_tx_pkt(struct nm_16esw_data *d,
 }
 
 /* Handle the TX ring */
-static int dev_bcm5600_handle_txring(struct nm_16esw_data *d)
+static int dev_bcm5600_handle_txring(struct bcm5600_chip *d)
 {
    struct bcm5600_pkt pkt_data;
    m_uint32_t tdes[4],txd_len;
@@ -2301,7 +2428,7 @@ static int dev_bcm5600_handle_txring(struct nm_16esw_data *d)
 /* Handle the RX ring */
 static int dev_bcm5600_handle_rxring(netio_desc_t *nio,
                                      u_char *pkt,ssize_t pkt_len,
-                                     struct nm_16esw_data *d,  
+                                     struct bcm5600_chip *d,  
                                      struct bcm5600_port *port)
 {  
    struct bcm5600_pkt pkt_data;
@@ -2379,7 +2506,7 @@ static int dev_bcm5600_handle_rxring(netio_desc_t *nio,
 static m_uint32_t pci_bcm5605_read(cpu_gen_t *cpu,struct pci_device *dev,
                                    int reg)
 {
-   struct nm_16esw_data *d = dev->priv_data;
+   struct bcm5600_chip *d = dev->priv_data;
 
    switch(reg) {
       case PCI_REG_BAR0:
@@ -2393,7 +2520,7 @@ static m_uint32_t pci_bcm5605_read(cpu_gen_t *cpu,struct pci_device *dev,
 static void pci_bcm5605_write(cpu_gen_t *cpu,struct pci_device *dev,
                               int reg,m_uint32_t value)
 {
-   struct nm_16esw_data *d = dev->priv_data;
+   struct bcm5600_chip *d = dev->priv_data;
 
    switch(reg) {
       case PCI_REG_BAR0:
@@ -2404,8 +2531,8 @@ static void pci_bcm5605_write(cpu_gen_t *cpu,struct pci_device *dev,
 }
 
 /* Rewrite the base MAC address */
-int dev_nm_16esw_burn_mac_addr(vm_instance_t *vm,u_int nm_bay,
-                               struct cisco_eeprom *eeprom)
+int esw_burn_mac_addr(vm_instance_t *vm,u_int nm_bay,
+                      struct cisco_eeprom *eeprom)
 {
    m_uint8_t eeprom_ver;
    size_t offset;
@@ -2435,17 +2562,38 @@ int dev_nm_16esw_burn_mac_addr(vm_instance_t *vm,u_int nm_bay,
    return(0);
 }
 
-/* Initialize a NM-16ESW module */
-struct nm_16esw_data *
-dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
-                  struct pci_bus *pci_bus,int pci_device,int irq)
+/* Delete a BCM5600 chip */
+static void bcm5600_chip_delete(struct bcm5600_chip *d)
 {
-   struct nm_16esw_data *data;
-   struct bcm5600_port *port;
-   struct vdevice *dev;
-   int i,port_id;
+   /* Stop the Ager */
+   timer_remove(d->ager_tid);
 
-   /* Allocate the private data structure */
+   /* Stop the TX ring task */
+   ptask_remove(d->tx_tid);
+
+   /* Remove device + PCI stuff */
+   pci_dev_remove(d->pci_dev);
+   vm_unbind_device(d->vm,d->dev);
+   cpu_group_rebuild_mts(d->vm->cpu_group);
+   free(d->dev);
+
+   /* Free all tables and registers */
+   bcm5600_table_free(d);
+   bcm5600_reg_free(d);
+
+   free(d->name);
+   free(d);
+}
+
+/* Create a BCM5600 chip */
+static struct bcm5600_chip *
+bcm5600_chip_create(char *name,vm_instance_t *vm,
+                    struct pci_bus *pci_bus,int pci_device,int irq)
+{
+   struct bcm5600_chip *data;
+   struct vdevice *dev;
+
+   /* Allocate the data structure */
    if (!(data = malloc(sizeof(*data)))) {
       fprintf(stderr,"%s: out of memory\n",name);
       return NULL;
@@ -2454,8 +2602,7 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
    memset(data,0,sizeof(*data));
    pthread_mutex_init(&data->lock,NULL);
    data->name = name;
-   data->nr_port = 16;
-   data->vm = vm;
+   data->vm   = vm;
 
    /* Create the BCM5600 tables */
    if (bcm5600_table_create(data) == -1)
@@ -2473,14 +2620,6 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
 
    /* Initialize ports */
    data->cpu_port = 27;
-
-   for(i=0;i<data->nr_port;i++) {
-      port_id = nm16esw_port_mapping[i];
-
-      port = &data->ports[port_id];
-      port->id = port_id;
-      snprintf(port->name,sizeof(port->name),"Fa%u/%d",nm_bay,i);
-   }
 
    /* Create the BCM5605 PCI device */
    data->pci_dev = pci_dev_add(pci_bus,name,
@@ -2500,7 +2639,7 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
    }
 
    dev->phys_addr = 0;
-   dev->phys_len  = 0x200000;
+   dev->phys_len  = 0x100000;
    dev->handler   = dev_bcm5605_access;
 
    /* Store device info */
@@ -2514,56 +2653,168 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
    /* Start the MAC address ager */
    data->ager_tid = timer_create_entry(15000,FALSE,10,
                                        (timer_proc)bcm5600_arl_ager,data);
+
    return data;
 }
 
-/* Remove a NM-16ESW from the specified slot */
-int dev_nm_16esw_remove(struct nm_16esw_data *data)
-{
-   /* Stop the Ager */
-   timer_remove(data->ager_tid);
-
-   /* Stop the TX ring task */
-   ptask_remove(data->tx_tid);
-
-   /* Remove device + PCI stuff */
-   pci_dev_remove(data->pci_dev);
-   vm_unbind_device(data->vm,data->dev);
-   cpu_group_rebuild_mts(data->vm->cpu_group);
-   free(data->dev);
-
-   /* Free all tables and registers */
-   bcm5600_table_free(data);
-   bcm5600_reg_free(data);
-   free(data);
+/* Show debugging information */
+static int bcm5600_chip_show_info(struct bcm5600_chip *d)
+{   
+   BCM_LOCK(d);
+   printf("ARL count = %u\n\n",d->arl_cnt[0]);
+   bcm5600_dump_main_tables(d);
+   bcm5600_mirror_show_status(d);
+   //bcm5600_reg_dump(d,FALSE);
+   BCM_UNLOCK(d);
    return(0);
 }
 
-/* Bind a Network IO descriptor */
-int dev_nm_16esw_set_nio(struct nm_16esw_data *d,u_int port_id,
-                         netio_desc_t *nio)
+/* Delete an ESW card */
+void esw_remove(struct esw_data *d)
 {
+   int i;
+
+   /* free all chips */
+   for(i=0;i<d->nr_chip;i++)
+      bcm5600_chip_delete(d->chip[i]);
+
+   free(d);
+}
+
+/* Create an ESW card based on the specified model */
+static struct esw_data *esw_create(char *name,u_int id,
+                                   vm_instance_t *vm,
+                                   struct pci_bus *pci_bus,
+                                   int pci_device_base,
+                                   int irq)
+{
+   struct esw_model *model;
+   struct esw_data *data;
+   char *chip_name;
+   int i;
+
+   if (id >= ESW_MODEL_MAX)
+      return NULL;
+
+   model = &esw_models[id];
+
+   /* Allocate the data structure */
+   if (!(data = malloc(sizeof(*data)))) {
+      fprintf(stderr,"%s: out of memory\n",name);
+      return NULL;
+   }
+
+   memset(data,0,sizeof(*data));
+   data->model = model;
+
+   for(i=0;i<model->nr_chip;i++) {
+      if (!(chip_name = dyn_sprintf("%s[%d]",name,i)))
+         goto error;
+
+      data->chip[i] = bcm5600_chip_create(chip_name,vm,
+                                          pci_bus,pci_device_base+i,
+                                          irq+i);
+      if (!data->chip[i])
+         goto error;
+
+      data->chip[i]->parent = data;
+   }
+
+   return data;
+
+ error:
+   esw_remove(data);
+   return NULL;
+}
+
+/* Show debugging information */
+int esw_show_info(struct esw_data *d)
+{   
+   int i;
+
+   for(i=0;i<d->model->nr_chip;i++) {
+      printf("BCM5600 chip %d\n",i);
+      bcm5600_chip_show_info(d->chip[i]);
+   }
+
+   return(0);
+}
+
+/* Returns port data corresponding to a user port number */
+static struct bcm5600_port *esw_get_user_port(struct esw_data *d,u_int port_id,
+                                              struct bcm5600_chip **chip)
+{
+   struct bcm5600_port_mapping *map;
    struct bcm5600_port *port;
 
-   if (!d || (port_id >= d->nr_port))
+   if (port_id >= d->model->nr_port)
+      return NULL;
+
+   map = &d->model->port_map[port_id];
+
+   if ((map->chip == -1) || (map->port == -1))
+      return NULL;
+
+   *chip = d->chip[map->chip];
+   port = &(*chip)->ports[map->port];
+   return port;
+}
+
+/* Generate default port names */
+static void bcm5600_chip_build_def_port_names(struct bcm5600_chip *d)
+{
+   struct bcm5600_port *port;
+   int i;
+
+   for(i=0;i<BCM5600_MAX_PORTS;i++) {
+      port = &d->ports[i];
+      snprintf(port->name,sizeof(port->name),"_BCM%d",i);
+   }
+}
+
+/* Generate port names compatible with IOS (to ease debugging) */
+static void esw_build_port_names(struct esw_data *d,u_int slot)
+{
+   struct bcm5600_chip *chip;
+   struct bcm5600_port *port;
+   int i;
+
+   /* Default port names */
+   for(i=0;i<d->model->nr_chip;i++)
+      bcm5600_chip_build_def_port_names(d->chip[i]);
+
+   /* User ports */
+   for(i=0;i<d->model->nr_port;i++) {
+      if (!(port = esw_get_user_port(d,i,&chip)))
+         continue;
+
+      snprintf(port->name,sizeof(port->name),"Fa%d/%d",slot,i);
+   }
+}
+
+/* Bind a Network IO descriptor */
+int esw_set_nio(struct esw_data *d,u_int port_id,netio_desc_t *nio)
+{
+   struct bcm5600_chip *chip;
+   struct bcm5600_port *port;
+
+   if (!d || !(port = esw_get_user_port(d,port_id,&chip)))
       return(-1);
 
    /* define the new NIO */
-   port = &d->ports[nm16esw_port_mapping[port_id]];
    port->nio = nio;
-   netio_rxl_add(nio,(netio_rx_handler_t)dev_bcm5600_handle_rxring,d,port);
+   netio_rxl_add(nio,(netio_rx_handler_t)dev_bcm5600_handle_rxring,chip,port);
    return(0);
 }
 
 /* Unbind a Network IO descriptor */
-int dev_nm_16esw_unset_nio(struct nm_16esw_data *d,u_int port_id)
+int esw_unset_nio(struct esw_data *d,u_int port_id)
 {
+   struct bcm5600_chip *chip;
    struct bcm5600_port *port;
 
-   if (!d || (port_id >= d->nr_port))
+   if (!d || !(port = esw_get_user_port(d,port_id,&chip)))
       return(-1);
-
-   port = &d->ports[nm16esw_port_mapping[port_id]];
 
    if (port->nio) {
       netio_rxl_remove(port->nio);
@@ -2573,14 +2824,32 @@ int dev_nm_16esw_unset_nio(struct nm_16esw_data *d,u_int port_id)
    return(0);
 }
 
-/* Show debugging information */
-int dev_nm_16esw_show_info(struct nm_16esw_data *d)
-{   
-   BCM_LOCK(d);
-   printf("ARL count = %u\n\n",d->arl_cnt[0]);
-   bcm5600_dump_main_tables(d);
-   bcm5600_mirror_show_status(d);
-   bcm5600_reg_dump(d,FALSE);
-   BCM_UNLOCK(d);
-   return(0);
+/* Initialize a NM-16ESW module */
+struct esw_data *
+dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
+                  struct pci_bus *pci_bus,int pci_device,int irq)
+{
+   struct esw_data *data;
+
+   data = esw_create(name,ESW_MODEL_NM_16ESW,vm,pci_bus,pci_device,irq);
+   if (!data)
+      return NULL;
+
+   esw_build_port_names(data,nm_bay);
+   return data;
+}
+
+/* Initialize a NMD-36ESW module */
+struct esw_data *
+dev_nmd_36esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
+                   struct pci_bus *pci_bus,int pci_device,int irq)
+{
+   struct esw_data *data;
+
+   data = esw_create(name,ESW_MODEL_NMD_36ESW,vm,pci_bus,pci_device,irq);
+   if (!data)
+      return NULL;
+
+   esw_build_port_names(data,nm_bay);
+   return data;
 }

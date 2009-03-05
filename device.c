@@ -447,6 +447,19 @@ m_iptr_t dev_sparse_get_host_addr(vm_instance_t *vm,struct vdevice *dev,
    return(ptr_new);
 }
 
+/* Get virtual address space used on host for the specified device */
+size_t dev_get_vspace_size(struct vdevice *dev)
+{
+   /* if the device is simply remapped, don't count it */
+   if (dev->flags & VDEVICE_FLAG_REMAP)
+      return(0);
+
+   if (dev->host_addr || (dev->flags & VDEVICE_FLAG_SPARSE))
+      return(dev->phys_len >> 10);
+
+   return(0);
+}
+
 /* dummy console handler */
 static void *dummy_console_handler(cpu_gen_t *cpu,struct vdevice *dev,
                                    m_uint32_t offset,u_int op_size,

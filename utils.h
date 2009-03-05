@@ -50,6 +50,7 @@
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__i386) || defined(__i386__) || defined(i386)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
+#define ARCH_REGPARM_SUPPORTED  1
 #elif defined(__x86_64__)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__ia64__)
@@ -80,8 +81,13 @@
 #endif
 
 /* Useful attributes for functions */
+#ifdef ARCH_REGPARM_SUPPORTED
 #define asmlinkage __attribute__((regparm(0)))
 #define fastcall   __attribute__((regparm(3)))
+#else
+#define asmlinkage
+#define fastcall
+#endif
 
 #if __GNUC__ > 2
 #define forced_inline inline __attribute__((always_inline))
@@ -116,6 +122,15 @@ typedef signed long long m_int64_t;
 typedef unsigned long m_iptr_t;
 typedef m_uint64_t m_tmcnt_t;
 
+/* FD pool */
+#define FD_POOL_MAX  16
+
+typedef struct fd_pool fd_pool_t;
+struct fd_pool {
+   int fd[FD_POOL_MAX];
+   struct fd_pool *next;
+};
+
 /* Forward declarations */
 typedef struct cpu_gen cpu_gen_t;
 typedef struct vm_instance vm_instance_t;
@@ -123,6 +138,8 @@ typedef struct vm_platform vm_platform_t;
 typedef struct mips64_jit_tcb mips64_jit_tcb_t;
 typedef struct ppc32_jit_tcb ppc32_jit_tcb_t;
 typedef struct jit_op jit_op_t;
+typedef struct cpu_tb cpu_tb_t;
+typedef struct cpu_tc cpu_tc_t;
 
 /* Translated block function pointer */
 typedef void (*insn_tblock_fptr)(void);
@@ -132,6 +149,7 @@ typedef struct insn_exec_page insn_exec_page_t;
 struct insn_exec_page {
    u_char *ptr;
    insn_exec_page_t *next;
+   int flags;
 };
 
 /* MIPS instruction */
@@ -153,10 +171,40 @@ typedef m_uint32_t ppc_insn_t;
 /* Compute offset of a field in a structure */
 #define OFFSET(st,f)     ((long)&((st *)(NULL))->f)
 
+/* Stringify a constant */
+#define XSTRINGIFY(val)  #val
+#define STRINGIFY(val)   XSTRINGIFY(val)
+
 /* MMAP */
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
+
+/* Macros for double linked list */
+#define M_LIST_ADD(item,head,prefix) \
+   do { \
+      (item)->prefix##_next  = (head); \
+      (item)->prefix##_pprev = &(head); \
+      \
+      if ((head) != NULL) \
+         (head)->prefix##_pprev = &(item)->prefix##_next; \
+      \
+      (head) = (item); \
+   }while(0)
+
+#define M_LIST_REMOVE(item,prefix) \
+   do { \
+      if ((item)->prefix##_pprev != NULL) { \
+         if ((item)->prefix##_next != NULL) \
+            (item)->prefix##_next->prefix##_pprev = (item)->prefix##_pprev; \
+         \
+         *((item)->prefix##_pprev) = (item)->prefix##_next; \
+         \
+         (item)->prefix##_pprev = NULL; \
+         (item)->prefix##_next  = NULL; \
+      } \
+   }while(0)
+
 
 /* List item */
 typedef struct m_list m_list_t;
@@ -171,8 +219,8 @@ typedef struct {
    m_uint64_t paddr;
    m_uint64_t len;
    m_uint32_t cached;
-   m_uint32_t tlb_index;
    m_uint32_t offset;
+   m_uint32_t flags;
 }mts_map_t;
 
 /* Invalid VTLB entry */
@@ -182,6 +230,9 @@ typedef struct {
 #define MTS_FLAG_DEV   0x000000001   /* Virtual device used */
 #define MTS_FLAG_COW   0x000000002   /* Copy-On-Write */
 #define MTS_FLAG_EXEC  0x000000004   /* Exec page */
+#define MTS_FLAG_RO    0x000000008   /* Read-only page */
+
+#define MTS_FLAG_WRCATCH (MTS_FLAG_RO|MTS_FLAG_COW)  /* Catch writes */
 
 /* Virtual TLB entry (32-bit MMU) */
 typedef struct mts32_entry mts32_entry_t;
@@ -359,7 +410,6 @@ static inline void m_hton32(m_uint8_t *ptr,m_uint32_t val)
    ptr[3] = val;
 }
 
-
 /* Add an element to a list */
 m_list_t *m_list_add(m_list_t **head,void *data);
 
@@ -383,6 +433,9 @@ void m_flog(FILE *fd,char *module,char *fmt,va_list ap);
 
 /* Logging function */
 void m_log(char *module,char *fmt,...);
+
+/* Write an array of string to a logfile */
+void m_flog_str_array(FILE *fd,int count,char *str[]);
 
 /* Returns a line from specified file (remove trailing '\n') */
 char *m_fgets(char *buffer,int size,FILE *fd);
@@ -425,5 +478,30 @@ void mem_bswap32(void *ptr,size_t len);
 
 /* Reverse a byte */
 m_uint8_t m_reverse_u8(m_uint8_t val);
+
+/* Generate a pseudo random block of data */
+void m_randomize_block(m_uint8_t *buf,size_t len);
+
+/* Free an FD pool */
+void fd_pool_free(fd_pool_t *pool);
+
+/* Initialize an empty pool */
+void fd_pool_init(fd_pool_t *pool);
+
+/* Get a free slot for a FD in a pool */
+int fd_pool_get_free_slot(fd_pool_t *pool,int **slot);
+
+/* Fill a FD set and get the maximum FD in order to use with select */
+int fd_pool_set_fds(fd_pool_t *pool,fd_set *fds);
+
+/* Send a buffer to all FDs of a pool */
+int fd_pool_send(fd_pool_t *pool,void *buffer,size_t len,int flags);
+
+/* Call a function for each FD having incoming data */
+int fd_pool_check_input(fd_pool_t *pool,fd_set *fds,
+                        void (*cbk)(int *fd_slot,void *opt),void *opt);
+
+/* Equivalent to fprintf, but for a posix fd */
+ssize_t fd_printf(int fd,int flags,char *fmt,...);
 
 #endif

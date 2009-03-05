@@ -200,12 +200,14 @@ static int cisco_card_save_config(vm_instance_t *vm,struct cisco_card *card,
 {
    struct cisco_nio_binding *nb;
 
-   fprintf(fd,"vm add_slot_binding %s %u %u %s\n",
-           vm->name,card->slot_id,card->subslot_id,card->dev_type);
+   if (card != NULL) {
+      fprintf(fd,"vm add_slot_binding %s %u %u %s\n",
+              vm->name,card->slot_id,card->subslot_id,card->dev_type);
 
-   for(nb=card->nio_list;nb;nb=nb->next) {
-      fprintf(fd,"vm add_nio_binding %s %u %u %s\n",
-              vm->name,card->slot_id,nb->orig_port_id,nb->nio->name);
+      for(nb=card->nio_list;nb;nb=nb->next) {
+         fprintf(fd,"vm add_nio_binding %s %u %u %s\n",
+                 vm->name,card->slot_id,nb->orig_port_id,nb->nio->name);
+      }
    }
 
    return(0);
@@ -261,19 +263,23 @@ static int vm_slot_get_info(vm_instance_t *vm,u_int slot_id,u_int port_id,
        *            wic #1 => port_id = 0x20
        */
       case CISCO_CARD_TYPE_NM:
-         wic_id = port_id >> 4;
+         if (card->driver->wic_slots > 0) {
+            wic_id = port_id >> 4;
 
-         if (wic_id >= (CISCO_CARD_MAX_WIC+1)) {
-            vm_error(vm,"Invalid wic_id %u (slot %u)\n",wic_id,slot_id);
-            return(-1);
-         }
+            if (wic_id >= (CISCO_CARD_MAX_WIC+1)) {
+               vm_error(vm,"Invalid wic_id %u (slot %u)\n",wic_id,slot_id);
+               return(-1);
+            }
 
-         if (wic_id >= 0x01) {
-            /* wic card */
-            *rc = &card->sub_slots[wic_id - 1];
-            *real_port_id = port_id & 0x0F;
+            if (wic_id >= 0x01) {
+               /* wic card */
+               *rc = &card->sub_slots[wic_id - 1];
+               *real_port_id = port_id & 0x0F;
+            } else {
+               /* main card */
+               *real_port_id = port_id;
+            }
          } else {
-            /* main card */
             *real_port_id = port_id;
          }
          return(0);
@@ -924,6 +930,16 @@ int vm_slot_cmd_add_nio(vm_instance_t *vm,char *str)
 
          nio = netio_desc_create_udp(nio_name,atoi(tokens[3]),
                                      tokens[4],atoi(tokens[5]));
+         break;
+
+      case NETIO_TYPE_MCAST:
+         if (count != 5) {
+            vm_error(vm,"invalid number of arguments for Multicast NIO '%s'\n",
+                     str);
+            goto done;
+         }
+
+         nio = netio_desc_create_mcast(nio_name,tokens[3],atoi(tokens[4]));
          break;
 
       case NETIO_TYPE_TCP_CLI:

@@ -356,7 +356,7 @@ struct eth_port {
    /* SDMA registers */
    m_uint32_t sdcr,sdcmr;
 
-   /* Interrupt register */
+   /* Interrupt registers */
    m_uint32_t icr,imr;
 
    /* Hash Table pointer */
@@ -1169,7 +1169,7 @@ static int gt_sdma_handle_rx_pkt(netio_desc_t *nio,
                                  struct gt_data *d,void *arg)
 {
    struct sdma_channel *channel;
-   u_int chan_id = (int)arg;
+   u_int chan_id = (u_int)(u_long)arg;
    u_int group_id;
 
    GT_LOCK(d);
@@ -1356,7 +1356,8 @@ static int gt_mpsc_access(cpu_gen_t *cpu,struct vdevice *dev,
 }
 
 /* Set NIO for a MPSC channel */
-int dev_gt96100_mpsc_set_nio(struct gt_data *d,u_int chan_id,netio_desc_t *nio)
+int dev_gt96100_mpsc_set_nio(struct gt_data *d,u_int chan_id,
+                             netio_desc_t *nio)
 {
    struct mpsc_channel *channel;
 
@@ -1370,7 +1371,7 @@ int dev_gt96100_mpsc_set_nio(struct gt_data *d,u_int chan_id,netio_desc_t *nio)
 
    channel->nio = nio;
    netio_rxl_add(nio,(netio_rx_handler_t)gt_sdma_handle_rx_pkt,
-                 d,(void *)chan_id);
+                 d,(void *)(u_long)chan_id);
    return(0);
 }
 
@@ -2085,8 +2086,8 @@ void *dev_gt96100_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 }
 
 /* Handle a TX queue (single packet) */
-static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
-                                 int queue)
+static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
+                                      int queue)
 {   
    u_char pkt[GT_MAX_PKT_SIZE],*pkt_ptr;
    struct sdma_desc txd0,ctxd,*ptxd;
@@ -2214,8 +2215,8 @@ static int gt_eth_handle_txqueue(struct gt_data *d,struct eth_port *port,
 /* Handle TX ring of the specified port */
 static void gt_eth_handle_port_txqueues(struct gt_data *d,u_int port)
 {
-   gt_eth_handle_txqueue(d,&d->eth_ports[port],0);  /* TX Low */
-   gt_eth_handle_txqueue(d,&d->eth_ports[port],1);  /* TX High */
+   gt_eth_handle_port_txqueue(d,&d->eth_ports[port],0);  /* TX Low */
+   gt_eth_handle_port_txqueue(d,&d->eth_ports[port],1);  /* TX High */
 }
 
 /* Handle all TX rings of all Ethernet ports */
@@ -2498,7 +2499,7 @@ static int gt_eth_handle_rx_pkt(netio_desc_t *nio,
                                 u_char *pkt,ssize_t pkt_len,
                                 struct gt_data *d,void *arg)
 {
-   u_int queue,port_id = (int)arg;
+   u_int queue,port_id = (u_int)(u_long)arg;
    struct eth_port *port;
 
    port = &d->eth_ports[port_id];
@@ -2521,7 +2522,7 @@ static int gt_eth_handle_rx_pkt(netio_desc_t *nio,
 void dev_gt_shutdown(vm_instance_t *vm,struct gt_data *d)
 {
    if (d != NULL) {
-      /* Stop the TX ring scanner */
+      /* Stop the Ethernet TX ring scanner */
       ptask_remove(d->eth_tx_tid);
 
       /* Remove the device */
@@ -2718,7 +2719,7 @@ int dev_gt96100_init(vm_instance_t *vm,char *name,
       }
    }
 
-   /* Start the TX ring scanner */
+   /* Start the Ethernet TX ring scanner */
    d->eth_tx_tid = ptask_add((ptask_callback)gt_eth_handle_txqueues,d,NULL);
 
    /* Map this device to the VM */
@@ -2743,7 +2744,7 @@ int dev_gt96100_eth_set_nio(struct gt_data *d,u_int port_id,netio_desc_t *nio)
 
    port->nio = nio;
    netio_rxl_add(nio,(netio_rx_handler_t)gt_eth_handle_rx_pkt,
-                 d,(void *)port_id);
+                 d,(void *)(u_long)port_id);
    return(0);
 }
 

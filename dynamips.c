@@ -21,7 +21,10 @@
 #include <getopt.h>
 
 #include "dynamips.h"
+#include "gen_uuid.h"
 #include "cpu.h"
+#include "vm.h"
+#include "tcb.h"
 #include "mips64_exec.h"
 #include "mips64_jit.h"
 #include "ppc32_exec.h"
@@ -47,6 +50,7 @@
 #include "net_io_filter.h"
 #include "crc.h"
 #include "atm.h"
+#include "atm_bridge.h"
 #include "frame_relay.h"
 #include "eth_switch.h"
 #ifdef GEN_ETH
@@ -59,11 +63,14 @@
 /* Default name for logfile */
 #define LOGFILE_DEFAULT_NAME  "dynamips_log.txt"
 
+/* Operating system name */
+const char *os_name = STRINGIFY(OSNAME);
+
 /* Software version */
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2007101400";
+const char *sw_version_tag = "2008040100";
 
 /* Hypervisor */
 int hypervisor_mode = 0;
@@ -172,7 +179,6 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "(default: 7200)\n\n"
           "  -l <log_file>      : Set logging file (default is %s)\n"
           "  -j                 : Disable the JIT compiler, very slow\n"
-          "  --exec-area <size> : Set the exec area size (default: %d Mb)\n"
           "  --idle-pc <pc>     : Set the idle PC (default: disabled)\n"
           "  --timer-itv <val>  : Timer IRQ interval check (default: %u)\n"
           "\n"
@@ -206,7 +212,7 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "  --disk1 <size>     : Set PCMCIA ATA disk1: size "
           "(default: %u Mb)\n"
           "\n",
-          LOGFILE_DEFAULT_NAME,MIPS_EXEC_AREA_SIZE,VM_TIMER_IRQ_CHECK_ITV,
+          LOGFILE_DEFAULT_NAME,VM_TIMER_IRQ_CHECK_ITV,
           vm->ram_size,vm->rom_size,vm->nvram_size,vm->conf_reg_setup,
           vm->clock_divisor,vm->pcmcia_disk_size[0],vm->pcmcia_disk_size[1]);
 
@@ -339,7 +345,6 @@ static vm_platform_t *cli_get_platform_type(int argc,char *argv[])
 static struct option cmd_line_lopts[] = {
    { "disk0"      , 1, NULL, OPT_DISK0_SIZE },
    { "disk1"      , 1, NULL, OPT_DISK1_SIZE },
-   { "exec-area"  , 1, NULL, OPT_EXEC_AREA },
    { "idle-pc"    , 1, NULL, OPT_IDLE_PC },
    { "timer-itv"  , 1, NULL, OPT_TIMER_ITV },
    { "vm-debug"   , 1, NULL, OPT_VM_DEBUG },
@@ -357,7 +362,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
    vm = vm_create_instance(name,instance_id,platform_name);
   
    if (vm == NULL) {
-      fprintf(stderr,"C7200: unable to create instance!\n");
+      fprintf(stderr,"%s: unable to create instance %s!\n",platform_name,name);
       return NULL;
    }
 
@@ -430,11 +435,6 @@ static int parse_std_cmd_line(int argc,char *argv[])
          case 'n':
             vm->nvram_size = strtol(optarg, NULL, 10);
             printf("NVRAM size set to %d KB.\n",vm->nvram_size);
-            break;
-
-         /* Execution area size */
-         case OPT_EXEC_AREA:
-            vm->exec_area_size = atoi(optarg);
             break;
 
          /* PCMCIA disk0 size */
@@ -585,6 +585,12 @@ static int parse_std_cmd_line(int argc,char *argv[])
                exit(EXIT_FAILURE);
             break;
 
+         /* Virtual ATM bridge */
+         case 'M':
+            if (atm_bridge_start(optarg) == -1)
+               exit(EXIT_FAILURE);
+            break;
+
          /* Virtual Frame-Relay switch */
          case 'f':
             if (frsw_start(optarg) == -1)
@@ -730,11 +736,14 @@ void dynamips_reset(void)
    /* Delete ATM and Frame-Relay switches + bridges */
    netio_bridge_delete_all();
    atmsw_delete_all();
+   atm_bridge_delete_all();
    frsw_delete_all();
    ethsw_delete_all();
 
    /* Delete all NIO descriptors */
    netio_delete_all();
+
+   m_log("GENERAL","reset done.\n");
 
    printf("Shutdown completed.\n");
 }
@@ -750,6 +759,7 @@ static int (*platform_register[])(void) = {
    c1700_platform_register,
    c6sup1_platform_register,
    c6msfc1_platform_register,
+   ppc32_vmtest_platform_register,
    NULL,
 };
 
@@ -770,9 +780,12 @@ int main(int argc,char *argv[])
    atexit(profiler_savestat);
 #endif
 
-   printf("Cisco Router Simulation Platform (version %s)\n",sw_version);
-   printf("Copyright (c) 2005-2007 Christophe Fillot.\n");
+   printf("Cisco Router Simulation Platform (version %s/%s)\n",
+          sw_version,os_name);
+   printf("Copyright (c) 2005-2008 Christophe Fillot.\n");
    printf("Build date: %s %s\n\n",__DATE__,__TIME__);
+
+   gen_uuid_init();
 
    /* Register platforms */
    register_default_platforms();
@@ -822,7 +835,7 @@ int main(int argc,char *argv[])
       vm = vm_acquire("default");
       assert(vm != NULL);
 
-      if (vm->platform->init_instance(vm) == -1) {
+      if (vm_init_instance(vm) == -1) {
          fprintf(stderr,"Unable to initialize router instance.\n");
          exit(EXIT_FAILURE);
       }

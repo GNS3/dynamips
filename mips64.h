@@ -171,23 +171,52 @@
 #define MIPS_CP0_CAUSE_IBIT1     0x00000200
 #define MIPS_CP0_CAUSE_IBIT0     0x00000100
 
+/* CP0 Context register */
+#define MIPS_CP0_CONTEXT_VPN2_MASK       0xffffe000ULL  /* applied to addr */
+#define MIPS_CP0_CONTEXT_BADVPN2_MASK    0x7fffffULL
+#define MIPS_CP0_CONTEXT_BADVPN2_SHIFT   4
+
+/* CP0 XContext register */
+#define MIPS_CP0_XCONTEXT_VPN2_MASK      0xffffffe000ULL
+#define MIPS_CP0_XCONTEXT_RBADVPN2_MASK  0x1ffffffffULL
+#define MIPS_CP0_XCONTEXT_BADVPN2_SHIFT  4
+#define MIPS_CP0_XCONTEXT_R_SHIFT        31
 
 /* TLB masks and shifts */
-#define MIPS_TLB_PAGE_MASK     0x01ffe000
+#define MIPS_TLB_PAGE_MASK     0x01ffe000ULL
 #define MIPS_TLB_PAGE_SHIFT    13
 #define MIPS_TLB_VPN2_MASK_32  0xffffe000ULL
 #define MIPS_TLB_VPN2_MASK_64  0xc00000ffffffe000ULL
-#define MIPS_TLB_PFN_MASK      0x3fffffc0
+#define MIPS_TLB_PFN_MASK      0x3fffffc0ULL
 #define MIPS_TLB_ASID_MASK     0x000000ff     /* "asid" in EntryHi */
-#define MIPS_TLB_G_MASK        0x00001000     /* "Global" in EntryHi */
-#define MIPS_TLB_V_MASK        0x2            /* "Valid" in EntryLo */
-#define MIPS_TLB_D_MASK        0x4            /* "Dirty" in EntryLo */
-#define MIPS_TLB_C_MASK        0x38           /* Page Coherency Attribute */
+#define MIPS_TLB_G_MASK        0x00001000ULL  /* "Global" in EntryHi */
+#define MIPS_TLB_V_MASK        0x2ULL         /* "Valid" in EntryLo */
+#define MIPS_TLB_D_MASK        0x4ULL         /* "Dirty" in EntryLo */
+#define MIPS_TLB_C_MASK        0x38ULL        /* Page Coherency Attribute */
 #define MIPS_TLB_C_SHIFT       3
 
-#define MIPS_CP0_LO_G_MASK     0x00000001     /* "Global" in Lo0/1 reg */
-#define MIPS_CP0_HI_SAFE_MASK  0xffffe0ff     /* Safety mask for Hi reg */
-#define MIPS_CP0_LO_SAFE_MASK  0x7fffffff     /* Safety mask for Lo reg */
+#define MIPS_CP0_LO_G_MASK     0x00000001ULL  /* "Global" in Lo0/1 reg */
+#define MIPS_CP0_LO_SAFE_MASK  0x3fffffffULL  /* Safety mask for Lo reg */
+#define MIPS_CP0_HI_SAFE_MASK  0xc00000ffffffe0ffULL  /* Same for EntryHi */
+
+/* results for TLB lookups */
+enum {
+   MIPS_TLB_LOOKUP_OK = 0,     /* Entry found */
+   MIPS_TLB_LOOKUP_INVALID,    /* Invalid entry found */
+   MIPS_TLB_LOOKUP_MISS,       /* No matching entry found */
+   MIPS_TLB_LOOKUP_MOD,        /* Read-only */
+};
+
+/* Exceptions vectors */
+enum {
+   MIPS_EXCVECT_RST = 0,          /* Soft Reset, Reset, NMI */
+   MIPS_EXCVECT_TLB_REFILL,       /* TLB Refill (32-bit) */
+   MIPS_EXCVECT_XTLB_REFILL,      /* TLB Refill (64-bit) */
+   MIPS_EXCVECT_CACHE_ERR,        /* Cache Error */
+   MIPS_EXCVECT_INT_IV0,          /* Interrupt, IV=0 */
+   MIPS_EXCVECT_INT_IV1,          /* Interrupt, IV=1 */
+   MIPS_EXCVECT_OTHERS,           /* Other exceptions */
+};
 
 /* MIPS "jr ra" instruction */
 #define MIPS_INSN_JR_RA        0x03e00008
@@ -268,6 +297,7 @@
 /* Memory operations */
 enum {
    MIPS_MEMOP_LOOKUP = 0,
+   MIPS_MEMOP_IFETCH,
 
    MIPS_MEMOP_LB,
    MIPS_MEMOP_LBU,
@@ -352,10 +382,9 @@ struct cpu_mips {
    m_uint32_t irq_pending,irq_cause,ll_bit;
    m_uint64_t pc,gpr[MIPS64_GPR_NR];
    m_uint64_t lo,hi,ret_pc;
+   m_uint32_t exec_state;
+   u_int bd_slot;
    
-   /* Code page translation cache */
-   mips64_jit_tcb_t **exec_blk_map;
-
    /* Virtual address to physical page translation */
    fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                              m_uint32_t *phys_page);
@@ -363,8 +392,9 @@ struct cpu_mips {
    /* Memory access functions */
    mips_memop_fn mem_op_fn[MIPS_MEMOP_MAX];
 
-   /* Memory lookup function (to load ELF image,...) */
+   /* Memory lookup function (to load ELF image,...) and instruction fetch */
    void *(*mem_op_lookup)(cpu_mips_t *cpu,m_uint64_t vaddr);
+   void *(*mem_op_ifetch)(cpu_mips_t *cpu,m_uint64_t vaddr);
 
    /* System coprocessor (CP0) */
    mips_cp0_t cp0;
@@ -413,14 +443,8 @@ struct cpu_mips {
    /* non-JIT mode instruction counter */
    m_uint64_t insn_exec_count;
 
-   /* MTS map/unmap/rebuild operations */
-   void (*mts_map)(cpu_mips_t *cpu,m_uint64_t vaddr,
-                   m_uint64_t paddr,m_uint32_t len,
-                   int cache_access,int tlb_index);
-
-   void (*mts_unmap)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
-                     m_uint32_t val,int tlb_index);
-
+   /* MTS invalidate/shutdown operations */
+   void (*mts_invalidate)(cpu_mips_t *cpu);
    void (*mts_shutdown)(cpu_mips_t *cpu);
 
    /* MTS cache statistics */
@@ -455,6 +479,9 @@ struct cpu_mips {
    /* Symtrace */
    int sym_trace;
    rbtree_tree *sym_tree;
+
+   /* XXX */
+   cpu_tb_t *current_tb;
 };
 
 #define MIPS64_IRQ_LOCK(cpu)   pthread_mutex_lock(&(cpu)->irq_lock)
@@ -496,8 +523,19 @@ void mips64_vm_clear_irq(vm_instance_t *vm,u_int irq);
 /* Update the IRQ flag */
 void mips64_update_irq_flag(cpu_mips_t *cpu);
 
-/* Generate an exception */
-void mips64_trigger_exception(cpu_mips_t *cpu,u_int exc_code,int bd_slot);
+/* Generate a general exception */
+void mips64_general_exception(cpu_mips_t *cpu,u_int exc_code);
+
+/* Generate a general exception that updates BadVaddr */
+void mips64_gen_exception_badva(cpu_mips_t *cpu,u_int exc_code,
+                                m_uint64_t bad_vaddr);
+
+/* Generate a TLB/XTLB exception */
+void mips64_tlb_miss_exception(cpu_mips_t *cpu,u_int exc_code,
+                               m_uint64_t bad_vaddr);
+
+/* Prepare a TLB exception */
+void mips64_prepare_tlb_exception(cpu_mips_t *cpu,m_uint64_t vaddr);
 
 /*
  * Increment count register and trigger the timer IRQ if value in compare 

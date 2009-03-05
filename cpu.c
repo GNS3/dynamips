@@ -18,6 +18,8 @@
 #include <pthread.h>
 
 #include "cpu.h"
+#include "vm.h"
+#include "tcb.h"
 #include "memory.h"
 #include "device.h"
 #include "mips64.h"
@@ -28,7 +30,6 @@
 #include "ppc32_exec.h"
 #include "ppc32_jit.h"
 #include "dynamips.h"
-#include "vm.h"
 
 /* Find a CPU in a group given its ID */
 cpu_gen_t *cpu_group_find_id(cpu_group_t *group,u_int id)
@@ -141,10 +142,11 @@ cpu_gen_t *cpu_create(vm_instance_t *vm,u_int type,u_int id)
       return NULL;
 
    memset(cpu,0,sizeof(*cpu));
-   cpu->vm = vm;
-   cpu->id = id;
-   cpu->type = type;
+   cpu->vm    = vm;
+   cpu->id    = id;
+   cpu->type  = type;
    cpu->state = CPU_STATE_SUSPENDED;
+   cpu->tsg   = vm->tsg;
 
    switch(cpu->type) {
       case CPU_TYPE_MIPS64:

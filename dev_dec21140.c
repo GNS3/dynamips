@@ -406,8 +406,9 @@ static inline void dev_dec21140_update_irq_status(struct dec21140_data *d)
    
    if (trigger)
       pci_dev_trigger_irq(d->vm,d->pci_dev);
-   else 
+   else {
       pci_dev_clear_irq(d->vm,d->pci_dev);
+   }
 }
 
 /*
@@ -747,6 +748,10 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
    if ((d->csr[4] == 0) || (!(d->csr[6] & DEC21140_CSR6_START_TX)))
       return(FALSE);
 
+   /* Check if the NIO can transmit */
+   if (!netio_can_transmit(d->nio))
+      return(FALSE);
+
    /* Copy the current txring descriptor */
    tx_start = d->tx_current;   
    ptxd = &txd0;
@@ -848,7 +853,7 @@ static int dev_dec21140_handle_txring_single(struct dec21140_data *d)
  clear_txd0_own_bit:
    /* Clear the OWN flag of the first descriptor */
    physmem_copy_u32_to_vm(d->vm,tx_start,0);
-   
+ 
    /* Interrupt on completion ? */
    if (txd0.tdes[1] & DEC21140_TXDESC_IC) {      
       d->csr[5] |= DEC21140_CSR5_TI;
@@ -867,6 +872,7 @@ static int dev_dec21140_handle_txring(struct dec21140_data *d)
       if (!dev_dec21140_handle_txring_single(d))
          break;
 
+   netio_clear_bw_stat(d->nio);
    return(TRUE);
 }
 

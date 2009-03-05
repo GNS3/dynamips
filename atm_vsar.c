@@ -68,7 +68,7 @@ static void atm_add_tx_padding(struct atm_seg_context *asc,size_t len)
 static void atm_send_fifo(struct atm_seg_context *asc)
 {
    if (!asc->txfifo_avail) {
-      asc->aal5_crc = crc32_compute(asc->aal5_crc,
+      asc->aal5_crc = crc32_compute(~asc->aal5_crc,
                                     &asc->txfifo_cell[ATM_HDR_SIZE],
                                     ATM_PAYLOAD_SIZE);
       atm_send_cell(asc);
@@ -108,11 +108,11 @@ static void atm_aal5_add_trailer(struct atm_seg_context *asc)
    m_hton32(trailer,asc->aal5_len);
 
    /* Final CRC-32 computation */
-   asc->aal5_crc = crc32_compute(asc->aal5_crc,
+   asc->aal5_crc = crc32_compute(~asc->aal5_crc,
                                  &asc->txfifo_cell[ATM_HDR_SIZE],
                                  ATM_PAYLOAD_SIZE - 4);
 
-   m_hton32(trailer+4,~asc->aal5_crc);
+   m_hton32(trailer+4,asc->aal5_crc);
 
    /* Consider the FIFO as full */
    asc->txfifo_avail = 0;
@@ -127,7 +127,7 @@ int atm_aal5_send(netio_desc_t *nio,u_int vpi,u_int vci,
    
    asc.nio = nio;
    asc.aal5_len = 0;
-   asc.aal5_crc = 0xFFFFFFFF;
+   asc.aal5_crc = 0;  /* will be inverted by first CRC update */
    atm_clear_tx_fifo(&asc);
 
    /* prepare the atm header */

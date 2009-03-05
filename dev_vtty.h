@@ -61,15 +61,13 @@ typedef struct virtual_tty vtty_t;
 struct virtual_tty {
    vm_instance_t *vm;
    char *name;
-   int type,state;
-   int tcp_port;
+   int type;
+   int fd,tcp_port;
    int terminal_support;
    int input_state;
    int input_pending;
    int telnet_cmd, telnet_opt, telnet_qual;
-   int fd,accept_fd,*select_fd;
    int managed_flush;
-   FILE *fstream;
    u_char buffer[VTTY_BUFFER_SIZE];
    u_int read_ptr,write_ptr;
    pthread_mutex_t lock;
@@ -77,6 +75,9 @@ struct virtual_tty {
    void *priv_data;
    u_long user_arg;
 
+   /* FD Pool (for TCP connections) */
+   fd_pool_t fd_pool;
+   
    /* Read notification */
    void (*read_notifier)(vtty_t *);
 };

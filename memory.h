@@ -36,23 +36,30 @@
 #define MTS_ACC_T   0x00000004   /* TLB Exception */
 #define MTS_ACC_U   0x00000006   /* Unexistent */
 
+/* Macro for easy hash computing */
+#define MTS_SHR(v,sr) ((v) >> (sr))
+
 /* Hash table size for MTS64 (default: [shift:16,bits:12]) */
-#define MTS64_HASH_SHIFT   12
-#define MTS64_HASH_BITS    14
+#define MTS64_HASH_SHIFT1  12
+#define MTS64_HASH_SHIFT2  20
+#define MTS64_HASH_BITS    8
 #define MTS64_HASH_SIZE    (1 << MTS64_HASH_BITS)
 #define MTS64_HASH_MASK    (MTS64_HASH_SIZE - 1)
 
 /* MTS64 hash on virtual addresses */
-#define MTS64_HASH(vaddr)  (((vaddr) >> MTS64_HASH_SHIFT) & MTS64_HASH_MASK)
+#define MTS64_SHR(v,i)    (MTS_SHR((v),MTS64_HASH_SHIFT##i))
+#define MTS64_HASH(vaddr) ((MTS64_SHR(vaddr,1) ^ MTS64_SHR(vaddr,2)) & MTS64_HASH_MASK)
 
 /* Hash table size for MTS32 (default: [shift:15,bits:15]) */
-#define MTS32_HASH_SHIFT   12
-#define MTS32_HASH_BITS    14
+#define MTS32_HASH_SHIFT1  12
+#define MTS32_HASH_SHIFT2  20
+#define MTS32_HASH_BITS    8
 #define MTS32_HASH_SIZE    (1 << MTS32_HASH_BITS)
 #define MTS32_HASH_MASK    (MTS32_HASH_SIZE - 1)
 
 /* MTS32 hash on virtual addresses */
-#define MTS32_HASH(vaddr)  (((vaddr) >> MTS32_HASH_SHIFT) & MTS32_HASH_MASK)
+#define MTS32_SHR(v,i)    (MTS_SHR((v),MTS32_HASH_SHIFT##i))
+#define MTS32_HASH(vaddr) ((MTS32_SHR(vaddr,1) ^ MTS32_SHR(vaddr,2)) & MTS32_HASH_MASK)
 
 /* Number of entries per chunk */
 #define MTS64_CHUNK_SIZE   256

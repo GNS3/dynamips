@@ -25,7 +25,7 @@
 #define DEBUG_IDMA      0
 #define DEBUG_SPI       0
 #define DEBUG_SCC       0
-#define DEBUG_FEC       1
+#define DEBUG_FEC       0
 
 #define MPC860_TXRING_PASS_COUNT  16
 
@@ -995,7 +995,7 @@ static int mpc860_scc_handle_rx_pkt(netio_desc_t *nio,
 {       
    struct mpc860_scc_bd rxd0,crxd,*prxd;
    struct mpc860_scc_chan *chan;
-   u_int scc_chan = (int)arg;
+   u_int scc_chan = (u_int)(u_long)arg;
    scc_chan_info_t *scc_info;
    m_uint16_t bd_offset;
    ssize_t clen,tot_len;
@@ -1107,7 +1107,7 @@ int mpc860_scc_set_nio(struct mpc860_data *d,u_int scc_chan,netio_desc_t *nio)
 
    chan->nio = nio;
    netio_rxl_add(nio,(netio_rx_handler_t)mpc860_scc_handle_rx_pkt,
-                 d,(void *)scc_chan);
+                 d,(void *)(u_long)scc_chan);
    return(0);
 }
 

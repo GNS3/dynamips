@@ -30,6 +30,7 @@
 #include "pci_dev.h"
 #include "nmc93cX6.h"
 #include "dev_mv64460.h"
+#include "dev_ds1620.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -45,8 +46,12 @@
 #define C7200_DEFAULT_DISK0_SIZE   64
 #define C7200_DEFAULT_DISK1_SIZE   0
 
-/* 6 slots + 1 I/O card */
-#define C7200_MAX_PA_BAYS  7
+/* 
+ * 6 slots + 1 I/O card.
+ * Slot 8 is special: it is for the NPE-G2 ethernet ports, but doesn't
+ * represent something real.
+ */
+#define C7200_MAX_PA_BAYS  9
 
 /* C7200 Timer IRQ (virtual) */
 #define C7200_VTIMER_IRQ 0
@@ -122,6 +127,9 @@ enum {
    C7200_NPE_FAMILY_PPC,
 };
 
+/* 4 temperature sensors in a C7200 */
+#define C7200_TEMP_SENSORS  4
+
 #define VM_C7200(vm) ((c7200_t *)vm->hw_data)
 
 /* C7200 router */
@@ -158,16 +166,25 @@ struct c7200_router {
    /* MV64460 device for NPE-G2 */
    struct mv64460_data *mv64460_sysctr;
 
-   /* Midplane FPGA */
-   struct c7200_mpfpga_data *mpfpga_data;
-
    /* NPE and OIR status */
    struct c7200_npe_driver *npe_driver;
-   m_uint8_t oir_status;
+   m_uint32_t oir_status[2];
 
    /* Hidden I/O bridge hack to support PCMCIA */
    struct pci_bridge *io_pci_bridge;
    struct pci_bus *pcmcia_bus;
+
+   /* PA and Network IRQ registers */
+   m_uint32_t pa_status_reg[2];
+   m_uint32_t pa_ctrl_reg[2];
+   m_uint32_t net_irq_status[3];
+   m_uint32_t net_irq_mask[3];
+
+   /* Temperature sensors */
+   struct ds1620_data ds1620_sensors[C7200_TEMP_SENSORS];
+
+   /* Power supply status */
+   u_int ps_status;
 
    /* Midplane EEPROM can be modified to change the chassis MAC address... */
    struct cisco_eeprom cpu_eeprom,mp_eeprom,pem_eeprom;
@@ -176,6 +193,7 @@ struct c7200_router {
    struct nmc93cX6_group sys_eeprom_g2;    /* EEPROM for PEM */
    struct nmc93cX6_group pa_eeprom_g1;     /* EEPROMs for bays 0, 1, 3, 4 */
    struct nmc93cX6_group pa_eeprom_g2;     /* EEPROMs for bays 2, 5, 6 */
+   struct nmc93cX6_group pa_eeprom_g3;     /* EEPROM for bay 7 */
 };
 
 /* Initialize system EEPROM groups */
@@ -184,12 +202,21 @@ void c7200_init_sys_eeprom_groups(c7200_t *router);
 /* Initialize midplane EEPROM groups */
 void c7200_init_mp_eeprom_groups(c7200_t *router);
 
+/* Returns TRUE if the specified card in slot 0 is an I/O card */
+int c7200_slot0_iocard_present(c7200_t *router);
+
 /* Set EEPROM for the specified slot */
 int c7200_set_slot_eeprom(c7200_t *router,u_int slot,
                           struct cisco_eeprom *eeprom);
 
 /* Get network IRQ for specified slot/port */
 u_int c7200_net_irq_for_slot_port(u_int slot,u_int port);
+
+/* Get register offset for the specified slot */
+u_int dev_c7200_net_get_reg_offset(u_int slot);
+
+/* Update network interrupt status */
+void dev_c7200_net_update_irq(c7200_t *router);
 
 /* Show the list of available PA drivers */
 void c7200_pa_show_drivers(void);
@@ -209,15 +236,6 @@ int c7200_midplane_set_mac_addr(c7200_t *router,char *mac_addr);
 /* Show C7200 hardware info */
 void c7200_show_hardware(c7200_t *router);
 
-/* Trigger an OIR event */
-int c7200_trigger_oir_event(c7200_t *router,u_int slot_mask);
-
-/* Initialize a new PA while the virtual router is online (OIR) */
-int c7200_pa_init_online(c7200_t *router,u_int pa_bay);
-
-/* Stop a PA while the virtual router is online (OIR) */
-int c7200_pa_stop_online(c7200_t *router,u_int pa_bay);
-
 /* dev_c7200_iofpga_init() */
 int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 
@@ -228,6 +246,7 @@ int c7200_platform_register(void);
 extern int hypervisor_c7200_init(vm_platform_t *platform);
 
 /* PA drivers */
+extern struct cisco_card_driver dev_c7200_npeg2_driver;
 extern struct cisco_card_driver dev_c7200_iocard_fe_driver;
 extern struct cisco_card_driver dev_c7200_iocard_2fe_driver;
 extern struct cisco_card_driver dev_c7200_iocard_ge_e_driver;
@@ -242,5 +261,6 @@ extern struct cisco_card_driver dev_c7200_pa_a1_driver;
 extern struct cisco_card_driver dev_c7200_pa_pos_oc3_driver;
 extern struct cisco_card_driver dev_c7200_pa_4b_driver;
 extern struct cisco_card_driver dev_c7200_pa_mc8te1_driver;
+extern struct cisco_card_driver dev_c7200_jcpa_driver;
 
 #endif

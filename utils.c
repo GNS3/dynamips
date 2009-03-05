@@ -215,16 +215,17 @@ void mem_dump(FILE *f_output,u_char *pkt,u_int len)
 void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
 {
    struct timeval now;
-   static char buf[256];
    struct tm tmn;
    time_t ct;
+   char buf[256];
 
-   gettimeofday(&now,0);
-   ct = now.tv_sec;
-   localtime_r(&ct,&tmn);
+   if (fd != NULL) {
+      gettimeofday(&now,0);
+      ct = now.tv_sec;
+      localtime_r(&ct,&tmn);
 
-   strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
-   if (fd) {
+      strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
+
       fprintf(fd,"%s.%03ld %s: ",buf,(long)now.tv_usec/1000,module);
       vfprintf(fd,fmt,ap);
       fflush(fd);
@@ -239,6 +240,18 @@ void m_log(char *module,char *fmt,...)
    va_start(ap,fmt);
    m_flog(log_file,module,fmt,ap);
    va_end(ap);
+}
+
+/* Write an array of string to a logfile */
+void m_flog_str_array(FILE *fd,int count,char *str[])
+{
+   int i;
+
+   for(i=0;i<count;i++)
+      fprintf(fd,"%s ",str[i]);
+
+   fprintf(fd,"\n");
+   fflush(fd);
 }
 
 /* Returns a line from specified file (remove trailing '\n') */
@@ -468,4 +481,147 @@ m_uint8_t m_reverse_u8(m_uint8_t val)
          res |= 1 << (7 - i);
    
    return(res);
+}
+
+/* Generate a pseudo random block of data */
+void m_randomize_block(m_uint8_t *buf,size_t len)
+{
+   int i;
+
+   for(i=0;i<len;i++)
+      buf[i] = rand() & 0xFF;
+}
+
+/* Free an FD pool */
+void fd_pool_free(fd_pool_t *pool)
+{
+   fd_pool_t *p,*next;
+   int i;
+   
+   for(p=pool;p;p=next) {
+      next = p->next;
+      
+      for(i=0;i<FD_POOL_MAX;i++) {
+         if (p->fd[i] != -1) {
+            shutdown(p->fd[i],2);
+            close(p->fd[i]);
+         }
+      }
+               
+      if (pool != p)
+         free(p);
+   }
+}
+
+/* Initialize an empty pool */
+void fd_pool_init(fd_pool_t *pool)
+{
+   int i;
+   
+   for(i=0;i<FD_POOL_MAX;i++)
+      pool->fd[i] = -1;
+
+   pool->next = NULL;
+}
+
+/* Get a free slot for a FD in a pool */
+int fd_pool_get_free_slot(fd_pool_t *pool,int **slot)
+{
+   fd_pool_t *p;
+   int i;
+   
+   for(p=pool;p;p=p->next) {
+      for(i=0;i<FD_POOL_MAX;i++) {
+         if (p->fd[i] == -1) {
+            *slot = &p->fd[i];
+            return(0);
+         }
+      }
+   }
+   
+   /* No free slot, allocate a new pool */
+   if (!(p = malloc(sizeof(*p))))
+      return(-1);
+
+   fd_pool_init(p);      
+   *slot = &p->fd[0];
+      
+   p->next = pool->next;
+   pool->next = p;
+   return(0);
+}
+
+/* Fill a FD set and get the maximum FD in order to use with select */
+int fd_pool_set_fds(fd_pool_t *pool,fd_set *fds)
+{
+   fd_pool_t *p;
+   int i,max_fd = -1;
+   
+   for(p=pool;p;p=p->next)
+      for(i=0;i<FD_POOL_MAX;i++) {
+         if (p->fd[i] != -1) {
+            FD_SET(p->fd[i],fds);
+            
+            if (p->fd[i] > max_fd)
+               max_fd = p->fd[i];
+         }
+      }
+      
+   return(max_fd);
+}
+
+/* Send a buffer to all FDs of a pool */
+int fd_pool_send(fd_pool_t *pool,void *buffer,size_t len,int flags)
+{
+   fd_pool_t *p;
+   ssize_t res;
+   int i,err;
+   
+   for(p=pool,err=0;p;p=p->next)
+      for(i=0;i<FD_POOL_MAX;i++) {
+         if (p->fd[i] == -1)
+            continue;
+         
+         res = send(p->fd[i],buffer,len,flags);
+         
+         if (res != len) {
+            shutdown(p->fd[i],2);
+            close(p->fd[i]);
+            p->fd[i] = -1;
+            err++;
+         }
+      }
+      
+   return(err);
+}
+
+/* Call a function for each FD having incoming data */
+int fd_pool_check_input(fd_pool_t *pool,fd_set *fds,
+                        void (*cbk)(int *fd_slot,void *opt),void *opt)
+{
+   fd_pool_t *p;
+   int i,count;
+   
+   for(p=pool,count=0;p;p=p->next)
+      for(i=0;i<FD_POOL_MAX;i++) {
+         if ((p->fd[i] != -1) && FD_ISSET(p->fd[i],fds)) {
+            cbk(&p->fd[i],opt);
+            count++;
+         }
+      }
+   
+   return(count);
+}
+
+/* Equivalent to fprintf, but for a posix fd */
+ssize_t fd_printf(int fd,int flags,char *fmt,...)
+{
+   char buffer[2048];
+   va_list ap;
+    
+   va_start(ap,fmt);
+   vsnprintf(buffer,sizeof(buffer),fmt,ap);
+   va_end(ap);
+   
+   return(send(fd,buffer,strlen(buffer),flags));
 }

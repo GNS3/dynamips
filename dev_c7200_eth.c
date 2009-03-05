@@ -21,6 +21,7 @@
 #include "dev_am79c971.h"
 #include "dev_dec21140.h"
 #include "dev_i8254x.h"
+#include "dev_mv64460.h"
 #include "dev_c7200.h"
 
 /* ====================================================================== */
@@ -28,7 +29,7 @@
 /* ====================================================================== */
 
 /* C7200-IO-FE: C7200 IOCard with one FastEthernet port EEPROM */
-static const m_uint16_t eeprom_c7200_io_fe_data[16] = {
+static const m_uint16_t eeprom_c7200_io_fe_data[] = {
    0x0183, 0x010E, 0xffff, 0xffff, 0x490B, 0x8C02, 0x0000, 0x0000,
    0x5000, 0x0000, 0x9812, 0x2800, 0x00FF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -679,5 +680,64 @@ struct cisco_card_driver dev_c7200_pa_8e_driver = {
    NULL,
    dev_c7200_pa_4e8e_set_nio,
    dev_c7200_pa_4e8e_unset_nio,
+   NULL,
+};
+
+/* ====================================================================== */
+/* NPE-G2                                                                 */
+/* ====================================================================== */
+
+/* Initialize NPE-G2 Ethernet ports */
+static int dev_c7200_npeg2_init(vm_instance_t *vm,struct cisco_card *card)
+{
+   /* Nothing to do */
+   card->drv_info = VM_C7200(vm)->mv64460_sysctr;
+   return(0);
+}
+
+/* Shutdown NPE-G2 Ethernet ports */
+static int dev_c7200_npeg2_shutdown(vm_instance_t *vm,struct cisco_card *card)
+{
+   /* Nothing to do */
+   return(0);
+}
+
+/* Set a NIO descriptor */
+static int dev_c7200_npeg2_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                                   u_int port_id,netio_desc_t *nio)
+{
+   c7200_t *router = VM_C7200(vm);
+   struct mv64460_data *mv_data = router->mv64460_sysctr;
+
+   if (!mv_data)
+      return(-1);
+
+   dev_mv64460_eth_set_nio(mv_data,port_id,nio);
+   return(0);
+}
+
+/* Unbind a NIO descriptor */
+static int dev_c7200_npeg2_unset_nio(vm_instance_t *vm,
+                                     struct cisco_card *card,
+                                     u_int port_id)
+{
+   c7200_t *router = VM_C7200(vm);
+   struct mv64460_data *mv_data = router->mv64460_sysctr;
+
+   if (!mv_data)
+      return(-1);
+
+   dev_mv64460_eth_unset_nio(mv_data,port_id);
+   return(0);
+}
+
+/* NPE-G2 driver */
+struct cisco_card_driver dev_c7200_npeg2_driver = {
+   "NPE-G2", 1, 0,
+   dev_c7200_npeg2_init, 
+   dev_c7200_npeg2_shutdown, 
+   NULL,
+   dev_c7200_npeg2_set_nio,
+   dev_c7200_npeg2_unset_nio,
    NULL,
 };

@@ -23,6 +23,13 @@ int dev_mv64460_init(vm_instance_t *vm,char *name,
 /* Bind a VTTY to a SDMA channel */
 int mv64460_sdma_bind_vtty(struct mv64460_data *d,u_int chan_id,vtty_t *vtty);
 
+/* Bind a NIO to an Ethernet port */
+int dev_mv64460_eth_set_nio(struct mv64460_data *d,u_int port_id,
+                            netio_desc_t *nio);
+
+/* Unbind a NIO from an Ethernet port */
+int dev_mv64460_eth_unset_nio(struct mv64460_data *d,u_int port_id);
+
 /* Set value of GPP register */
 void dev_mv64460_set_gpp_reg(struct mv64460_data *d,m_uint32_t val);
 

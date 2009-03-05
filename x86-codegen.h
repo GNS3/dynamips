@@ -1710,4 +1710,15 @@ typedef union {
 		x86_ret ((inst));	\
 	} while (0)
 
+
+static inline void x86_jump_code_fn(u_char **instp,u_char *target)
+{
+   x86_jump_code(*instp,target);
+}
+
+static inline void x86_patch_fn(u_char *instp,u_char *target)
+{
+   x86_patch(instp,target);
+}
+
 #endif // X86_H

@@ -172,6 +172,53 @@ static int dev_c3600_nm_1fe_tx_init(vm_instance_t *vm,struct cisco_card *card)
 }
 
 /* ====================================================================== */
+/* ESW cards, common part                                                 */
+/* ====================================================================== */
+
+/* Remove a ESW NM from the specified slot */
+static int dev_c3600_nm_esw_shutdown(vm_instance_t *vm,struct cisco_card *card)
+{
+   struct esw_data *data = card->drv_info;
+
+   /* Remove the NM EEPROM */
+   cisco_card_unset_eeprom(card);
+   c3600_set_slot_eeprom(VM_C3600(vm),card->slot_id,NULL);
+
+   /* Remove the BCM5600 chip */
+   esw_remove(data);
+   return(0);
+}
+
+/* Bind a Network IO descriptor */
+static int 
+dev_c3600_nm_esw_set_nio(vm_instance_t *vm,struct cisco_card *card,
+                         u_int port_id,netio_desc_t *nio)
+{
+   struct esw_data *d = card->drv_info;
+   esw_set_nio(d,port_id,nio);
+   return(0);
+}
+
+/* Unbind a Network IO descriptor */
+static int dev_c3600_nm_esw_unset_nio(vm_instance_t *vm,
+                                      struct cisco_card *card,
+                                      u_int port_id)
+{
+   struct esw_data *d = card->drv_info;
+   esw_unset_nio(d,port_id);
+   return(0);
+}
+
+/* Show debug info */
+static int 
+dev_c3600_nm_esw_show_info(vm_instance_t *vm,struct cisco_card *card)
+{
+   struct esw_data *d = card->drv_info;
+   esw_show_info(d);
+   return(0);
+}
+
+/* ====================================================================== */
 /* NM-16ESW                                                               */
 /* ====================================================================== */
 
@@ -179,7 +226,7 @@ static int dev_c3600_nm_1fe_tx_init(vm_instance_t *vm,struct cisco_card *card)
 static int dev_c3600_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
 {
    struct nm_bay_info *bay_info;
-   struct nm_16esw_data *data;
+   struct esw_data *data;
    u_int slot = card->slot_id;
    u_int chassis_id;
 
@@ -188,7 +235,7 @@ static int dev_c3600_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
 
    /* Set the EEPROM */
    cisco_card_set_eeprom(vm,card,cisco_eeprom_find_nm("NM-16ESW"));
-   dev_nm_16esw_burn_mac_addr(vm,slot,&card->eeprom);
+   esw_burn_mac_addr(vm,slot,&card->eeprom);
    c3600_set_slot_eeprom(VM_C3600(vm),slot,&card->eeprom);
 
    /* Get PCI bus info about this bay */
@@ -210,47 +257,42 @@ static int dev_c3600_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
    return(0);
 }
 
-/* Remove a NM-16ESW from the specified slot */
-static int 
-dev_c3600_nm_16esw_shutdown(vm_instance_t *vm,struct cisco_card *card)
+/* ====================================================================== */
+/* NMD-36ESW                                                              */
+/* ====================================================================== */
+
+/* Add a NMD-36ESW */
+static int dev_c3600_nmd_36esw_init(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct nm_16esw_data *data = card->drv_info;
+   struct nm_bay_info *bay_info;
+   struct esw_data *data;
+   u_int slot = card->slot_id;
+   u_int chassis_id;
 
-   /* Remove the NM EEPROM */
-   cisco_card_unset_eeprom(card);
-   c3600_set_slot_eeprom(VM_C3600(vm),card->slot_id,NULL);
+   /* Set the PCI bus */
+   card->pci_bus = vm->slots_pci_bus[slot];
 
-   /* Remove the BCM5600 chip */
-   dev_nm_16esw_remove(data);
-   return(0);
-}
+   /* Set the EEPROM */
+   cisco_card_set_eeprom(vm,card,cisco_eeprom_find_nm("NMD-36ESW"));
+   esw_burn_mac_addr(vm,slot,&card->eeprom);
+   c3600_set_slot_eeprom(VM_C3600(vm),slot,&card->eeprom);
 
-/* Bind a Network IO descriptor */
-static int 
-dev_c3600_nm_16esw_set_nio(vm_instance_t *vm,struct cisco_card *card,
-                           u_int port_id,netio_desc_t *nio)
-{
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_set_nio(d,port_id,nio);
-   return(0);
-}
+   /* Get PCI bus info about this bay */
+   chassis_id = c3600_chassis_get_id(VM_C3600(vm));
+   bay_info = c3600_nm_get_bay_info(chassis_id,slot);
+      
+   if (!bay_info) {
+      vm_error(vm,"unable to get info for NM bay %u\n",slot);
+      return(-1);
+   }
 
-/* Unbind a Network IO descriptor */
-static int dev_c3600_nm_16esw_unset_nio(vm_instance_t *vm,
-                                        struct cisco_card *card,
-                                        u_int port_id)
-{
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_unset_nio(d,port_id);
-   return(0);
-}
+   /* Create the device */
+   data = dev_nmd_36esw_init(vm,card->dev_name,slot,
+                             card->pci_bus,bay_info->pci_device,
+                             c3600_net_irq_for_slot_port(slot,0));
 
-/* Show debug info */
-static int 
-dev_c3600_nm_16esw_show_info(vm_instance_t *vm,struct cisco_card *card)
-{
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_show_info(d);
+   /* Store device info into the router structure */
+   card->drv_info = data;
    return(0);
 }
 
@@ -336,11 +378,22 @@ struct cisco_card_driver dev_c3600_nm_4e_driver = {
 struct cisco_card_driver dev_c3600_nm_16esw_driver = {
    "NM-16ESW", 1, 0,
    dev_c3600_nm_16esw_init, 
-   dev_c3600_nm_16esw_shutdown,
+   dev_c3600_nm_esw_shutdown,
    NULL,
-   dev_c3600_nm_16esw_set_nio,
-   dev_c3600_nm_16esw_unset_nio,
-   dev_c3600_nm_16esw_show_info,
+   dev_c3600_nm_esw_set_nio,
+   dev_c3600_nm_esw_unset_nio,
+   dev_c3600_nm_esw_show_info,
+};
+
+/* NMD-36ESW driver */
+struct cisco_card_driver dev_c3600_nmd_36esw_driver = {
+   "NMD-36ESW", 1, 0,
+   dev_c3600_nmd_36esw_init, 
+   dev_c3600_nm_esw_shutdown,
+   NULL,
+   dev_c3600_nm_esw_set_nio,
+   dev_c3600_nm_esw_unset_nio,
+   dev_c3600_nm_esw_show_info,
 };
 
 /* Leopard-2FE driver */

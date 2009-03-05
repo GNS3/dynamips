@@ -153,7 +153,7 @@ static int dev_c2691_nm_1fe_tx_init(vm_instance_t *vm,struct cisco_card *card)
 /* Add a NM-16ESW */
 static int dev_c2691_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct nm_16esw_data *data;
+   struct esw_data *data;
    u_int slot = card->slot_id;
 
    /* Set the PCI bus */
@@ -161,7 +161,7 @@ static int dev_c2691_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
 
    /* Set the EEPROM */
    cisco_card_set_eeprom(vm,card,cisco_eeprom_find_nm("NM-16ESW"));
-   dev_nm_16esw_burn_mac_addr(vm,slot,&card->eeprom);
+   esw_burn_mac_addr(vm,slot,&card->eeprom);
    c2691_set_slot_eeprom(VM_C2691(vm),slot,&card->eeprom);
 
    /* Create the device */
@@ -178,14 +178,14 @@ static int dev_c2691_nm_16esw_init(vm_instance_t *vm,struct cisco_card *card)
 static int 
 dev_c2691_nm_16esw_shutdown(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct nm_16esw_data *data = card->drv_info;
+   struct esw_data *data = card->drv_info;
 
    /* Remove the NM EEPROM */
    cisco_card_unset_eeprom(card);
    c2691_set_slot_eeprom(VM_C2691(vm),card->slot_id,NULL);
 
    /* Remove the BCM5600 chip */
-   dev_nm_16esw_remove(data);
+   esw_remove(data);
    return(0);
 }
 
@@ -194,8 +194,8 @@ static int
 dev_c2691_nm_16esw_set_nio(vm_instance_t *vm,struct cisco_card *card,
                            u_int port_id,netio_desc_t *nio)
 {
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_set_nio(d,port_id,nio);
+   struct esw_data *d = card->drv_info;
+   esw_set_nio(d,port_id,nio);
    return(0);
 }
 
@@ -204,8 +204,8 @@ static int dev_c2691_nm_16esw_unset_nio(vm_instance_t *vm,
                                         struct cisco_card *card,
                                         u_int port_id)
 {
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_unset_nio(d,port_id);
+   struct esw_data *d = card->drv_info;
+   esw_unset_nio(d,port_id);
    return(0);
 }
 
@@ -213,8 +213,8 @@ static int dev_c2691_nm_16esw_unset_nio(vm_instance_t *vm,
 static int 
 dev_c2691_nm_16esw_show_info(vm_instance_t *vm,struct cisco_card *card)
 {
-   struct nm_16esw_data *d = card->drv_info;
-   dev_nm_16esw_show_info(d);
+   struct esw_data *d = card->drv_info;
+   esw_show_info(d);
    return(0);
 }
 

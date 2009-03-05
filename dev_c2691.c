@@ -763,6 +763,8 @@ static vm_platform_t c2691_platform = {
    c2691_delete_instance,
    c2691_init_instance,
    c2691_stop_instance,
+   NULL,
+   NULL,
    c2691_nvram_extract_config,
    c2691_nvram_push_config,
    c2691_get_mac_addr_msb,

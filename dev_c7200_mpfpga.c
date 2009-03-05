@@ -25,26 +25,26 @@
 /*
  * Definitions for Port Adapter Status.
  */
-#define PCI_BAY0_3V_OK    0x00000002      /* IO card 3V */
-#define PCI_BAY0_5V_OK    0x00000004      /* IO card 5V */
+#define PCI_BAY_3V         0x00000002  /* 3.3V */
+#define PCI_BAY_5V         0x00000004  /* 5V */
+#define PCI_BAY_POWER_OK   (PCI_BAY_3V | PCI_BAY_5V)
 
-#define PCI_BAY1_5V_OK    0x00000200      /* Bay 1 5V */
-#define PCI_BAY1_3V_OK    0x00000400      /* Bay 1 3V */
+/* Bay power */
+struct bay_power {
+   u_int reg;
+   u_int offset;
+};
 
-#define PCI_BAY2_5V_OK    0x00002000      /* Bay 2 5V */
-#define PCI_BAY2_3V_OK    0x00004000      /* Bay 2 3V */
-
-#define PCI_BAY3_5V_OK    0x02000000      /* Bay 3 5V */
-#define PCI_BAY3_3V_OK    0x04000000      /* Bay 3 3V */
-
-#define PCI_BAY4_5V_OK    0x00020000      /* Bay 4 5V */
-#define PCI_BAY4_3V_OK    0x00040000      /* Bay 4 3V */
-
-#define PCI_BAY5_5V_OK    0x20000000      /* Bay 5 5V */
-#define PCI_BAY5_3V_OK    0x40000000      /* Bay 5 3V */
-
-#define PCI_BAY6_5V_OK    0x00200000      /* Bay 6 5V */
-#define PCI_BAY6_3V_OK    0x00400000      /* Bay 6 3V */
+static struct bay_power bay_power_info[C7200_MAX_PA_BAYS] = {
+   { 0,  0 },  /* I/O card */
+   { 0,  8 },  /* Slot 1 */
+   { 0, 12 },  /* Slot 2 */
+   { 0, 24 },  /* Slot 3 */
+   { 0, 16 },  /* Slot 4 */
+   { 0, 28 },  /* Slot 5 */
+   { 0, 20 },  /* Slot 6 */
+   { 1, 24 },  /* Slot 7 */
+};
 
 /*
  * Definitions for EEPROM access (slots 0,1,3,4) (0x60)
@@ -87,6 +87,12 @@
 #define BAY6_EEPROM_DIN_BIT      20
 #define BAY6_EEPROM_DOUT_BIT     22
 
+/* Definitions for EEPROM access (slot 7) (0x2e4, in iofpga) */
+#define BAY7_EEPROM_SELECT_BIT   25
+#define BAY7_EEPROM_CLOCK_BIT    27
+#define BAY7_EEPROM_DIN_BIT      28
+#define BAY7_EEPROM_DOUT_BIT     30
+
 /* PA Bay EEPROM definitions */
 static const struct nmc93cX6_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
    /* Bay 0 */
@@ -123,6 +129,11 @@ static const struct nmc93cX6_eeprom_def eeprom_bay_def[C7200_MAX_PA_BAYS] = {
    { BAY6_EEPROM_CLOCK_BIT , BAY6_EEPROM_SELECT_BIT,
      BAY6_EEPROM_DIN_BIT   , BAY6_EEPROM_DOUT_BIT,
    },
+
+   /* Bay 7 */
+   { BAY7_EEPROM_CLOCK_BIT , BAY7_EEPROM_SELECT_BIT,
+     BAY7_EEPROM_DIN_BIT   , BAY7_EEPROM_DOUT_BIT,
+   },
 };
 
 /* EEPROM group #1 (Bays 0, 1, 3, 4) */
@@ -147,108 +158,47 @@ static const struct nmc93cX6_group eeprom_bays_g2 = {
    { &eeprom_bay_def[2], &eeprom_bay_def[5], &eeprom_bay_def[6] },
 };
 
-/* Network IRQ distribution */
-struct net_irq_distrib  {
-   u_int reg;
-   u_int offset;
-};
-
-static struct net_irq_distrib net_irq_dist[C7200_MAX_PA_BAYS] = {
-   { 0,  0 },  /* Slot 0: reg 0x10, 0x000000XX */
-   { 0,  8 },  /* Slot 1: reg 0x10, 0x0000XX00 */
-   { 1,  8 },  /* Slot 2: reg 0x18, 0x0000XX00 */
-   { 0, 24 },  /* Slot 3: reg 0x10, 0xXX000000 */
-   { 0, 16 },  /* Slot 4: reg 0x10, 0x00XX0000 */
-   { 1, 24 },  /* Slot 5: reg 0x18, 0xXX000000 */
-   { 1, 16 },  /* Slot 6: reg 0x18, 0x00XX0000 */
+/* EEPROM group #3 (Bay 7) */
+static const struct nmc93cX6_group eeprom_bays_g3 = {
+   EEPROM_TYPE_NMC93C46, 1, 0, 
+   EEPROM_DORD_NORMAL,
+   EEPROM_DOUT_HIGH,
+   EEPROM_DEBUG_DISABLED,
+   "PA Bay (Group #3) EEPROM", 
+   { &eeprom_bay_def[7] }, 
 };
 
 /* Midplane FPGA private data */
 struct c7200_mpfpga_data {
    vm_obj_t vm_obj;
    struct vdevice dev;
-
    c7200_t *router;
-   m_uint32_t pa_status_reg;
-   m_uint32_t pa_ctrl_reg;
-
-   m_uint32_t net_irq_status[2];
-   m_uint32_t net_irq_mask[2];
 };
 
-/* Update network interrupt status */
-static inline void dev_c7200_mpfpga_net_update_irq(struct c7200_mpfpga_data *d)
+/* Returns TRUE if a slot has to be powered */
+static int pa_get_power_status(c7200_t *router,u_int slot)
 {
-   int status;
+   if (slot == 0)
+      return(TRUE);
 
-   status = (d->net_irq_status[0] & d->net_irq_mask[0]) ||
-      (d->net_irq_status[1] & d->net_irq_mask[1]);
-   
-   if (status) {
-      vm_set_irq(d->router->vm,C7200_NETIO_IRQ);
-   } else {
-      vm_clear_irq(d->router->vm,C7200_NETIO_IRQ);
-   }
-}
-
-/* Trigger a Network IRQ for the specified slot/port */
-void dev_c7200_mpfpga_net_set_irq(struct c7200_mpfpga_data *d,
-                                  u_int slot,u_int port)
-{
-   struct net_irq_distrib *irq_dist;
-
-#if DEBUG_NET_IRQ
-   vm_log(d->router->vm,"MP_FPGA","setting NetIRQ for slot %u port %u\n",
-          slot,port);
-#endif
-   irq_dist = &net_irq_dist[slot];
-   d->net_irq_status[irq_dist->reg] |= 1 << (irq_dist->offset + port);
-   dev_c7200_mpfpga_net_update_irq(d);
-}
-
-/* Clear a Network IRQ for the specified slot/port */
-void dev_c7200_mpfpga_net_clear_irq(struct c7200_mpfpga_data *d,
-                                    u_int slot,u_int port)
-{
-   struct net_irq_distrib *irq_dist;
-
-#if DEBUG_NET_IRQ
-   vm_log(d->router->vm,"MP_FPGA","clearing NetIRQ for slot %u port %u\n",
-          slot,port);
-#endif
-   irq_dist = &net_irq_dist[slot];
-   d->net_irq_status[irq_dist->reg] &= ~(1 << (irq_dist->offset + port));
-   dev_c7200_mpfpga_net_update_irq(d);
+   return(vm_slot_check_eeprom(router->vm,slot,0));
 }
 
 /* Update Port Adapter Status */
 static void pa_update_status_reg(struct c7200_mpfpga_data *d)
 {
-   m_uint32_t res = 0;
+   c7200_t *router = d->router;
+   struct bay_power *pw;
+   u_int i;
 
-   /* PA Power. Bay 0 is always powered */
-   res |= PCI_BAY0_5V_OK | PCI_BAY0_3V_OK;
-
-   /* We fake power on bays defined by the final user */
-   if (vm_slot_check_eeprom(d->router->vm,1,0))
-      res |= PCI_BAY1_5V_OK | PCI_BAY1_3V_OK;
+   router->pa_status_reg[0] = router->pa_status_reg[1] = 0;
    
-   if (vm_slot_check_eeprom(d->router->vm,2,0))
-      res |= PCI_BAY2_5V_OK | PCI_BAY2_3V_OK;
-
-   if (vm_slot_check_eeprom(d->router->vm,3,0))
-      res |= PCI_BAY3_5V_OK | PCI_BAY3_3V_OK;
-   
-   if (vm_slot_check_eeprom(d->router->vm,4,0))
-      res |= PCI_BAY4_5V_OK | PCI_BAY4_3V_OK;
-
-   if (vm_slot_check_eeprom(d->router->vm,5,0))
-      res |= PCI_BAY5_5V_OK | PCI_BAY5_3V_OK;
-      
-   if (vm_slot_check_eeprom(d->router->vm,6,0))
-      res |= PCI_BAY6_5V_OK | PCI_BAY6_3V_OK;
-
-   d->pa_status_reg = res;
+   for(i=0;i<C7200_MAX_PA_BAYS;i++) {
+      if (pa_get_power_status(router,i)) {
+         pw = &bay_power_info[i];
+         router->pa_status_reg[pw->reg] |= (PCI_BAY_POWER_OK << pw->offset);
+      }
+   }
 }
 
 /*
@@ -259,6 +209,7 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint64_t *data)
 {
    struct c7200_mpfpga_data *d = dev->priv_data;
+   c7200_t *router = d->router;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -284,8 +235,22 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x11:
       case 0x12:
       case 0x13:
-         if (op_type == MTS_READ)
-            *data = d->net_irq_status[0];
+         if (op_type == MTS_READ) {
+            *data = router->net_irq_status[0];
+
+            /* if we have a card in slot 7, report status as for slot 0 */
+            if (vm_slot_active(router->vm,7,0)) {
+               u_int offset;
+               
+               offset = dev_c7200_net_get_reg_offset(0);               
+
+               if (router->net_irq_status[2]) {
+                  *data |= 0xFF << offset;
+               } else {
+                  *data &= ~(0xFF << offset);
+               }
+            }
+         }
          break;
 
       /* Interrupt status for slots 2, 5, 6 */
@@ -294,26 +259,26 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x1a:
       case 0x1b:
          if (op_type == MTS_READ)
-            *data = d->net_irq_status[1];
+            *data = router->net_irq_status[1];
          break;
 
       /* Interrupt mask for slots 0, 1, 3, 4 */
       case 0x20:
          if (op_type == MTS_READ) {
-            *data = d->net_irq_mask[0];
+            *data = router->net_irq_mask[0];
          } else {
-            d->net_irq_mask[0] = *data;
-            dev_c7200_mpfpga_net_update_irq(d);
+            router->net_irq_mask[0] = *data;
+            dev_c7200_net_update_irq(router);
          }
          break;
 
       /* Interrupt mask for slots 2, 5, 6 */
       case 0x28:
          if (op_type == MTS_READ) {
-            *data = d->net_irq_mask[1];
+            *data = router->net_irq_mask[1];
          } else {
-            d->net_irq_mask[1] = *data;
-            dev_c7200_mpfpga_net_update_irq(d);
+            router->net_irq_mask[1] = *data;
+            dev_c7200_net_update_irq(router);
          }
          break;
 
@@ -328,9 +293,9 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        */
       case 0x40:
          if (op_type == MTS_READ)
-            *data = 0x66666600 & d->pa_status_reg;
+            *data = 0x66666600 & router->pa_status_reg[0];
 
-         vm_clear_irq(d->router->vm,C7200_PA_MGMT_IRQ);
+         vm_clear_irq(router->vm,C7200_PA_MGMT_IRQ);
          break;
 
       case 0x48:  /* ??? (test) */
@@ -349,17 +314,17 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
 #if DEBUG_OIR
             cpu_log(cpu,"MP_FPGA","reading reg 0x%x at pc=0x%llx, val=0x%x\n",
-                    offset,cpu_get_pc(cpu),d->router->oir_status);
+                    offset,cpu_get_pc(cpu),router->oir_status[0]);
 #endif
-            *data = d->router->oir_status;
-            vm_clear_irq(d->router->vm,C7200_OIR_IRQ);
+            *data = router->oir_status[0];
+            vm_clear_irq(router->vm,C7200_OIR_IRQ);
          } else {
 #if DEBUG_OIR
             cpu_log(cpu,"MP_FPGA","writing reg 0x%x at pc=0x%llx "
                     "(data=0x%llx)\n",offset,cpu_get_pc(cpu),*data);
 #endif
-            d->router->oir_status &= ~(*data);
-            vm_clear_irq(d->router->vm,C7200_OIR_IRQ);                    
+            router->oir_status[0] &= ~(*data);
+            vm_clear_irq(router->vm,C7200_OIR_IRQ);                    
          }
          break;
 
@@ -388,29 +353,39 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x50:   /* Port Adapter Status */
          if (op_type == MTS_READ) {
             pa_update_status_reg(d);
-            *data = d->pa_status_reg;
+            *data = router->pa_status_reg[0];
          }
          break;
  
       case 0x58:   /* Port Adapter Control */
          if (op_type == MTS_WRITE)
-            d->pa_ctrl_reg = *data;
+            router->pa_ctrl_reg[0] = *data;
          else
-            *data = d->pa_ctrl_reg;
+            *data = router->pa_ctrl_reg[0];
          break;
 
       case 0x60:   /* EEPROM for PA in slots 0,1,3,4 */
          if (op_type == MTS_WRITE)
-            nmc93cX6_write(&d->router->pa_eeprom_g1,*data);
+            nmc93cX6_write(&router->pa_eeprom_g1,*data);
          else
-            *data = nmc93cX6_read(&d->router->pa_eeprom_g1);
+            *data = nmc93cX6_read(&router->pa_eeprom_g1);
          break;
 
       case 0x68:   /* EEPROM for PA in slots 2,5,6 */
-         if (op_type == MTS_WRITE)
-            nmc93cX6_write(&d->router->pa_eeprom_g2,*data);
-         else
-            *data = nmc93cX6_read(&d->router->pa_eeprom_g2);
+         if (op_type == MTS_WRITE) {
+            nmc93cX6_write(&router->pa_eeprom_g2,*data);
+            router->ps_status = *data & 0x03;
+
+            if (router->ps_status == 0) {
+               printf("\n\n\nVM %s: power shutdown - halting...\n\n\n",
+                      router->vm->name);
+               vm_log(router->vm,"MP_FPGA","shutdown of power supplies\n");
+               vm_stop(router->vm);
+            }
+         } else {
+            *data = nmc93cX6_read(&router->pa_eeprom_g2);
+            *data |= router->ps_status & 0x03;
+         }
          break;
 
       case 0x7b:  /* ??? */
@@ -446,6 +421,10 @@ void c7200_init_mp_eeprom_groups(c7200_t *router)
    router->pa_eeprom_g2.eeprom[0] = NULL;
    router->pa_eeprom_g2.eeprom[1] = NULL;
    router->pa_eeprom_g2.eeprom[2] = NULL;
+
+   /* Group 3: bay 7 */
+   router->pa_eeprom_g3 = eeprom_bays_g3;
+   router->pa_eeprom_g3.eeprom[0] = NULL;
 }
 
 /* Shutdown the MP FPGA device */
@@ -474,6 +453,7 @@ int dev_c7200_mpfpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
 
    memset(d,0,sizeof(*d));
    d->router = router;
+   router->ps_status = 0x03;
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "mp_fpga";

@@ -972,6 +972,8 @@ static vm_platform_t c2600_platform = {
    c2600_delete_instance,
    c2600_init_instance,
    c2600_stop_instance,
+   NULL,
+   NULL,
    c2600_nvram_extract_config,
    c2600_nvram_push_config,
    c2600_get_mac_addr_msb,

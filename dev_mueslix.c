@@ -144,6 +144,10 @@ struct mueslix_channel {
    /* Channel status (0=disabled) */
    u_int status;
 
+   /* Clock parameters */
+   u_int clk_shift,clk_div;
+   u_int clk_rate;
+
    /* CRC control register */
    u_int crc_ctrl_reg;
 
@@ -241,6 +245,23 @@ static inline void dev_mueslix_update_irq_status(struct mueslix_data *d)
    }
 }
 
+/* Compute clock rate */
+static void dev_mueslix_update_clk_rate(struct mueslix_channel *channel)
+{
+   u_int clk_shift = channel->clk_shift;
+   
+   if (clk_shift == 8)
+      clk_shift = 0;
+      
+   channel->clk_rate = (8064000 >> clk_shift) / (channel->clk_div + 1);
+   MUESLIX_LOG(channel->parent,"channel %u: clock rate set to %u\n",
+               channel->id,channel->clk_rate);
+
+   /* Apply the bandwidth constraint to the NIO */
+   if (channel->nio != NULL)
+      netio_set_bandwidth(channel->nio,(channel->clk_rate+1000)/1000);
+}
+
 /*
  * Access to channel registers.
  */
@@ -272,6 +293,23 @@ void dev_mueslix_chan_access(cpu_gen_t *cpu,struct mueslix_channel *channel,
                         "channel %u: CRC size set to 0x%4.4x\n",
                         channel->id,channel->crc_size);
          }
+         break;
+
+      case 0x40:
+         if (op_type == MTS_READ)
+            *data = channel->clk_shift;
+         else
+            channel->clk_shift = *data;
+            
+         /* Recompute clock rate */
+         dev_mueslix_update_clk_rate(channel);
+         break;
+
+      case 0x44:
+         if (op_type == MTS_READ)
+            *data = channel->clk_div;
+         else
+            channel->clk_div = *data;
          break;
 
       case 0x60: /* signals ? */
@@ -316,6 +354,15 @@ void dev_mueslix_chan_access(cpu_gen_t *cpu,struct mueslix_channel *channel,
          else
             *data = channel->rx_end;
          break;
+
+#if DEBUG_UNKNOWN
+      default:
+         if (op_type == MTS_WRITE) {
+            MUESLIX_LOG(channel->parent,"channel %u: "
+                        "write to unknown addr 0x%4.4x, value=0x%llx\n",
+                        channel->id,offset,*data);
+         }
+#endif
    }
 }
 
@@ -757,6 +804,10 @@ static int dev_mueslix_handle_txring_single(struct mueslix_channel *channel)
    if ((channel->tx_start == 0) || (channel->status == 0))
       return(FALSE);
 
+   /* Check if the NIO can transmit */
+   if (!netio_can_transmit(channel->nio))
+      return(FALSE);
+
    /* Copy the current txring descriptor */
    tx_start = channel->tx_current;   
    ptxd = &txd0;
@@ -870,6 +921,7 @@ static int dev_mueslix_handle_txring(struct mueslix_channel *channel)
          break;
    }
 
+   netio_clear_bw_stat(channel->nio);
    return(TRUE);
 }
 

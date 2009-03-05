@@ -96,6 +96,7 @@ struct vm_instance {
    char *log_file;                /* Log filename */
    int log_file_enabled;          /* Logging enabled */
    u_int ram_size,rom_size;       /* RAM and ROM size in Mb */
+   u_int ram_res_size;            /* RAM reserved space size */
    u_int iomem_size;              /* IOMEM size in Mb */
    u_int nvram_size;              /* NVRAM size in Kb */
    u_int pcmcia_disk_size[2];     /* PCMCIA disk0 and disk1 sizes (in Mb) */
@@ -153,6 +154,9 @@ struct vm_instance {
    /* Timer IRQ interval check */
    u_int timer_irq_check_itv;
 
+   /* Translation sharing group */
+   int tsg;
+
    /* "idling" pointer counter */
    m_uint64_t idle_pc;
 
@@ -192,6 +196,8 @@ struct vm_platform {
    int (*delete_instance)(vm_instance_t *vm);
    int (*init_instance)(vm_instance_t *vm);
    int (*stop_instance)(vm_instance_t *vm);
+   int (*oir_start)(vm_instance_t *vm,u_int slot_id,u_int subslot_id);
+   int (*oir_stop)(vm_instance_t *vm,u_int slot_id,u_int subslot_id);
    ssize_t (*nvram_extract_config)(vm_instance_t *vm,u_char **buffer);
    int (*nvram_push_config)(vm_instance_t *vm,u_char *buffer,size_t len);
    u_int (*get_mac_addr_msb)(void);
@@ -249,6 +255,9 @@ u_int vm_get_mac_addr_msb(vm_instance_t *vm);
 
 /* Generate a filename for use by the instance */
 char *vm_build_filename(vm_instance_t *vm,char *name);
+
+/* Get the amount of host virtual memory used by a VM */
+size_t vm_get_vspace_size(vm_instance_t *vm);
 
 /* Check that an instance lock file doesn't already exist */
 int vm_get_lock(vm_instance_t *vm);
@@ -388,5 +397,14 @@ int vm_delete_all_instances(void);
 
 /* Save all VM configs */
 int vm_save_config_all(FILE *fd);
+
+/* OIR to start a slot/subslot */
+int vm_oir_start(vm_instance_t *vm,u_int slot,u_int subslot);
+
+/* OIR to stop a slot/subslot */
+int vm_oir_stop(vm_instance_t *vm,u_int slot,u_int subslot);
+
+/* Set the JIT translation sharing group */
+int vm_set_tsg(vm_instance_t *vm,int group);
 
 #endif

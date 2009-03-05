@@ -19,8 +19,9 @@
 #include "pci_dev.h"
 #include "pci_io.h"
 #include "cpu.h"
-#include "mips64_jit.h"
 #include "vm.h"
+#include "tcb.h"
+#include "mips64_jit.h"
 #include "dev_vtty.h"
 
 #include MIPS64_ARCH_INC_FILE
@@ -178,6 +179,22 @@ char *vm_build_filename(vm_instance_t *vm,char *name)
 
    assert(filename != NULL);
    return filename;
+}
+
+/* Get the amount of host virtual memory used by a VM */
+size_t vm_get_vspace_size(vm_instance_t *vm)
+{
+   struct vdevice *dev;
+   size_t hsize = 0;
+
+   /* Add memory used by CPU (exec area) */
+   /* XXX TODO */
+
+   /* Add memory used by devices */
+   for(dev=vm->dev_list;dev;dev=dev->next)
+      hsize += dev_get_vspace_size(dev);
+
+   return(hsize);
 }
 
 /* Erase lock file */
@@ -351,6 +368,7 @@ static vm_instance_t *vm_create(char *name,int instance_id,
       goto err_reg_add;
    }
 
+   m_log("VM","VM %s created.\n",vm->name);
    return vm;
 
  err_reg_add:
@@ -417,6 +435,7 @@ int vm_hardware_shutdown(vm_instance_t *vm)
    vm->boot_cpu = NULL;
 
    vm_log(vm,"VM","shutdown procedure completed.\n");
+   m_log("VM","VM %s shutdown.\n",vm->name);
    return(0);
 }
 
@@ -426,6 +445,8 @@ void vm_free(vm_instance_t *vm)
    if (vm != NULL) {
       /* Free hardware resources */
       vm_hardware_shutdown(vm);
+
+      m_log("VM","VM %s destroyed.\n",vm->name);
 
       /* Close log file */
       vm_close_log(vm);
@@ -773,6 +794,8 @@ int vm_ghost_image_get(char *filename,u_char **ptr,int *fd)
    img->next = vm_ghost_pool;
    vm_ghost_pool = img;   
    VM_GUNLOCK();
+
+   m_log("GHOST","loaded image %s successfully.\n",filename);
    return(0);
 }
 
@@ -918,7 +941,7 @@ int vm_ios_set_config(vm_instance_t *vm,char *ios_config)
 /* Extract IOS configuration from NVRAM and write it to a file */
 int vm_nvram_extract_config(vm_instance_t *vm,char *filename)
 {
-   u_char *cfg_buffer;
+   u_char *cfg_buffer = NULL;
    ssize_t cfg_len;
    FILE *fd;
 
@@ -980,10 +1003,12 @@ void vm_save_config(vm_instance_t *vm,FILE *fd)
    fprintf(fd,"vm set_conf_reg %s 0x%4.4x\n",vm->name,vm->conf_reg_setup);
 
    if (vm->vtty_con_type == VTTY_TYPE_TCP)
-      fprintf(fd,"vm set_con_tcp_port %s %d\n",vm->name,vm->vtty_con_tcp_port);
+      fprintf(fd,"vm set_con_tcp_port %s %d\n",
+              vm->name,vm->vtty_con_tcp_port);
 
    if (vm->vtty_aux_type == VTTY_TYPE_TCP)
-      fprintf(fd,"vm set_aux_tcp_port %s %d\n",vm->name,vm->vtty_aux_tcp_port);
+      fprintf(fd,"vm set_aux_tcp_port %s %d\n",
+              vm->name,vm->vtty_aux_tcp_port);
 
    /* Save slot config */
    vm_slot_save_all_config(vm,fd);
@@ -1113,3 +1138,36 @@ int vm_save_config_all(FILE *fd)
    registry_foreach_type(OBJ_TYPE_VM,vm_reg_save_config,fd,NULL);
    return(0);
 }
+
+/* OIR to start a slot/subslot */
+int vm_oir_start(vm_instance_t *vm,u_int slot,u_int subslot)
+{
+   if (vm->platform->oir_start != NULL)
+      return(vm->platform->oir_start(vm,slot,subslot));
+
+   /* OIR not supported */
+   return(-1);
+}
+
+/* OIR to stop a slot/subslot */
+int vm_oir_stop(vm_instance_t *vm,u_int slot,u_int subslot)
+{
+   if (vm->platform->oir_stop != NULL)
+      return(vm->platform->oir_stop(vm,slot,subslot));
+
+   /* OIR not supported */
+   return(-1);
+}
+
+/* Set the JIT translation sharing group */
+int vm_set_tsg(vm_instance_t *vm,int group)
+{
+   if (vm->status == VM_STATUS_RUNNING)
+      return(-1);
+
+   vm->tsg = group;
+   return(0);
+}
+
+
+

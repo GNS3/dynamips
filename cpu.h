@@ -113,11 +113,24 @@ struct cpu_gen {
    /* Statistics */
    m_uint64_t dev_access_counter;
 
-   /* JIT op array for current compiled page */
+   /* JIT op array for current compiled pages */
    u_int jit_op_array_size;
    jit_op_t **jit_op_array;
    jit_op_t **jit_op_current;
    
+   /* Translation group ID and TCB descriptor local list */
+   int tsg;
+   cpu_tc_t *tc_local_list; 
+
+   /* Current and free lists of TBs */
+   cpu_tb_t *tb_list,*tb_free_list;
+
+   /* Virtual and Physical hash tables to retrieve TBs */
+   cpu_tb_t **tb_virt_hash,**tb_phys_hash;
+
+   /* CPU List for a Translation Sharing Group */
+   cpu_gen_t **tsg_pprev,*tsg_next;
+
    /* JIT op pool */
    jit_op_t *jit_op_pool[JIT_OP_POOL_NR];
 };

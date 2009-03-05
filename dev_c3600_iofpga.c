@@ -150,7 +150,7 @@ static u_int nm_get_status_1(struct c3600_iofpga_data *d)
    int i;
 
    for(i=0;i<4;i++) {
-      if (vm_slot_get_card_ptr(d->router->vm,i))
+      if (vm_slot_check_eeprom(d->router->vm,i,0))
          res &= ~(0x1111 << i);
    }
    
@@ -178,7 +178,7 @@ static u_int nm_get_status_2(struct c3600_iofpga_data *d,u_int pos)
    }
 
    for(i=start;i<=end;i++) {
-      if (vm_slot_get_card_ptr(d->router->vm,i))
+      if (vm_slot_check_eeprom(d->router->vm,i,0))
          res &= c3660_nm_masks[i-1];
    }
    
@@ -314,12 +314,6 @@ dev_c3620_c3640_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data = nmc93cX6_read(&d->router->mb_eeprom_group);
          break;
 
-      case 0x10004:  /* ??? OIR control ??? */
-         if (op_type == MTS_READ) {
-            *data = 0x0000;
-         }
-         break;
-         
       /* 
        * Network modules presence.
        *
@@ -393,6 +387,12 @@ dev_c3620_c3640_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data = 0x00;
          vm_clear_irq(d->router->vm,C3600_EXT_IRQ);
          break;
+
+      case 0x10004:  /* ??? OIR control ??? */
+         if (op_type == MTS_READ) {
+            *data = 0x0000;
+         }
+         break;         
 
       /* IO Mask (displayed by "show c3600") */
       case 0x20008:
@@ -687,9 +687,31 @@ dev_c3660_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
        * oir_stat = register 0x10006
        */
       case 0x2000a:
-         if (op_type == MTS_READ)
-            *data = 0x54;
+         if (op_type == MTS_READ) {
+            if (d->router->oir_status != 0)
+               *data = 0x40;
+         }
+
          vm_clear_irq(d->router->vm,C3600_EXT_IRQ);
+         break;
+
+      /* 
+       * oir_ctrl (seen with "debug oir") 
+       * 
+       * Bits   0-2 : OIR event for slots 2,4,6
+       * Bit      3 : Summary for slots 2,4,6
+       * Bits   4-6 : OIR watchdog (?) for slots 2,4,6
+       * Bit      7 : Unknown/unused ?
+       * Bits  8-10 : OIR event for slots 1,3,5
+       * Bit     11 : Summary for slots 1,3,5
+       * Bits 12-14 : OIR watchdog (?) for slots 1,3,5
+       * Bit     15 : Unknown/unused ?       
+       */
+      case 0x10004:
+         if (op_type == MTS_READ)
+            *data = d->router->oir_status;
+         else
+            d->router->oir_status &= ~(*data);
          break;
 
 #if DEBUG_UNKNOWN

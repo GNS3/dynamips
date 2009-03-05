@@ -53,6 +53,9 @@ void ppc32_access_special(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                cpu->dar = vaddr;
                ppc32_trigger_exception(cpu,PPC32_EXC_DSI);
                cpu_exec_loop_enter(cpu->gen);
+            } else {
+               ppc32_trigger_exception(cpu,PPC32_EXC_ISI);
+               cpu_exec_loop_enter(cpu->gen);
             }
          }        
          break;
@@ -170,7 +173,7 @@ void ppc32_mem_show_stats(cpu_gen_t *gen_cpu)
 void ppc32_mem_invalidate_cache(cpu_ppc_t *cpu)
 {
    size_t len;
-
+ 
    len = MTS32_HASH_SIZE * sizeof(mts32_entry_t);
    memset(cpu->mts_cache[PPC32_MTS_ICACHE],0xFF,len);
    memset(cpu->mts_cache[PPC32_MTS_DCACHE],0xFF,len);
@@ -185,7 +188,7 @@ static no_inline struct mts32_entry *
 ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
               mts32_entry_t *entry,mts32_entry_t *alt_entry)
 {
-   ppc32_jit_tcb_t *block;
+   ppc32_jit_tcb_t *tcb;
    struct vdevice *dev;
    m_uint32_t offset;
    m_iptr_t host_ptr;
@@ -195,16 +198,16 @@ ppc32_mem_map(cpu_ppc_t *cpu,u_int op_type,mts_map_t *map,
    if (!(dev = dev_lookup(cpu->vm,map->paddr+map->offset,map->cached)))
       return NULL;
 
-   if (cpu->exec_phys_map) {
-      block = ppc32_jit_find_by_phys_page(cpu,map->paddr >> VM_PAGE_SHIFT);
+   if (cpu->tcb_phys_hash != NULL) {
+      tcb = ppc32_jit_find_by_phys_page(cpu,map->paddr >> VM_PAGE_SHIFT);
 
-      if (block)
+      if ((tcb != NULL) && !(tcb->flags & PPC32_JIT_TCB_FLAG_SMC))
          exec_flag = MTS_FLAG_EXEC;
    }
 
    if (dev->flags & VDEVICE_FLAG_SPARSE) {
-      host_ptr = dev_sparse_get_host_addr(cpu->vm,dev,map->paddr,op_type,&cow);
-
+      host_ptr = dev_sparse_get_host_addr(cpu->vm,dev,map->paddr,
+                                          op_type,&cow);
       entry->gvpa  = map->vaddr;
       entry->gppa  = map->paddr;
       entry->hpa   = host_ptr;
@@ -378,16 +381,54 @@ static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
    return NULL;
 }
 
+/* Invalidate TCB related to a physical page marked as executable */
+static void ppc32_mem_invalidate_tcb(cpu_ppc_t *cpu,mts32_entry_t *entry)
+{
+   ppc32_jit_tcb_t *tcb,**tcbp,*tcb_next;
+   m_uint32_t hp,hv,phys_page,ia_phys_page;
+
+   if (cpu->tcb_phys_hash == NULL)
+      return;
+
+   phys_page = entry->gppa >> VM_PAGE_SHIFT;
+   hp = ppc32_jit_get_phys_hash(phys_page);
+ 
+   cpu->translate(cpu,cpu->ia,PPC32_MTS_ICACHE,&ia_phys_page);
+
+   if (phys_page != ia_phys_page) {
+      /* Clear all TCB matching the physical page being modified */
+      for(tcbp=&cpu->tcb_phys_hash[hp];*tcbp;)
+         if ((*tcbp)->phys_page == phys_page) {
+            hv = ppc32_jit_get_virt_hash((*tcbp)->start_ia);
+
+            if (cpu->tcb_virt_hash[hv] == *tcbp)
+               cpu->tcb_virt_hash[hv] = NULL;
+
+            tcb_next = (*tcbp)->phys_next;
+            ppc32_jit_tcb_free(cpu,(*tcbp),TRUE);
+            *tcbp = tcb_next;
+         } else {
+            tcbp = &(*tcbp)->phys_next; 
+         }
+      entry->flags &= ~MTS_FLAG_EXEC;
+   } else {
+      /* Self-modifying page */
+      for(tcb=cpu->tcb_phys_hash[hp];tcb;tcb=tcb->phys_next)
+         if (tcb->phys_page == phys_page)
+            ppc32_jit_mark_smc(cpu,tcb);
+
+      entry->flags &= ~MTS_FLAG_EXEC;
+      cpu_exec_loop_enter(cpu->gen);
+   }
+}
+
 /* Memory access */
 static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                      u_int cid,u_int op_code,u_int op_size,
                                      u_int op_type,m_uint64_t *data)
 {   
    mts32_entry_t *entry,alt_entry;
-   ppc32_jit_tcb_t *block;
    m_uint32_t hash_bucket;
-   m_uint32_t phys_page;
-   m_uint32_t ia_hash;
    m_iptr_t haddr;
    u_int dev_id;
    int cow;
@@ -422,26 +463,8 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
    }
 
    /* Invalidate JIT code for written pages */
-   if ((op_type == MTS_WRITE) && (entry->flags & MTS_FLAG_EXEC)) {
-      if (cpu->exec_phys_map) {
-         phys_page = entry->gppa >> VM_PAGE_SHIFT;
-
-         if (vaddr >= PPC32_EXC_SYS_RST) {
-            block = ppc32_jit_find_by_phys_page(cpu,phys_page);
-
-            if (block != NULL) {
-               //printf("Invalidation of block 0x%8.8x\n",block->start_ia);
-               ia_hash = ppc32_jit_get_ia_hash(block->start_ia);
-               ppc32_jit_tcb_free(cpu,block,TRUE);
-
-               if (cpu->exec_blk_map[ia_hash] == block)
-                  cpu->exec_blk_map[ia_hash] = NULL;
-
-               entry->flags &= ~MTS_FLAG_EXEC;
-            }
-         }
-      }
-   }
+   if ((op_type == MTS_WRITE) && (entry->flags & MTS_FLAG_EXEC))
+      ppc32_mem_invalidate_tcb(cpu,entry);
 
    /* Raw memory access */
    haddr = entry->hpa + (vaddr & PPC32_MIN_PAGE_IMASK);
@@ -468,7 +491,7 @@ static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
    entry = &cpu->mts_cache[cid][hash_bucket];
 
    /* Slow lookup if nothing found in cache */
-   if (unlikely(((m_uint32_t)vaddr & PPC32_MIN_PAGE_MASK) != entry->gvpa)) {
+   if (unlikely((vaddr & PPC32_MIN_PAGE_MASK) != entry->gvpa)) {
       entry = cpu->mts_slow_lookup(cpu,vaddr,cid,PPC_MEMOP_LOOKUP,4,MTS_READ,
                                    &data,&alt_entry);
       if (!entry)
@@ -484,6 +507,14 @@ static void *ppc32_mem_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid)
 {
    m_uint64_t data;
    return(ppc32_mem_access(cpu,vaddr,cid,PPC_MEMOP_LOOKUP,4,MTS_READ,&data));
+}
+
+/* Instruction fetch */
+static void *ppc32_mem_ifetch(cpu_ppc_t *cpu,m_uint32_t vaddr)
+{
+   m_uint64_t data;
+   return(ppc32_mem_access(cpu,vaddr,PPC32_MTS_ICACHE,
+                           PPC_MEMOP_IFETCH,4,MTS_READ,&data));
 }
 
 /* Set a BAT register */
@@ -523,12 +554,16 @@ int ppc32_set_sdr1(cpu_ppc_t *cpu,m_uint32_t sdr1)
    pt_addr |= ((m_uint64_t)(sdr1 & PPC32_SDR1_HTABEXT_MASK) << 20);
 
    if (!(dev = dev_lookup(cpu->vm,pt_addr,TRUE))) {
-      fprintf(stderr,"ppc32_set_sdr1: unable to find haddr for SDR1=0x%8.8x\n",
-              sdr1);
+      vm_error(cpu->vm,
+               "ppc32_set_sdr1: unable to find haddr for SDR1=0x%8.8x\n",
+               sdr1);
       return(-1);
    }
 
    cpu->sdr1_hptr = (char *)dev->host_addr + (pt_addr - dev->phys_addr);
+
+   /* Flush the virtual TLB */
+   ppc32_mem_invalidate_cache(cpu);
    return(0);
 }
 
@@ -868,7 +903,7 @@ fastcall void ppc32_stfd(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int reg)
 /* ICBI: Instruction Cache Block Invalidate */
 fastcall void ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
 {
-   ppc32_jit_tcb_t *block;
+   ppc32_jit_tcb_t *tcb;
    m_uint32_t phys_page;
 
 #if DEBUG_ICBI
@@ -876,17 +911,17 @@ fastcall void ppc32_icbi(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int op)
 #endif
 
    if (!cpu->translate(cpu,vaddr,PPC32_MTS_ICACHE,&phys_page)) {
-      if (cpu->exec_phys_map) {
-         block = ppc32_jit_find_by_phys_page(cpu,phys_page);
+      if (cpu->tcb_phys_hash) {
+         tcb = ppc32_jit_find_by_phys_page(cpu,phys_page);
 
-         if (block && (block->start_ia == (vaddr & PPC32_MIN_PAGE_MASK))) {
+         if (tcb && (tcb->start_ia == (vaddr & PPC32_MIN_PAGE_MASK))) {
 #if DEBUG_ICBI
             cpu_log(cpu->gen,"MTS",
                     "ICBI: removing compiled page at 0x%8.8x, pc=0x%8.8x\n",
-                    block->start_ia,cpu->ia);
+                    tcb->start_ia,cpu->ia);
 #endif
-            ppc32_jit_tcb_free(cpu,block,TRUE);
-            cpu->exec_blk_map[ppc32_jit_get_ia_hash(vaddr)] = NULL;
+            ppc32_jit_tcb_free(cpu,tcb,TRUE);
+            cpu->tcb_virt_hash[ppc32_jit_get_virt_hash(vaddr)] = NULL;
          }
          else
          {
@@ -964,8 +999,9 @@ void ppc32_init_memop_vectors(cpu_ppc_t *cpu)
    /* MTS statistics */
    cpu->gen->mts_show_stats = ppc32_mem_show_stats;
 
-   /* Memory lookup operation */
+   /* Memory lookup and instruction fetch operations */
    cpu->mem_op_lookup = ppc32_mem_lookup;
+   cpu->mem_op_ifetch = ppc32_mem_ifetch;
 
    /* Translation operation */
    cpu->translate = ppc32_translate;

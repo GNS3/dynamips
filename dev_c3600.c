@@ -108,6 +108,7 @@ static struct cisco_card_driver *nm_drivers[] = {
    &dev_c3600_nm_4t_driver,
    &dev_c3600_leopard_2fe_driver,
    &dev_c3600_nm_16esw_driver,
+   &dev_c3600_nmd_36esw_driver,
    NULL,
 };
 
@@ -881,6 +882,94 @@ static int c3600_stop_instance(vm_instance_t *vm)
    return(0);
 }
 
+static m_uint16_t c3660_oir_masks[C3600_MAX_NM_BAYS] = {
+   0x0000,
+   0x0900,  /* slot 1 */
+   0x0009,  /* slot 2 */
+   0x0A00,  /* slot 3 */
+   0x000A,  /* slot 4 */
+   0x0C00,  /* slot 5 */
+   0x000C,  /* slot 6 */
+};
+
+/* Trigger an OIR event (3660 only) */
+static int c3600_trigger_oir_event(c3600_t *router,u_int nm_bay)
+{
+   if (nm_bay >= C3600_MAX_NM_BAYS)
+      return(-1);
+
+   router->oir_status = c3660_oir_masks[nm_bay];
+   vm_set_irq(router->vm,C3600_EXT_IRQ);
+   return(0);
+}
+
+/* Initialize a new NM while the virtual router is online (OIR) */
+static int c3600_nm_init_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* 
+    * Suspend CPU activity while adding new hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Check that CPU activity is really suspended */
+   if (cpu_group_sync_state(vm->cpu_group) == -1) {
+      vm_error(vm,"unable to sync with system CPUs.\n");
+      return(-1);
+   }
+
+   /* Add the new hardware elements */
+   if (vm_slot_init(vm,slot) == -1)
+      return(-1);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+
+   /* Now, we can safely trigger the OIR event */
+   c3600_trigger_oir_event(VM_C3600(vm),slot);
+   return(0);
+}
+
+/* Stop a NM while the virtual router is online (OIR) */
+static int c3600_nm_stop_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{   
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* The NM driver must be initialized */
+   if (!vm_slot_get_card_ptr(vm,slot)) {
+      vm_error(vm,"trying to shut down empty slot %u.\n",slot);
+      return(-1);
+   }
+
+   /* Disable all NIOs to stop traffic forwarding */
+   vm_slot_disable_all_nio(vm,slot);
+
+   /* We can safely trigger the OIR event */
+   c3600_trigger_oir_event(VM_C3600(vm),slot);
+
+   /* 
+    * Suspend CPU activity while removing the hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Device removal */
+   if (vm_slot_shutdown(vm,slot) != 0)
+      vm_error(vm,"unable to shutdown slot %u.\n",slot);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+   return(0);
+}
+
 /* Get MAC address MSB */
 static u_int c3600_get_mac_addr_msb(void)
 {
@@ -929,6 +1018,8 @@ static vm_platform_t c3600_platform = {
    c3600_delete_instance,
    c3600_init_instance,
    c3600_stop_instance,
+   c3600_nm_init_online,
+   c3600_nm_stop_online,
    c3600_nvram_extract_config,
    c3600_nvram_push_config,
    c3600_get_mac_addr_msb,

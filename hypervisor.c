@@ -29,12 +29,14 @@
 #include <pthread.h>
 
 #include "utils.h"
+#include "gen_uuid.h"
 #include "parser.h"
 #include "net.h"
 #include "registry.h"
 #include "cpu.h"
 #include "vm.h"
 #include "dynamips.h"
+#include "tcb.h"
 #include "dev_c7200.h"
 #include "dev_c3600.h"
 #include "dev_c2691.h"
@@ -61,6 +63,19 @@ static hypervisor_conn_t *hypervisor_conn_list = NULL;
 static int cmd_version(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"%s",sw_version);
+   return(0);
+}
+
+/* Show UUID */
+static int cmd_uuid(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   char buffer[40];
+   uuid_t local_uuid;
+   
+   gen_uuid_get_local(local_uuid);
+   uuid_unparse(local_uuid,buffer);
+   
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"%s",buffer);
    return(0);
 }
 
@@ -117,6 +132,7 @@ static int cmd_set_working_dir(hypervisor_conn_t *conn,int argc,char *argv[])
       hypervisor_send_reply(conn,HSC_ERR_INV_PARAM,1,
                             "chdir: %s",strerror(errno));
    } else {
+      m_log("GENERAL","working_dir=%s\n",argv[0]);
       hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    }
    return(0);
@@ -136,8 +152,11 @@ static int cmd_save_config(hypervisor_conn_t *conn,int argc,char *argv[])
    netio_save_config_all(fd);
    frsw_save_config_all(fd);
    atmsw_save_config_all(fd);
+   //atm_bridge_save_config_all(fd);
    netio_bridge_save_config_all(fd);
    vm_save_config_all(fd);
+
+   fclose(fd);
 
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -167,9 +186,18 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Statistics about JIT code sharing (dumped on console) */
+static int cmd_tsg_stats(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   tsg_show_stats();   
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Hypervisor commands */
 static hypervisor_cmd_t hypervisor_cmd_array[] = {
    { "version", 0, 0, cmd_version, NULL },
+   { "uuid", 0, 0, cmd_uuid, NULL },
    { "parser_test", 0, 10, cmd_parser_test, NULL },
    { "module_list", 0, 0, cmd_mod_list, NULL },
    { "cmd_list", 1, 1, cmd_modcmd_list, NULL },
@@ -178,6 +206,7 @@ static hypervisor_cmd_t hypervisor_cmd_array[] = {
    { "reset", 0, 0, cmd_reset, NULL },
    { "close", 0, 0, cmd_close, NULL },
    { "stop", 0, 0, cmd_stop, NULL },
+   { "tsg_stats", 0, 0, cmd_tsg_stats, NULL },
    { NULL, -1, -1, NULL, NULL },
 };
 
@@ -391,7 +420,9 @@ static void *hypervisor_thread(void *arg)
          }
 
          /* Execute command */
-         //m_log("hypervisor_exec","%s\n",buffer);
+         m_log("HYPERVISOR","exec_cmd: ");
+         m_flog_str_array(log_file,ctx.tok_count,tokens);
+
          hypervisor_exec_cmd(conn,tokens[0],tokens[1],ctx.
                              tok_count-2,&tokens[2]);
       
@@ -570,6 +601,10 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
    }
 
    /* Start accepting connections */
+   m_log("HYPERVISOR","Release %s/%s (tag %s)\n",
+         sw_version,os_name,sw_version_tag);
+         
+   m_log("HYPERVISOR","Started on TCP port = %d.\n",tcp_port);
    printf("Hypervisor TCP control server started (port %d).\n",tcp_port);
    hypervisor_running = TRUE;
 
@@ -637,5 +672,7 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
    /* Close all remote client connections */
    printf("Hypervisor: closing remote client connections.\n");
    hypervisor_close_conn_list(FALSE);
+
+   m_log("HYPERVISOR","Stopped.\n");
    return(0);
 }
