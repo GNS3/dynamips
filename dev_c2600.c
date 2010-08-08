@@ -947,6 +947,14 @@ static int c2600_cli_parse_options(vm_instance_t *vm,int option)
          c2600_mainboard_set_type(router,optarg);
          break;
 
+      /* GR edit */
+      /* Set the base MAC address */
+      case 'm':
+         if (!c2600_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+      /* GR edit end */
+
       /* Unknown option */
       default:
          return(-1);

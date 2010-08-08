@@ -785,11 +785,21 @@ static u_int c3745_get_mac_addr_msb(void)
 /* Parse specific options for the Cisco 1700 platform */
 static int c3745_cli_parse_options(vm_instance_t *vm,int option)
 {
+   c3745_t *router = VM_C3745(vm);
+
    switch(option) {
       /* IO memory reserved for NMs (in percents!) */
       case OPT_IOMEM_SIZE:
          vm->nm_iomem_size = 0x8000 | atoi(optarg);
          break;
+
+      /* GR edit */
+      /* Set the base MAC address */
+      case 'm':
+         if (!c3745_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+      /* GR edit end */
 
       /* Unknown option */
       default:

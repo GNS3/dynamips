@@ -779,6 +779,14 @@ static int c1700_cli_parse_options(vm_instance_t *vm,int option)
          c1700_mainboard_set_type(router,optarg);
          break;
 
+      /* GR edit */
+      /* Set the base MAC address */
+      case 'm':
+         if (!c1700_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+      /* GR edit end */
+
       /* Unknown option */
       default:
          return(-1);

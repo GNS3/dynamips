@@ -746,11 +746,21 @@ static u_int c3725_get_mac_addr_msb(void)
 /* Parse specific options for the Cisco 3725 platform */
 static int c3725_cli_parse_options(vm_instance_t *vm,int option)
 {
+   c3725_t *router = VM_C3725(vm);
+
    switch(option) {
       /* IO memory reserved for NMs (in percents!) */
       case OPT_IOMEM_SIZE:
          vm->nm_iomem_size = 0x8000 | atoi(optarg);
          break;
+
+      /* GR edit */
+      /* Set the base MAC address */
+      case 'm':
+         if (!c3725_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+      /* GR edit end */
 
       /* Unknown option */
       default:

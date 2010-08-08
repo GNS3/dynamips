@@ -64,6 +64,11 @@ extern const char *sw_version_tag;
 #define OPT_VM_DEBUG    0x105
 #define OPT_IOMEM_SIZE  0x106
 #define OPT_SPARSE_MEM  0x107
+/* GR Edit */
+#define OPT_NOCTRL      0x120
+#define OPT_NOTELMSG    0x121
+#define OPT_FILEPID     0x122
+/* GR Edit end */
 
 /* Delete all objects */
 void dynamips_reset(void);

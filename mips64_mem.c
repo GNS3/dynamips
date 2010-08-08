@@ -52,6 +52,20 @@ void mips64_access_special(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t mask,
 
       case MTS_ACC_T:
          if (op_code != MIPS_MEMOP_LOOKUP) {
+
+            /* GR edit */
+            /* If the IOS tries to access memory at addr 0x0, it is probably */
+            /* a reload. Shut the vm down, otherwise 100% cpu and livespin   */
+            if (vaddr == 0) {
+              cpu_log(cpu->gen,
+                    "MTS","TLB exception suggests RELOAD for address 0x%llx at pc=0x%llx "
+                    "(%s access, size=%u)\n",
+                    vaddr,cpu->pc,(op_type == MTS_READ) ? 
+                    "read":"write",op_size);
+              vm_stop(cpu->vm);
+            }
+            /* GR edit end */
+
 #if DEBUG_MTS_ACC_T
             cpu_log(cpu->gen,
                     "MTS","TLB exception for address 0x%llx at pc=0x%llx "

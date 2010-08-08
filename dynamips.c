@@ -93,6 +93,13 @@ void signal_gen_handler(int sig)
          vm_save_state = TRUE;
          break;
 
+      /* GR edit */
+      /* Handle SIGPIPE by ignoring it */
+      case SIGPIPE:
+         fprintf(stderr,"Error: unwanted SIGPIPE.\n");
+         break;
+      /* GR edit end */
+
       case SIGINT:
          /* CTRL+C has been pressed */
          if (hypervisor_mode)
@@ -131,6 +138,11 @@ static void setup_signals(void)
    sigaction(SIGHUP,&act,NULL);
    sigaction(SIGQUIT,&act,NULL);
    sigaction(SIGINT,&act,NULL);
+
+   /* GR edit */
+   /* Handle SIGPIPE */
+   sigaction(SIGPIPE,&act,NULL);
+   /* GR edit end */
 }
 
 /* Create general log file */
@@ -205,6 +217,10 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "(default: %u Mb)\n"
           "  --disk1 <size>     : Set PCMCIA ATA disk1: size "
           "(default: %u Mb)\n"
+          "\n"
+          "  --noctrl           : Disable ctrl+] monitor console\n"
+          "  --notelnetmsg      : Disable message when using tcp console/aux\n"
+          "  --filepid filename : Store dynamips pid in a file\n"
           "\n",
           LOGFILE_DEFAULT_NAME,MIPS_EXEC_AREA_SIZE,VM_TIMER_IRQ_CHECK_ITV,
           vm->ram_size,vm->rom_size,vm->nvram_size,vm->conf_reg_setup,
@@ -345,6 +361,9 @@ static struct option cmd_line_lopts[] = {
    { "vm-debug"   , 1, NULL, OPT_VM_DEBUG },
    { "iomem-size" , 1, NULL, OPT_IOMEM_SIZE },
    { "sparse-mem" , 0, NULL, OPT_SPARSE_MEM },
+   { "noctrl"     , 0, NULL, OPT_NOCTRL },
+   { "notelnetmsg", 0, NULL, OPT_NOTELMSG },
+   { "filepid"    , 1, NULL, OPT_FILEPID },
    { NULL         , 0, NULL, 0 },
 };
 
@@ -374,6 +393,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
    int instance_id;
    int option;
    char *str;
+   FILE *pid_file = NULL; // For saving the pid if requested
 
    /* Get the instance ID */
    instance_id = 0;
@@ -400,6 +420,10 @@ static int parse_std_cmd_line(int argc,char *argv[])
       exit(EXIT_FAILURE);
 
    opterr = 0;
+   /* GR Edit */
+   vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
+   vtty_set_telnetmsg(1);   /* By default allow telnet message */
+   /* GR Edit end */
 
    while((option = getopt_long(argc,argv,options_list,
                                cmd_line_lopts,NULL)) != -1) 
@@ -451,6 +475,13 @@ static int parse_std_cmd_line(int argc,char *argv[])
                    vm->pcmcia_disk_size[1]);
             break;
 
+         /* GR Edit */
+         case OPT_NOCTRL:
+            vtty_set_ctrlhandler(0); /* Ignore ctrl ] */
+            printf("Block ctrl+] access to monitor console.\n");
+            break;
+         /* GR Edit end */
+
          /* Config Register */
          case 'c':
             vm->conf_reg_setup = strtol(optarg, NULL, 0);
@@ -489,6 +520,22 @@ static int parse_std_cmd_line(int argc,char *argv[])
             vm->rom_filename = optarg;
             break;
 
+         /* GR Edit */
+         case OPT_NOTELMSG:
+            vtty_set_telnetmsg(0); /* disable telnet greeting */
+            printf("Prevent telnet message on AUX/CONSOLE connecte.\n");
+            break;
+
+         case OPT_FILEPID:
+            if ((pid_file = fopen(optarg,"w"))) {
+              fprintf(pid_file,"%d",getpid());
+              fclose(pid_file);
+            } else {
+              printf("Unable to save to %s.\n",optarg);
+            }
+            break;
+
+         /* GR Edit end */
          /* Idle PC */
          case OPT_IDLE_PC:
             vm->idle_pc = strtoull(optarg,NULL,0);
@@ -622,8 +669,14 @@ static int parse_std_cmd_line(int argc,char *argv[])
          /* Parse options specific to the platform */
          default:
             if (vm->platform->cli_parse_options != NULL)
-               if (vm->platform->cli_parse_options(vm,option) == -1)
-                  exit(EXIT_FAILURE);
+               /* GR edit */
+               /* If you get an option wrong, say which option is was */
+               /* Wont be pretty for a long option, but it will at least help */
+               if (vm->platform->cli_parse_options(vm,option) == -1) {
+                 printf("Flag not recognised: -%c\n",(char)option);
+                 exit(EXIT_FAILURE);
+               }
+               /* GR edit end */
       }
    }
 
@@ -653,6 +706,12 @@ static int run_hypervisor(int argc,char *argv[])
    int i,option;
    char *index;
    size_t len;
+   FILE *pid_file = NULL; // For saving the pid if requested
+
+   /* GR Edit */
+   vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
+   vtty_set_telnetmsg(1);   /* By default allow telnet message */
+   /* GR Edit end */
 
    for(i=1;i<argc;i++)
       if (!strcmp(argv[i],"-H")) {
@@ -667,7 +726,12 @@ static int run_hypervisor(int argc,char *argv[])
    cli_load_plugins(argc,argv);
 
    opterr = 0;
-   while((option = getopt(argc,argv,options_list)) != -1) {
+   /* while((option = getopt(argc,argv,options_list)) != -1) { */
+   /* GR Edit */
+   /* New long options are sometimes appropriate for hypervisor mode */
+   while((option = getopt_long(argc,argv,options_list,
+                               cmd_line_lopts,NULL)) != -1) {
+   /* GR Edit end */
       switch(option)
       {
          /* Hypervisor TCP port */
@@ -708,6 +772,28 @@ static int run_hypervisor(int argc,char *argv[])
          /* Load plugin (already handled) */
          case 'L':
             break;
+
+         /* GR Edit */
+         case OPT_NOCTRL:
+            vtty_set_ctrlhandler(0); /* Ignore ctrl ] */
+            printf("Block ctrl+] access to monitor console.\n");
+            break;
+
+         case OPT_NOTELMSG:
+            vtty_set_telnetmsg(0); /* disable telnet greeting */
+            printf("Prevent telnet message on AUX/CONSOLE connecte.\n");
+            break;
+
+         case OPT_FILEPID:
+            if ((pid_file = fopen(optarg,"w"))) {
+              fprintf(pid_file,"%d",getpid());
+              fclose(pid_file);
+            } else {
+              printf("Unable to save to %s.\n",optarg);
+            }
+            break;
+
+         /* GR Edit end */
 
          /* Oops ! */
          case '?':

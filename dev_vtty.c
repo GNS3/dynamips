@@ -48,10 +48,28 @@ static pthread_mutex_t vtty_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vtty_t *vtty_list = NULL;
 static pthread_t vtty_thread;
 
+/* GR Edit */
+static int ctrl_code_ok = 1;
+static int telnet_message_ok = 1;
+/* GR Edit end */
+
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
 static struct termios tios,tios_orig;
+
+/* GR Edit */
+/* Allow the user to disable the CTRL code for the monitor interface */
+void vtty_set_ctrlhandler(int n)
+{
+  ctrl_code_ok = n;
+}
+/* Allow the user to disable the telnet message for AUX and CONSOLE */
+void vtty_set_telnetmsg(int n)
+{
+  telnet_message_ok = n;
+}
+/* GR Edit end */
 
 /* Send Telnet command: WILL TELOPT_ECHO */
 static void vtty_telnet_will_echo(vtty_t *vtty)
@@ -188,15 +206,27 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
    }
 
    if (!(vtty->fstream = fdopen(vtty->fd, "wb"))) {
+      /* GR edit */
+      /* I was debugging an AUX tcp problem and thought this was the issue */
+      /* Turns out the prob is elsewhere, but still makes sense to know if */
+      /* this test fails rather than a silent failure                      */
+      vm_log(vtty->vm,"VTTY","vtty_tcp_conn_accept: fdopen failed on port %d failed %s\n",
+              vtty->tcp_port,strerror(errno));
+      /* GR edit end */
       close(vtty->fd);
       vtty->fd = -1;
       return(-1);
    }
 
-   fprintf(vtty->fstream,
-           "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n\r\n", 
-           vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
-           vtty->name);
+   /* GR Edit */
+   /* Allow telnet message to be turned off */
+   if (telnet_message_ok == 1) {
+     fprintf(vtty->fstream,
+             "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n\r\n", 
+             vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
+             vtty->name);
+   }
+   /* GR Edit end */
 
    vtty->select_fd = &vtty->fd;
    vtty->state = VTTY_STATE_TCP_RUNNING;
@@ -820,7 +850,15 @@ static void vtty_read_and_store(vtty_t *vtty)
             /* Ctrl + ']' (0x1d, 29), or Alt-Gr + '*' (0xb3, 179) */
             case 0x1d:
             case 0xb3:
-               vtty->input_state = VTTY_INPUT_REMOTE;
+               /* GR Edit */
+               /* Allow REMOTE control to be turned off */
+               if (ctrl_code_ok == 1) {
+                 vtty->input_state = VTTY_INPUT_REMOTE;
+               } else {
+                 /* Store a standard character */
+                 vtty_store(vtty,c);
+               }
+               /* GR Edit end */
                return;
             case IAC :
                vtty->input_state = VTTY_INPUT_TELNET;

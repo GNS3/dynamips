@@ -115,4 +115,8 @@ int vtty_store_ctrlc(vtty_t *);
 /* Initialize the VTTY thread */
 int vtty_init(void);
 
+/* GR Edit */
+void vtty_set_ctrlhandler(int n);
+void vtty_set_telnetmsg(int n);
+/* GR Edit end */
 #endif

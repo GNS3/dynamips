@@ -209,8 +209,11 @@ int parse_mac_addr(n_eth_addr_t *addr,char *str)
       addr->eth_addr_byte[3] = v[1] & 0xFF;
       addr->eth_addr_byte[4] = (v[2] >> 8) & 0xFF;
       addr->eth_addr_byte[5] = v[2] & 0xFF;
+      /* GR edit */
+      /* If the format is right, return 0 to indicate it is valid */
+      return(0);
+      /* GR edit end */
    }
-
    return(-1);
 }
 

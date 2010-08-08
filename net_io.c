@@ -355,9 +355,14 @@ static int netio_unix_create(netio_unix_desc_t *nud,char *local,char *remote)
 /* Write a packet to an UNIX socket */
 static ssize_t netio_unix_send(netio_unix_desc_t *nud,void *pkt,size_t pkt_len)
 {
+/* GR Edit */
+/* Bug pointed out by JayTee */
+/* http://www.ipflow.utc.fr/blog/?p=52#comments */
    return(sendto(nud->fd,pkt,pkt_len,0,
                  (struct sockaddr *)&nud->remote_sock,
-                 sizeof(&nud->remote_sock)));
+                 sizeof(nud->remote_sock)));    // Size of struct not pointer
+                 /* sizeof(&nud->remote_sock))); */
+/* GR Edit end */
 }
 
 /* Receive a packet from an UNIX socket */
