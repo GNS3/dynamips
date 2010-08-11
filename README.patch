@@ -1,68 +1,76 @@
 
+Author: Gordon Russell
+
 I have started using dynamips quite a bit myself, and have changed to the code
 to make it nicer and more robust. Feel free to take this patch and use it
 how you like. The patch and resulting code is without warranty. Consider
-it beta. Use at your own risk. This is the version I run in linuxzoo.net.
+it beta. Use at your own risk. This is the version I run in my own systems.
+I am not the author of dynamips and this is in no way an "official" patch.
 
-I mostly use c3645 and a little c7200. Where possible I extended the patch
-to all variants where it seemed safe to do so, but these are unchecked.
+Changes tested in c3745 and c7200. Other platforms are largely untested.
+Please let me know if it breaks anything. However it should be reasonably
+safe.
+
 I dont use the hypervisor, so I cannot verify that I have broken it with
 these changes. However I extended hypervisor for the new flags as appropriate
-and where it seemed safe. Most changes (unless trivial or typo corrections)
-start with 
-  /* GR edit */
-and end with
-  /* GR edit end */ 
-This is just to keep me sane. Feel free to delete the comment markers.
+and where it seemed safe. All changes are made in a way that nothing should
+break. Let me know if it does.
 
-This patch does the following:
- o In c3645 the IOS command "reload" spins the emulator out of control. I
-   placed a test in the mips64_mem.c routine to check for an vaddr lookup
-   of 0x0, and when this happens I SHUTDOWN the vm.
- o The flags suggest you can set the base mac address, but the code only works
-   for C7200. I put in the missing code for c3645 (verified to work) and
-   put in similar code for the rest (unverified). Most of the code was
-   there, so there may have been a good reason for it to be missing...
-   This is for the command line only, and I did not extend the hypervisor
-   in this case.
- o Flags which are meant to work but dont now give an error message saying
-   what is wrong, rather than being cryptic. This is specific to platform
-   options only.
- o I put in a flag for my needs which disables the CTRL control
-   code "Ctrl-]" to access the monitor console of the vm. It is
-   called "--noctrl"
- o I put in a flag for my needs which disables the "Connected to" message
-   when you telnet to AUX or CONSOLE tcp ports. This was messing up
-   the perl module Net::Telnet::Cisco. It is called "--notelnetmsg".
- o If you telnet to AUX or CONSOLE tcp, then terminate the link, the
-   emulator may crash. The problem is the fclose, which closes the
-   link between telnet and uart buffer while there is still data to be
-   written from the buffer. This results in a SIGPIPE signal and a crash
-   when you are running the command from the prompt (from the hypervisor
-   I believe the signal is trapped and handled). Patch catches SIGPIPE
-   but does nothing more. Solves the problem for me. 
- o Someone posted in a forum that having a flag to save the pid of the process
-   would be nice. I have no use for that but it was a trivial addition. Flag
-   is "--pidfile filename". 
- o The author put in code to support mac addresses in xxxx.xxxx.xxxx and
-   xx:xx:xx:xx:xx:xx notation. However if the second format is used
-   it is parsed then marked incorrectly as an error. Fixed.
- o http://www.ipflow.utc.fr/blog/?p=52#comments
-   JatTee found a bug. sizeof should be on struct not pointer to struct.
-   It is a simple fix and his patch looks fine.
+Changelog:
+11th Aug 2010
+o AUX port in 3745 now works. The error was with the ns16552 emulation of
+  channel 2. Somehow the irq signal was commented out. Put back in. This
+  should help the 1700,2600,2691,3600,3725 as well.
+o the 16552 did not emulate the latch bit, and so when AUX speed was set the
+  high and low byte of the speed was read as a character. But although this is
+  a bug you probably never noticed it. Fixed anyway. Also now monitors the
+  handshake register as well as the speed/parity/stopbits, but does nothing
+  with the information except logging it.
+o When you telnet to AUX or CONSOLE, stream was not flushed until data was flowing
+  from the router, which left the message hanging. Quick fix is to flush the FILE
+  immediately. Additionally TCP_NODELAY was added to see if it would help.
+o When telnetting into CON or AUX, and before IAC, telnet mode should be
+  VTTY_INPUT_TEXT
+o Make clean was not deleting everything
+
+8th Aug 2010
+o In c3645 the IOS command "reload" spins the emulator out of control. I
+  placed a test in the mips64_mem.c routine to check for an vaddr lookup
+  of 0x0, and when this happens I SHUTDOWN the vm.
+o The flags suggest you can set the base mac address, but the code only works
+  for C7200. I put in the missing code for c3645 (verified to work) and
+  put in similar code for the rest (unverified). Most of the code was
+  there, so there may have been a good reason for it to be missing...
+  This is for the command line only, and I did not extend the hypervisor
+  in this case.
+o Flags which are meant to work but dont now give an error message saying
+  what is wrong, rather than being cryptic. This is specific to platform
+  options only.
+o I put in a flag for my needs which disables the CTRL control
+  code "Ctrl-]" to access the monitor console of the vm. It is
+  called "--noctrl"
+o I put in a flag for my needs which disables the "Connected to" message
+  when you telnet to AUX or CONSOLE tcp ports. This was messing up
+  the perl module Net::Telnet::Cisco. It is called "--notelnetmsg".
+o If you telnet to AUX or CONSOLE tcp, then terminate the link, the
+  emulator may crash. The problem is the fclose, which closes the
+  link between telnet and uart buffer while there is still data to be
+  written from the buffer. This results in a SIGPIPE signal and a crash
+  when you are running the command from the prompt (from the hypervisor
+  I believe the signal is trapped and handled). Patch catches SIGPIPE
+  but does nothing more. Solves the problem for me. 
+o Someone posted in a forum that having a flag to save the pid of the process
+  would be nice. I have no use for that but it was a trivial addition. Flag
+  is "--pidfile filename". 
+o The author put in code to support mac addresses in xxxx.xxxx.xxxx and
+  xx:xx:xx:xx:xx:xx notation. However if the second format is used
+  it is parsed then marked incorrectly as an error. Fixed.
+o http://www.ipflow.utc.fr/blog/?p=52#comments
+  JatTee found a bug. sizeof should be on struct not pointer to struct.
+  It is a simple fix and his patch looks fine.
 
 Bugs I have noticed but cannot yet fix:
-
- o The AUX port on the 3645 seems to configure properly but never connects
-   to an exec cli prompt. I believe the bug lies in the fact that the AUX
-   port is not passing characters from telnet to vm. However the
-   IOS command "users" suggests that the IOS is detecting activity. Characters
-   from the vm to the telnet port work find!. Very strange.
-   Perhaps missing code to pass characters into uart buffer?
-   Been through the code and there is nothing obvious. Works absolutely fine
-   for c7200. Interestingly the telnet announce message never appears in this
-   case, as the port is shutdown before the buffer is emptied, leaving the
-   text unsent back.
+o None
 
 Notes you may find useful:
 
@@ -76,7 +84,7 @@ Notes you may find useful:
  o I suggest combining this patch with idle_pcs-0.2.8-RC1.patch
    You can download this from sourceforge page for dynagui.
    Applying my patch then theirs seems to apply cleanly.
-   I did not role the patches together as I did not want to confuse my changes
+   I did not roll the patches together as I did not want to confuse my changes
    with dynagui.
 
 Please dont email me with requests or dynagen bug reports (unless of course the

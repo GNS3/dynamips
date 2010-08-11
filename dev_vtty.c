@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -155,6 +156,14 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
       goto error;
    }
 
+   // Send telnet packets asap. Dont wait to fill packets up
+   if (setsockopt(vtty->accept_fd,SOL_TCP,TCP_NODELAY,
+                  &one,sizeof(one)) < 0)
+   {
+      perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
+      goto error;
+   }
+
    memset(&serv,0,sizeof(serv));
    serv.sin_family = AF_INET;
    serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -202,7 +211,9 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
       vtty_telnet_will_echo(vtty);
       vtty_telnet_will_suppress_go_ahead(vtty);
       vtty_telnet_dont_linemode(vtty);
-      vtty->input_state = VTTY_INPUT_TELNET;
+      // IAC not recieved yet, so actually in TEXT mode
+      //vtty->input_state = VTTY_INPUT_TELNET;
+      vtty->input_state = VTTY_INPUT_TEXT;
    }
 
    if (!(vtty->fstream = fdopen(vtty->fd, "wb"))) {
@@ -225,6 +236,9 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
              "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n\r\n", 
              vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
              vtty->name);
+     // Flush the messages asap or the user will see nothing for a potentially
+     // long time
+     vtty_flush(vtty);
    }
    /* GR Edit end */
 
@@ -588,6 +602,9 @@ static int vtty_tcp_read(vtty_t *vtty)
             return(c);
 
          /* Problem with the connection: Re-enter wait mode */
+         vm_log(vtty->vm,"VTTY","%s: closing running tcp socket %d\n",
+                vtty->name,vtty->fd);
+
          shutdown(vtty->fd,2);
          fclose(vtty->fstream);
          close(vtty->fd);

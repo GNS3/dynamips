@@ -263,7 +263,8 @@ install: $(PROG) nvram_export
 .PHONY: clean
 clean:
 	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc asmdefs$(BIN_EXT) \
-	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG)
+	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG) nvram_export \
+	mips64_microcode_dump.inc ppc32_microcode_dump.inc
 	$(RM) -f *~
 
 .PHONY: package
