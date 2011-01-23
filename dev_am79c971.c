@@ -30,8 +30,8 @@
 #define DEBUG_BCR_REGS   0
 #define DEBUG_PCI_REGS   0
 #define DEBUG_ACCESS     0
-#define DEBUG_TRANSMIT   1
-#define DEBUG_RECEIVE    1
+#define DEBUG_TRANSMIT   0
+#define DEBUG_RECEIVE    0
 #define DEBUG_UNKNOWN    0
 
 /* AMD Am79c971 PCI vendor/product codes */
@@ -823,6 +823,10 @@ static int am79c971_handle_txring_single(struct am79c971_data *d)
    if ((d->tx_start == 0) || !(d->csr[0] & AM79C971_CSR0_TXON))
       return(FALSE);
    
+   /* Check if the NIO can transmit */
+   if (!netio_can_transmit(d->nio))
+      return(FALSE);
+   
    /* Copy the current txring descriptor */
    tx_start = tx_current = txdesc_get_current(d);
    ptxd = &txd0;
@@ -916,6 +920,7 @@ static int am79c971_handle_txring(struct am79c971_data *d)
       if (!am79c971_handle_txring_single(d))
          break;
 
+   netio_clear_bw_stat(d->nio);
    AM79C971_UNLOCK(d);
    return(TRUE);
 }

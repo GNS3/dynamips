@@ -127,6 +127,9 @@ int dev_sparse_shutdown(struct vdevice *dev);
 m_iptr_t dev_sparse_get_host_addr(vm_instance_t *vm,struct vdevice *dev,
                                   m_uint64_t paddr,u_int op_type,int *cow);
 
+/* Get virtual address space used on host for the specified device */
+size_t dev_get_vspace_size(struct vdevice *dev);
+
 /* Create a dummy console */
 int dev_create_dummy_console(vm_instance_t *vm);
 

@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 7200 routines and definitions (EEPROM,...).
  */
@@ -35,37 +36,37 @@
 
 /* NPE-100 */
 static m_uint16_t eeprom_cpu_npe100_data[16] = {
-   0x0135, 0x0203, 0xffff, 0xffff, 0x4906, 0x0004, 0x0000, 0x0000,
+   0x0135, 0x0203, 0xff10, 0x45C5, 0x4906, 0x0004, 0x0000, 0x0000,
    0x6000, 0x0000, 0x9901, 0x0600, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* NPE-150 */
 static m_uint16_t eeprom_cpu_npe150_data[16] = {
-   0x0115, 0x0203, 0xffff, 0xffff, 0x4906, 0x0004, 0x0000, 0x0000,
+   0x0115, 0x0203, 0xff10, 0x45C5, 0x4906, 0x0004, 0x0000, 0x0000,
    0x6000, 0x0000, 0x9901, 0x0600, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* NPE-175 */
 static m_uint16_t eeprom_cpu_npe175_data[16] = {
-   0x01C2, 0x0203, 0xffff, 0xffff, 0x4906, 0x0004, 0x0000, 0x0000,
+   0x01C2, 0x0203, 0xff10, 0x45C5, 0x4906, 0x0004, 0x0000, 0x0000,
    0x6000, 0x0000, 0x9901, 0x0600, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* NPE-200 */
 static m_uint16_t eeprom_cpu_npe200_data[16] = {
-   0x0169, 0x0200, 0xffff, 0xffff, 0x4909, 0x8902, 0x0000, 0x0000,
+   0x0169, 0x0200, 0xff10, 0x45C5, 0x4909, 0x8902, 0x0000, 0x0000,
    0x6800, 0x0000, 0x9710, 0x2200, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* NPE-225 (same as NPE-175) */
 static m_uint16_t eeprom_cpu_npe225_data[16] = {
-   0x01C2, 0x0203, 0xffff, 0xffff, 0x4906, 0x0004, 0x0000, 0x0000,
+   0x01C2, 0x0203, 0xff10, 0x45C5, 0x4906, 0x0004, 0x0000, 0x0000,
    0x6000, 0x0000, 0x9901, 0x0600, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
 
 /* NPE-300 */
 static m_uint16_t eeprom_cpu_npe300_data[16] = {
-   0x01AE, 0x0402, 0xffff, 0xffff, 0x490D, 0x5108, 0x0000, 0x0000,
+   0x01AE, 0x0402, 0xff10, 0x45C5, 0x490D, 0x5108, 0x0000, 0x0000,
    0x5000, 0x0000, 0x0012, 0x1000, 0x0000, 0xFFFF, 0xFFFF, 0xFF00,
 };
 
@@ -104,7 +105,6 @@ static m_uint16_t eeprom_cpu_npeg2_data[64] = {
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x15FF,
 };
-
 /*
  * CPU EEPROM array.
  */
@@ -116,8 +116,8 @@ static struct cisco_eeprom c7200_cpu_eeprom[] = {
    { "npe-225", eeprom_cpu_npe225_data, sizeof(eeprom_cpu_npe225_data)/2 },
    { "npe-300", eeprom_cpu_npe300_data, sizeof(eeprom_cpu_npe300_data)/2 },
    { "npe-400", eeprom_cpu_npe400_data, sizeof(eeprom_cpu_npe400_data)/2 },
-   { "npe-g1" , eeprom_cpu_npeg1_data , sizeof(eeprom_cpu_npeg1_data)/2 },
-   { "npe-g2" , eeprom_cpu_npeg2_data , sizeof(eeprom_cpu_npeg2_data)/2 },
+   { "npe-g1" , eeprom_cpu_npeg1_data , sizeof(eeprom_cpu_npeg1_data)/2  },
+   { "npe-g2" , eeprom_cpu_npeg2_data , sizeof(eeprom_cpu_npeg2_data)/2  },
    { NULL, NULL, 0 },
 };
 
@@ -127,7 +127,7 @@ static struct cisco_eeprom c7200_cpu_eeprom[] = {
 
 /* Standard Midplane EEPROM contents */
 static m_uint16_t eeprom_midplane_data[32] = {
-   0x0106, 0x0101, 0xffff, 0xffff, 0x4906, 0x0303, 0xFFFF, 0xFFFF,
+   0x0106, 0x0101, 0xff10, 0x45C5, 0x4906, 0x0303, 0xFFFF, 0xFFFF,
    0xFFFF, 0x0400, 0x0000, 0x0000, 0x4C09, 0x10B0, 0xFFFF, 0x00FF,
    0x0000, 0x0000, 0x6335, 0x8B28, 0x631D, 0x0000, 0x608E, 0x6D1C,
    0x62BB, 0x0000, 0x6335, 0x8B28, 0x0000, 0x0000, 0x6335, 0x8B28,
@@ -135,7 +135,7 @@ static m_uint16_t eeprom_midplane_data[32] = {
 
 /* VXR Midplane EEPROM contents */
 static m_uint16_t eeprom_vxr_midplane_data[32] = {
-   0x0106, 0x0201, 0xffff, 0xffff, 0x4906, 0x0303, 0xFFFF, 0xFFFF,
+   0x0106, 0x0201, 0xff10, 0x45C5, 0x4906, 0x0303, 0xFFFF, 0xFFFF,
    0xFFFF, 0x0400, 0x0000, 0x0000, 0x4C09, 0x10B0, 0xFFFF, 0x00FF,
    0x0000, 0x0000, 0x6335, 0x8B28, 0x631D, 0x0000, 0x608E, 0x6D1C,
    0x62BB, 0x0000, 0x6335, 0x8B28, 0x0000, 0x0000, 0x6335, 0x8B28,
@@ -179,6 +179,7 @@ static struct cisco_eeprom c7200_pem_eeprom[] = {
 /* Port Adapter Drivers                                                     */
 /* ======================================================================== */
 static struct cisco_card_driver *pa_drivers[] = {
+   &dev_c7200_npeg2_driver,
    &dev_c7200_iocard_fe_driver,
    &dev_c7200_iocard_2fe_driver,
    &dev_c7200_iocard_ge_e_driver,
@@ -193,6 +194,7 @@ static struct cisco_card_driver *pa_drivers[] = {
    &dev_c7200_pa_pos_oc3_driver,
    &dev_c7200_pa_4b_driver,   
    &dev_c7200_pa_mc8te1_driver,
+   &dev_c7200_jcpa_driver,
    NULL,
 };
 
@@ -467,6 +469,45 @@ static void c7200_save_config(vm_instance_t *vm,FILE *fd)
    fprintf(fd,"c7200 set_midplane %s %s\n\n",vm->name,router->midplane_type);
 }
 
+/* Returns TRUE if the specified card in slot 0 is an I/O card */
+int c7200_slot0_iocard_present(c7200_t *router)
+{
+   struct cisco_eeprom *eeprom;
+   m_uint8_t eeprom_ver,data[2];
+   m_uint16_t card_type;
+   size_t offset;
+
+   if (!(eeprom = router->pa_eeprom_g1.eeprom[0]))
+      return(FALSE);
+    
+   /* Read EEPROM format version */
+   card_type = 0;
+   cisco_eeprom_get_byte(eeprom,0,&eeprom_ver);
+
+   switch(eeprom_ver) {
+      case 1:
+         cisco_eeprom_get_byte(eeprom,0,&data[0]);
+         cisco_eeprom_get_byte(eeprom,1,&data[1]);
+         card_type = ((m_uint16_t)data[0] << 8) | data[1];
+         break;
+
+      case 4:
+         if (!cisco_eeprom_v4_find_field(eeprom,0x40,&offset)) {
+            cisco_eeprom_get_byte(eeprom,offset,&data[0]);
+            cisco_eeprom_get_byte(eeprom,offset+1,&data[1]);
+            card_type = ((m_uint16_t)data[0] << 8) | data[1];        
+         }
+         break;
+   }
+
+   /* jacket card is not an i/o card */
+   if (card_type == 0x0511)
+      return(FALSE);
+
+   /* by default, if there is something, consider it as an i/o card */
+   return(TRUE);
+}
+
 /* Set EEPROM for the specified slot */
 int c7200_set_slot_eeprom(c7200_t *router,u_int slot,
                           struct cisco_eeprom *eeprom)
@@ -499,9 +540,80 @@ int c7200_set_slot_eeprom(c7200_t *router,u_int slot,
       case 6:
          router->pa_eeprom_g2.eeprom[2] = eeprom;
          break;
+
+      /* Group 3: bay 7 */
+      case 7:
+         router->pa_eeprom_g3.eeprom[0] = eeprom;
+         break;
    }
 
    return(0);
+}
+
+/* Network IRQ distribution */
+struct net_irq_distrib  {
+   u_int reg;
+   u_int offset;
+};
+
+static struct net_irq_distrib net_irq_dist[C7200_MAX_PA_BAYS] = {
+   { 0,  0 },  /* Slot 0: reg 0x10,  0x000000XX */
+   { 0,  8 },  /* Slot 1: reg 0x10,  0x0000XX00 */
+   { 1,  8 },  /* Slot 2: reg 0x18,  0x0000XX00 */
+   { 0, 24 },  /* Slot 3: reg 0x10,  0xXX000000 */
+   { 0, 16 },  /* Slot 4: reg 0x10,  0x00XX0000 */
+   { 1, 24 },  /* Slot 5: reg 0x18,  0xXX000000 */
+   { 1, 16 },  /* Slot 6: reg 0x18,  0x00XX0000 */
+   { 2, 24 },  /* Slot 7: reg 0x294, 0xXX000000 */ 
+};
+
+/* Get register offset for the specified slot */
+u_int dev_c7200_net_get_reg_offset(u_int slot)
+{
+   return(net_irq_dist[slot].offset);
+}
+
+/* Update network interrupt status */
+void dev_c7200_net_update_irq(c7200_t *router)
+{
+   int i,status = 0;
+
+   for(i=0;i<3;i++)
+      status |= router->net_irq_status[i] & router->net_irq_mask[i];
+   
+   if (status) {
+      vm_set_irq(router->vm,C7200_NETIO_IRQ);
+   } else {
+      vm_clear_irq(router->vm,C7200_NETIO_IRQ);
+   }
+}
+
+/* Trigger a Network IRQ for the specified slot/port */
+void dev_c7200_net_set_irq(c7200_t *router,u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(router->vm,"C7200","setting NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   router->net_irq_status[irq_dist->reg] |= 1 << (irq_dist->offset + port);
+   dev_c7200_net_update_irq(router);
+}
+
+/* Clear a Network IRQ for the specified slot/port */
+void dev_c7200_net_clear_irq(c7200_t *router,u_int slot,u_int port)
+{
+   struct net_irq_distrib *irq_dist;
+
+#if DEBUG_NET_IRQ
+   vm_log(router->vm,"C7200","clearing NetIRQ for slot %u port %u\n",
+          slot,port);
+#endif
+   irq_dist = &net_irq_dist[slot];
+   router->net_irq_status[irq_dist->reg] &= ~(1 << (irq_dist->offset + port));
+   dev_c7200_net_update_irq(router);
 }
 
 /* Get slot/port corresponding to specified network IRQ */
@@ -597,7 +709,7 @@ int c7200_npe_set_type(c7200_t *router,char *npe_type)
       return(-1);
    }
 
-#if 1 /* FIXME - for a later release */
+#if 0 /* FIXME - for a later release */
    /* Use a C7200-IO-FE by default in slot 0 if an I/O card is required */
    if (driver->iocard_required) {
       vm_slot_add_binding(router->vm,"C7200-IO-FE",0,0);
@@ -1262,7 +1374,7 @@ int c7200_init_npeg2(c7200_t *router)
    for(i=1;i<C7200_MAX_PA_BAYS;i++)
       vm->slots_pci_bus[i] = vm->pci_bus_pool[i];
 
-   /* PCI bridges for PA Bays 1 to 6 */
+   /* PCI bridges for PA Bays 1 to 7 */
    c7200_pa_init_pci_bridge(router,1,vm->pci_bus_pool[24],1);
    c7200_pa_init_pci_bridge(router,3,vm->pci_bus_pool[24],2);
    c7200_pa_init_pci_bridge(router,5,vm->pci_bus_pool[24],3);
@@ -1270,6 +1382,16 @@ int c7200_init_npeg2(c7200_t *router)
    c7200_pa_init_pci_bridge(router,2,vm->pci_bus_pool[25],1);
    c7200_pa_init_pci_bridge(router,4,vm->pci_bus_pool[25],2);
    c7200_pa_init_pci_bridge(router,6,vm->pci_bus_pool[25],3);
+
+   c7200_pa_init_pci_bridge(router,7,vm->pci_bus_pool[0],8);
+
+
+#if 0 /* too late at this stage... */
+   /* Add a fake slot (8) for NPE-G2 Ethernet ports */
+   if (vm_slot_add_binding(router->vm,"NPE-G2",8,0) == -1)
+      printf("unable to set slot 8\n");
+#endif
+
    return(0);
 }
 
@@ -1357,7 +1479,7 @@ static int c7200_checklist(c7200_t *router)
 /* Initialize Port Adapters */
 static int c7200_init_platform_pa(c7200_t *router)
 {
-#if 0 /* FIXME - for a later release */
+#if 1 /* FIXME - for a later release */
    /* Use a C7200-IO-FE by default in slot 0 if an I/O card is required */
    if (router->npe_driver->iocard_required && !vm_slot_active(router->vm,0,0))
       vm_slot_add_binding(router->vm,"C7200-IO-FE",0,0);
@@ -1372,7 +1494,6 @@ static int c7200m_init_platform(c7200_t *router)
    struct vm_instance *vm = router->vm;
    cpu_mips_t *cpu0; 
    cpu_gen_t *gen0;
-   vm_obj_t *obj;
 
    /* Copy config register setup into "active" config register */
    vm->conf_reg = vm->conf_reg_setup;
@@ -1478,11 +1599,6 @@ static int c7200m_init_platform(c7200_t *router)
 
    /* Midplane FPGA */
    dev_c7200_mpfpga_init(router,C7200_MPFPGA_ADDR,0x1000);
-
-   if (!(obj = vm_object_find(router->vm,"mp_fpga")))
-      return(-1);
-
-   router->mpfpga_data = obj->data;
 
    /* IO FPGA */
    if (dev_c7200_iofpga_init(router,C7200_IOFPGA_ADDR,0x1000) == -1)
@@ -1606,13 +1722,11 @@ static int c7200p_init_platform(c7200_t *router)
    if (dev_c7200_mpfpga_init(router,C7200_G2_MPFPGA_ADDR,0x10000) == -1)
       return(-1);
 
-   if (!(obj = vm_object_find(router->vm,"mp_fpga")))
-      return(-1);
-
-   router->mpfpga_data = obj->data;
-
-   /* If we have nothing in slot 0, the console is handled by the MV64460 */
-   if (!vm_slot_get_card_ptr(vm,0)) {
+   /* 
+    * If we have no i/o card in slot 0, the console is handled by 
+    * the MV64460.
+    */
+   if (!c7200_slot0_iocard_present(router)) {
       vm_log(vm,"CONSOLE","console managed by NPE-G2 board\n");
       mv64460_sdma_bind_vtty(router->mv64460_sysctr,0,vm->vtty_con);
       mv64460_sdma_bind_vtty(router->mv64460_sysctr,1,vm->vtty_aux);
@@ -1740,7 +1854,7 @@ static void c7200m_set_irq(vm_instance_t *vm,u_int irq)
 
       case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
          c7200_net_irq_get_slot_port(irq,&slot,&port);
-         dev_c7200_mpfpga_net_set_irq(router->mpfpga_data,slot,port);
+         dev_c7200_net_set_irq(router,slot,port);
          break;
    }
 }
@@ -1759,7 +1873,7 @@ static void c7200m_clear_irq(vm_instance_t *vm,u_int irq)
 
       case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
          c7200_net_irq_get_slot_port(irq,&slot,&port);
-         dev_c7200_mpfpga_net_clear_irq(router->mpfpga_data,slot,port);
+         dev_c7200_net_clear_irq(router,slot,port);
          break;
    }
 }
@@ -1833,7 +1947,7 @@ static void c7200p_set_irq(vm_instance_t *vm,u_int irq)
          break;
       case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
          c7200_net_irq_get_slot_port(irq,&slot,&port);
-         dev_c7200_mpfpga_net_set_irq(router->mpfpga_data,slot,port);
+         dev_c7200_net_set_irq(router,slot,port);
          break;
    }
 
@@ -1862,7 +1976,7 @@ static void c7200p_clear_irq(vm_instance_t *vm,u_int irq)
          break;
       case C7200_NETIO_IRQ_BASE ... C7200_NETIO_IRQ_END:
          c7200_net_irq_get_slot_port(irq,&slot,&port);
-         dev_c7200_mpfpga_net_clear_irq(router->mpfpga_data,slot,port);
+         dev_c7200_net_clear_irq(router,slot,port);
          break;
    }
 }
@@ -1901,6 +2015,8 @@ static int c7200p_init_instance(c7200_t *router)
    for(i=0;i<PPC32_SR_NR;i++)
       cpu0->sr[i] = i << 16;
 
+   /* The page table takes 2 Mb of memory */
+   vm->ram_res_size = 2;
    ppc32_set_sdr1(cpu0,((vm->ram_size - 2) * 1048576) + 0x1F);
    ppc32_init_page_table(cpu0);
    ppc32_map_zone(cpu0,cpu0->sr[C7200_G2_BOOTFLASH_ADDR >> 28],
@@ -1929,7 +2045,6 @@ static int c7200p_init_instance(c7200_t *router)
 
    cpu0->bat[PPC32_DBAT_IDX][3].reg[0] = 0xF0001FFE;
    cpu0->bat[PPC32_DBAT_IDX][3].reg[1] = 0xF0000003;
-
 
    return(c7200p_boot_ios(router));
 }
@@ -1976,22 +2091,27 @@ static int c7200_stop_instance(vm_instance_t *vm)
 }
 
 /* Trigger an OIR event */
-int c7200_trigger_oir_event(c7200_t *router,u_int slot_mask)
+static int c7200_trigger_oir_event(c7200_t *router,u_int slot)
 {
-   /* An OIR IRQ without reason could lead to stop the system */
-   if (!slot_mask) return(-1);
+   switch(slot) {
+      case 1 ... 6:
+         router->oir_status[0] = 1 << slot;
+         break;
+      case 7:
+         /* signal the OIR on slot 0, and set the "extended status" */
+         router->oir_status[0] = 1 << 0;
+         router->oir_status[1] = 1 << 24;
+         break;
+   }
 
-   router->oir_status = slot_mask;
    vm_set_irq(router->vm,C7200_OIR_IRQ);
    return(0);
 }
 
 /* Initialize a new PA while the virtual router is online (OIR) */
-int c7200_pa_init_online(c7200_t *router,u_int pa_bay)
+static int c7200_pa_init_online(vm_instance_t *vm,u_int slot,u_int subslot)
 {
-   vm_instance_t *vm = router->vm;
-
-   if (!pa_bay) {
+   if (!slot) {
       vm_error(vm,"OIR not supported on slot 0.\n");
       return(-1);
    }
@@ -2009,38 +2129,36 @@ int c7200_pa_init_online(c7200_t *router,u_int pa_bay)
    }
 
    /* Add the new hardware elements */
-   if (vm_slot_init(vm,pa_bay) == -1)
+   if (vm_slot_init(vm,slot) == -1)
       return(-1);
 
    /* Resume normal operations */
    vm_resume(vm);
 
    /* Now, we can safely trigger the OIR event */
-   c7200_trigger_oir_event(router,1 << pa_bay);
+   c7200_trigger_oir_event(VM_C7200(vm),slot);
    return(0);
 }
 
 /* Stop a PA while the virtual router is online (OIR) */
-int c7200_pa_stop_online(c7200_t *router,u_int pa_bay)
+static int c7200_pa_stop_online(vm_instance_t *vm,u_int slot,u_int subslot)
 {   
-   vm_instance_t *vm = router->vm;
-
-   if (!pa_bay) {
+   if (!slot) {
       vm_error(vm,"OIR not supported on slot 0.\n");
       return(-1);
    }
 
    /* The PA driver must be initialized */
-   if (!vm_slot_get_card_ptr(vm,pa_bay)) {
-      vm_error(vm,"trying to shut down empty slot %u.\n",pa_bay);
+   if (!vm_slot_get_card_ptr(vm,slot)) {
+      vm_error(vm,"trying to shut down empty slot %u.\n",slot);
       return(-1);
    }
 
    /* Disable all NIOs to stop traffic forwarding */
-   vm_slot_disable_all_nio(vm,pa_bay);
+   vm_slot_disable_all_nio(vm,slot);
 
    /* We can safely trigger the OIR event */
-   c7200_trigger_oir_event(router,1 << pa_bay);
+   c7200_trigger_oir_event(VM_C7200(vm),slot);
 
    /* 
     * Suspend CPU activity while removing the hardware (since we change the
@@ -2049,7 +2167,8 @@ int c7200_pa_stop_online(c7200_t *router,u_int pa_bay)
    vm_suspend(vm);
 
    /* Device removal */
-   vm_slot_shutdown(vm,pa_bay);
+   if (vm_slot_shutdown(vm,slot) != 0)
+      vm_error(vm,"unable to shutdown slot %u.\n",slot);
 
    /* Resume normal operations */
    vm_resume(vm);
@@ -2110,6 +2229,8 @@ static vm_platform_t c7200_platform = {
    c7200_delete_instance,
    c7200_init_instance,
    c7200_stop_instance,
+   c7200_pa_init_online,
+   c7200_pa_stop_online,
    c7200_nvram_extract_config,
    c7200_nvram_push_config,
    c7200_get_mac_addr_msb,

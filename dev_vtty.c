@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Virtual console TTY.
  *
@@ -20,6 +21,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -47,11 +49,24 @@
 static pthread_mutex_t vtty_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vtty_t *vtty_list = NULL;
 static pthread_t vtty_thread;
+static int ctrl_code_ok = 1;
+static int telnet_message_ok = 1;
 
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
 static struct termios tios,tios_orig;
+
+/* Allow the user to disable the CTRL code for the monitor interface */
+void vtty_set_ctrlhandler(int n)
+{
+  ctrl_code_ok = n;
+}
+/* Allow the user to disable the telnet message for AUX and CONSOLE */
+void vtty_set_telnetmsg(int n)
+{
+  telnet_message_ok = n;
+}
 
 /* Send Telnet command: WILL TELOPT_ECHO */
 static void vtty_telnet_will_echo(vtty_t *vtty)
@@ -137,6 +152,18 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
       goto error;
    }
 
+#ifndef SOL_TCP
+#define SOL_TCP 6
+#endif
+
+   // Send telnet packets asap. Dont wait to fill packets up
+   if (setsockopt(vtty->accept_fd,SOL_TCP,TCP_NODELAY,
+                  &one,sizeof(one)) < 0)
+   {
+      perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
+      goto error;
+   }
+   
    memset(&serv,0,sizeof(serv));
    serv.sin_family = AF_INET;
    serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -184,7 +211,8 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
       vtty_telnet_will_echo(vtty);
       vtty_telnet_will_suppress_go_ahead(vtty);
       vtty_telnet_dont_linemode(vtty);
-      vtty->input_state = VTTY_INPUT_TELNET;
+      // IAC not recieved yet, so actually in TEXT mode
+      vtty->input_state = VTTY_INPUT_TEXT;
    }
 
    if (!(vtty->fstream = fdopen(vtty->fd, "wb"))) {
@@ -193,10 +221,16 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
       return(-1);
    }
 
-   fprintf(vtty->fstream,
-           "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n\r\n", 
-           vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
-           vtty->name);
+   /* Allow telnet message to be turned off */
+   if (telnet_message_ok == 1) {
+     fprintf(vtty->fstream,
+             "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n\r\n", 
+             vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
+             vtty->name);
+     // Flush the messages asap or the user will see nothing for a potentially
+     // long time
+     vtty_flush(vtty);
+   }
 
    vtty->select_fd = &vtty->fd;
    vtty->state = VTTY_STATE_TCP_RUNNING;
@@ -820,7 +854,13 @@ static void vtty_read_and_store(vtty_t *vtty)
             /* Ctrl + ']' (0x1d, 29), or Alt-Gr + '*' (0xb3, 179) */
             case 0x1d:
             case 0xb3:
-               vtty->input_state = VTTY_INPUT_REMOTE;
+               /* Allow REMOTE control to be turned off */
+               if (ctrl_code_ok == 1) {
+                 vtty->input_state = VTTY_INPUT_REMOTE;
+               } else {
+                 /* Store a standard character */
+                 vtty_store(vtty,c);
+               }
                return;
             case IAC :
                vtty->input_state = VTTY_INPUT_TELNET;
@@ -930,8 +970,8 @@ static void vtty_read_and_store(vtty_t *vtty)
          /* parse ttype string: first char is sufficient */
          /* if client is xterm or vt, set the title bar */
          if ((c == 'x') || (c == 'X') || (c == 'v') || (c == 'V')) {
-            fprintf(vtty->fstream, "\033]0;Dynamips(%i): %s, %s\07", 
-                    vtty->vm->instance_id, vtty->vm->name, vtty->name);
+            fprintf(vtty->fstream, "\033]0;%s, %s\07", 
+                    vtty->vm->name, vtty->name);
          }
          vtty->input_state = VTTY_INPUT_TELNET_NEXT;
          return;

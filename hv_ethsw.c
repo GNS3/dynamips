@@ -163,6 +163,30 @@ static int cmd_set_dot1q_port(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* 
+ * Set a port as a trunk (QinQ) port.
+ *
+ * Parameters: <ethsw_name> <nio> <outer_VLAN>
+ */
+static int cmd_set_qinq_port(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   ethsw_table_t *t;
+
+   if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
+      return(-1);
+   
+   if (ethsw_set_qinq_port(t,argv[1],atoi(argv[2])) == -1) {
+      ethsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
+                            "unable to apply port settings");
+      return(-1);
+   }
+
+   ethsw_release(argv[0]);   
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"Port settings OK");
+   return(0);
+}
+
 /* Clear the MAC address table */
 static int cmd_clear_mac_addr_table(hypervisor_conn_t *conn,
                                    int argc,char *argv[])
@@ -236,6 +260,7 @@ static hypervisor_cmd_t ethsw_cmd_array[] = {
    { "remove_nio", 2, 2, cmd_remove_nio, NULL },
    { "set_access_port", 3, 3, cmd_set_access_port, NULL },
    { "set_dot1q_port", 3, 3, cmd_set_dot1q_port, NULL },
+   { "set_qinq_port", 3, 3, cmd_set_qinq_port, NULL },
    { "clear_mac_addr_table", 1, 1, cmd_clear_mac_addr_table, NULL },
    { "show_mac_addr_table", 1, 1, cmd_show_mac_addr_table, NULL },
    { "list", 0, 0, cmd_list, NULL },

@@ -2490,3 +2490,75 @@
 10-Oct-2007
 -----------
   - MV64460: added SRAM.
+
+29-Oct-2007
+-----------
+  - C3745: some work on OIR, but unfortunately only NM-4T works at the moment.
+
+30-Oct-2007
+-----------
+  - C3660: added OIR support.
+
+27-Nov-2007
+-----------
+  - C7200: added support for jacket card (C7200-JC-PA) and support for PA
+    in slot 7.
+
+29-Nov-2007
+-----------
+  - Fixed AAL5 CRC.
+
+15-Jan-2008
+-----------
+  - Added Multicast NIO
+
+19-Jan-2008
+-----------
+  - Added "nio set_mcast_ttl" hypervisor command to change TTL for multicast
+    NIOs.
+
+25-Jan-2008
+-----------
+  - Added 64-bit support for MacOS X 10.5 - Leopard (stack alignment).
+
+31-Mar-2008
+-----------
+  - PPC32: Fixed DIVW instruction (incorrect cast: unsigned instead of signed).
+    This was causing problems with OSPF (and probably other protocols) on 2600
+    platforms.
+  
+01-Apr-2008
+-----------
+  - Some minor info added (OS name) to ease debugging.
+
+24-Apr-2008
+-----------
+  - Added NIO traffic statistics (packets/bytes in/out).
+
+25-Apr-2008
+-----------
+  - Added QinQ support in integrated ethernet switch (untested).
+  
+07-May-2008
+-----------
+  - More coherent naming for JIT variables ("blocks" -> "tcb").
+  - Fix QinQ input vector in Ethernet switch (thanks to Pavel Skovajsa).
+  
+16-May-2008
+-----------
+  - Merged PPC-host JIT patch from Zhe Fang. 
+  
+Jun-2008
+--------
+  - Worked on a JIT code sharing system (only MIPS ported at this time)
+  
+03-Jul-2008
+-----------
+  - MIPS64: fixed a lot of mistakes in handling of TLB entries.
+  
+27-Nov-2008
+-----------
+  - Added "udp auto" NIO to avoid fixed port allocation which can easily fail.
+  - Bug fixes in socket handling (incorrect setsockopt() for non-RFC2553 
+    systems)
+  

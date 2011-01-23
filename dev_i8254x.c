@@ -859,7 +859,9 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
       buf_addr = ((m_uint64_t)txd.tdes[1] << 32) | txd.tdes[0];
       buf_len  = txd.tdes[2] & I8254X_TXDESC_LEN_MASK;
 
-      //printf("COPYING DATA FROM 0x%8.8llx\n",buf_addr);
+#if DEBUG_TRANSMIT
+      LVG_LOG(d,"copying data from 0x%8.8llx (buf_len=%u)\n",buf_addr,buf_len);
+#endif
       norm_len = normalize_size(buf_len,4,0);
       physmem_copy_from_vm(d->vm,pkt_ptr,buf_addr,norm_len);
       mem_bswap32(pkt_ptr,norm_len);

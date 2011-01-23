@@ -38,9 +38,11 @@
 #endif
 
 #include "registry.h"
+#include "gen_uuid.h"
 #include "net.h"
 #include "net_io.h"
 #include "net_io_filter.h"
+#include "ptask.h"
 
 /* Free a NetIO descriptor */
 static int netio_free(void *data,void *arg);
@@ -72,8 +74,10 @@ static netio_type_t netio_types[NETIO_TYPE_MAX] = {
    { "vde"       , "Virtual Distributed Ethernet / UML switch" },
    { "tap"       , "Linux/FreeBSD TAP device" },
    { "udp"       , "UDP sockets" },
+   { "udp_auto"  , "Auto UDP sockets" },
    { "tcp_cli"   , "TCP client" },
    { "tcp_ser"   , "TCP server" },
+   { "mcast"     , "Multicast bus" },
 #ifdef LINUX_ETH
    { "linux_eth" , "Linux Ethernet device" },
 #endif
@@ -214,6 +218,12 @@ ssize_t netio_send(netio_desc_t *nio,void *pkt,size_t len)
          return(-1);
    }
 
+   /* Update output statistics */
+   nio->stats_pkts_out++;
+   nio->stats_bytes_out += len;
+
+   netio_update_bw_stat(nio,len);
+
    return(nio->send(nio->dptr,pkt,len));
 }
 
@@ -251,6 +261,9 @@ ssize_t netio_recv(netio_desc_t *nio,void *pkt,size_t max_len)
          return(-1);
    }
 
+   /* Update input statistics */
+   nio->stats_pkts_in++;
+   nio->stats_bytes_in += len;
    return(len);
 }
 
@@ -272,7 +285,11 @@ int netio_get_fd(netio_desc_t *nio)
       case NETIO_TYPE_TCP_CLI:
       case NETIO_TYPE_TCP_SER:
       case NETIO_TYPE_UDP:
+      case NETIO_TYPE_UDP_AUTO:
          fd = nio->u.nid.fd;
+         break;
+      case NETIO_TYPE_MCAST:
+         fd = nio->u.nmd.fd;
          break;
 #ifdef LINUX_ETH
       case NETIO_TYPE_LINUX_ETH:
@@ -352,12 +369,12 @@ static int netio_unix_create(netio_unix_desc_t *nud,char *local,char *remote)
    return(-1);
 }
 
-/* Write a packet to an UNIX socket */
+/* Send a packet to an UNIX socket */
 static ssize_t netio_unix_send(netio_unix_desc_t *nud,void *pkt,size_t pkt_len)
 {
    return(sendto(nud->fd,pkt,pkt_len,0,
                  (struct sockaddr *)&nud->remote_sock,
-                 sizeof(&nud->remote_sock)));
+                 sizeof(nud->remote_sock)));
 }
 
 /* Receive a packet from an UNIX socket */
@@ -390,6 +407,7 @@ netio_desc_t *netio_desc_create_unix(char *nio_name,char *local,char *remote)
    nio->type     = NETIO_TYPE_UNIX;
    nio->send     = (void *)netio_unix_send;
    nio->recv     = (void *)netio_unix_recv;
+   nio->free     = (void *)netio_unix_free;
    nio->save_cfg = netio_unix_save_cfg;
    nio->dptr     = &nio->u.nud;
 
@@ -503,7 +521,7 @@ static int netio_vde_create(netio_vde_desc_t *nvd,char *control,char *local)
    return(0);
 }
 
-/* Write a packet to a VDE data socket */
+/* Send a packet to a VDE data socket */
 static ssize_t netio_vde_send(netio_vde_desc_t *nvd,void *pkt,size_t pkt_len)
 {
    return(sendto(nvd->data_fd,pkt,pkt_len,0,
@@ -544,6 +562,7 @@ netio_desc_t *netio_desc_create_vde(char *nio_name,char *control,char *local)
    nio->type     = NETIO_TYPE_VDE;
    nio->send     = (void *)netio_vde_send;
    nio->recv     = (void *)netio_vde_recv;
+   nio->free     = (void *)netio_vde_free;
    nio->save_cfg = netio_vde_save_cfg;
    nio->dptr     = &nio->u.nvd;
 
@@ -635,7 +654,7 @@ static int netio_tap_create(netio_tap_desc_t *ntd,char *tap_name)
    return(0);
 }
 
-/* Write a packet to a TAP device */
+/* Send a packet to a TAP device */
 static ssize_t netio_tap_send(netio_tap_desc_t *ntd,void *pkt,size_t pkt_len)
 {
    return(write(ntd->fd,pkt,pkt_len));
@@ -673,6 +692,7 @@ netio_desc_t *netio_desc_create_tap(char *nio_name,char *tap_name)
    nio->type     = NETIO_TYPE_TAP;
    nio->send     = (void *)netio_tap_send;
    nio->recv     = (void *)netio_tap_recv;
+   nio->free     = (void *)netio_tap_free;
    nio->save_cfg = netio_tap_save_cfg;
    nio->dptr     = &nio->u.ntd;
 
@@ -784,6 +804,7 @@ netio_desc_t *netio_desc_create_tcp_cli(char *nio_name,char *host,char *port)
    nio->type = NETIO_TYPE_TCP_CLI;
    nio->send = (void *)netio_tcp_send;
    nio->recv = (void *)netio_tcp_recv;
+   nio->free = (void *)netio_tcp_free;
    nio->dptr = &nio->u.nid;
 
   if (netio_record(nio) == -1) {
@@ -865,6 +886,7 @@ netio_desc_t *netio_desc_create_tcp_ser(char *nio_name,char *port)
    nio->type = NETIO_TYPE_TCP_SER;
    nio->send = (void *)netio_tcp_send;
    nio->recv = (void *)netio_tcp_recv;
+   nio->free = (void *)netio_tcp_free;
    nio->dptr = &nio->u.nid;
 
    if (netio_record(nio) == -1) {
@@ -893,7 +915,7 @@ static void netio_udp_free(netio_inet_desc_t *nid)
       close(nid->fd);
 }
 
-/* Write a packet to an UDP socket */
+/* Send a packet to an UDP socket */
 static ssize_t netio_udp_send(netio_inet_desc_t *nid,void *pkt,size_t pkt_len)
 {
    return(send(nid->fd,pkt,pkt_len,0));
@@ -941,6 +963,7 @@ netio_desc_t *netio_desc_create_udp(char *nio_name,int local_port,
    nio->type     = NETIO_TYPE_UDP;
    nio->send     = (void *)netio_udp_send;
    nio->recv     = (void *)netio_udp_recv;
+   nio->free     = (void *)netio_udp_free;
    nio->save_cfg = netio_udp_save_cfg;
    nio->dptr     = &nio->u.nid;
 
@@ -956,6 +979,215 @@ netio_desc_t *netio_desc_create_udp(char *nio_name,int local_port,
 
 /*
  * =========================================================================
+ * UDP sockets with auto allocation
+ * =========================================================================
+ */
+
+/* Get local port */
+int netio_udp_auto_get_local_port(netio_desc_t *nio)
+{
+   if (nio->type != NETIO_TYPE_UDP_AUTO)
+      return(-1);
+   
+   return(nio->u.nid.local_port);
+}
+
+/* Connect to a remote host/port */
+int netio_udp_auto_connect(netio_desc_t *nio,char *host,int port)
+{
+   netio_inet_desc_t *nid = nio->dptr;
+
+   /* NIO already connected */
+   if (nid->remote_host != NULL)
+      return(-1);
+   
+   if (!(nid->remote_host = strdup(host))) {
+      fprintf(stderr,"netio_desc_create_udp_auto: insufficient memory\n");
+      return(-1);
+   }
+   
+   nid->remote_port = port;
+   
+   if (ip_connect_fd(nid->fd,nid->remote_host,nid->remote_port) < 0) {
+      free(nid->remote_host);
+      nid->remote_host = NULL;
+      return(-1);
+   }
+   
+   return(0);
+}
+
+/* Create a new NetIO descriptor with auto UDP method */
+netio_desc_t *netio_desc_create_udp_auto(char *nio_name,char *local_addr,
+                                         int port_start,int port_end)
+{
+   netio_inet_desc_t *nid;
+   netio_desc_t *nio;
+   
+   if (!(nio = netio_create(nio_name)))
+      return NULL;
+   
+   nid = &nio->u.nid;
+   nid->local_port  = -1;
+   nid->remote_host = NULL;
+   nid->remote_port = -1;
+      
+   if ((nid->fd = udp_listen_range(local_addr,port_start,port_end,
+                                   &nid->local_port)) < 0) 
+   {
+      fprintf(stderr,
+              "netio_desc_create_udp_auto: unable to create socket "
+              "(addr=%s,port_start=%d,port_end=%d)\n",
+              local_addr,port_start,port_end);
+      goto error;
+   }
+   
+   nio->type     = NETIO_TYPE_UDP_AUTO;
+   nio->send     = (void *)netio_udp_send;
+   nio->recv     = (void *)netio_udp_recv;
+   nio->free     = (void *)netio_udp_free;
+   nio->save_cfg = netio_udp_save_cfg;
+   nio->dptr     = &nio->u.nid;
+   
+   if (netio_record(nio) == -1)
+      goto error;
+   
+   return nio;
+   
+error:
+   netio_free(nio,NULL);
+   return NULL;
+}
+
+/*
+ * =========================================================================
+ * Multicast sockets
+ * =========================================================================
+ */
+
+/* Free a NetIO Mcast descriptor */
+static void netio_mcast_free(netio_mcast_desc_t *nmd)
+{
+   if (nmd->mcast_group) {
+      free(nmd->mcast_group);
+      nmd->mcast_group = NULL;
+   }
+
+   if (nmd->fd != -1) 
+      close(nmd->fd);
+}
+
+/* Send a packet to a Multicast socket */
+static ssize_t netio_mcast_send(netio_mcast_desc_t *nmd,
+                                void *pkt,size_t pkt_len)
+{
+   struct msghdr mh;
+   struct iovec vec[2];
+
+   memset(&mh,0,sizeof(mh));
+   mh.msg_name = &nmd->sa;
+   mh.msg_namelen = nmd->sa_len;
+   mh.msg_iov = vec;
+   mh.msg_iovlen = 2;
+   
+   vec[0].iov_base = nmd->local_id;
+   vec[0].iov_len  = sizeof(uuid_t);
+   vec[1].iov_base = pkt;
+   vec[1].iov_len  = pkt_len;
+
+   return(sendmsg(nmd->fd,&mh,0));
+}
+
+/* Receive a packet from a Multicast socket */
+static ssize_t netio_mcast_recv(netio_mcast_desc_t *nmd,
+                                void *pkt,size_t max_len)
+{
+   uuid_t remote_id;   
+   struct msghdr mh;
+   struct iovec vec[2];
+   ssize_t len;
+
+   memset(&mh,0,sizeof(mh));
+   mh.msg_iov = vec;
+   mh.msg_iovlen = 2;
+   
+   vec[0].iov_base = remote_id;
+   vec[0].iov_len  = sizeof(uuid_t);
+   vec[1].iov_base = pkt;
+   vec[1].iov_len  = max_len;
+
+   len = recvmsg(nmd->fd,&mh,0);
+
+   if ((len <= sizeof(uuid_t)) || (uuid_compare(remote_id,nmd->local_id) == 0))
+      return(-1);
+
+   return(len - sizeof(uuid_t));
+}
+
+/* Save the NIO configuration */
+static void netio_mcast_save_cfg(netio_desc_t *nio,FILE *fd)
+{
+   netio_mcast_desc_t *nmd = nio->dptr;
+   fprintf(fd,"nio create_mcast %s %s %d\n",
+           nio->name,nmd->mcast_group,nmd->mcast_port);
+}
+
+/* Create a new NetIO descriptor with Multicast method */
+netio_desc_t *
+netio_desc_create_mcast(char *nio_name,char *mcast_group,int mcast_port)
+{
+   netio_mcast_desc_t *nmd;
+   netio_desc_t *nio;
+   
+   if (!(nio = netio_create(nio_name)))
+      return NULL;
+
+   nmd = &nio->u.nmd;
+   nmd->mcast_port  = mcast_port;
+   uuid_generate(nmd->local_id);
+
+   if (!(nmd->mcast_group = strdup(mcast_group))) {
+      fprintf(stderr,"netio_desc_create_mcast: insufficient memory\n");
+      goto error;
+   }
+
+   nmd->fd = udp_mcast_socket(mcast_group,mcast_port,
+                              (struct sockaddr *)&nmd->sa,&nmd->sa_len);
+
+   if (nmd->fd < 0) {
+      fprintf(stderr,"netio_desc_create_mcast: unable to connect to %s:%d\n",
+              mcast_group,mcast_port);
+      goto error;
+   }
+
+   nio->type     = NETIO_TYPE_MCAST;
+   nio->send     = (void *)netio_mcast_send;
+   nio->recv     = (void *)netio_mcast_recv;
+   nio->free     = (void *)netio_mcast_free;
+   nio->save_cfg = netio_mcast_save_cfg;
+   nio->dptr     = &nio->u.nmd;
+
+   if (netio_record(nio) == -1)
+      goto error;
+
+   return nio;
+
+ error:
+   netio_free(nio,NULL);
+   return NULL;
+}
+
+/* Set TTL for a multicast socket */
+int netio_mcast_set_ttl(netio_desc_t *nio,int ttl)
+{
+   if (nio->type == NETIO_TYPE_MCAST)
+      return(-1);
+
+   return(udp_mcast_set_ttl(netio_get_fd(nio),ttl));
+}
+
+/*
+ * =========================================================================
  * Linux RAW Ethernet driver
  * =========================================================================
  */
@@ -967,7 +1199,7 @@ static void netio_lnxeth_free(netio_lnxeth_desc_t *nled)
       close(nled->fd);
 }
 
-/* Write a packet to a raw Ethernet socket */
+/* Send a packet to a raw Ethernet socket */
 static ssize_t netio_lnxeth_send(netio_lnxeth_desc_t *nled,
                                  void *pkt,size_t pkt_len)
 {
@@ -1019,6 +1251,7 @@ netio_desc_t *netio_desc_create_lnxeth(char *nio_name,char *dev_name)
    nio->type     = NETIO_TYPE_LINUX_ETH;
    nio->send     = (void *)netio_lnxeth_send;
    nio->recv     = (void *)netio_lnxeth_recv;
+   nio->free     = (void *)netio_lnxeth_free;
    nio->save_cfg = netio_lnxeth_save_cfg;
    nio->dptr     = &nio->u.nled;
 
@@ -1043,7 +1276,7 @@ static void netio_geneth_free(netio_geneth_desc_t *nged)
    gen_eth_close(nged->pcap_dev);
 }
 
-/* Write a packet to an Ethernet device */
+/* Send a packet to an Ethernet device */
 static ssize_t netio_geneth_send(netio_geneth_desc_t *nged,
                                  void *pkt,size_t pkt_len)
 {
@@ -1092,6 +1325,7 @@ netio_desc_t *netio_desc_create_geneth(char *nio_name,char *dev_name)
    nio->type     = NETIO_TYPE_GEN_ETH;
    nio->send     = (void *)netio_geneth_send;
    nio->recv     = (void *)netio_geneth_recv;
+   nio->free     = (void *)netio_geneth_free;
    nio->save_cfg = netio_geneth_save_cfg;
    nio->dptr     = &nio->u.nged;
 
@@ -1282,6 +1516,7 @@ netio_desc_t *netio_desc_create_fifo(char *nio_name)
    nio->type = NETIO_TYPE_FIFO;
    nio->send = (void *)netio_fifo_send;
    nio->recv = (void *)netio_fifo_recv;
+   nio->free = (void *)netio_fifo_free;
    nio->dptr = nfd;
 
    if (netio_record(nio) == -1) {
@@ -1345,47 +1580,64 @@ static int netio_free(void *data,void *arg)
       netio_filter_unbind(nio,NETIO_FILTER_DIR_TX);
       netio_filter_unbind(nio,NETIO_FILTER_DIR_BOTH);
 
-      switch(nio->type) {
-         case NETIO_TYPE_UNIX:
-            netio_unix_free(&nio->u.nud);
-            break;
-         case NETIO_TYPE_VDE:
-            netio_vde_free(&nio->u.nvd);
-            break;
-         case NETIO_TYPE_TAP:
-            netio_tap_free(&nio->u.ntd);
-            break;
-         case NETIO_TYPE_TCP_CLI:
-         case NETIO_TYPE_TCP_SER:
-            netio_tcp_free(&nio->u.nid);
-            break;
-         case NETIO_TYPE_UDP:
-            netio_udp_free(&nio->u.nid);
-            break;
-#ifdef LINUX_ETH
-         case NETIO_TYPE_LINUX_ETH:
-            netio_lnxeth_free(&nio->u.nled);
-            break;
-#endif
-#ifdef GEN_ETH
-         case NETIO_TYPE_GEN_ETH:
-            netio_geneth_free(&nio->u.nged);
-            break;
-#endif
-         case NETIO_TYPE_FIFO:
-            netio_fifo_free(&nio->u.nfd);
-            break;
-         case NETIO_TYPE_NULL:           
-            break;
-         default:
-            fprintf(stderr,"NETIO: unknown descriptor type %u\n",nio->type);
-      }
+      if (nio->free != NULL)
+         nio->free(nio->dptr);
 
       free(nio->name);
       free(nio);
    }
 
    return(TRUE);
+}
+
+/* Reset NIO statistics */
+void netio_reset_stats(netio_desc_t *nio)
+{
+   nio->stats_pkts_in = nio->stats_pkts_out = 0;
+   nio->stats_bytes_in = nio->stats_bytes_out = 0;
+}
+
+/* Indicate if a NetIO can transmit a packet */
+int netio_can_transmit(netio_desc_t *nio)
+{
+   u_int bw_current;
+
+   /* No bandwidth constraint applied, can always transmit */
+   if (!nio->bandwidth)
+      return(TRUE);
+
+   /* Check that we verify the bandwidth constraint */
+   bw_current = nio->bw_cnt_total * 8 * 1000;
+   bw_current /= 1024 * NETIO_BW_SAMPLE_ITV * NETIO_BW_SAMPLES;
+
+   return(bw_current < nio->bandwidth);
+}
+
+/* Update bandwidth counter */
+void netio_update_bw_stat(netio_desc_t *nio,m_uint64_t bytes)
+{
+   nio->bw_cnt[nio->bw_pos] += bytes;
+   nio->bw_cnt_total += bytes;
+}
+
+/* Reset NIO bandwidth counter */
+void netio_clear_bw_stat(netio_desc_t *nio)
+{
+   if (++nio->bw_ptask_cnt == (NETIO_BW_SAMPLE_ITV / ptask_sleep_time)) {
+      nio->bw_ptask_cnt = 0;
+
+      if (++nio->bw_pos == NETIO_BW_SAMPLES)
+         nio->bw_pos = 0;
+
+      nio->bw_cnt_total -= nio->bw_cnt[nio->bw_pos];
+      nio->bw_cnt[nio->bw_pos] = 0;
+   }
+}
+
+/* Set the bandwidth constraint */
+void netio_set_bandwidth(netio_desc_t *nio,u_int bandwidth)
+{
+   nio->bandwidth = bandwidth;
 }
 
 /*

@@ -136,11 +136,6 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
    }
 #endif
 
-   dev_ram_init(vm,"nvram",TRUE,FALSE,NULL,FALSE,
-                0x67c00000,vm->nvram_size*4096);
-
-   dev_ns16552_init(vm,0xffe00000,0x1000,0,0,vm->vtty_con,vm->vtty_aux);
-
    /* Remote emulator control */
    dev_remote_control_init(vm,0xf6000000,0x1000);
 
@@ -309,6 +304,8 @@ static vm_platform_t ppc32_vmtest_platform = {
    ppc32_vmtest_delete_instance,
    ppc32_vmtest_init_instance,
    ppc32_vmtest_stop_instance,
+   NULL,
+   NULL,
    NULL,
    NULL,
    NULL,

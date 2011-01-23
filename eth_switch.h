@@ -23,10 +23,11 @@
 /* Maximum packet size */
 #define ETHSW_MAX_PKT_SIZE  2048
 
-/* Port types: access or 802.1Q */
+/* Port types: access, 802.1Q, 802.1Q tunnel (QinQ) */
 enum {
    ETHSW_PORT_TYPE_ACCESS = 1,
    ETHSW_PORT_TYPE_DOT1Q,
+   ETHSW_PORT_TYPE_QINQ,
    ETHSW_PORT_TYPE_ISL,
 };
 
@@ -101,6 +102,9 @@ int ethsw_set_access_port(ethsw_table_t *t,char *nio_name,u_int vlan_id);
 
 /* Set port as a 802.1q trunk port */
 int ethsw_set_dot1q_port(ethsw_table_t *t,char *nio_name,u_int native_vlan);
+
+/* Set port as a Q-in-Q port */
+int ethsw_set_qinq_port(ethsw_table_t *t,char *nio_name,u_int outer_vlan);
 
 /* Save the configuration of a switch */
 void ethsw_save_config(ethsw_table_t *t,FILE *fd);

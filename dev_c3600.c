@@ -1,6 +1,7 @@
 /*
  * Cisco 3600 simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 3600 routines and definitions (EEPROM,...).
  */
@@ -33,7 +34,7 @@
 /* Cisco 3620 mainboard EEPROM */
 static m_uint16_t eeprom_c3620_mainboard_data[64] = {
    0x0001, 0x0000, 0x0000, 0x0000, 0x0AFF, 0x7318, 0x5011, 0x0020,
-   0x0000, 0x0000, 0xA0FF, 0x9904, 0x19FF, 0xFFFF, 0xFFFF, 0x0002,
+   0xFF10, 0x45C5, 0xA0FF, 0x9904, 0x19FF, 0xFFFF, 0xFFFF, 0x0002,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -51,7 +52,7 @@ struct cisco_eeprom eeprom_c3620_mainboard = {
 /* Cisco 3640 mainboard EEPROM */
 static m_uint16_t eeprom_c3640_mainboard_data[64] = {
    0x0001, 0x0000, 0x0000, 0x0000, 0x0AFF, 0x7316, 0x8514, 0x0040,
-   0x0000, 0x0000, 0xA1FF, 0x0102, 0x22FF, 0xFFFF, 0xFFFF, 0x0002,
+   0xFF10, 0x45C5, 0xA1FF, 0x0102, 0x22FF, 0xFFFF, 0xFFFF, 0x0002,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -71,7 +72,7 @@ static m_uint16_t eeprom_c3660_backplane_data[64] = {
    0x04FF, 0x4000, 0xC841, 0x0100, 0xC046, 0x0320, 0x0012, 0x8402,
    0x4243, 0x3080, 0x0000, 0x0000, 0x0202, 0xC18B, 0x4841, 0x4430,
    0x3434, 0x3431, 0x3135, 0x4A03, 0x0081, 0x0000, 0x0000, 0x0400,
-   0xC28B, 0x4A41, 0x4230, 0x3434, 0x3643, 0x304C, 0x32C3, 0x0600,
+   0xC28B, 0x4654, 0x5830, 0x3934, 0x3557, 0x304D, 0x59C3, 0x0600,
    0x044D, 0x0EC2, 0xD043, 0x0070, 0xC408, 0x0000, 0x0000, 0x0000,
    0x0000, 0x851C, 0x0A5B, 0x0201, 0x06FF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -881,6 +882,94 @@ static int c3600_stop_instance(vm_instance_t *vm)
    return(0);
 }
 
+static m_uint16_t c3660_oir_masks[C3600_MAX_NM_BAYS] = {
+   0x0000,
+   0x0900,  /* slot 1 */
+   0x0009,  /* slot 2 */
+   0x0A00,  /* slot 3 */
+   0x000A,  /* slot 4 */
+   0x0C00,  /* slot 5 */
+   0x000C,  /* slot 6 */
+};
+
+/* Trigger an OIR event (3660 only) */
+static int c3600_trigger_oir_event(c3600_t *router,u_int nm_bay)
+{
+   if (nm_bay >= C3600_MAX_NM_BAYS)
+      return(-1);
+
+   router->oir_status = c3660_oir_masks[nm_bay];
+   vm_set_irq(router->vm,C3600_EXT_IRQ);
+   return(0);
+}
+
+/* Initialize a new NM while the virtual router is online (OIR) */
+static int c3600_nm_init_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* 
+    * Suspend CPU activity while adding new hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Check that CPU activity is really suspended */
+   if (cpu_group_sync_state(vm->cpu_group) == -1) {
+      vm_error(vm,"unable to sync with system CPUs.\n");
+      return(-1);
+   }
+
+   /* Add the new hardware elements */
+   if (vm_slot_init(vm,slot) == -1)
+      return(-1);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+
+   /* Now, we can safely trigger the OIR event */
+   c3600_trigger_oir_event(VM_C3600(vm),slot);
+   return(0);
+}
+
+/* Stop a NM while the virtual router is online (OIR) */
+static int c3600_nm_stop_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{   
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* The NM driver must be initialized */
+   if (!vm_slot_get_card_ptr(vm,slot)) {
+      vm_error(vm,"trying to shut down empty slot %u.\n",slot);
+      return(-1);
+   }
+
+   /* Disable all NIOs to stop traffic forwarding */
+   vm_slot_disable_all_nio(vm,slot);
+
+   /* We can safely trigger the OIR event */
+   c3600_trigger_oir_event(VM_C3600(vm),slot);
+
+   /* 
+    * Suspend CPU activity while removing the hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Device removal */
+   if (vm_slot_shutdown(vm,slot) != 0)
+      vm_error(vm,"unable to shutdown slot %u.\n",slot);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+   return(0);
+}
+
 /* Get MAC address MSB */
 static u_int c3600_get_mac_addr_msb(void)
 {
@@ -901,6 +990,12 @@ static int c3600_cli_parse_options(vm_instance_t *vm,int option)
       /* Chassis type */
       case 't':
          c3600_chassis_set_type(router,optarg);
+         break;
+
+       /* Set the base MAC address */
+      case 'm':
+         if (!c3600_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
          break;
 
       /* Unknown option */
@@ -929,6 +1024,8 @@ static vm_platform_t c3600_platform = {
    c3600_delete_instance,
    c3600_init_instance,
    c3600_stop_instance,
+   c3600_nm_init_online,
+   c3600_nm_stop_online,
    c3600_nvram_extract_config,
    c3600_nvram_push_config,
    c3600_get_mac_addr_msb,

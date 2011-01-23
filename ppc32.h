@@ -211,8 +211,6 @@ struct ppc405_tlb_entry {
 /* Memory operations */
 enum {
    PPC_MEMOP_LOOKUP = 0,
-
-   /* Instruction fetch operation */
    PPC_MEMOP_IFETCH,
 
    /* Load operations */
@@ -282,21 +280,16 @@ typedef struct {
 /* Maximum number of breakpoints */
 #define PPC32_MAX_BREAKPOINTS  8
 
-/* zzz */
-struct ppc32_vtlb_entry {
-   m_uint32_t vaddr;
-   m_uint32_t haddr;
-};
-
 /* PowerPC CPU definition */
 struct cpu_ppc {
+   /* Execution state */
+   m_uint32_t exec_state;
+
    /* Instruction address */
    m_uint32_t ia;
 
    /* General Purpose registers */
    m_uint32_t gpr[PPC32_GPR_NR];
-
-   struct ppc32_vtlb_entry vtlb[PPC32_GPR_NR];
 
    /* Pending IRQ */
    volatile m_uint32_t irq_pending,irq_check;
@@ -312,7 +305,7 @@ struct cpu_ppc {
    mts32_entry_t *mts_cache[2];
 
    /* Code page translation cache and physical page mapping */
-   ppc32_jit_tcb_t **exec_blk_map,**exec_phys_map;
+   ppc32_jit_tcb_t **tcb_virt_hash,**tcb_phys_hash;
 
    /* Virtual address to physical page translation */
    fastcall int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
@@ -321,8 +314,9 @@ struct cpu_ppc {
    /* Memory access functions */
    ppc_memop_fn mem_op_fn[PPC_MEMOP_MAX];
 
-   /* Memory lookup function (to load ELF image,...) */
+   /* Memory lookup function (to load ELF image,...) and Instruction fetch */
    void *(*mem_op_lookup)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid);
+   void *(*mem_op_ifetch)(cpu_ppc_t *cpu,m_uint32_t vaddr);
 
    /* MTS slow lookup function */
    mts32_entry_t *(*mts_slow_lookup)(cpu_ppc_t *cpu,m_uint32_t vaddr,

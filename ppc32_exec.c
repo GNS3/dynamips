@@ -94,8 +94,8 @@ static forced_inline int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
    exec_page = ia & ~PPC32_MIN_PAGE_IMASK;
 
    if (unlikely(exec_page != cpu->njm_exec_page)) {
+      cpu->njm_exec_ptr  = cpu->mem_op_ifetch(cpu,exec_page);
       cpu->njm_exec_page = exec_page;
-      cpu->njm_exec_ptr  = cpu->mem_op_lookup(cpu,exec_page,PPC32_MTS_ICACHE);
    }
 
    offset = (ia & PPC32_MIN_PAGE_IMASK) >> 2;
@@ -152,7 +152,7 @@ fastcall int ppc32_exec_page(cpu_ppc_t *cpu)
    ppc_insn_t insn;
    int res;
 
-   exec_page = cpu->ia & ~PPC32_MIN_PAGE_IMASK;
+   exec_page = cpu->ia & PPC32_MIN_PAGE_MASK;
    cpu->njm_exec_page = exec_page;
    cpu->njm_exec_ptr  = cpu->mem_op_lookup(cpu,exec_page,PPC32_MTS_ICACHE);
 
@@ -162,7 +162,7 @@ fastcall int ppc32_exec_page(cpu_ppc_t *cpu)
 
       res = ppc32_exec_single_instruction(cpu,insn);
       if (likely(!res)) cpu->ia += sizeof(ppc_insn_t);
-   }while((cpu->ia & ~PPC32_MIN_PAGE_IMASK) == exec_page);
+   }while((cpu->ia & PPC32_MIN_PAGE_MASK) == exec_page);
 
    return(0);
 }
@@ -1360,7 +1360,7 @@ static fastcall int ppc32_exec_DIVW(cpu_ppc_t *cpu,ppc_insn_t insn)
    int rd = bits(insn,21,25);
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
-   register m_uint32_t a,b;
+   register m_int32_t a,b;
 
    a = (m_int32_t)cpu->gpr[ra];
    b = (m_int32_t)cpu->gpr[rb];
@@ -2159,8 +2159,7 @@ static fastcall int ppc32_exec_MTSPR(cpu_ppc_t *cpu,ppc_insn_t insn)
          cpu->timer_irq_armed = TRUE;
          break;
       case PPC32_SPR_SDR1:
-         cpu->sdr1 = cpu->gpr[rd];
-         ppc32_mem_invalidate_cache(cpu);
+         ppc32_set_sdr1(cpu,cpu->gpr[rd]);
          break;
       case PPC32_SPR_SRR0:
          cpu->srr0 = cpu->gpr[rd];

@@ -104,7 +104,7 @@ struct c3600_router {
 
    /* Chassis information */
    struct c3600_chassis_driver *chassis_driver;
-   m_uint8_t oir_status;
+   m_uint16_t oir_status;
 
    /* 
     * Mainboard EEPROM.
@@ -161,5 +161,6 @@ extern struct cisco_card_driver dev_c3600_nm_1fe_tx_driver;
 extern struct cisco_card_driver dev_c3600_nm_4t_driver;
 extern struct cisco_card_driver dev_c3600_leopard_2fe_driver;
 extern struct cisco_card_driver dev_c3600_nm_16esw_driver;
+extern struct cisco_card_driver dev_c3600_nmd_36esw_driver;
 
 #endif

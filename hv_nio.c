@@ -60,6 +60,94 @@ static int cmd_create_udp(hypervisor_conn_t *conn,int argc,char *argv[])
 }
 
 /* 
+ * Create a Auto UDP NIO
+ *
+ * Parameters: <nio_name> <local_addr> <local_port_start> <local_port_end>
+ */
+static int cmd_create_udp_auto(hypervisor_conn_t *conn,int argc,char *argv[])
+{   
+   netio_desc_t *nio;
+   int local_port;
+   
+   nio = netio_desc_create_udp_auto(argv[0],argv[1],atoi(argv[2]),atoi(argv[3]));
+   
+   if (!nio) {
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
+                            "unable to create UDP Auto NIO");
+      return(-1);
+   }
+   
+   local_port = netio_udp_auto_get_local_port(nio);
+   
+   netio_release(argv[0]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"%d",local_port);
+   return(0);
+}
+
+/*
+ * Connect an UDP Auto NIO to a remote host/port.
+ *
+ * Parameters: <nio_name> <remote_host> <remote_port>
+ */ 
+static int cmd_connect_udp_auto(hypervisor_conn_t *conn,int argc,char *argv[])
+{   
+   netio_desc_t *nio;
+   int res;
+   
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+   
+   res = netio_udp_auto_connect(nio,argv[1],atoi(argv[2]));
+   netio_release(argv[0]);
+   
+   if (res == 0) {
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' connected",argv[0]);
+      return(0);
+   } else {
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,"unable to connect NIO");
+      return(-1);
+   }
+}
+
+
+/* 
+ * Create a Multicast NIO
+ *
+ * Parameters: <nio_name> <mcast_group> <mcast_port>
+ */
+static int cmd_create_mcast(hypervisor_conn_t *conn,int argc,char *argv[])
+{   
+   netio_desc_t *nio;
+
+   nio = netio_desc_create_mcast(argv[0],argv[1],atoi(argv[2]));
+
+   if (!nio) {
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
+                            "unable to create Multicast NIO");
+      return(-1);
+   }
+
+   netio_release(argv[0]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' created",argv[0]);
+   return(0);
+}
+
+/* Set TTL for a Multicast NIO */
+static int cmd_set_mcast_ttl(hypervisor_conn_t *conn,int argc,char *argv[])
+{   
+   netio_desc_t *nio;
+
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+
+   netio_mcast_set_ttl(nio,atoi(argv[1]));
+
+   netio_release(argv[0]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' TTL changed",argv[0]);
+   return(0);
+}
+
+/* 
  * Create a UNIX NIO
  *
  * Parameters: <nio_name> <local_file> <remote_file>
@@ -334,6 +422,57 @@ static int cmd_setup_filter(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Get statistics of a NIO */
+static int cmd_get_stats(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   netio_desc_t *nio;
+   m_uint64_t spi,spo,sbi,sbo;
+
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+
+   spi = nio->stats_pkts_in;
+   spo = nio->stats_pkts_out;
+   sbi = nio->stats_bytes_in;
+   sbo = nio->stats_bytes_out;
+
+   netio_release(argv[0]);
+
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"%llu %llu %llu %llu",
+                         spi,spo,sbi,sbo);
+   return(0);
+}
+
+/* Reset statistics of a NIO */
+static int cmd_reset_stats(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   netio_desc_t *nio;
+
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+   
+   netio_reset_stats(nio);
+   netio_release(argv[0]);
+
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Set bandwidth constraint */
+static int cmd_set_bandwidth(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   netio_desc_t *nio;
+
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+   
+   netio_set_bandwidth(nio,atoi(argv[1]));
+   netio_release(argv[0]);
+
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Show info about a NIO object */
 static void cmd_show_nio_list(registry_entry_t *entry,void *opt,int *err)
 {
@@ -353,6 +492,10 @@ static int cmd_nio_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* NIO commands */
 static hypervisor_cmd_t nio_cmd_array[] = {
    { "create_udp", 4, 4, cmd_create_udp, NULL },
+   { "create_udp_auto", 4, 4, cmd_create_udp_auto, NULL },
+   { "connect_udp_auto", 3, 3, cmd_connect_udp_auto, NULL },
+   { "create_mcast", 3, 3, cmd_create_mcast, NULL },
+   { "set_mcast_ttl", 2, 2, cmd_set_mcast_ttl, NULL },
    { "create_unix", 3, 3, cmd_create_unix, NULL },
    { "create_vde", 3, 3, cmd_create_vde, NULL },
    { "create_tap", 2, 2, cmd_create_tap, NULL },
@@ -370,6 +513,9 @@ static hypervisor_cmd_t nio_cmd_array[] = {
    { "bind_filter", 3, 3, cmd_bind_filter, NULL },
    { "unbind_filter", 2, 2, cmd_unbind_filter, NULL },
    { "setup_filter", 2, 10, cmd_setup_filter, NULL },
+   { "get_stats", 1, 1, cmd_get_stats },
+   { "reset_stats", 1, 1, cmd_reset_stats },
+   { "set_bandwidth", 2, 2, cmd_set_bandwidth },
    { "list", 0, 0, cmd_nio_list, NULL },
    { NULL, -1, -1, NULL, NULL },
 };

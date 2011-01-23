@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Virtual console TTY.
  */
@@ -114,5 +115,8 @@ int vtty_store_ctrlc(vtty_t *);
 
 /* Initialize the VTTY thread */
 int vtty_init(void);
+
+void vtty_set_ctrlhandler(int n);
+void vtty_set_telnetmsg(int n);
 
 #endif

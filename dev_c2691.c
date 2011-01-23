@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 2691 routines and definitions (EEPROM,...).
  */
@@ -729,13 +730,21 @@ static u_int c2691_get_mac_addr_msb(void)
    return(0xC0);
 }
 
-/* Parse specific options for the Cisco 1700 platform */
+/* Parse specific options for the Cisco 2691 platform */
 static int c2691_cli_parse_options(vm_instance_t *vm,int option)
 {
+   c2691_t *router = VM_C2691(vm);
+
    switch(option) {
       /* IO memory reserved for NMs (in percents!) */
       case OPT_IOMEM_SIZE:
          vm->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+       /* Set the base MAC address */
+      case 'm':
+         if (!c2691_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
          break;
 
       /* Unknown option */
@@ -763,6 +772,8 @@ static vm_platform_t c2691_platform = {
    c2691_delete_instance,
    c2691_init_instance,
    c2691_stop_instance,
+   NULL,
+   NULL,
    c2691_nvram_extract_config,
    c2691_nvram_push_config,
    c2691_get_mac_addr_msb,

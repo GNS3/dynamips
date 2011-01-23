@@ -24,10 +24,10 @@
 /* Maximum number of X86 chunks */
 #define PPC_JIT_MAX_CHUNKS  64
 
-/* Size of hash for IA lookup */
-#define PPC_JIT_IA_HASH_BITS    17
-#define PPC_JIT_IA_HASH_MASK    ((1 << PPC_JIT_IA_HASH_BITS) - 1)
-#define PPC_JIT_IA_HASH_SIZE    (1 << PPC_JIT_IA_HASH_BITS)
+/* Size of hash for virtual address lookup */
+#define PPC_JIT_VIRT_HASH_BITS  17
+#define PPC_JIT_VIRT_HASH_MASK  ((1 << PPC_JIT_VIRT_HASH_BITS) - 1)
+#define PPC_JIT_VIRT_HASH_SIZE  (1 << PPC_JIT_VIRT_HASH_BITS)
 
 /* Size of hash for physical lookup */
 #define PPC_JIT_PHYS_HASH_BITS  16
@@ -53,9 +53,14 @@ struct ppc32_jit_patch_table {
    u_int cur_patch;
 };
 
+#define PPC32_JIT_TCB_FLAG_SMC  0x1   /* Self-modifying code */
+
 /* PPC32 translated code block */
 struct ppc32_jit_tcb {
+   u_int flags;
    m_uint32_t start_ia;
+   m_uint32_t exec_state;
+   
    u_char **jit_insn_ptr;
    m_uint64_t acc_count;
    ppc_insn_t *ppc_code;
@@ -67,6 +72,7 @@ struct ppc32_jit_tcb {
    struct ppc32_jit_patch_table *patch_table;
    ppc32_jit_tcb_t *prev,*next;
 
+   /* Physical page information */
    m_uint32_t phys_page;
    m_uint32_t phys_hash;
    ppc32_jit_tcb_t **phys_pprev,*phys_next;
@@ -112,21 +118,21 @@ ppc32_jit_tcb_get_target_bit(ppc32_jit_tcb_t *b,m_uint32_t ia)
 
 /* Get the JIT instruction pointer in a translated block */
 static forced_inline 
-u_char *ppc32_jit_tcb_get_host_ptr(ppc32_jit_tcb_t *b,m_uint32_t vaddr)
+u_char *ppc32_jit_tcb_get_host_ptr(ppc32_jit_tcb_t *tcb,m_uint32_t vaddr)
 {
    m_uint32_t offset;
 
    offset = (vaddr & PPC32_MIN_PAGE_IMASK) >> 2;
-   return(b->jit_insn_ptr[offset]);
+   return(tcb->jit_insn_ptr[offset]);
 }
 
 /* Check if the specified address belongs to the specified block */
 static forced_inline 
-int ppc32_jit_tcb_local_addr(ppc32_jit_tcb_t *block,m_uint32_t vaddr,
+int ppc32_jit_tcb_local_addr(ppc32_jit_tcb_t *tcb,m_uint32_t vaddr,
                              u_char **jit_addr)
 {
-   if ((vaddr & PPC32_MIN_PAGE_MASK) == block->start_ia) {
-      *jit_addr = ppc32_jit_tcb_get_host_ptr(block,vaddr);
+   if ((vaddr & PPC32_MIN_PAGE_MASK) == tcb->start_ia) {
+      *jit_addr = ppc32_jit_tcb_get_host_ptr(tcb,vaddr);
       return(1);
    }
 
@@ -135,21 +141,21 @@ int ppc32_jit_tcb_local_addr(ppc32_jit_tcb_t *block,m_uint32_t vaddr,
 
 /* Check if PC register matches the compiled block virtual address */
 static forced_inline 
-int ppc32_jit_tcb_match(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
+int ppc32_jit_tcb_match(cpu_ppc_t *cpu,ppc32_jit_tcb_t *tcb)
 {
    m_uint32_t vpage;
 
-   vpage = cpu->ia & ~PPC32_MIN_PAGE_IMASK;
-   return(block->start_ia == vpage);
+   vpage = cpu->ia & PPC32_MIN_PAGE_MASK;
+   return((tcb->start_ia == vpage) && (tcb->exec_state == cpu->exec_state));
 }
 
-/* Compute the hash index for the specified IA value */
-static forced_inline m_uint32_t ppc32_jit_get_ia_hash(m_uint32_t ia)
+/* Compute the hash index for the specified virtual address */
+static forced_inline m_uint32_t ppc32_jit_get_virt_hash(m_uint32_t vaddr)
 {
    m_uint32_t page_hash;
 
-   page_hash = sbox_u32(ia >> PPC32_MIN_PAGE_SHIFT);
-   return((page_hash ^ (page_hash >> 14)) & PPC_JIT_IA_HASH_MASK);
+   page_hash = sbox_u32(vaddr >> PPC32_MIN_PAGE_SHIFT);
+   return((page_hash ^ (page_hash >> 14)) & PPC_JIT_VIRT_HASH_MASK);
 }
 
 /* Compute the hash index for the specified physical page */
@@ -161,16 +167,16 @@ static forced_inline m_uint32_t ppc32_jit_get_phys_hash(m_uint32_t phys_page)
    return((page_hash ^ (page_hash >> 12)) & PPC_JIT_PHYS_HASH_MASK);
 }
 
-/* Find the JIT block matching a physical page */
+/* Find a JIT block matching a physical page */
 static inline ppc32_jit_tcb_t *
 ppc32_jit_find_by_phys_page(cpu_ppc_t *cpu,m_uint32_t phys_page)
 {
-   m_uint32_t page_hash =  ppc32_jit_get_phys_hash(phys_page);
-   ppc32_jit_tcb_t *block;
+   m_uint32_t page_hash = ppc32_jit_get_phys_hash(phys_page);
+   ppc32_jit_tcb_t *tcb;
    
-   for(block=cpu->exec_phys_map[page_hash];block;block=block->phys_next)
-      if (block->phys_page == phys_page)
-         return block;
+   for(tcb=cpu->tcb_phys_hash[page_hash];tcb;tcb=tcb->phys_next)
+      if (tcb->phys_page == phys_page)
+         return tcb;
 
    return NULL;
 }
@@ -329,6 +335,9 @@ struct ppc32_insn_tag *ppc32_jit_fetch_and_emit(cpu_ppc_t *cpu,
 /* Record a patch to apply in a compiled block */
 int ppc32_jit_tcb_record_patch(ppc32_jit_tcb_t *block,jit_op_t *iop,
                                u_char *jit_ptr,m_uint32_t vaddr);
+
+/* Mark a block as containing self-modifying code */
+void ppc32_jit_mark_smc(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block);
 
 /* Free an instruction block */
 void ppc32_jit_tcb_free(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block,

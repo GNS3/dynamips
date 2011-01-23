@@ -314,6 +314,34 @@ dev_c3745_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ)
             *data = d->net_irq_status[1];
          break;
+      
+      /* 
+       * Read when PA Mgmt IRQ (4) is received.
+       * Message: "Error: Unexpected NM Interrupt received from slot: X"
+       *
+       * Bits 0-1: 0 = Interrupt for slot 1
+       * Bits 2-3: 0 = Interrupt for slot 2
+       * Bits 4-5: 0 = Interrupt for slot 3
+       * Bits 6-7: 0 = Interrupt for slot 4
+       */
+      case 0x000026:
+         if (op_type == MTS_READ)
+            *data = 0x00FF;
+         break;
+
+      /* 
+       * Read when OIR IRQ (6) is received.
+       * Bits 0-3: 1 = OIR for slots 1-4
+       * Bits 4-8: 1 = OIR "Watchdog" (???) for slots 1-4
+       */
+      case 0x000028:
+         if (op_type == MTS_READ) {
+            *data = d->router->oir_status;
+         } else {
+            d->router->oir_status &= ~(*data);
+            vm_clear_irq(d->router->vm,C3745_EXT_IRQ);
+         }
+         break;
 
       /* 
        * Per Slot Intr Mask (seen with "sh platform").
@@ -371,16 +399,16 @@ dev_c3745_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             *data = 0xFFFF;
             
-            if (vm_slot_get_card_ptr(d->router->vm,1))
+            if (vm_slot_check_eeprom(d->router->vm,1,0))
                *data &= ~0x0100;
 
-            if (vm_slot_get_card_ptr(d->router->vm,2))
+            if (vm_slot_check_eeprom(d->router->vm,2,0))
                *data &= ~0x0001;
 
-            if (vm_slot_get_card_ptr(d->router->vm,3))
+            if (vm_slot_check_eeprom(d->router->vm,3,0))
                *data &= ~0x1000;
 
-            if (vm_slot_get_card_ptr(d->router->vm,4))
+            if (vm_slot_check_eeprom(d->router->vm,4,0))
                *data &= ~0x0010;
          }
          break;

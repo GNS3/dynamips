@@ -104,40 +104,59 @@ static int cmd_set_mac_addr(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
-/* Initialize a PA while the router is running */
-static int cmd_pa_init_online(hypervisor_conn_t *conn,int argc,char *argv[])
+/* 
+ * Set temperature for a DS1620 sensor.
+ * This can be used to simulate environmental problems (overheat)
+ */
+static int cmd_set_temp_sensor(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
    c7200_t *router;
-   u_int pa_bay;
+   u_int index;
+   int temp;
 
    if (!(vm = hypervisor_find_vm(conn,argv[0])))
       return(-1);
 
    router = VM_C7200(vm);
 
-   pa_bay = atoi(argv[1]);
-   c7200_pa_init_online(router,pa_bay);
+   index = atoi(argv[1]);
+   temp = atoi(argv[2]);
+
+   if (index < C7200_TEMP_SENSORS)
+      ds1620_set_temp(&router->ds1620_sensors[index],temp);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
 
-/* Stop a PA while the router is running */
-static int cmd_pa_stop_online(hypervisor_conn_t *conn,int argc,char *argv[])
-{     
+/* 
+ * Set power supply status.
+ * This can be used to simulate environmental problems (power loss)
+ */
+static int cmd_set_power_supply(hypervisor_conn_t *conn,int argc,char *argv[])
+{
    vm_instance_t *vm;
    c7200_t *router;
-   u_int pa_bay;
+   u_int index;
+   int status;
 
    if (!(vm = hypervisor_find_vm(conn,argv[0])))
       return(-1);
 
    router = VM_C7200(vm);
 
-   pa_bay = atoi(argv[1]);
-   c7200_pa_stop_online(router,pa_bay);
+   index = atoi(argv[1]);
+   status = atoi(argv[2]);
+
+   if (status)
+      router->ps_status |= 1 << index;
+   else
+      router->ps_status &= ~(1 << index);
+
+   /* only 2 power supplies */
+   router->ps_status &= 0x03;
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -185,8 +204,8 @@ static hypervisor_cmd_t c7200_cmd_array[] = {
    { "set_npe", 2, 2, cmd_set_npe, NULL },
    { "set_midplane", 2, 2, cmd_set_midplane, NULL },
    { "set_mac_addr", 2, 2, cmd_set_mac_addr, NULL },
-   { "pa_init_online", 2, 2, cmd_pa_init_online, NULL },
-   { "pa_stop_online", 2, 2, cmd_pa_stop_online, NULL },
+   { "set_temp_sensor", 3, 3, cmd_set_temp_sensor, NULL },
+   { "set_power_supply", 3, 3, cmd_set_power_supply, NULL },
    { "show_hardware", 1, 1, cmd_show_hardware, NULL },
    { "list", 0, 0, cmd_c7200_list, NULL },
    { NULL, -1, -1, NULL, NULL },

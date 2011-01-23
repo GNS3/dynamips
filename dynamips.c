@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2005,2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Many thanks to Nicolas Szalay for his patch
  * for the command line parsing and virtual machine 
@@ -21,7 +22,10 @@
 #include <getopt.h>
 
 #include "dynamips.h"
+#include "gen_uuid.h"
 #include "cpu.h"
+#include "vm.h"
+#include "tcb.h"
 #include "mips64_exec.h"
 #include "mips64_jit.h"
 #include "ppc32_exec.h"
@@ -47,6 +51,7 @@
 #include "net_io_filter.h"
 #include "crc.h"
 #include "atm.h"
+#include "atm_bridge.h"
 #include "frame_relay.h"
 #include "eth_switch.h"
 #ifdef GEN_ETH
@@ -59,11 +64,14 @@
 /* Default name for logfile */
 #define LOGFILE_DEFAULT_NAME  "dynamips_log.txt"
 
+/* Operating system name */
+const char *os_name = STRINGIFY(OSNAME);
+
 /* Software version */
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2007101400";
+const char *sw_version_tag = "2008040100";
 
 /* Hypervisor */
 int hypervisor_mode = 0;
@@ -93,6 +101,11 @@ void signal_gen_handler(int sig)
          vm_save_state = TRUE;
          break;
 
+      /* Handle SIGPIPE by ignoring it */
+      case SIGPIPE:
+         fprintf(stderr,"Error: unwanted SIGPIPE.\n");
+         break;
+		 
       case SIGINT:
          /* CTRL+C has been pressed */
          if (hypervisor_mode)
@@ -131,6 +144,7 @@ static void setup_signals(void)
    sigaction(SIGHUP,&act,NULL);
    sigaction(SIGQUIT,&act,NULL);
    sigaction(SIGINT,&act,NULL);
+   sigaction(SIGPIPE,&act,NULL);
 }
 
 /* Create general log file */
@@ -172,7 +186,6 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "(default: 7200)\n\n"
           "  -l <log_file>      : Set logging file (default is %s)\n"
           "  -j                 : Disable the JIT compiler, very slow\n"
-          "  --exec-area <size> : Set the exec area size (default: %d Mb)\n"
           "  --idle-pc <pc>     : Set the idle PC (default: disabled)\n"
           "  --timer-itv <val>  : Timer IRQ interval check (default: %u)\n"
           "\n"
@@ -205,8 +218,12 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "(default: %u Mb)\n"
           "  --disk1 <size>     : Set PCMCIA ATA disk1: size "
           "(default: %u Mb)\n"
+          "\n"
+          "  --noctrl           : Disable ctrl+] monitor console\n"
+          "  --notelnetmsg      : Disable message when using tcp console/aux\n"
+          "  --filepid filename : Store dynamips pid in a file\n"
           "\n",
-          LOGFILE_DEFAULT_NAME,MIPS_EXEC_AREA_SIZE,VM_TIMER_IRQ_CHECK_ITV,
+          LOGFILE_DEFAULT_NAME,VM_TIMER_IRQ_CHECK_ITV,
           vm->ram_size,vm->rom_size,vm->nvram_size,vm->conf_reg_setup,
           vm->clock_divisor,vm->pcmcia_disk_size[0],vm->pcmcia_disk_size[1]);
 
@@ -339,12 +356,14 @@ static vm_platform_t *cli_get_platform_type(int argc,char *argv[])
 static struct option cmd_line_lopts[] = {
    { "disk0"      , 1, NULL, OPT_DISK0_SIZE },
    { "disk1"      , 1, NULL, OPT_DISK1_SIZE },
-   { "exec-area"  , 1, NULL, OPT_EXEC_AREA },
    { "idle-pc"    , 1, NULL, OPT_IDLE_PC },
    { "timer-itv"  , 1, NULL, OPT_TIMER_ITV },
    { "vm-debug"   , 1, NULL, OPT_VM_DEBUG },
    { "iomem-size" , 1, NULL, OPT_IOMEM_SIZE },
    { "sparse-mem" , 0, NULL, OPT_SPARSE_MEM },
+   { "noctrl"     , 0, NULL, OPT_NOCTRL },
+   { "notelnetmsg", 0, NULL, OPT_NOTELMSG },
+   { "filepid"    , 1, NULL, OPT_FILEPID },
    { NULL         , 0, NULL, 0 },
 };
 
@@ -357,7 +376,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
    vm = vm_create_instance(name,instance_id,platform_name);
   
    if (vm == NULL) {
-      fprintf(stderr,"C7200: unable to create instance!\n");
+      fprintf(stderr,"%s: unable to create instance %s!\n",platform_name,name);
       return NULL;
    }
 
@@ -374,6 +393,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
    int instance_id;
    int option;
    char *str;
+   FILE *pid_file = NULL; // For saving the pid if requested
 
    /* Get the instance ID */
    instance_id = 0;
@@ -400,6 +420,9 @@ static int parse_std_cmd_line(int argc,char *argv[])
       exit(EXIT_FAILURE);
 
    opterr = 0;
+   
+   vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
+   vtty_set_telnetmsg(1);   /* By default allow telnet message */
 
    while((option = getopt_long(argc,argv,options_list,
                                cmd_line_lopts,NULL)) != -1) 
@@ -432,11 +455,6 @@ static int parse_std_cmd_line(int argc,char *argv[])
             printf("NVRAM size set to %d KB.\n",vm->nvram_size);
             break;
 
-         /* Execution area size */
-         case OPT_EXEC_AREA:
-            vm->exec_area_size = atoi(optarg);
-            break;
-
          /* PCMCIA disk0 size */
          case OPT_DISK0_SIZE:
             vm->pcmcia_disk_size[0] = atoi(optarg);
@@ -451,6 +469,11 @@ static int parse_std_cmd_line(int argc,char *argv[])
                    vm->pcmcia_disk_size[1]);
             break;
 
+         case OPT_NOCTRL:
+            vtty_set_ctrlhandler(0); /* Ignore ctrl ] */
+            printf("Block ctrl+] access to monitor console.\n");
+            break;
+			
          /* Config Register */
          case 'c':
             vm->conf_reg_setup = strtol(optarg, NULL, 0);
@@ -489,6 +512,20 @@ static int parse_std_cmd_line(int argc,char *argv[])
             vm->rom_filename = optarg;
             break;
 
+         case OPT_NOTELMSG:
+            vtty_set_telnetmsg(0); /* disable telnet greeting */
+            printf("Prevent telnet message on AUX/CONSOLE connecte.\n");
+            break;
+
+         case OPT_FILEPID:
+            if ((pid_file = fopen(optarg,"w"))) {
+              fprintf(pid_file,"%d",getpid());
+              fclose(pid_file);
+            } else {
+              printf("Unable to save to %s.\n",optarg);
+            }
+            break;
+			
          /* Idle PC */
          case OPT_IDLE_PC:
             vm->idle_pc = strtoull(optarg,NULL,0);
@@ -585,6 +622,12 @@ static int parse_std_cmd_line(int argc,char *argv[])
                exit(EXIT_FAILURE);
             break;
 
+         /* Virtual ATM bridge */
+         case 'M':
+            if (atm_bridge_start(optarg) == -1)
+               exit(EXIT_FAILURE);
+            break;
+
          /* Virtual Frame-Relay switch */
          case 'f':
             if (frsw_start(optarg) == -1)
@@ -622,8 +665,12 @@ static int parse_std_cmd_line(int argc,char *argv[])
          /* Parse options specific to the platform */
          default:
             if (vm->platform->cli_parse_options != NULL)
-               if (vm->platform->cli_parse_options(vm,option) == -1)
-                  exit(EXIT_FAILURE);
+               /* If you get an option wrong, say which option is was */
+               /* Wont be pretty for a long option, but it will at least help */
+               if (vm->platform->cli_parse_options(vm,option) == -1) {
+                 printf("Flag not recognised: -%c\n",(char)option);
+                 exit(EXIT_FAILURE);
+               }
       }
    }
 
@@ -652,7 +699,11 @@ static int run_hypervisor(int argc,char *argv[])
    char *options_list = "H:l:hN:L:";
    int i,option;
    char *index;
-   size_t len;
+   size_t len;  
+   FILE *pid_file = NULL; // For saving the pid if requested
+
+   vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
+   vtty_set_telnetmsg(1);   /* By default allow telnet message */
 
    for(i=1;i<argc;i++)
       if (!strcmp(argv[i],"-H")) {
@@ -667,7 +718,10 @@ static int run_hypervisor(int argc,char *argv[])
    cli_load_plugins(argc,argv);
 
    opterr = 0;
-   while((option = getopt(argc,argv,options_list)) != -1) {
+
+   /* New long options are sometimes appropriate for hypervisor mode */
+   while((option = getopt_long(argc,argv,options_list,
+                               cmd_line_lopts,NULL)) != -1) {
       switch(option)
       {
          /* Hypervisor TCP port */
@@ -709,6 +763,25 @@ static int run_hypervisor(int argc,char *argv[])
          case 'L':
             break;
 
+         case OPT_NOCTRL:
+            vtty_set_ctrlhandler(0); /* Ignore ctrl ] */
+            printf("Block ctrl+] access to monitor console.\n");
+            break;
+
+         case OPT_NOTELMSG:
+            vtty_set_telnetmsg(0); /* disable telnet greeting */
+            printf("Prevent telnet message on AUX/CONSOLE connecte.\n");
+            break;
+
+         case OPT_FILEPID:
+            if ((pid_file = fopen(optarg,"w"))) {
+              fprintf(pid_file,"%d",getpid());
+              fclose(pid_file);
+            } else {
+              printf("Unable to save to %s.\n",optarg);
+            }
+            break;
+
          /* Oops ! */
          case '?':
             //show_usage(argc,argv,VM_TYPE_C7200);
@@ -730,11 +803,14 @@ void dynamips_reset(void)
    /* Delete ATM and Frame-Relay switches + bridges */
    netio_bridge_delete_all();
    atmsw_delete_all();
+   atm_bridge_delete_all();
    frsw_delete_all();
    ethsw_delete_all();
 
    /* Delete all NIO descriptors */
    netio_delete_all();
+
+   m_log("GENERAL","reset done.\n");
 
    printf("Shutdown completed.\n");
 }
@@ -750,6 +826,7 @@ static int (*platform_register[])(void) = {
    c1700_platform_register,
    c6sup1_platform_register,
    c6msfc1_platform_register,
+   ppc32_vmtest_platform_register,
    NULL,
 };
 
@@ -770,9 +847,12 @@ int main(int argc,char *argv[])
    atexit(profiler_savestat);
 #endif
 
-   printf("Cisco Router Simulation Platform (version %s)\n",sw_version);
-   printf("Copyright (c) 2005-2007 Christophe Fillot.\n");
+   printf("Cisco Router Simulation Platform (version %s/%s)\n",
+          sw_version,os_name);
+   printf("Copyright (c) 2005-2008 Christophe Fillot.\n");
    printf("Build date: %s %s\n\n",__DATE__,__TIME__);
+
+   gen_uuid_init();
 
    /* Register platforms */
    register_default_platforms();
@@ -822,7 +902,7 @@ int main(int argc,char *argv[])
       vm = vm_acquire("default");
       assert(vm != NULL);
 
-      if (vm->platform->init_instance(vm) == -1) {
+      if (vm_init_instance(vm) == -1) {
          fprintf(stderr,"Unable to initialize router instance.\n");
          exit(EXIT_FAILURE);
       }

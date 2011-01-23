@@ -69,23 +69,6 @@ int mips64_cp0_get_reg_index(char *name)
    return(-1);
 }
 
-/* Get the CPU operating mode (User,Supervisor or Kernel) - inline version */
-static forced_inline u_int mips64_cp0_get_mode_inline(cpu_mips_t *cpu)
-{  
-   mips_cp0_t *cp0 = &cpu->cp0;
-   u_int cpu_mode;
-
-   cpu_mode = cp0->reg[MIPS_CP0_STATUS] >> MIPS_CP0_STATUS_KSU_SHIFT;
-   cpu_mode &= MIPS_CP0_STATUS_KSU_MASK;
-   return(cpu_mode);
-}
-
-/* Get the CPU operating mode (User,Supervisor or Kernel) */
-u_int mips64_cp0_get_mode(cpu_mips_t *cpu)
-{  
-   return(mips64_cp0_get_mode_inline(cpu));
-}
-
 /* Check that we are running in kernel mode */
 int mips64_cp0_check_kernel_mode(cpu_mips_t *cpu)
 {
@@ -94,8 +77,7 @@ int mips64_cp0_check_kernel_mode(cpu_mips_t *cpu)
    cpu_mode = mips64_cp0_get_mode(cpu);
 
    if (cpu_mode != MIPS_CP0_STATUS_KM) {
-      /* XXX Branch delay slot */
-      mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_ILLOP,0);
+      mips64_general_exception(cpu,MIPS_CP0_CAUSE_ILLOP);
       return(1);
    }
 
@@ -335,17 +317,38 @@ static char *get_page_size_str(char *buffer,size_t len,m_uint32_t page_mask)
    return buffer;
 }
 
-/* Get the VPN2 mask */
-static forced_inline m_uint64_t mips64_cp0_get_vpn2_mask(cpu_mips_t *cpu)
+/* Execute a callback for the specified entry */
+static inline void mips64_cp0_tlb_callback(cpu_mips_t *cpu,tlb_entry_t *entry,
+                                           int action)
 {
-   if (cpu->addr_mode == 64)
-      return(MIPS_TLB_VPN2_MASK_64);
-   else
-      return(MIPS_TLB_VPN2_MASK_32);
+   m_uint64_t vaddr,paddr0,paddr1;
+   m_uint32_t psize;
+
+   vaddr = entry->hi & mips64_cp0_get_vpn2_mask(cpu);
+   psize = get_page_size(entry->mask);
+
+   if (entry->lo0 & MIPS_TLB_V_MASK) {
+      paddr0 = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
+      
+      printf("TLB: vaddr=0x%8.8llx -> paddr0=0x%10.10llx (size=0x%8.8x), "
+             "action=%s\n",
+             vaddr,paddr0,psize,
+             (action == 0) ? "ADD" : "DELETE");
+   }
+
+   if (entry->lo1 & MIPS_TLB_V_MASK) {
+      paddr1 = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
+
+      printf("TLB: vaddr=0x%8.8llx -> paddr1=0x%10.10llx (size=0x%8.8x), "
+             "action=%s\n",
+             vaddr,paddr1,psize,
+             (action == 0) ? "ADD" : "DELETE");
+   }
 }
 
 /* TLB lookup */
-int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
+int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
+                          u_int op_type,mts_map_t *res)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t vpn_addr,vpn2_mask;
@@ -363,8 +366,8 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
    for(i=0;i<cp0->tlb_entries;i++) {
       entry = &cp0->tlb[i];
 
-      page_mask = ~(entry->mask + 0x1FFF);
-      hi_addr = entry->hi & vpn2_mask;
+      page_mask = ~entry->mask;
+      hi_addr = entry->hi & vpn2_mask & page_mask;
 
       if (((vpn_addr & page_mask) == hi_addr) &&
           ((entry->hi & MIPS_TLB_G_MASK) ||
@@ -374,7 +377,13 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
 
          if ((vaddr & page_size) == 0) {
             /* Even Page */
-            if (entry->lo0 & MIPS_TLB_V_MASK) {
+            if (entry->lo0 & MIPS_TLB_V_MASK) 
+            {
+               /* Check write protection */
+               if ((op_type == MTS_WRITE) && !(entry->lo0 & MIPS_TLB_D_MASK))
+                  return MIPS_TLB_LOOKUP_MOD;
+               
+               res->flags = 0;
                res->vaddr = vaddr & MIPS_MIN_PAGE_MASK;
                res->paddr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
                res->paddr += (res->vaddr & (page_size-1));
@@ -385,14 +394,21 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
                pca = (entry->lo0 & MIPS_TLB_C_MASK);
                pca >>= MIPS_TLB_C_SHIFT;
                res->cached = mips64_cca_cached(pca);
-            
-               res->tlb_index = i;
-               return(TRUE);
+               
+               if (!(entry->lo0 & MIPS_TLB_D_MASK))
+                  res->flags |= MTS_FLAG_RO;
+               
+               return(MIPS_TLB_LOOKUP_OK);
             }
          } else {
             /* Odd Page */
-            if (entry->lo1 & MIPS_TLB_V_MASK) {
+            if (entry->lo1 & MIPS_TLB_V_MASK) 
+            {
+               /* Check write protection */
+               if ((op_type == MTS_WRITE) && !(entry->lo1 & MIPS_TLB_D_MASK))
+                  return MIPS_TLB_LOOKUP_MOD;
 
+               res->flags = 0;
                res->vaddr = vaddr & MIPS_MIN_PAGE_MASK;
                res->paddr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
                res->paddr += (res->vaddr & (page_size-1));
@@ -402,93 +418,22 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,mts_map_t *res)
 
                pca = (entry->lo1 & MIPS_TLB_C_MASK);
                pca >>= MIPS_TLB_C_SHIFT;
-               res->cached = mips64_cca_cached(pca);
-               
-               res->tlb_index = i;
-               return(TRUE);
+               res->cached = mips64_cca_cached(pca);     
+                                             
+               if (!(entry->lo0 & MIPS_TLB_D_MASK))
+                  res->flags |= MTS_FLAG_RO;
+                         
+               return(MIPS_TLB_LOOKUP_OK);
             }
          }
 
          /* Invalid entry */
-         return(FALSE);
+         return(MIPS_TLB_LOOKUP_INVALID);
       }
    }
 
    /* No matching entry */
-   return(FALSE);
-}
-
-/* 
- * Map a TLB entry into the MTS.
- *
- * We apply the physical address bus masking here.
- *
- * TODO: - Manage ASID
- *       - Manage CPU Mode (user,supervisor or kernel)
- */
-void mips64_cp0_map_tlb_to_mts(cpu_mips_t *cpu,int index)
-{
-   m_uint64_t v0_addr,v1_addr,p0_addr,p1_addr;
-   m_uint32_t page_size,pca;
-   tlb_entry_t *entry;
-   int cacheable;
-
-   entry = &cpu->cp0.tlb[index];
-
-   page_size = get_page_size(entry->mask);
-   v0_addr = entry->hi & mips64_cp0_get_vpn2_mask(cpu);
-   v1_addr = v0_addr + page_size;
-
-   if (entry->lo0 & MIPS_TLB_V_MASK) {
-      pca = (entry->lo0 & MIPS_TLB_C_MASK);
-      pca >>= MIPS_TLB_C_SHIFT;
-      cacheable = mips64_cca_cached(pca);
-       
-      p0_addr = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
-      cpu->mts_map(cpu,v0_addr,p0_addr & cpu->addr_bus_mask,page_size,
-                   cacheable,index);
-   }
-
-   if (entry->lo1 & MIPS_TLB_V_MASK) {
-      pca = (entry->lo1 & MIPS_TLB_C_MASK);
-      pca >>= MIPS_TLB_C_SHIFT;
-      cacheable = mips64_cca_cached(pca);
-
-      p1_addr = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
-      cpu->mts_map(cpu,v1_addr,p1_addr & cpu->addr_bus_mask,page_size,
-                   cacheable,index);
-   }
-}
-
-/*
- * Unmap a TLB entry in the MTS.
- */
-void mips64_cp0_unmap_tlb_to_mts(cpu_mips_t *cpu,int index)
-{
-   m_uint64_t v0_addr,v1_addr;
-   m_uint32_t page_size;
-   tlb_entry_t *entry;
-
-   entry = &cpu->cp0.tlb[index];
-
-   page_size = get_page_size(entry->mask);
-   v0_addr = entry->hi & mips64_cp0_get_vpn2_mask(cpu);
-   v1_addr = v0_addr + page_size;
-
-   if (entry->lo0 & MIPS_TLB_V_MASK)
-      cpu->mts_unmap(cpu,v0_addr,page_size,MTS_ACC_T,index);
-
-   if (entry->lo1 & MIPS_TLB_V_MASK)
-      cpu->mts_unmap(cpu,v1_addr,page_size,MTS_ACC_T,index);
-}
-
-/* Map all TLB entries into the MTS */
-void mips64_cp0_map_all_tlb_to_mts(cpu_mips_t *cpu)
-{   
-   int i;
-
-   for(i=0;i<cpu->cp0.tlb_entries;i++)
-      mips64_cp0_map_tlb_to_mts(cpu,i);
+   return(MIPS_TLB_LOOKUP_MISS);
 }
 
 /* TLBP: Probe a TLB entry */
@@ -497,6 +442,7 @@ fastcall void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t hi_reg,asid;
    m_uint64_t vpn2,vpn2_mask;
+   m_uint64_t page_mask;
    tlb_entry_t *entry;
    int i;
   
@@ -509,8 +455,9 @@ fastcall void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
    
    for(i=0;i<cp0->tlb_entries;i++) {
       entry = &cp0->tlb[i];
+      page_mask = ~entry->mask;
 
-      if (((entry->hi & vpn2_mask) == vpn2) &&
+      if (((entry->hi & vpn2_mask & page_mask) == (vpn2 & page_mask)) &&
           ((entry->hi & MIPS_TLB_G_MASK) || 
            ((entry->hi & MIPS_TLB_ASID_MASK) == asid)))
       {
@@ -574,25 +521,27 @@ static inline void mips64_cp0_exec_tlbw(cpu_mips_t *cpu,u_int index)
    {
       entry = &cp0->tlb[index];
 
-      /* Unmap the old entry if it was valid */
-      mips64_cp0_unmap_tlb_to_mts(cpu,index);
+      mips64_cp0_tlb_callback(cpu,entry,TLB_ZONE_ADD);
 
       entry->mask = cp0->reg[MIPS_CP0_PAGEMASK] & MIPS_TLB_PAGE_MASK;
-      entry->hi   = cp0->reg[MIPS_CP0_TLB_HI] & ~entry->mask;
-      entry->hi   &= MIPS_CP0_HI_SAFE_MASK;         /* clear G bit */
+      entry->hi   = cp0->reg[MIPS_CP0_TLB_HI];
       entry->lo0  = cp0->reg[MIPS_CP0_TLB_LO_0];
       entry->lo1  = cp0->reg[MIPS_CP0_TLB_LO_1];
 
       /* if G bit is set in lo0 and lo1, set it in hi */
       if ((entry->lo0 & entry->lo1) & MIPS_CP0_LO_G_MASK)
          entry->hi |= MIPS_TLB_G_MASK;
+      else
+         entry->hi &= ~MIPS_TLB_G_MASK;
 
       /* Clear G bit in TLB lo0 and lo1 */
       entry->lo0 &= ~MIPS_CP0_LO_G_MASK;
       entry->lo1 &= ~MIPS_CP0_LO_G_MASK;
 
       /* Inform the MTS subsystem */
-      mips64_cp0_map_tlb_to_mts(cpu,index);
+      cpu->mts_invalidate(cpu);
+
+      mips64_cp0_tlb_callback(cpu,entry,TLB_ZONE_DELETE);
 
 #if DEBUG_TLB_ACTIVITY
       mips64_tlb_dump_entry(cpu,index);

@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include "cpu.h"
 #include "vm.h"
@@ -310,11 +311,11 @@ static forced_inline int mips64_exec_fetch(cpu_mips_t *cpu,m_uint64_t pc,
    m_uint64_t exec_page;
    m_uint32_t offset;
 
-   exec_page = pc & ~(m_uint64_t)MIPS_MIN_PAGE_IMASK;
+   exec_page = pc & MIPS_MIN_PAGE_MASK;
 
    if (unlikely(exec_page != cpu->njm_exec_page)) {
+      cpu->njm_exec_ptr  = cpu->mem_op_ifetch(cpu,exec_page);
       cpu->njm_exec_page = exec_page;
-      cpu->njm_exec_ptr  = cpu->mem_op_lookup(cpu,exec_page);
    }
 
    offset = (pc & MIPS_MIN_PAGE_IMASK) >> 2;
@@ -374,6 +375,34 @@ fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
 
    /* Normal flow ? */
    if (likely(!res)) cpu->pc += 4;
+}
+
+/* Execute a page */
+fastcall int mips64_exec_page(cpu_mips_t *cpu)
+{
+   m_uint32_t offset;
+   mips_insn_t insn;
+   int res;
+
+   /* Check IRQ */
+   if (unlikely(cpu->irq_pending))
+      mips64_trigger_irq(cpu);
+
+   cpu->njm_exec_page = cpu->pc & MIPS_MIN_PAGE_MASK;
+   cpu->njm_exec_ptr  = cpu->mem_op_ifetch(cpu,cpu->njm_exec_page);
+
+   do {
+      /* Reset "zero register" (for safety) */
+      cpu->gpr[0] = 0;
+
+      offset = (cpu->pc & MIPS_MIN_PAGE_IMASK) >> 2;
+      insn = vmtoh32(cpu->njm_exec_ptr[offset]);
+
+      res = mips64_exec_single_instruction(cpu,insn);
+      if (likely(!res)) cpu->pc += sizeof(mips_insn_t);
+   }while((cpu->pc & MIPS_MIN_PAGE_MASK) == cpu->njm_exec_page);
+
+   return(0);
 }
 
 /* Run MIPS code in step-by-step mode */
@@ -472,11 +501,17 @@ static forced_inline void mips64_exec_bdslot(cpu_mips_t *cpu)
 {
    mips_insn_t insn;
 
+   /* Set BD slot flag */
+   cpu->bd_slot = 1;
+
    /* Fetch the instruction in delay slot */
    mips64_exec_fetch(cpu,cpu->pc+4,&insn);
 
    /* Execute the instruction */
    mips64_exec_single_instruction(cpu,insn);
+   
+   /* Clear BD slot flag */
+   cpu->bd_slot = 0;
 }
 
 /* ADD */
@@ -1599,6 +1634,19 @@ static fastcall int mips64_exec_MOVE(cpu_mips_t *cpu,mips_insn_t insn)
    return(0);
 }
 
+/* MOVZ */
+static fastcall int mips64_exec_MOVZ(cpu_mips_t *cpu,mips_insn_t insn)
+{
+   int rs = bits(insn,21,25);
+   int rt = bits(insn,16,20);
+   int rd = bits(insn,11,15);
+   
+   if (!cpu->gpr[rt])
+      cpu->gpr[rd] = cpu->gpr[rs];
+
+   return(0);
+}
+
 /* MTC0 */
 static fastcall int mips64_exec_MTC0(cpu_mips_t *cpu,mips_insn_t insn)
 {	
@@ -2176,6 +2224,7 @@ static struct mips64_insn_exec_tag mips64_exec_tags[] = {
    { "mfc1"   , mips64_exec_MFC1    , 0xffe007ff , 0x44000000, 1, 19 },
    { "mfhi"   , mips64_exec_MFHI    , 0xffff07ff , 0x00000010, 1, 14 },
    { "mflo"   , mips64_exec_MFLO    , 0xffff07ff , 0x00000012, 1, 14 },
+   { "movz"   , mips64_exec_MOVZ    , 0xfc0007ff , 0x0000000a, 1, 3 },
    { "mtc0"   , mips64_exec_MTC0    , 0xffe007ff , 0x40800000, 1, 18 },
    { "mtc1"   , mips64_exec_MTC1    , 0xffe007ff , 0x44800000, 1, 19 },
    { "mthi"   , mips64_exec_MTHI    , 0xfc1fffff , 0x00000011, 1, 13 },

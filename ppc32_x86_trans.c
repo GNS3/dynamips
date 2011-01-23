@@ -112,7 +112,7 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
                                       m_uint32_t new_ia)
 {
    m_uint32_t new_page,ia_hash,ia_offset;
-   u_char *test1,*test2,*test3;
+   u_char *test1,*test2,*test3,*test4;
 
    /* Indicate that we throw %esi, %edx */
    ppc32_op_emit_alter_host_reg(cpu,X86_ESI);
@@ -120,11 +120,11 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
 
    new_page = new_ia & PPC32_MIN_PAGE_MASK;
    ia_offset = (new_ia & PPC32_MIN_PAGE_IMASK) >> 2;
-   ia_hash = ppc32_jit_get_ia_hash(new_ia);
+   ia_hash = ppc32_jit_get_virt_hash(new_ia);
 
    /* Get JIT block info in %edx */
    x86_mov_reg_membase(iop->ob_ptr,X86_EBX,
-                       X86_EDI,OFFSET(cpu_ppc_t,exec_blk_map),4);
+                       X86_EDI,OFFSET(cpu_ppc_t,tcb_virt_hash),4);
    x86_mov_reg_membase(iop->ob_ptr,X86_EDX,X86_EBX,ia_hash*sizeof(void *),4);
 
    /* no JIT block found ? */
@@ -142,11 +142,16 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
    /* Jump to the code */
    x86_mov_reg_membase(iop->ob_ptr,X86_ESI,
                        X86_EDX,OFFSET(ppc32_jit_tcb_t,jit_insn_ptr),4);
+
+   x86_test_reg_reg(iop->ob_ptr,X86_ESI,X86_ESI);
+   test3 = iop->ob_ptr;
+   x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
+
    x86_mov_reg_membase(iop->ob_ptr,X86_EBX,
                        X86_ESI,ia_offset * sizeof(void *),4);
    
    x86_test_reg_reg(iop->ob_ptr,X86_EBX,X86_EBX);
-   test3 = iop->ob_ptr;
+   test4 = iop->ob_ptr;
    x86_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
    x86_jump_reg(iop->ob_ptr,X86_EBX);
 
@@ -154,6 +159,7 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
    x86_patch(test1,iop->ob_ptr);
    x86_patch(test2,iop->ob_ptr);
    x86_patch(test3,iop->ob_ptr);
+   x86_patch(test4,iop->ob_ptr);
 
    ppc32_set_ia(&iop->ob_ptr,new_ia);
    ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
@@ -531,35 +537,14 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
          ppc32_load_imm(&iop->ob_ptr,X86_EBX,0);
    }
 
-#if 0
-   /* ======= zzz ======= */
-   {
-      u_char *testZ;
-
-      x86_mov_reg_reg(iop->ob_ptr,X86_ESI,X86_EBX,4);
-      x86_alu_reg_imm(iop->ob_ptr,X86_AND,X86_ESI,PPC32_MIN_PAGE_MASK);
-      x86_alu_reg_membase(iop->ob_ptr,X86_CMP,X86_ESI,X86_EDI,
-                          OFFSET(cpu_ppc_t,vtlb[base].vaddr));
-      testZ = iop->ob_ptr;
-      x86_branch8(iop->ob_ptr, X86_CC_NZ, 0, 1);
-
-      x86_alu_reg_imm(iop->ob_ptr,X86_AND,X86_EBX,PPC32_MIN_PAGE_IMASK);
-      x86_mov_reg_membase(iop->ob_ptr,X86_EAX,
-                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].haddr),4);
-
-      /* Memory access */
-      op_handler(iop,target);
-
-      p_fast_exit = iop->ob_ptr;
-      x86_jump8(iop->ob_ptr,0);
-
-      x86_patch(testZ,iop->ob_ptr);
-   }
-#endif
-
    /* EAX = mts32_entry index */
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EBX,4);
-   x86_shift_reg_imm(iop->ob_ptr,X86_SHR,X86_EAX,MTS32_HASH_SHIFT);
+   x86_mov_reg_reg(iop->ob_ptr,X86_ESI,X86_EBX,4);
+
+   x86_shift_reg_imm(iop->ob_ptr,X86_SHR,X86_EAX,MTS32_HASH_SHIFT1);
+   x86_shift_reg_imm(iop->ob_ptr,X86_SHR,X86_ESI,MTS32_HASH_SHIFT2);
+   x86_alu_reg_reg(iop->ob_ptr,X86_XOR,X86_EAX,X86_ESI);
+
    x86_alu_reg_imm(iop->ob_ptr,X86_AND,X86_EAX,MTS32_HASH_MASK);
 
    /* EDX = mts32_entry */
@@ -591,18 +576,6 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_membase(iop->ob_ptr,X86_EAX,
                        X86_EDX,OFFSET(mts32_entry_t,hpa),4);
 
-#if 0
-   /* zzz */
-   {
-      x86_mov_membase_reg(iop->ob_ptr,
-                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].vaddr),
-                          X86_ESI,4);
-      x86_mov_membase_reg(iop->ob_ptr,
-                          X86_EDI,OFFSET(cpu_ppc_t,vtlb[base].haddr),
-                          X86_EAX,4);
-   }
-#endif
-
    /* Memory access */
    op_handler(iop,target);
  
@@ -632,11 +605,6 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
    
    x86_patch(p_exit,iop->ob_ptr);
-
-   /* zzz */
-#if 0
-   x86_patch(p_fast_exit,iop->ob_ptr);
-#endif
 }
 
 /* Emit unhandled instruction code */

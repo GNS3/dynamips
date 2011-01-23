@@ -82,12 +82,6 @@ void MTS_PROTO(invalidate_cache)(cpu_mips_t *cpu)
    memset(MTS_CACHE(cpu),0xFF,len);
 }
 
-/* Invalidate partially the MTS cache, given a TLB entry index */
-void MTS_PROTO(invalidate_tlb_entry)(cpu_mips_t *cpu,u_int tlb_index)
-{
-   MTS_PROTO(invalidate_cache)(cpu);
-} 
-
 /* 
  * MTS mapping.
  *
@@ -97,13 +91,22 @@ static no_inline MTS_ENTRY *
 MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
                MTS_ENTRY *entry,MTS_ENTRY *alt_entry)
 {
+   cpu_tb_t *tb;
    struct vdevice *dev;
    m_uint32_t offset;
    m_iptr_t host_ptr;
+   m_uint32_t exec_flag = 0;
    int cow;
 
    if (!(dev = dev_lookup(cpu->vm,map->paddr,map->cached)))
       return NULL;
+
+   if (cpu->gen->tb_phys_hash != NULL) {      
+      tb = mips64_jit_find_by_phys_page(cpu,map->paddr >> VM_PAGE_SHIFT);
+
+      if ((tb != NULL) && !(tb->flags & TB_FLAG_SMC))
+         exec_flag = MTS_FLAG_EXEC;
+   }
 
    if (dev->flags & VDEVICE_FLAG_SPARSE) {
       host_ptr = dev_sparse_get_host_addr(cpu->vm,dev,map->paddr,op_type,&cow);
@@ -112,6 +115,7 @@ MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
       entry->gppa  = map->paddr;
       entry->hpa   = host_ptr;
       entry->flags = (cow) ? MTS_FLAG_COW : 0;
+      entry->flags |= exec_flag | map->flags;
       return entry;
    }
 
@@ -120,16 +124,32 @@ MTS_PROTO(map)(cpu_mips_t *cpu,u_int op_type,mts_map_t *map,
 
       /* device entries are never stored in virtual TLB */
       alt_entry->hpa   = (dev->id << MTS_DEVID_SHIFT) + offset;
-      alt_entry->flags = MTS_FLAG_DEV;
+      alt_entry->flags = MTS_FLAG_DEV | map->flags;
       return alt_entry;
    }
 
    entry->gvpa  = map->vaddr;
    entry->gppa  = map->paddr;
    entry->hpa   = dev->host_addr + (map->paddr - dev->phys_addr);
-   entry->flags = 0;
-
+   entry->flags = exec_flag | map->flags;
    return entry;
+}
+
+/* Invalidate TCB related to a physical page marked as executable */
+static void MTS_PROTO(invalidate_tcb)(cpu_mips_t *cpu,MTS_ENTRY *entry)
+{
+   m_uint32_t hp,phys_page,pc_phys_page;
+
+   if (cpu->gen->tb_phys_hash == NULL)
+      return;
+
+   phys_page = entry->gppa >> VM_PAGE_SHIFT;
+   hp = mips64_jit_get_phys_hash(phys_page);
+ 
+   cpu->translate(cpu,cpu->pc,&pc_phys_page);
+
+   entry->flags &= ~MTS_FLAG_EXEC;
+   cpu_jit_write_on_exec_page(cpu->gen,phys_page,hp,pc_phys_page);
 }
 
 /* MTS lookup */
@@ -137,6 +157,13 @@ static void *MTS_PROTO(lookup)(cpu_mips_t *cpu,m_uint64_t vaddr)
 {
    m_uint64_t data;
    return(MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_LOOKUP,4,MTS_READ,&data));
+}
+
+/* MTS instruction fetch */
+static void *MTS_PROTO(ifetch)(cpu_mips_t *cpu,m_uint64_t vaddr)
+{
+   m_uint64_t data;
+   return(MTS_PROTO(access)(cpu,vaddr,MIPS_MEMOP_IFETCH,4,MTS_READ,&data));
 }
 
 /* === MIPS Memory Operations ============================================= */
@@ -502,57 +529,14 @@ fastcall void MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 /* CACHE: Cache operation */
 fastcall void MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 {
-   mips64_jit_tcb_t *block;
-   m_uint32_t pc_hash;
-
 #if DEBUG_CACHE
    cpu_log(cpu->gen,
            "MTS","CACHE: PC=0x%llx, vaddr=0x%llx, cache=%u, code=%u\n",
            cpu->pc, vaddr, op & 0x3, op >> 2);
 #endif
-
-   if (cpu->exec_blk_map) {
-      pc_hash = mips64_jit_get_pc_hash(vaddr);
-      block = cpu->exec_blk_map[pc_hash];
-
-      if (block && (block->start_pc == (vaddr & MIPS_MIN_PAGE_MASK))) {
-#if DEBUG_CACHE
-         cpu_log(cpu->gen,"MTS",
-                 "CACHE: removing compiled page at 0x%llx, pc=0x%llx\n",
-                 block->start_pc,cpu->pc);
-#endif
-         cpu->exec_blk_map[pc_hash] = NULL;
-         mips64_jit_tcb_free(cpu,block,TRUE);
-      }
-      else
-      {
-#if DEBUG_CACHE
-         cpu_log(cpu->gen,"MTS",
-                 "CACHE: trying to remove page 0x%llx with pc=0x%llx\n",
-                 vaddr, cpu->pc);
-#endif         
-      }
-   }
 }
 
 /* === MTS Cache Management ============================================= */
-
-/* MTS map/unmap/rebuild "API" functions */
-void MTS_PROTO(api_map)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint64_t paddr,
-                        m_uint32_t len,int cache_access,int tlb_index)
-{
-   /* nothing to do, the cache will be filled on-the-fly */
-}
-
-void MTS_PROTO(api_unmap)(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t len,
-                          m_uint32_t val,int tlb_index)
-{
-   /* Invalidate the TLB entry or the full cache if no index is specified */
-   if (tlb_index != -1)
-      MTS_PROTO(invalidate_tlb_entry)(cpu,tlb_index);
-   else
-      MTS_PROTO(invalidate_cache)(cpu);
-}
 
 void MTS_PROTO(api_rebuild)(cpu_gen_t *cpu)
 {
@@ -570,17 +554,15 @@ void MTS_PROTO(init_memop_vectors)(cpu_mips_t *cpu)
 
    cpu->addr_mode = MTS_ADDR_SIZE;
 
-   /* API vectors */
-   cpu->mts_map     = MTS_PROTO(api_map);
-   cpu->mts_unmap   = MTS_PROTO(api_unmap);
-
-   /* Memory lookup operation */
+   /* Memory lookup and Instruction fetch operations */
    cpu->mem_op_lookup = MTS_PROTO(lookup);
+   cpu->mem_op_ifetch = MTS_PROTO(ifetch);
 
    /* Translation operation */
    cpu->translate = MTS_PROTO(translate);
 
-   /* Shutdown operation */
+   /* Invalidate and Shutdown operations */
+   cpu->mts_invalidate = MTS_PROTO(invalidate_cache);
    cpu->mts_shutdown = MTS_PROTO(shutdown);
 
    /* Rebuild MTS data structures */

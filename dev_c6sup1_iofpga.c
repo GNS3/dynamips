@@ -28,7 +28,7 @@
 #include "device.h"
 #include "dev_vtty.h"
 #include "nmc93cX6.h"
-#include "ds1620.h"
+#include "dev_ds1620.h"
 #include "dev_c6sup1.h"
 
 /* Debugging flags */
@@ -48,18 +48,12 @@
 #define DUART_TXRDYB  0x10
 #define DUART_RXRDYB  0x20
 
-/* Definitions for CPU and Midplane Serial EEPROMs */
-#define DO2_DATA_OUT_MIDPLANE	 7
-#define DO1_DATA_OUT_CPU	 6
-#define CS2_CHIP_SEL_MIDPLANE	 5
-#define SK2_CLOCK_MIDPLANE 	 4
-#define DI2_DATA_IN_MIDPLANE	 3
-#define CS1_CHIP_SEL_CPU	 2
-#define SK1_CLOCK_CPU	 	 1
-#define DI1_DATA_IN_CPU		 0
-
 /* Pack the NVRAM */
 #define NVRAM_PACKED   0x04
+
+/* Temperature: 22°C as default value */
+#define C6SUP1_DEFAULT_TEMP  22
+#define DS1620_CHIP(d,id) (&(d)->router->ds1620_sensors[(id)])
 
 /* 2 temperature sensors in a MSFC1: chassis inlet and oulet */
 #define C6SUP1_TEMP_SENSORS  2
@@ -100,114 +94,6 @@ struct iofpga_data {
 
 #define IOFPGA_LOCK(d)   pthread_mutex_lock(&(d)->lock)
 #define IOFPGA_UNLOCK(d) pthread_mutex_unlock(&(d)->lock)
-
-/* Reset DS1620 */
-static void temp_reset(struct iofpga_data *d)
-{
-   d->temp_cmd_pos = 0;
-   d->temp_cmd = 0;
-
-   d->temp_data_pos = 0;
-   d->temp_data = 0;
-}
-
-/* Write the temperature control data */
-static void temp_write_ctrl(struct iofpga_data *d,u_char val)
-{
-   switch(val) {
-      case DS1620_RESET_ON:
-         temp_reset(d);
-         break;
-
-      case DS1620_CLK_LOW:
-         d->temp_clk_low = 1;
-         break;
-
-      case DS1620_CLK_HIGH:
-         d->temp_clk_low = 0;
-         break;
-   }
-}
-
-/* Read a temperature control data */
-static u_int temp_read_data(struct iofpga_data *d)
-{
-   u_int i,data = 0;
-
-   switch(d->temp_cmd) {
-      case DS1620_READ_CONFIG:
-         for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
-            data |= ((d->temp_cfg_reg[i] >> d->temp_data_pos) & 1) << i;
-
-         d->temp_data_pos++;
-
-         if (d->temp_data_pos == DS1620_CONFIG_READ_SIZE)
-            temp_reset(d);
-
-         break;
-
-      case DS1620_READ_TEMP:
-         for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
-            data |= ((d->temp_deg_reg[i] >> d->temp_data_pos) & 1) << i;
-
-         d->temp_data_pos++;
-
-         if (d->temp_data_pos == DS1620_DATA_READ_SIZE)
-            temp_reset(d);
-
-         break;
-
-      default:
-         vm_log(d->router->vm,"IO_FPGA","temp_sensors: CMD = 0x%x\n",
-                d->temp_cmd);
-   }
-
-   return(data);
-}
-
-/* Write the temperature data write register */
-static void temp_write_data(struct iofpga_data *d,u_char val)
-{
-   if (val == DS1620_ENABLE_READ) {
-      d->temp_data_pos = 0;
-      return;
-   }
-
-   if (!d->temp_clk_low)
-      return;
-
-   /* Write a command */
-   if (d->temp_cmd_pos < DS1620_WRITE_SIZE)
-   {
-      if (val == DS1620_DATA_HIGH)
-         d->temp_cmd |= 1 << d->temp_cmd_pos;
-
-      d->temp_cmd_pos++;
-   
-      if (d->temp_cmd_pos == DS1620_WRITE_SIZE) {
-         switch(d->temp_cmd) {
-            case DS1620_START_CONVT:
-               //printf("temp_sensors: IOS enabled continuous monitoring.\n");
-               temp_reset(d);
-               break;
-            case DS1620_READ_CONFIG:
-            case DS1620_READ_TEMP:
-               break;
-            default:
-               vm_log(d->router->vm,"IO_FPGA",
-                      "temp_sensors: IOS sent command 0x%x.\n",
-                      d->temp_cmd);
-         }
-      }
-   }
-   else
-   {
-      if (val == DS1620_DATA_HIGH)
-         d->temp_data |= 1 << d->temp_data_pos;
-
-      d->temp_data_pos++;
-   }
-}
 
 /* Console port input */
 static void tty_con_input(vtty_t *vtty)
@@ -267,6 +153,7 @@ void *dev_c6sup1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    struct iofpga_data *d = dev->priv_data;
    vm_instance_t *vm = d->router->vm;
    u_char odata;
+   int i;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -284,15 +171,6 @@ void *dev_c6sup1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    IOFPGA_LOCK(d);
 
    switch(offset) {
-      case 0x294:
-         /* 
-          * Unknown, seen in 12.4(6)T, and seems to be read at each 
-          * network interrupt.
-          */
-         if (op_type == MTS_READ)
-            *data = 0x0;
-         break;
-
       /* I/O control register */
       case 0x204:
          if (op_type == MTS_WRITE) {
@@ -432,20 +310,30 @@ void *dev_c6sup1_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* ==== DS 1620 (temp sensors) ==== */
       case 0x20c:   /* Temperature Control */
-         if (op_type == MTS_WRITE)
-            temp_write_ctrl(d,*data);
+         if (op_type == MTS_WRITE) {
+            for(i=0;i<C6SUP1_TEMP_SENSORS;i++) {
+               ds1620_set_rst_bit(DS1620_CHIP(d,i),(*data >> i) & 0x01);
+               ds1620_set_clk_bit(DS1620_CHIP(d,i),(*data >> 4) & 0x01);
+            }
+         }
          break;
 
       case 0x214:   /* Temperature data write */
          if (op_type == MTS_WRITE) {
-            temp_write_data(d,*data);
             d->mux = *data;
+
+            for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
+               ds1620_write_data_bit(DS1620_CHIP(d,i),*data & 0x01);
          }
          break;
 
       case 0x22c:   /* Temperature data read */
-         if (op_type == MTS_READ)
-            *data = temp_read_data(d);
+         if (op_type == MTS_READ) {
+            *data = 0;
+
+            for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
+               *data |= ds1620_read_data_bit(DS1620_CHIP(d,i)) << i;
+         }
          break;
 
 #if DEBUG_UNKNOWN
@@ -505,10 +393,8 @@ int dev_c6sup1_iofpga_init(c6sup1_t *router,m_uint64_t paddr,m_uint32_t len)
    pthread_mutex_init(&d->lock,NULL);
    d->router = router;
 
-   for(i=0;i<C6SUP1_TEMP_SENSORS;i++) {
-      d->temp_cfg_reg[i] = DS1620_CONFIG_STATUS_CPU;
-      d->temp_deg_reg[i] = C6SUP1_DEFAULT_TEMP * 2;
-   }
+   for(i=0;i<C6SUP1_TEMP_SENSORS;i++)
+      ds1620_init(DS1620_CHIP(d,i),C6SUP1_DEFAULT_TEMP);
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "io_fpga";

@@ -463,7 +463,7 @@ static int ti1570_acquire_tx_buffer(struct pa_a1_data *d,
    if (tx_buf.ctrl_buf & TI1570_TX_BUFFER_SOP) {
       tde->atm_hdr   = tx_buf.atm_hdr;
       tde->aal5_ctrl = tx_buf.aal5_ctrl;
-      tde->aal5_crc  = 0xFFFFFFFF;
+      tde->aal5_crc  = 0; /* will be inverted at first CRC update */
    }
 
    /* Compute the current-buffer-data address */
@@ -489,7 +489,7 @@ static inline int ti1570_is_tde_aal5(ti1570_tx_dma_entry_t *tde)
 static void ti1570_update_aal5_crc(struct pa_a1_data *d,
                                    ti1570_tx_dma_entry_t *tde)
 {
-   tde->aal5_crc = crc32_compute(tde->aal5_crc,
+   tde->aal5_crc = crc32_compute(~tde->aal5_crc,
                                  &d->txfifo_cell[ATM_HDR_SIZE],
                                  ATM_PAYLOAD_SIZE);
 }
@@ -651,7 +651,7 @@ static void ti1570_add_aal5_trailer(struct pa_a1_data *d,
    *(m_uint32_t *)trailer = htonl(tde->aal5_ctrl);
 
    /* Final CRC-32 computation */
-   tde->aal5_crc = crc32_compute(tde->aal5_crc,
+   tde->aal5_crc = crc32_compute(~tde->aal5_crc,
                                  &d->txfifo_cell[ATM_HDR_SIZE],
                                  ATM_PAYLOAD_SIZE - 4);
 

@@ -15,6 +15,7 @@
 #include "device.h"
 #include "pci_dev.h"
 #include "nmc93cX6.h"
+#include "dev_ds1620.h"
 #include "net_io.h"
 #include "vm.h"
 
@@ -81,6 +82,9 @@
 /* MSFC1 ELF Platform ID */
 #define C6MSFC1_ELF_MACHINE_ID  0x19
 
+/* 2 temperature sensors in a MSFC1: chassis inlet and oulet */
+#define C6MSFC1_TEMP_SENSORS  2
+
 #define VM_C6MSFC1(vm) ((c6msfc1_t *)vm->hw_data)
 
 /* MSFC1 router */
@@ -96,12 +100,15 @@ struct c6msfc1_router {
 
    /* Midplane FPGA */
    struct c6msfc1_mpfpga_data *mpfpga_data;
-   
+  
    /* Midplane EEPROM can be modified to change the chassis MAC address... */
-   struct cisco_eeprom cpu_eeprom,mp_eeprom,pem_eeprom;
+   struct cisco_eeprom cpu_eeprom,mp_eeprom;
 
    /* EEPROMs for CPU and Midplane */
    struct nmc93cX6_group sys_eeprom_g1;
+
+   /* Temperature sensors */
+   struct ds1620_data ds1620_sensors[C6MSFC1_TEMP_SENSORS];
 
    /* Slot of this MSFC */
    u_int msfc_slot;

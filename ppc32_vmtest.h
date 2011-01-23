@@ -19,4 +19,7 @@
 /* Default parameters of the test VM */
 #define PPC32_VMTEST_DEFAULT_RAM_SIZE  256
 
+/* Register the ppc32_vmtest platform */
+int ppc32_vmtest_platform_register(void);
+
 #endif

@@ -31,7 +31,7 @@
 #define DEBUG_ACCESS     0
 #define DEBUG_TRANSMIT   0
 #define DEBUG_RECEIVE    0
-#define DEBUG_UNKNOWN    1
+#define DEBUG_UNKNOWN    0
 
 /* Intel i8255x PCI vendor/product codes */
 #define I8255X_PCI_VENDOR_ID    0x8086

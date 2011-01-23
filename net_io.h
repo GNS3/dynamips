@@ -12,7 +12,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <pthread.h>
+
 #include "utils.h"
+#include "gen_uuid.h"
 
 #ifdef LINUX_ETH
 #include "linux_eth.h"
@@ -32,8 +34,10 @@ enum {
    NETIO_TYPE_VDE,
    NETIO_TYPE_TAP,
    NETIO_TYPE_UDP,
+   NETIO_TYPE_UDP_AUTO,
    NETIO_TYPE_TCP_CLI,
    NETIO_TYPE_TCP_SER,
+   NETIO_TYPE_MCAST,
 #ifdef LINUX_ETH
    NETIO_TYPE_LINUX_ETH,
 #endif
@@ -98,6 +102,21 @@ struct netio_inet_desc {
    int fd;
 };
 
+/* netio mcast descriptor */
+typedef struct netio_mcast_desc netio_mcast_desc_t;
+struct netio_mcast_desc {
+   uuid_t local_id;
+   char *mcast_group;
+   int mcast_port;
+   int fd;
+#if HAS_RFC2553
+   struct sockaddr_storage sa;
+#else
+   struct sockaddr_in sa;
+#endif
+   int sa_len;
+};
+
 #ifdef LINUX_ETH
 /* netio linux raw ethernet descriptor */
 typedef struct netio_lnxeth_desc netio_lnxeth_desc_t;
@@ -144,6 +163,15 @@ struct netio_pktfilter {
    netio_pktfilter_t *next;
 };
 
+/* Statistics */
+typedef struct netio_stat netio_stat_t;
+struct netio_stat {
+   m_uint64_t pkts,bytes;
+};
+
+#define NETIO_BW_SAMPLES     10
+#define NETIO_BW_SAMPLE_ITV  30
+
 /* Generic netio descriptor */
 struct netio_desc {
    u_int type;
@@ -165,6 +193,7 @@ struct netio_desc {
       netio_vde_desc_t nvd;
       netio_tap_desc_t ntd;
       netio_inet_desc_t nid;
+      netio_mcast_desc_t nmd;
 #ifdef LINUX_ETH
       netio_lnxeth_desc_t nled;
 #endif
@@ -181,9 +210,23 @@ struct netio_desc {
    /* Configuration saving */
    void (*save_cfg)(netio_desc_t *nio,FILE *fd);
 
+   /* Free ressources */
+   void (*free)(void *desc);
+
+   /* Bandwidth constraint (in Kb/s) */
+   u_int bandwidth;
+   m_uint64_t bw_cnt[NETIO_BW_SAMPLES];
+   m_uint64_t bw_cnt_total;
+   u_int bw_pos;  
+   u_int bw_ptask_cnt;
+
    /* Packet filters */
    netio_pktfilter_t *rx_filter,*tx_filter,*both_filter;
    void *rx_filter_data,*tx_filter_data,*both_filter_data;
+
+   /* Statistics */
+   m_uint64_t stats_pkts_in,stats_pkts_out;
+   m_uint64_t stats_bytes_in,stats_bytes_out;
 
    /* Next pointer (for RX listener) */
    netio_desc_t *rxl_next;
@@ -232,6 +275,23 @@ netio_desc_t *netio_desc_create_tcp_ser(char *nio_name,char *port);
 netio_desc_t *netio_desc_create_udp(char *nio_name,int local_port,
                                     char *remote_host,int remote_port);
 
+/* Get local port */
+int netio_udp_auto_get_local_port(netio_desc_t *nio);
+
+/* Connect to a remote host/port */
+int netio_udp_auto_connect(netio_desc_t *nio,char *host,int port);
+
+/* Create a new NetIO descriptor with auto UDP method */
+netio_desc_t *netio_desc_create_udp_auto(char *nio_name,char *local_addr,
+                                         int port_start,int port_end);
+
+/* Create a new NetIO descriptor with Multicast method */
+netio_desc_t *
+netio_desc_create_mcast(char *nio_name,char *mcast_group,int mcast_port);
+
+/* Set TTL for a multicast socket */
+int netio_mcast_set_ttl(netio_desc_t *nio,int ttl);
+
 #ifdef LINUX_ETH
 /* Create a new NetIO descriptor with raw Ethernet method */
 netio_desc_t *netio_desc_create_lnxeth(char *nio_name,char *dev_name);
@@ -277,6 +337,21 @@ ssize_t netio_recv(netio_desc_t *nio,void *pkt,size_t max_len);
 
 /* Get a NetIO FD */
 int netio_get_fd(netio_desc_t *nio);
+
+/* Reset NIO statistics */
+void netio_reset_stats(netio_desc_t *nio);
+
+/* Indicate if a NetIO can transmit a packet */
+int netio_can_transmit(netio_desc_t *nio);
+
+/* Update bandwidth counter */
+void netio_update_bw_stat(netio_desc_t *nio,m_uint64_t bytes);
+
+/* Reset NIO bandwidth counter */
+void netio_clear_bw_stat(netio_desc_t *nio);
+
+/* Set the bandwidth constraint */
+void netio_set_bandwidth(netio_desc_t *nio,u_int bandwidth);
 
 /* Enable a RX listener */
 int netio_rxl_enable(netio_desc_t *nio);

@@ -27,7 +27,7 @@
 #include "device.h"
 #include "dev_vtty.h"
 #include "nmc93cX6.h"
-#include "ds1620.h"
+#include "dev_ds1620.h"
 #include "dev_c7200.h"
 
 /* Debugging flags */
@@ -42,33 +42,34 @@
 #define DUART_TX_READY  0x04
 
 /* DUART RX/TX Interrupt Status/Mask */
-#define DUART_TXRDYA  0x01
-#define DUART_RXRDYA  0x02
-#define DUART_TXRDYB  0x10
-#define DUART_RXRDYB  0x20
+#define DUART_TXRDYA   0x01
+#define DUART_RXRDYA   0x02
+#define DUART_TXRDYB   0x10
+#define DUART_RXRDYB   0x20
 
 /* Definitions for CPU and Midplane Serial EEPROMs */
-#define DO2_DATA_OUT_MIDPLANE	 7
-#define DO1_DATA_OUT_CPU	 6
-#define CS2_CHIP_SEL_MIDPLANE	 5
-#define SK2_CLOCK_MIDPLANE 	 4
-#define DI2_DATA_IN_MIDPLANE	 3
-#define CS1_CHIP_SEL_CPU	 2
-#define SK1_CLOCK_CPU	 	 1
-#define DI1_DATA_IN_CPU		 0
+#define EEPROM_CPU_DOUT  6
+#define EEPROM_CPU_DIN   0
+#define EEPROM_CPU_CLK   1
+#define EEPROM_CPU_CS    2
+
+#define EEPROM_MP_DOUT   7
+#define EEPROM_MP_DIN    3
+#define EEPROM_MP_CLK    4
+#define EEPROM_MP_CS     5
 
 /* Definitions for PEM (NPE-B) Serial EEPROM */
-#define DO1_DATA_OUT_PEM   3
-#define DI1_DATA_IN_PEM    2
-#define CS1_CHIP_SEL_PEM   1
-#define SK1_CLOCK_PEM      0
+#define EEPROM_PEM_DOUT  3
+#define EEPROM_PEM_DIN   2
+#define EEPROM_PEM_CS    1
+#define EEPROM_PEM_CLK   0
 
 /* Pack the NVRAM */
 #define NVRAM_PACKED   0x04
 
-/* 4 temperature sensors in a C7200 */
-#define C7200_TEMP_SENSORS  4
-#define C7200_DEFAULT_TEMP  22    /* default temperature: 22°C */
+/* Temperature: 22°C as default value */
+#define C7200_DEFAULT_TEMP  22
+#define DS1620_CHIP(d,id) (&(d)->router->ds1620_sensors[(id)])
 
 /* Voltages */
 #define C7200_A2D_SAMPLES   9
@@ -111,17 +112,6 @@ struct iofpga_data {
    /* IO control register */
    u_int io_ctrl_reg;
 
-   /* Temperature Control */
-   u_int temp_cfg_reg[C7200_TEMP_SENSORS];
-   u_int temp_deg_reg[C7200_TEMP_SENSORS];
-   u_int temp_clk_low;
-
-   u_int temp_cmd;
-   u_int temp_cmd_pos;
-
-   u_int temp_data;
-   u_int temp_data_pos;
-
    /* Voltages */
    u_int mux;
 
@@ -134,19 +124,17 @@ struct iofpga_data {
 
 /* CPU EEPROM definition */
 static const struct nmc93cX6_eeprom_def eeprom_cpu_def = {
-   SK1_CLOCK_CPU, CS1_CHIP_SEL_CPU, 
-   DI1_DATA_IN_CPU, DO1_DATA_OUT_CPU,
+   EEPROM_CPU_CLK, EEPROM_CPU_CS, EEPROM_CPU_DIN, EEPROM_CPU_DOUT,
 };
 
 /* Midplane EEPROM definition */
 static const struct nmc93cX6_eeprom_def eeprom_midplane_def = {
-   SK2_CLOCK_MIDPLANE, CS2_CHIP_SEL_MIDPLANE, 
-   DI2_DATA_IN_MIDPLANE, DO2_DATA_OUT_MIDPLANE,
+   EEPROM_MP_CLK, EEPROM_MP_CS, EEPROM_MP_DIN, EEPROM_MP_DOUT,
 };
 
 /* PEM (NPE-B) EEPROM definition */
 static const struct nmc93cX6_eeprom_def eeprom_pem_def = {
-   SK1_CLOCK_PEM, CS1_CHIP_SEL_PEM, DI1_DATA_IN_PEM, DO1_DATA_OUT_PEM,
+   EEPROM_PEM_CLK, EEPROM_PEM_CS, EEPROM_PEM_DIN, EEPROM_PEM_DOUT,
 };
 
 /* IOFPGA manages simultaneously CPU and Midplane EEPROM */
@@ -172,114 +160,6 @@ static const struct nmc93cX6_group eeprom_pem_npeb = {
    "PEM (NPE-B) EEPROM", 
    { &eeprom_pem_def },
 };
-
-/* Reset DS1620 */
-static void temp_reset(struct iofpga_data *d)
-{
-   d->temp_cmd_pos = 0;
-   d->temp_cmd = 0;
-
-   d->temp_data_pos = 0;
-   d->temp_data = 0;
-}
-
-/* Write the temperature control data */
-static void temp_write_ctrl(struct iofpga_data *d,u_char val)
-{
-   switch(val) {
-      case DS1620_RESET_ON:
-         temp_reset(d);
-         break;
-
-      case DS1620_CLK_LOW:
-         d->temp_clk_low = 1;
-         break;
-
-      case DS1620_CLK_HIGH:
-         d->temp_clk_low = 0;
-         break;
-   }
-}
-
-/* Read a temperature control data */
-static u_int temp_read_data(struct iofpga_data *d)
-{
-   u_int i,data = 0;
-
-   switch(d->temp_cmd) {
-      case DS1620_READ_CONFIG:
-         for(i=0;i<C7200_TEMP_SENSORS;i++)
-            data |= ((d->temp_cfg_reg[i] >> d->temp_data_pos) & 1) << i;
-
-         d->temp_data_pos++;
-
-         if (d->temp_data_pos == DS1620_CONFIG_READ_SIZE)
-            temp_reset(d);
-
-         break;
-
-      case DS1620_READ_TEMP:
-         for(i=0;i<C7200_TEMP_SENSORS;i++)
-            data |= ((d->temp_deg_reg[i] >> d->temp_data_pos) & 1) << i;
-
-         d->temp_data_pos++;
-
-         if (d->temp_data_pos == DS1620_DATA_READ_SIZE)
-            temp_reset(d);
-
-         break;
-
-      default:
-         vm_log(d->router->vm,"IO_FPGA","temp_sensors: CMD = 0x%x\n",
-                d->temp_cmd);
-   }
-
-   return(data);
-}
-
-/* Write the temperature data write register */
-static void temp_write_data(struct iofpga_data *d,u_char val)
-{
-   if (val == DS1620_ENABLE_READ) {
-      d->temp_data_pos = 0;
-      return;
-   }
-
-   if (!d->temp_clk_low)
-      return;
-
-   /* Write a command */
-   if (d->temp_cmd_pos < DS1620_WRITE_SIZE)
-   {
-      if (val == DS1620_DATA_HIGH)
-         d->temp_cmd |= 1 << d->temp_cmd_pos;
-
-      d->temp_cmd_pos++;
-   
-      if (d->temp_cmd_pos == DS1620_WRITE_SIZE) {
-         switch(d->temp_cmd) {
-            case DS1620_START_CONVT:
-               //printf("temp_sensors: IOS enabled continuous monitoring.\n");
-               temp_reset(d);
-               break;
-            case DS1620_READ_CONFIG:
-            case DS1620_READ_TEMP:
-               break;
-            default:
-               vm_log(d->router->vm,"IO_FPGA",
-                      "temp_sensors: IOS sent command 0x%x.\n",
-                      d->temp_cmd);
-         }
-      }
-   }
-   else
-   {
-      if (val == DS1620_DATA_HIGH)
-         d->temp_data |= 1 << d->temp_data_pos;
-
-      d->temp_data_pos++;
-   }
-}
 
 /* NPE-G2 environmental monitor reading */
 static m_uint32_t g2_envm_read(struct iofpga_data *d)
@@ -320,7 +200,7 @@ static m_uint32_t g2_envm_read(struct iofpga_data *d)
       case 0x4802:     /* +3.45V */
          val = 0x2c8;
          break;
-      case 0x4803:     /* -11.95V*/
+      case 0x4803:     /* -11.95V */
          val = 0x260;
          break;
       case 0x4804:     /* ? */
@@ -341,7 +221,7 @@ static m_uint32_t g2_envm_read(struct iofpga_data *d)
 #endif
    }
 
-   return(htonl(val));
+   return(swap32(val));
 }
 
 /* Console port input */
@@ -400,8 +280,10 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint64_t *data)
 {
    struct iofpga_data *d = dev->priv_data;
-   vm_instance_t *vm = d->router->vm;
+   c7200_t *router = d->router;
+   vm_instance_t *vm = router->vm;
    u_char odata;
+   int i;
 
    if (op_type == MTS_READ)
       *data = 0x0;
@@ -419,13 +301,51 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
    IOFPGA_LOCK(d);
 
    switch(offset) {
-      case 0x294:
-         /* 
-          * Unknown, seen in 12.4(6)T, and seems to be read at each 
-          * network interrupt.
-          */
+      /* PA Status Reg #2 (for slot 7) */
+      case 0x2d4:
          if (op_type == MTS_READ)
-            *data = 0x0;
+            *data = router->pa_status_reg[1];
+         break;
+
+      /* PA Control Reg #2 (for slot 7) */
+      case 0x2dc:
+         if (op_type == MTS_READ)
+            router->pa_ctrl_reg[1] = *data;
+         else
+            *data = router->pa_ctrl_reg[1];
+         break;
+
+      /* EEPROM for PA in slot 7 */
+      case 0x2e4:
+         if (op_type == MTS_WRITE)
+            nmc93cX6_write(&router->pa_eeprom_g3,*data);
+         else
+            *data = nmc93cX6_read(&router->pa_eeprom_g3);
+         break;
+
+      /* Network Interrupt for slot 7 */
+      case 0x294:
+         if (op_type == MTS_READ)
+            *data = router->net_irq_status[2];
+         break;
+
+      /* Interrupt mask for slot 7 */
+      case 0x2a4:
+         if (op_type == MTS_READ) {
+            *data = router->net_irq_mask[2];
+         } else {
+            router->net_irq_mask[2] = *data;
+            dev_c7200_net_update_irq(router);
+         }
+         break;
+
+      /* OIR status for slot 7 (bit 24, other bits unknown) */
+      case 0x2f4:
+         if (op_type == MTS_READ) {
+            *data = router->oir_status[1];
+         } else {
+            router->oir_status[1] &= ~(*data);
+         }
          break;
 
       /* NPE-G1 test - unknown (value written: 0x01) */
@@ -442,7 +362,7 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             *data = 0x0102;
             
             /* If we have an I/O slot, we use the I/O slot DUART */
-            if (vm_slot_check_eeprom(d->router->vm,0,0))
+            if (c7200_slot0_iocard_present(router))
                *data |= 0x01000000;
          }
          break;
@@ -602,20 +522,30 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* ==== DS 1620 (temp sensors) ==== */
       case 0x20c:   /* Temperature Control */
-         if (op_type == MTS_WRITE)
-            temp_write_ctrl(d,*data);
+         if (op_type == MTS_WRITE) {
+            for(i=0;i<C7200_TEMP_SENSORS;i++) {
+               ds1620_set_rst_bit(DS1620_CHIP(d,i),(*data >> i) & 0x01);
+               ds1620_set_clk_bit(DS1620_CHIP(d,i),(*data >> 4) & 0x01);
+            }
+         }
          break;
 
       case 0x214:   /* Temperature data write */
          if (op_type == MTS_WRITE) {
-            temp_write_data(d,*data);
             d->mux = *data;
+
+            for(i=0;i<C7200_TEMP_SENSORS;i++)
+               ds1620_write_data_bit(DS1620_CHIP(d,i),*data & 0x01);
          }
          break;
 
       case 0x22c:   /* Temperature data read */
-         if (op_type == MTS_READ)
-            *data = temp_read_data(d);
+         if (op_type == MTS_READ) {
+            *data = 0;
+
+            for(i=0;i<C7200_TEMP_SENSORS;i++)
+               *data |= ds1620_read_data_bit(DS1620_CHIP(d,i)) << i;
+         }
          break;
 
       /* 
@@ -638,11 +568,13 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          if (op_type == MTS_READ) {
             switch(d->mux) {
                case C7200_MUX_PS0:
-                  *data = C7200_A2D_PS0;
+                  if (router->ps_status & 0x1)
+                     *data = C7200_A2D_PS0;
                   break;
 
                case C7200_MUX_PS1:
-                  *data = C7200_A2D_PS1;
+                  if (router->ps_status & 0x2)
+                     *data = C7200_A2D_PS1;
                   break;
 
                case C7200_MUX_P3V:
@@ -677,12 +609,12 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       case 0x3c4:
          if (op_type == MTS_WRITE)
-            d->envm_r0 = ntohl(*data);
+            d->envm_r0 = swap32(*data);
          break;
 
       case 0x3c8:
          if (op_type == MTS_WRITE) {
-            d->envm_r1 = ntohl(*data);
+            d->envm_r1 = swap32(*data);
          } else {
             *data = g2_envm_read(d);
          }
@@ -690,7 +622,7 @@ void *dev_c7200_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       case 0x3cc:
          if (op_type == MTS_WRITE)
-            d->envm_r2 = ntohl(*data);
+            d->envm_r2 = swap32(*data);
          break;
 
       /* PCMCIA status ? */
@@ -768,10 +700,8 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
    pthread_mutex_init(&d->lock,NULL);
    d->router = router;
 
-   for(i=0;i<C7200_TEMP_SENSORS;i++) {
-      d->temp_cfg_reg[i] = DS1620_CONFIG_STATUS_CPU;
-      d->temp_deg_reg[i] = C7200_DEFAULT_TEMP * 2;
-   }
+   for(i=0;i<C7200_TEMP_SENSORS;i++)
+      ds1620_init(DS1620_CHIP(d,i),C7200_DEFAULT_TEMP);
 
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "io_fpga";
@@ -787,7 +717,7 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len)
    d->dev.priv_data = d;
 
    /* If we have an I/O slot, we use the I/O slot DUART */
-   if (vm_slot_check_eeprom(vm,0,0)) {
+   if (c7200_slot0_iocard_present(router)) {
       vm_log(vm,"CONSOLE","console managed by I/O board\n");
 
       /* Set console and AUX port notifying functions */

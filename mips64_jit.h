@@ -11,60 +11,19 @@
 #include "utils.h"
 #include "sbox.h"
 
-/* Size of executable page area (in Mb) */
-#ifndef __CYGWIN__
-#define MIPS_EXEC_AREA_SIZE  64
-#else
-#define MIPS_EXEC_AREA_SIZE  16
-#endif
+/* Size of hash for virtual address lookup */
+#define MIPS_JIT_VIRT_HASH_BITS   16
+#define MIPS_JIT_VIRT_HASH_MASK   ((1 << MIPS_JIT_VIRT_HASH_BITS) - 1)
+#define MIPS_JIT_VIRT_HASH_SIZE   (1 << MIPS_JIT_VIRT_HASH_BITS)
 
-/* Buffer size for JIT code generation */
-#define MIPS_JIT_BUFSIZE     32768
-
-/* Maximum number of X86 chunks */
-#define MIPS_JIT_MAX_CHUNKS  32
-
-/* Size of hash for PC lookup */
-#define MIPS_JIT_PC_HASH_BITS   16
-#define MIPS_JIT_PC_HASH_MASK   ((1 << MIPS_JIT_PC_HASH_BITS) - 1)
-#define MIPS_JIT_PC_HASH_SIZE   (1 << MIPS_JIT_PC_HASH_BITS)
-
-/* Instruction jump patch */
-struct mips64_insn_patch {
-   u_char *jit_insn;
-   m_uint64_t mips_pc;
-};
-
-/* Instruction patch table */
-#define MIPS64_INSN_PATCH_TABLE_SIZE  32
-
-struct mips64_jit_patch_table {
-   struct mips64_insn_patch patches[MIPS64_INSN_PATCH_TABLE_SIZE];
-   u_int cur_patch;
-   struct mips64_jit_patch_table *next;
-};
-
-/* MIPS64 translated code block */
-struct mips64_jit_tcb {
-   m_uint64_t start_pc;
-   u_char **jit_insn_ptr;
-   m_uint64_t acc_count;
-   mips_insn_t *mips_code;
-   u_int mips_trans_pos;
-   u_int jit_chunk_pos;
-   u_char *jit_ptr;
-   insn_exec_page_t *jit_buffer;
-   insn_exec_page_t *jit_chunks[MIPS_JIT_MAX_CHUNKS];
-   struct mips64_jit_patch_table *patch_table;
-   mips64_jit_tcb_t *prev,*next;
-#if DEBUG_BLOCK_TIMESTAMP
-   m_uint64_t tm_first_use,tm_last_use;
-#endif
-};
+/* Size of hash for physical lookup */
+#define MIPS_JIT_PHYS_HASH_BITS   16
+#define MIPS_JIT_PHYS_HASH_MASK   ((1 << MIPS_JIT_PHYS_HASH_BITS) - 1)
+#define MIPS_JIT_PHYS_HASH_SIZE   (1 << MIPS_JIT_PHYS_HASH_BITS)
 
 /* MIPS instruction recognition */
 struct mips64_insn_tag {
-   int (*emit)(cpu_mips_t *cpu,mips64_jit_tcb_t *,mips_insn_t);
+   int (*emit)(cpu_mips_t *cpu,cpu_tc_t *,mips_insn_t);
    m_uint32_t mask,value;
    int delay_slot;
 };
@@ -79,21 +38,21 @@ struct mips64_insn_jump {
 
 /* Get the JIT instruction pointer in a translated block */
 static forced_inline 
-u_char *mips64_jit_tcb_get_host_ptr(mips64_jit_tcb_t *b,m_uint64_t vaddr)
+u_char *mips64_jit_tc_get_host_ptr(cpu_tc_t *tc,m_uint64_t vaddr)
 {
    m_uint32_t offset;
 
    offset = ((m_uint32_t)vaddr & MIPS_MIN_PAGE_IMASK) >> 2;
-   return(b->jit_insn_ptr[offset]);
+   return(tc->jit_insn_ptr[offset]);
 }
 
 /* Check if the specified address belongs to the specified block */
 static forced_inline 
-int mips64_jit_tcb_local_addr(mips64_jit_tcb_t *block,m_uint64_t vaddr,
+int mips64_jit_tcb_local_addr(cpu_tc_t *tc,m_uint64_t vaddr,
                               u_char **jit_addr)
 {
-   if ((vaddr & MIPS_MIN_PAGE_MASK) == block->start_pc) {
-      *jit_addr = mips64_jit_tcb_get_host_ptr(block,vaddr);
+   if ((vaddr & MIPS_MIN_PAGE_MASK) == tc->vaddr) {
+      *jit_addr = mips64_jit_tc_get_host_ptr(tc,vaddr);
       return(1);
    }
 
@@ -101,26 +60,48 @@ int mips64_jit_tcb_local_addr(mips64_jit_tcb_t *block,m_uint64_t vaddr,
 }
 
 /* Check if PC register matches the compiled block virtual address */
-static forced_inline 
-int mips64_jit_tcb_match(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
+static forced_inline int mips64_jit_tcb_match(cpu_mips_t *cpu,cpu_tb_t *tb)
 {
    m_uint64_t vpage;
 
-   vpage = cpu->pc & ~(m_uint64_t)MIPS_MIN_PAGE_IMASK;
-   return(block->start_pc == vpage);
+   vpage = cpu->pc & MIPS_MIN_PAGE_MASK;
+   return((tb->vaddr == vpage) && (tb->exec_state == cpu->exec_state));
 }
 
-/* Compute the hash index for the specified PC value */
-static forced_inline m_uint32_t mips64_jit_get_pc_hash(m_uint64_t pc)
+/* Compute the hash index for the specified virtual address */
+static forced_inline m_uint32_t mips64_jit_get_virt_hash(m_uint64_t vaddr)
 {
    m_uint32_t page_hash;
 
-   page_hash = sbox_u32(pc >> MIPS_MIN_PAGE_SHIFT);
-   return((page_hash ^ (page_hash >> 12)) & MIPS_JIT_PC_HASH_MASK);
+   page_hash = sbox_u32(vaddr >> MIPS_MIN_PAGE_SHIFT);
+   return((page_hash ^ (page_hash >> 12)) & MIPS_JIT_VIRT_HASH_MASK);
+}
+
+/* Compute the hash index for the specified physical page */
+static forced_inline m_uint32_t mips64_jit_get_phys_hash(m_uint32_t phys_page)
+{
+   m_uint32_t page_hash;
+
+   page_hash = sbox_u32(phys_page);
+   return((page_hash ^ (page_hash >> 12)) & MIPS_JIT_PHYS_HASH_MASK);
+}
+
+/* Find a JIT block matching a physical page */
+static inline cpu_tb_t *
+mips64_jit_find_by_phys_page(cpu_mips_t *cpu,m_uint32_t phys_page)
+{
+   m_uint32_t page_hash = mips64_jit_get_phys_hash(phys_page);
+   cpu_tb_t *tb;
+   
+   for(tb=cpu->gen->tb_phys_hash[page_hash];tb;tb=tb->phys_next)
+      if (tb->phys_page == phys_page)
+         return tb;
+
+   return NULL;
 }
 
 /* Check if there are pending IRQ */
-extern void mips64_check_pending_irq(mips64_jit_tcb_t *b);
+extern void mips64_check_pending_irq(cpu_tc_t *tc);
 
 /* Initialize instruction lookup table */
 void mips64_jit_create_ilt(void);
@@ -135,46 +116,48 @@ u_int mips64_jit_flush(cpu_mips_t *cpu,u_int threshold);
 void mips64_jit_shutdown(cpu_mips_t *cpu);
 
 /* Check if an instruction is in a delay slot or not */
-int mips64_jit_is_delay_slot(mips64_jit_tcb_t *b,m_uint64_t pc);
+int mips64_jit_is_delay_slot(cpu_tc_t *tc,m_uint64_t pc);
 
-/* Fetch a MIPS instruction and emit corresponding x86 translated code */
+/* Fetch a MIPS instruction and emit corresponding translated code */
 struct mips64_insn_tag *mips64_jit_fetch_and_emit(cpu_mips_t *cpu,
-                                                  mips64_jit_tcb_t *block,
+                                                  cpu_tc_t *tc,
                                                   int delay_slot);
 
 /* Record a patch to apply in a compiled block */
-int mips64_jit_tcb_record_patch(mips64_jit_tcb_t *block,u_char *x86_ptr,
-                                m_uint64_t vaddr);
+int mips64_jit_tcb_record_patch(cpu_mips_t *cpu,cpu_tc_t *tc,
+                                u_char *jit_ptr,m_uint64_t vaddr);
+
+/* Mark a block as containing self-modifying code */
+void mips64_jit_mark_smc(cpu_mips_t *cpu,cpu_tb_t *tb);
 
 /* Free an instruction block */
-void mips64_jit_tcb_free(cpu_mips_t *cpu,mips64_jit_tcb_t *block,
-                         int list_removal);
+void mips64_jit_tcb_free(cpu_mips_t *cpu,cpu_tb_t *tb,int list_removal);
 
 /* Execute compiled MIPS code */
 void *mips64_jit_run_cpu(cpu_gen_t *cpu);
 
 /* Set the Pointer Counter (PC) register */
-void mips64_set_pc(mips64_jit_tcb_t *b,m_uint64_t new_pc);
+void mips64_set_pc(cpu_tc_t *tc,m_uint64_t new_pc);
 
 /* Set the Return Address (RA) register */
-void mips64_set_ra(mips64_jit_tcb_t *b,m_uint64_t ret_pc);
+void mips64_set_ra(cpu_tc_t *tc,m_uint64_t ret_pc);
 
 /* Single-step operation */
-void mips64_emit_single_step(mips64_jit_tcb_t *b,mips_insn_t insn);
+void mips64_emit_single_step(cpu_tc_t *tc,mips_insn_t insn);
 
 /* Virtual Breakpoint */
-void mips64_emit_breakpoint(mips64_jit_tcb_t *b);
+void mips64_emit_breakpoint(cpu_tc_t *tc);
 
 /* Emit unhandled instruction code */
-int mips64_emit_invalid_delay_slot(mips64_jit_tcb_t *b);
+int mips64_emit_invalid_delay_slot(cpu_tc_t *tc);
 
 /* 
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-void mips64_inc_cp0_count_reg(mips64_jit_tcb_t *b);
+void mips64_inc_cp0_count_reg(cpu_tc_t *tc);
 
 /* Increment the number of executed instructions (performance debugging) */
-void mips64_inc_perf_counter(mips64_jit_tcb_t *b);
+void mips64_inc_perf_counter(cpu_tc_t *tc);
 
 #endif

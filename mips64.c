@@ -17,6 +17,8 @@
 
 #include "rbtree.h"
 #include "cpu.h"
+#include "vm.h"
+#include "tcb.h"
 #include "mips64_mem.h"
 #include "mips64_exec.h"
 #include "mips64_jit.h"
@@ -247,7 +249,7 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
    /* Select PCs */
    for(i=0,res_count=0;i<IDLE_HASH_SIZE;i++) {
       for(p=pc_hash[i];p;p=p->next)
-         if ((p->count >= 20) && (p->count <= 80)) {
+         if ((p->count >= 70) && (p->count <= 180)) {
             res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
 
             res->pc    = p->pc;
@@ -352,40 +354,113 @@ void mips64_update_irq_flag(cpu_mips_t *cpu)
    mips64_update_irq_flag_fast(cpu);
 }
 
-/* Generate an exception */
-void mips64_trigger_exception(cpu_mips_t *cpu,u_int exc_code,int bd_slot)
+/* Generate a general exception */
+void mips64_general_exception(cpu_mips_t *cpu,u_int exc_code)
+{
+   mips_cp0_t *cp0 = &cpu->cp0;
+   m_uint64_t cause;
+   
+   /* Update cause register (set BD and ExcCode) */
+   cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
+
+   if (cpu->bd_slot)
+      cause |= MIPS_CP0_CAUSE_BD_SLOT;
+   else
+      cause &= ~MIPS_CP0_CAUSE_BD_SLOT;
+
+   cause |= (exc_code << MIPS_CP0_CAUSE_SHIFT);
+   cp0->reg[MIPS_CP0_CAUSE] = cause;
+
+   /* If EXL bit is 0, set EPC and BadVaddr registers */
+   if (likely(!(cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_EXL))) {
+      cp0->reg[MIPS_CP0_EPC] = cpu->pc - (cpu->bd_slot << 2);
+   }
+   
+   /* Set EXL bit in status register */
+   cp0->reg[MIPS_CP0_STATUS] |= MIPS_CP0_STATUS_EXL;
+
+   /* Use bootstrap vectors ? */
+   if (cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_BEV)
+      cpu->pc = 0xffffffffbfc00200ULL + 0x180;
+   else
+      cpu->pc = 0xffffffff80000000ULL + 0x180;
+
+   /* Clear the pending IRQ flag */
+   cpu->irq_pending = 0;
+}
+
+/* Generate a general exception that updates BadVaddr */
+void mips64_gen_exception_badva(cpu_mips_t *cpu,u_int exc_code,
+                                m_uint64_t bad_vaddr)
+{
+   mips_cp0_t *cp0 = &cpu->cp0;
+   m_uint64_t cause;
+   
+   /* Update cause register (set BD and ExcCode) */
+   cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
+
+   if (cpu->bd_slot)
+      cause |= MIPS_CP0_CAUSE_BD_SLOT;
+   else
+      cause &= ~MIPS_CP0_CAUSE_BD_SLOT;
+
+   cause |= (exc_code << MIPS_CP0_CAUSE_SHIFT);
+   cp0->reg[MIPS_CP0_CAUSE] = cause;
+
+   /* If EXL bit is 0, set EPC and BadVaddr registers */
+   if (likely(!(cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_EXL))) {
+      cp0->reg[MIPS_CP0_EPC] = cpu->pc - (cpu->bd_slot << 2);
+      cp0->reg[MIPS_CP0_BADVADDR] = bad_vaddr;
+   }
+   
+   /* Set EXL bit in status register */
+   cp0->reg[MIPS_CP0_STATUS] |= MIPS_CP0_STATUS_EXL;
+
+   /* Use bootstrap vectors ? */
+   if (cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_BEV)
+      cpu->pc = 0xffffffffbfc00200ULL + 0x180;
+   else
+      cpu->pc = 0xffffffff80000000ULL + 0x180;
+
+   /* Clear the pending IRQ flag */
+   cpu->irq_pending = 0;
+}
+
+/* Generate a TLB/XTLB miss exception */
+void mips64_tlb_miss_exception(cpu_mips_t *cpu,u_int exc_code,
+                               m_uint64_t bad_vaddr)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t cause,vector;
+   
+   /* Update cause register (set BD and ExcCode) */
+   cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
 
-   /* we don't set EPC if EXL is set */
-   if (!(cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_EXL))
-   {
-      cp0->reg[MIPS_CP0_EPC] = cpu->pc;
-
-      /* keep IM, set exception code and bd slot */
-      cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
-
-      if (bd_slot)
-         cause |= MIPS_CP0_CAUSE_BD_SLOT;
-      else
-         cause &= ~MIPS_CP0_CAUSE_BD_SLOT;
-
-      cause |= (exc_code << MIPS_CP0_CAUSE_SHIFT);
-      cp0->reg[MIPS_CP0_CAUSE] = cause;
-
-      /* XXX properly set vector */
-      vector = 0x180ULL;
-   }
+   if (cpu->bd_slot)
+      cause |= MIPS_CP0_CAUSE_BD_SLOT;
    else
-   {
-      /* keep IM and set exception code */
-      cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
-      cause |= (exc_code << MIPS_CP0_CAUSE_SHIFT);
-      cp0->reg[MIPS_CP0_CAUSE] = cause;
+      cause &= ~MIPS_CP0_CAUSE_BD_SLOT;
 
-      /* set vector */
-      vector = 0x180ULL;
+   cause |= (exc_code << MIPS_CP0_CAUSE_SHIFT);
+   cp0->reg[MIPS_CP0_CAUSE] = cause;
+
+   /* If EXL bit is 0, set EPC and BadVaddr registers */
+   if (likely(!(cp0->reg[MIPS_CP0_STATUS] & MIPS_CP0_STATUS_EXL))) {
+      cp0->reg[MIPS_CP0_EPC] = cpu->pc - (cpu->bd_slot << 2);
+      cp0->reg[MIPS_CP0_BADVADDR] = bad_vaddr;
+      
+      /* 
+       * determine if TLB or XTLB exception, based on the current
+       * addressing mode.
+       */
+      if (cpu->addr_mode == 64) {
+         vector = 0x080;
+      } else {
+         vector = 0x000;
+      }
+   } else {
+      /* nested: handled as a general exception */
+      vector = 0x180;
    }
 
    /* Set EXL bit in status register */
@@ -399,6 +474,22 @@ void mips64_trigger_exception(cpu_mips_t *cpu,u_int exc_code,int bd_slot)
 
    /* Clear the pending IRQ flag */
    cpu->irq_pending = 0;
+}
+
+/* Prepare a TLB exception */
+void mips64_prepare_tlb_exception(cpu_mips_t *cpu,m_uint64_t vaddr)
+{
+   m_uint64_t vpn2,mask;
+
+   /* Update CP0 context and xcontext registers */
+   mips64_cp0_update_context_reg(cpu,vaddr);
+   mips64_cp0_update_xcontext_reg(cpu,vaddr);
+            
+   /* EntryHi also contains the VPN address */
+   mask = mips64_cp0_get_vpn2_mask(cpu);
+   vpn2 = vaddr & mask;
+   cpu->cp0.reg[MIPS_CP0_TLB_HI] &= ~mask;
+   cpu->cp0.reg[MIPS_CP0_TLB_HI] |= vpn2;
 }
 
 /*
@@ -462,27 +553,21 @@ fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
           cpu->gpr[MIPS_GPR_A0], cpu->gpr[MIPS_GPR_A1], 
           cpu->gpr[MIPS_GPR_A2], cpu->gpr[MIPS_GPR_A3]);
 #endif
-   
-   /* XXX TODO: Branch Delay slot */
-   mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_SYSCALL,0);
+   mips64_general_exception(cpu,MIPS_CP0_CAUSE_SYSCALL);
 }
 
 /* Execute BREAK instruction */
 fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 {
-   printf("MIPS64: BREAK instruction (code=%u)\n",code);
-   mips64_dump_regs(cpu->gen);
-
-   /* XXX TODO: Branch Delay slot */
-   mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_BP,0);
+   cpu_log(cpu->gen,"MIPS64","BREAK instruction (code=%u)\n",code);
+   mips64_general_exception(cpu,MIPS_CP0_CAUSE_BP);
 }
 
 /* Trigger a Trap Exception */
 fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 {  
-   /* XXX TODO: Branch Delay slot */
-   printf("MIPS64: TRAP exception, CPU=%p\n",cpu);
-   mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_TRAP,0);
+   cpu_log(cpu->gen,"MIPS64","TRAP exception\n");
+   mips64_general_exception(cpu,MIPS_CP0_CAUSE_TRAP);
 }
 
 /* Trigger IRQs */
@@ -495,7 +580,7 @@ fastcall void mips64_trigger_irq(cpu_mips_t *cpu)
 
    cpu->irq_count++;
    if (mips64_update_irq_flag_fast(cpu))
-      mips64_trigger_exception(cpu,MIPS_CP0_CAUSE_INTERRUPT,0);
+      mips64_general_exception(cpu,MIPS_CP0_CAUSE_INTERRUPT);
    else
       cpu->irq_fp_count++;
 }
@@ -840,8 +925,6 @@ int mips64_restore_state(cpu_mips_t *cpu,char *filename)
          continue;
       }
    }
-
-   mips64_cp0_map_all_tlb_to_mts(cpu);
 
    mips64_dump_regs(cpu->gen);
    mips64_tlb_dump(cpu->gen);

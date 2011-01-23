@@ -54,6 +54,20 @@ static m_uint16_t eeprom_nm_16esw_data[] = {
 };
 
 /* ====================================================================== */
+/* NMD-36ESW: 36 FastEthernet Port Switch Network Module EEPROM           */
+/* ====================================================================== */
+static m_uint16_t eeprom_nmd_36esw_data[] = {
+   0x04FF, 0x4002, 0xB141, 0x0100, 0xC046, 0x0320, 0x003B, 0x3401,
+   0x4245, 0x3080, 0x0000, 0x0000, 0x0203, 0xC18B, 0x3030, 0x3030,
+   0x3030, 0x3030, 0x3030, 0x3003, 0x0081, 0x0000, 0x0000, 0x0400,
+   0xCF06, 0x0013, 0x1A1D, 0x0BD1, 0x4300, 0x26FF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
+};
+
+/* ====================================================================== */
 /* NM-4T: 4 Serial Network Module EEPROM                                  */
 /* ====================================================================== */
 static m_uint16_t eeprom_nm_4t_data[] = {
@@ -128,6 +142,7 @@ static const struct cisco_eeprom eeprom_nm_array[] = {
    { "NM-4E", eeprom_nm_4e_data, sizeof(eeprom_nm_4e_data)/2 },
    { "NM-1FE-TX", eeprom_nm_1fe_tx_data, sizeof(eeprom_nm_1fe_tx_data)/2 },
    { "NM-16ESW", eeprom_nm_16esw_data, sizeof(eeprom_nm_16esw_data)/2 },
+   { "NMD-36ESW", eeprom_nmd_36esw_data, sizeof(eeprom_nmd_36esw_data)/2 },
    { "NM-4T", eeprom_nm_4t_data, sizeof(eeprom_nm_4t_data)/2 },
    { "NM-2E2W", eeprom_nm_2e2w_data, sizeof(eeprom_nm_2e2w_data)/2 },
    { "NM-2W", eeprom_nm_2w_data, sizeof(eeprom_nm_2w_data)/2 },
@@ -215,6 +230,14 @@ static m_uint16_t eeprom_pa_a1_data[] = {
 };
 
 /* ====================================================================== */
+/* PA-A3: 1 ATM Port Adapter EEPROM                                       */
+/* ====================================================================== */
+static m_uint16_t eeprom_pa_a3_data[] = {
+   0x0159, 0x0200, 0xFFFF, 0xFFFF, 0x4909, 0x7E04, 0x0000, 0x0000,
+   0x5000, 0x0000, 0x0007, 0x1100, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+};
+
+/* ====================================================================== */
 /* PA-POS-OC3: 1 POS Port Adapter EEPROM                                   */
 /* ====================================================================== */
 static m_uint16_t eeprom_pa_pos_oc3_data[] = {
@@ -245,6 +268,20 @@ static m_uint16_t eeprom_pa_mc8te1_data[] = {
 };
 
 /* ====================================================================== */
+/* C7200-JC-PA                                                            */
+/* ====================================================================== */
+static m_uint16_t eeprom_c7200_jc_pa_data[] = {
+   0x04FF, 0x4005, 0x1141, 0x0101, 0x8744, 0x0A3B, 0x0382, 0x4928,
+   0xB003, 0x4241, 0x30C1, 0x8B58, 0x5858, 0x5858, 0x5858, 0x5858,
+   0x5858, 0x0400, 0x0203, 0x851C, 0x1DDA, 0x03CB, 0x8B43, 0x3732,
+   0x3030, 0x2D4A, 0x432D, 0x5041, 0x8800, 0x0145, 0xC589, 0x5630,
+   0x3120, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+};
+
+/* ====================================================================== */
 /* PA EEPROMs                                                             */
 /* ====================================================================== */
 
@@ -257,9 +294,12 @@ static const struct cisco_eeprom eeprom_pa_array[] = {
    { "PA-4T+", eeprom_pa_4t_data, sizeof(eeprom_pa_4t_data)/2 },
    { "PA-8T", eeprom_pa_8t_data, sizeof(eeprom_pa_8t_data)/2 },
    { "PA-A1", eeprom_pa_a1_data, sizeof(eeprom_pa_a1_data)/2 },
+   { "PA-A3", eeprom_pa_a3_data, sizeof(eeprom_pa_a3_data)/2 },
    { "PA-POS-OC3", eeprom_pa_pos_oc3_data, sizeof(eeprom_pa_pos_oc3_data)/2 },
    { "PA-4B", eeprom_pa_4b_data, sizeof(eeprom_pa_4b_data)/2 },
    { "PA-MC-8TE1", eeprom_pa_mc8te1_data, sizeof(eeprom_pa_mc8te1_data)/2 },
+   { "C7200-JC-PA", eeprom_c7200_jc_pa_data, 
+     sizeof(eeprom_c7200_jc_pa_data)/2 },
    { NULL, NULL, 0 },
 };
 

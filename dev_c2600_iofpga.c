@@ -40,8 +40,6 @@
 #define EEPROM_NM_CLK   2
 #define EEPROM_NM_CS    4
 
-#define C2691_NET_IRQ_CLEARING_DELAY  16
-
 /* Network IRQ distribution */
 static u_int net_irq_dist[C2600_MAX_NM_BAYS] = {
    4,  /* reg 0x08, bits 4-5 */

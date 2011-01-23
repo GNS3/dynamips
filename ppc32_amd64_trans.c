@@ -103,7 +103,7 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
                                       m_uint32_t new_ia)
 {
    m_uint32_t new_page,ia_hash,ia_offset;
-   u_char *test1,*test2,*test3;
+   u_char *test1,*test2,*test3,*test4;
 
    /* Indicate that we throw %rbx, %rdx */
    ppc32_op_emit_alter_host_reg(cpu,AMD64_RBX);
@@ -112,11 +112,11 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
 
    new_page = new_ia & PPC32_MIN_PAGE_MASK;
    ia_offset = (new_ia & PPC32_MIN_PAGE_IMASK) >> 2;
-   ia_hash = ppc32_jit_get_ia_hash(new_ia);
+   ia_hash = ppc32_jit_get_virt_hash(new_ia);
    
    /* Get JIT block info in %rdx */
    amd64_mov_reg_membase(iop->ob_ptr,AMD64_RBX,
-                         AMD64_R15,OFFSET(cpu_ppc_t,exec_blk_map),8);
+                         AMD64_R15,OFFSET(cpu_ppc_t,tcb_virt_hash),8);
    amd64_mov_reg_membase(iop->ob_ptr,AMD64_RDX,
                          AMD64_RBX,ia_hash*sizeof(void *),8);
 
@@ -135,11 +135,16 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
    /* Jump to the code */
    amd64_mov_reg_membase(iop->ob_ptr,AMD64_RSI,
                          AMD64_RDX,OFFSET(ppc32_jit_tcb_t,jit_insn_ptr),8);
+
+   amd64_test_reg_reg(iop->ob_ptr,AMD64_RSI,AMD64_RSI);
+   test3 = iop->ob_ptr;
+   amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
+
    amd64_mov_reg_membase(iop->ob_ptr,AMD64_RBX,
                          AMD64_RSI,ia_offset * sizeof(void *),8);
    
    amd64_test_reg_reg(iop->ob_ptr,AMD64_RBX,AMD64_RBX);
-   test3 = iop->ob_ptr;
+   test4 = iop->ob_ptr;
    amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
    amd64_jump_reg(iop->ob_ptr,AMD64_RBX);
 
@@ -147,6 +152,7 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
    amd64_patch(test1,iop->ob_ptr);
    amd64_patch(test2,iop->ob_ptr);
    amd64_patch(test3,iop->ob_ptr);
+   amd64_patch(test4,iop->ob_ptr);
 
    ppc32_set_ia(&iop->ob_ptr,new_ia);
    ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
@@ -400,7 +406,9 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    amd64_mov_reg_reg(iop->ob_ptr,AMD64_RDI,AMD64_R15,8);
 
    /* Call memory function */
+   amd64_alu_reg_imm(iop->ob_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(op));
+   amd64_alu_reg_imm(iop->ob_ptr,X86_ADD,AMD64_RSP,8);
 
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,base,AMD64_R14);
@@ -441,7 +449,9 @@ static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    amd64_mov_reg_reg(iop->ob_ptr,AMD64_RDI,AMD64_R15,8);
 
    /* Call memory function */
+   amd64_alu_reg_imm(iop->ob_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(op));
+   amd64_alu_reg_imm(iop->ob_ptr,X86_ADD,AMD64_RSP,8);
 
    if (update)
       ppc32_store_gpr(&iop->ob_ptr,ra,AMD64_R14);
@@ -501,6 +511,9 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    test2 = NULL;
 
+   /* XXX */
+   amd64_inc_membase(iop->ob_ptr,AMD64_R15,OFFSET(cpu_ppc_t,mts_lookups));
+
    /* RSI = GPR[base] + sign-extended offset */
    ppc32_load_imm(&iop->ob_ptr,AMD64_RSI,val);
    if (base != 0)
@@ -508,7 +521,12 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    /* RBX = mts32_entry index */
    amd64_mov_reg_reg_size(iop->ob_ptr,X86_EBX,X86_ESI,4);
-   amd64_shift_reg_imm_size(iop->ob_ptr,X86_SHR,X86_EBX,MTS32_HASH_SHIFT,4);
+   amd64_mov_reg_reg_size(iop->ob_ptr,X86_EAX,X86_ESI,4);
+
+   amd64_shift_reg_imm_size(iop->ob_ptr,X86_SHR,X86_EBX,MTS32_HASH_SHIFT1,4);
+   amd64_shift_reg_imm_size(iop->ob_ptr,X86_SHR,X86_EAX,MTS32_HASH_SHIFT2,4);
+   amd64_alu_reg_reg(iop->ob_ptr,X86_XOR,AMD64_RBX,AMD64_RAX);
+
    amd64_alu_reg_imm_size(iop->ob_ptr,X86_AND,X86_EBX,MTS32_HASH_MASK,4);
 
    /* RCX = mts32 entry */
@@ -562,7 +580,9 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    amd64_mov_reg_reg(iop->ob_ptr,AMD64_RDI,AMD64_R15,8);
 
    /* Call memory access function */
+   amd64_alu_reg_imm(iop->ob_ptr,X86_SUB,AMD64_RSP,8);
    amd64_call_membase(iop->ob_ptr,AMD64_R15,MEMOP_OFFSET(opcode));
+   amd64_alu_reg_imm(iop->ob_ptr,X86_ADD,AMD64_RSP,8);
 
    amd64_patch(p_exit,iop->ob_ptr);
 }
@@ -583,7 +603,10 @@ static int ppc32_emit_unknown(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    amd64_mov_reg_reg(iop->ob_ptr,AMD64_RDI,AMD64_R15,8);
    amd64_mov_reg_imm(iop->ob_ptr,AMD64_RSI,opcode);
 
+   amd64_alu_reg_imm(iop->ob_ptr,X86_SUB,AMD64_RSP,8);
    ppc32_emit_c_call(b,iop,ppc32_exec_single_insn_ext);
+   amd64_alu_reg_imm(iop->ob_ptr,X86_ADD,AMD64_RSP,8);
+
    amd64_test_reg_reg_size(iop->ob_ptr,AMD64_RAX,AMD64_RAX,4);
    test1 = iop->ob_ptr;
    amd64_branch8(iop->ob_ptr, X86_CC_Z, 0, 1);
@@ -604,7 +627,10 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
    iop = ppc32_op_emit_insn_output(cpu,2,"breakpoint");
 
    amd64_mov_reg_reg(iop->ob_ptr,AMD64_RDI,AMD64_R15,8);
+
+   amd64_alu_reg_imm(iop->ob_ptr,X86_SUB,AMD64_RSP,8);
    ppc32_emit_c_call(b,iop,ppc32_run_breakpoint);
+   amd64_alu_reg_imm(iop->ob_ptr,X86_ADD,AMD64_RSP,8);
 
    /* Signal this as an EOB to to reset JIT state */
    ppc32_op_emit_basic_opcode(cpu,JIT_OP_EOB);

@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 2600 routines and definitions (EEPROM,...).
  */
@@ -34,8 +35,8 @@
 /* Cisco 2600 mainboard EEPROM */
 static m_uint16_t eeprom_c2600_mb_data[] = {
    0x0101, 0x0404, 0x0000, 0x0000, 0x4320, 0x00FF, 0x0091, 0x0020,
-   0x0000, 0x0000, 0x0000, 0x0000, 0x3030, 0x3000, 0x0030, 0x3030,
-   0x3002, 0x0200, 0x0000, 0x0000, 0x00FF, 0xFFFF, 0x5006, 0x490B,
+   0x0000, 0x0000, 0x0000, 0x0000, 0x4654, 0x5809, 0x4557, 0x304D,
+   0x5902, 0x0200, 0x0000, 0x0000, 0x00FF, 0xFFFF, 0x5006, 0x490B,
    0x1709, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -947,6 +948,12 @@ static int c2600_cli_parse_options(vm_instance_t *vm,int option)
          c2600_mainboard_set_type(router,optarg);
          break;
 
+      /* Set the base MAC address */
+      case 'm':
+         if (!c2600_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
+         break;
+
       /* Unknown option */
       default:
          return(-1);
@@ -972,6 +979,8 @@ static vm_platform_t c2600_platform = {
    c2600_delete_instance,
    c2600_init_instance,
    c2600_stop_instance,
+   NULL,
+   NULL,
    c2600_nvram_extract_config,
    c2600_nvram_push_config,
    c2600_get_mac_addr_msb,

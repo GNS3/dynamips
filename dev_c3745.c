@@ -1,6 +1,7 @@
 /*
  * Cisco 3745 simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 3745 routines and definitions (EEPROM,...).
  */
@@ -72,8 +73,8 @@ static m_uint16_t eeprom_c3745_midplane_data[] = {
    0x4241, 0x3080, 0x0000, 0x0000, 0x0205, 0xC18B, 0x5858, 0x5858,
    0x5858, 0x5858, 0x5858, 0x5803, 0x0081, 0x0000, 0x0000, 0x0400,
    0xC809, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFC3, 0x0600, 0x0DED,
-   0xCD7D, 0x8043, 0x0050, 0xC28B, 0x5858, 0x5858, 0x5858, 0x5858,
-   0x5858, 0x58FF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+   0xCD7D, 0x8043, 0x0050, 0xC28B, 0x4654, 0x5830, 0x3934, 0x3557,
+   0x304D, 0x59FF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 };
@@ -776,6 +777,81 @@ static int c3745_stop_instance(vm_instance_t *vm)
    return(0);
 }
 
+/* Trigger an OIR event */
+static int c3745_trigger_oir_event(c3745_t *router,u_int slot_mask)
+{
+   router->oir_status = slot_mask;
+   vm_set_irq(router->vm,C3745_EXT_IRQ);
+   return(0);
+}
+
+/* Initialize a new NM while the virtual router is online (OIR) */
+static int c3745_nm_init_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* 
+    * Suspend CPU activity while adding new hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Check that CPU activity is really suspended */
+   if (cpu_group_sync_state(vm->cpu_group) == -1) {
+      vm_error(vm,"unable to sync with system CPUs.\n");
+      return(-1);
+   }
+
+   /* Add the new hardware elements */
+   if (vm_slot_init(vm,slot) == -1)
+      return(-1);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+
+   /* Now, we can safely trigger the OIR event */
+   c3745_trigger_oir_event(VM_C3745(vm),1 << (slot - 1));
+   return(0);
+}
+
+/* Stop a NM while the virtual router is online (OIR) */
+static int c3745_nm_stop_online(vm_instance_t *vm,u_int slot,u_int subslot)
+{   
+   if (!slot) {
+      vm_error(vm,"OIR not supported on slot 0.\n");
+      return(-1);
+   }
+
+   /* The NM driver must be initialized */
+   if (!vm_slot_get_card_ptr(vm,slot)) {
+      vm_error(vm,"trying to shut down empty slot %u.\n",slot);
+      return(-1);
+   }
+
+   /* Disable all NIOs to stop traffic forwarding */
+   vm_slot_disable_all_nio(vm,slot);
+
+   /* We can safely trigger the OIR event */
+   c3745_trigger_oir_event(VM_C3745(vm),1 << (slot - 1));
+
+   /* 
+    * Suspend CPU activity while removing the hardware (since we change the
+    * memory maps).
+    */
+   vm_suspend(vm);
+
+   /* Device removal */
+   if (vm_slot_shutdown(vm,slot) != 0)
+      vm_error(vm,"unable to shutdown slot %u.\n",slot);
+
+   /* Resume normal operations */
+   vm_resume(vm);
+   return(0);
+}
+
 /* Get MAC address MSB */
 static u_int c3745_get_mac_addr_msb(void)
 {
@@ -785,10 +861,18 @@ static u_int c3745_get_mac_addr_msb(void)
 /* Parse specific options for the Cisco 1700 platform */
 static int c3745_cli_parse_options(vm_instance_t *vm,int option)
 {
+   c3745_t *router = VM_C3745(vm);
+
    switch(option) {
       /* IO memory reserved for NMs (in percents!) */
       case OPT_IOMEM_SIZE:
          vm->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* Set the base MAC address */
+      case 'm':
+         if (!c3745_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
          break;
 
       /* Unknown option */
@@ -816,6 +900,8 @@ static vm_platform_t c3745_platform = {
    c3745_delete_instance,
    c3745_init_instance,
    c3745_stop_instance,
+   c3745_nm_init_online,
+   c3745_nm_stop_online,
    c3745_nvram_extract_config,
    c3745_nvram_push_config,
    c3745_get_mac_addr_msb,

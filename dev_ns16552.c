@@ -1,6 +1,7 @@
 /*
  * Cisco 3600 simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * NS16552 DUART.
  */
@@ -41,6 +42,23 @@
 #define	LSR_TXRDY     0x20
 #define	LSR_TXEMPTY   0x40
 
+/* Line Control Register */
+#define LCR_WRL0       0x01
+#define LCR_WRL1       0x02
+#define LCR_NUMSTOP    0x04
+#define LCR_PARITYON   0x08
+#define LCR_PARITYEV   0x10
+#define LCR_STICKP     0x20
+#define LCR_SETBREAK   0x40
+#define LCR_DIVLATCH   0x80
+
+/* Modem Control Register */
+#define MCR_DTR        0x01
+#define MCR_RTS        0x02
+#define MCR_OUT1       0x04
+#define MCR_OUT2       0x08
+#define MCR_LOOP       0x10
+
 /* UART channel */
 struct ns16552_channel {
    u_int ier,output;
@@ -62,6 +80,10 @@ struct ns16552_data {
 
    struct ns16552_channel channel[2];
    u_int duart_irq_seq;
+   
+   u_int line_control_reg;
+   u_int div_latch;
+   u_int baud_divisor;
 };
 
 /* Console port input */
@@ -93,12 +115,10 @@ static int tty_trigger_dummy_irq(struct ns16552_data *d,void *arg)
          vm_set_irq(d->vm,d->irq);
       }
 
-#if 0
       if (d->channel[1].ier & IER_ETXRDY) {
          d->channel[1].output = TRUE;
          vm_set_irq(d->vm,d->irq);
       }
-#endif
 
       d->duart_irq_seq = 0;
    }
@@ -134,54 +154,140 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
    if (offset >= 0x08)
       channel = 1;
 
+// From the NS16552V datasheet, the following is known about the registers
+// Bit 4 is channel
+// Value 0 Receive or transmit buffer
+// Value 1 Interrupt enable
+// Value 2 Interrupt identification (READ), FIFO Config (Write)
+// Value 3 Line Control (Appears in IOS)
+//    0x1 - Word Length Selector bit 0
+//    0x2 - Word Length Selector bit 1
+//    0x4 - Num stop bits
+//    0x8 - Parity Enable
+//    0x16 - Parity even
+//    0x32 - Stick Parity
+//    0x64 - Set Break
+//    0x128 - Division Latch
+// Value 4 Modem Control (Appears in IOS)
+// Value 5 Line status
+// Value 6 Modem Status
+// Value 7 Scratch
+	  
    switch(offset) {
       /* Receiver Buffer Reg. (RBR) / Transmitting Holding Reg. (THR) */
       case 0x00:
       case 0x08:
-         if (op_type == MTS_WRITE) {
-            vtty_put_char(d->channel[channel].vtty,(char)*data);
-
-            if (d->channel[channel].ier & IER_ETXRDY)
-               vm_set_irq(d->vm,d->irq);
-
-            d->channel[channel].output = TRUE;
+         if (d->div_latch == 0) {
+           if (op_type == MTS_WRITE) {
+              vtty_put_char(d->channel[channel].vtty,(char)*data);
+  
+              if (d->channel[channel].ier & IER_ETXRDY)
+                 vm_set_irq(d->vm,d->irq);
+  
+              d->channel[channel].output = TRUE;
+           } else
+              *data = vtty_get_char(d->channel[channel].vtty);
          } else {
-            *data = vtty_get_char(d->channel[channel].vtty);
+           if (op_type == MTS_WRITE)
+             d->baud_divisor = ((*data) & 0x00ff) | (d->baud_divisor & 0xff00);
          }
          break;
 
       /* Interrupt Enable Register (IER) */
       case 0x01:
       case 0x09:
-         if (op_type == MTS_READ) {
-            *data = d->channel[channel].ier;
-         } else {
-            d->channel[channel].ier = *data & 0xFF;
+         if (d->div_latch == 0) {
+           if (op_type == MTS_READ) {
+              *data = d->channel[channel].ier;
+           } else {
+              d->channel[channel].ier = *data & 0xFF;
 
-            if ((*data & 0x02) == 0) {   /* transmit holding register */
-               d->channel[channel].vtty->managed_flush = TRUE;
-               vtty_flush(d->channel[channel].vtty);               
-            }
+              if ((*data & 0x02) == 0) {   /* transmit holding register */
+                 d->channel[channel].vtty->managed_flush = TRUE;
+                 vtty_flush(d->channel[channel].vtty);               
+              }
+           }
+         } else {
+           if (op_type == MTS_WRITE)
+              d->baud_divisor = (((*data) & 0xff)<<8)|(d->baud_divisor & 0xff);
          }
          break;
 
       /* Interrupt Ident Register (IIR) */
       case 0x02:
-         vm_clear_irq(d->vm,d->irq);
       case 0x0A:
-         if (op_type == MTS_READ) {
-            odata = IIR_NPENDING;
+         if (d->div_latch == 0) {
+           vm_clear_irq(d->vm,d->irq);
+           if (op_type == MTS_READ) {
+             odata = IIR_NPENDING;
 
-            if (vtty_is_char_avail(d->channel[channel].vtty)) {
+             if (vtty_is_char_avail(d->channel[channel].vtty)) {
                odata = IIR_RXRDY;
-            } else {
+             } else {
                if (d->channel[channel].output) {
                   odata = IIR_TXRDY;
                   d->channel[channel].output = 0;
                }
-            }
+             }
 
-            *data = odata;
+             *data = odata;
+           }
+         }
+         break;
+      case 0x03:
+      case 0x0B:
+         if (op_type == MTS_READ) {
+           *data = d->line_control_reg;
+         } else {
+
+           d->line_control_reg = (uint)*data;
+           uint bits = 5;
+           char *stop = "1";
+           char *parity = "no ";
+           char *parityeven = "odd";
+           if (*data & LCR_WRL0) bits+=1;
+           if (*data & LCR_WRL1) bits+=2;
+         
+           if (*data & LCR_NUMSTOP) {
+             if ( bits >= 6) {
+               stop = "2";
+             } else {
+               stop = "1.5";
+             }
+           }
+
+           if (*data & LCR_PARITYON)
+             parity=""; //Parity on
+           if (*data & LCR_PARITYEV)
+             parityeven="even";
+
+           // DIV LATCH changes the behavior of 0x0,0x1,and 0x2
+           if (*data & LCR_DIVLATCH) {
+             d->div_latch = 1;
+           } else {
+             uint baud;
+             d->div_latch = 0;
+             //  1200 divisor was 192
+             //  9600 divisor was  24
+             // 19200 divisor was  12
+             // Suggests a crystal of 3686400 hz
+             if (d->baud_divisor > 0) {
+               baud = 3686400 / (d->baud_divisor * 16);
+             } else {
+               baud = 0;
+             }
+           }
+         }
+         break;
+      case 0x04:
+      case 0x0C:
+         if (op_type != MTS_READ) {
+           char *f1 = ""; char *f2 = ""; char *f3 = ""; char *f4 = ""; char *f5 = "";
+           if (*data & MCR_DTR) f1 = "DTR ";
+           if (*data & MCR_RTS) f2 = "RTS ";
+           if (*data & MCR_OUT1) f3 = "OUT1 ";
+           if (*data & MCR_OUT2) f4 = "OUT2 ";
+           if (*data & MCR_LOOP) f5 = "LOOP ";
          }
          break;
 
@@ -252,7 +358,10 @@ int dev_ns16552_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len,
    d->reg_div = reg_div;
    d->channel[0].vtty = vtty_A;
    d->channel[1].vtty = vtty_B;
-
+   d->line_control_reg = 0;
+   d->div_latch = 0;
+   d->baud_divisor=0;
+   
    vm_object_init(&d->vm_obj);
    d->vm_obj.name = "ns16552";
    d->vm_obj.data = d;

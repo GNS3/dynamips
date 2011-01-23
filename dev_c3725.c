@@ -1,6 +1,7 @@
 /*
  * Cisco router simulation platform.
  * Copyright (c) 2006 Christophe Fillot (cf@utc.fr)
+ * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Generic Cisco 3725 routines and definitions (EEPROM,...).
  */
@@ -35,8 +36,8 @@ static m_uint16_t eeprom_c3725_mainboard_data[] = {
    0x04FF, 0xC18B, 0x5858, 0x5858, 0x5858, 0x5858, 0x5858, 0x5809,
    0x6140, 0x0259, 0xC046, 0x0320, 0x003F, 0x1302, 0x4244, 0x3085,
    0x1C10, 0x8206, 0x80FF, 0xFFFF, 0xFFC4, 0x08FF, 0xFFFF, 0xFFFF,
-   0xFFFF, 0xFF81, 0xFFFF, 0xFFFF, 0x03FF, 0x04FF, 0xC28B, 0x5858,
-   0x5858, 0x5858, 0x5858, 0x5858, 0x58C3, 0x0600, 0x1319, 0x5C6F,
+   0xFFFF, 0xFF81, 0xFFFF, 0xFFFF, 0x03FF, 0x04FF, 0xC28B, 0x4654,
+   0x5830, 0x3934, 0x3557, 0x304D, 0x59C3, 0x0600, 0x1319, 0x5C6F,
    0x7043, 0x0030, 0xC508, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x4100,
    0x0101, 0x02FF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
@@ -746,10 +747,18 @@ static u_int c3725_get_mac_addr_msb(void)
 /* Parse specific options for the Cisco 3725 platform */
 static int c3725_cli_parse_options(vm_instance_t *vm,int option)
 {
+   c3725_t *router = VM_C3725(vm);
+
    switch(option) {
       /* IO memory reserved for NMs (in percents!) */
       case OPT_IOMEM_SIZE:
          vm->nm_iomem_size = 0x8000 | atoi(optarg);
+         break;
+
+      /* Set the base MAC address */
+      case 'm':
+         if (!c3725_chassis_set_mac_addr(router,optarg))
+            printf("MAC address set to '%s'.\n",optarg);
          break;
 
       /* Unknown option */
@@ -777,6 +786,8 @@ static vm_platform_t c3725_platform = {
    c3725_delete_instance,
    c3725_init_instance,
    c3725_stop_instance,
+   NULL,
+   NULL,
    c3725_nvram_extract_config,
    c3725_nvram_push_config,
    c3725_get_mac_addr_msb,
