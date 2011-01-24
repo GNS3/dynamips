@@ -40,7 +40,7 @@ void *dev_sb1_access(cpu_gen_t *cpu,struct vdevice *dev,
                      m_uint32_t offset,u_int op_size,u_int op_type,
                      m_uint64_t *data)
 {
-   struct sb1_data *d = dev->priv_data;
+   //struct sb1_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0;

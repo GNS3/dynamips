@@ -33,7 +33,7 @@
 #include "dev_c7200.h"
 
 /* Debugging flags */
-#define DEBUG_ACCESS    1
+#define DEBUG_ACCESS    0
 #define DEBUG_TRANSMIT  0
 #define DEBUG_RECEIVE   0
 

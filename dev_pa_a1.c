@@ -587,7 +587,7 @@ static m_uint32_t ti1570_init_tx_atm_cell(struct pa_a1_data *d,
       atm_hdr &= ~ATM_PTI_NETWORK;
       atm_hdr |= ATM_PTI_EOP;
    }
-   
+
    *(m_uint32_t *)d->txfifo_cell = htonl(atm_hdr);
 
    /* compute HEC field */
@@ -1500,7 +1500,7 @@ static void pci_ti1570_write(cpu_gen_t *cpu,struct pci_device *dev,
 static m_uint32_t pci_plx9060es_read(cpu_gen_t *cpu,struct pci_device *dev,
                                      int reg)
 {
-   struct pa_a1_data *d = dev->priv_data;
+   //struct pa_a1_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
    TI1570_LOG(d,"PLX9060ES","read reg 0x%x\n",reg);
@@ -1517,7 +1517,7 @@ static m_uint32_t pci_plx9060es_read(cpu_gen_t *cpu,struct pci_device *dev,
 static void pci_plx9060es_write(cpu_gen_t *cpu,struct pci_device *dev,
                                 int reg,m_uint32_t value)
 {
-   struct pa_a1_data *d = dev->priv_data;
+   //struct pa_a1_data *d = dev->priv_data;
 
 #if DEBUG_ACCESS
    TI1570_LOG(d,"PLX9060ES","write reg 0x%x, value 0x%x\n",reg,value);

@@ -209,7 +209,7 @@ int parse_mac_addr(n_eth_addr_t *addr,char *str)
       addr->eth_addr_byte[3] = v[1] & 0xFF;
       addr->eth_addr_byte[4] = (v[2] >> 8) & 0xFF;
       addr->eth_addr_byte[5] = v[2] & 0xFF;
-	  return(0);
+      return(0);
    }
 
    return(-1);

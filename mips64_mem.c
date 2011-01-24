@@ -73,6 +73,8 @@ static void mips64_tlb_error(cpu_mips_t *cpu,m_uint64_t vaddr,int error,
    switch(error) {
    
       case MTS_ACC_T:
+         /* Cannot be anying but _LOOKUP due to test above, but sensible */
+         /* to leave the test in for future reference                    */
          if (op_code != MIPS_MEMOP_LOOKUP) {
             /* If the IOS tries to access memory at addr 0x0, it is probably */
             /* a reload. Shut the vm down, otherwise 100% cpu and livespin   */
@@ -84,7 +86,7 @@ static void mips64_tlb_error(cpu_mips_t *cpu,m_uint64_t vaddr,int error,
                     "read":"write",op_size);
               vm_stop(cpu->vm);
             }
-		 }
+	 }
          break;
 		 
       case MIPS_TLB_LOOKUP_MISS:

@@ -8,6 +8,9 @@
 #   - Use "nojit" for unsupported architectures.
 DYNAMIPS_ARCH?=amd64
 
+# Do you want to use lib (for 32 bit compiling) or lib64
+DYNAMIPS_LIB?=lib
+
 # Change this to 0 if your system doesn't support RFC2553 extensions
 HAS_RFC2553?=1
 
@@ -64,7 +67,7 @@ ifeq ($(shell uname), Linux)
 #   PCAP_LIB=-lpcap
    OSNAME=Linux
    CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. -ldl /usr/lib/libuuid.a /usr/lib/libelf.a $(PTHREAD_LIBS)
+   LIBS=-L/usr/lib -L. -ldl -luuid /usr/$(DYNAMIPS_LIB)/libelf.a $(PTHREAD_LIBS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
