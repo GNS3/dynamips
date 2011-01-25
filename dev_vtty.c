@@ -801,6 +801,9 @@ static void vtty_read_and_store(vtty_t *vtty,int *fd_slot)
    /* if read error, do nothing */
    if (c < 0) return;
   
+   /* If something was read, make sure the handler is informed */
+   vtty->input_pending = TRUE;
+
    if (!vtty->terminal_support) {
       vtty_store(vtty,c);
       return;
