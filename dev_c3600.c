@@ -321,6 +321,31 @@ struct c3600_chassis_driver *c3600_chassis_get_driver(char *chassis_type)
    return NULL;
 }
 
+/* Set the system id or processor board id in the eeprom */
+int c3600_set_system_id(c3600_t *router,char *id)
+{
+  /* 11 characters is enough. Array is 20 long */
+  strncpy(router->board_id,id,13);
+  /* Make sure it is null terminated */
+  router->board_id[13] = 0x00;
+  c3600_refresh_systemid(router);
+  return 0;
+}
+int c3600_refresh_systemid(c3600_t *router)
+{
+  if (router->board_id[0] == 0x00) return(0);
+  m_uint8_t buf[11];
+
+  if (!strcmp("3660",router->chassis_driver->chassis_type)) {
+    parse_board_id(buf,router->board_id,11);
+    cisco_eeprom_set_region(&router->mb_eeprom ,50,buf,11);
+  } else {
+    parse_board_id(buf,router->board_id,4);
+    cisco_eeprom_set_region(&router->mb_eeprom ,16,buf,4);
+  }
+  return (0);
+}
+
 /* Set the base MAC address of the chassis */
 static int c3600_burn_mac_addr(c3600_t *router,n_eth_addr_t *addr)
 {
@@ -395,7 +420,7 @@ int c3600_chassis_set_type(c3600_t *router,char *chassis_type)
       vm_slot_remove_binding(router->vm,0,0);
       vm_slot_add_binding(router->vm,"Leopard-2FE",0,0);
    }
-
+   c3600_refresh_systemid(router);
    return(0);
 }
 
@@ -592,6 +617,7 @@ static void c3600_init_defaults(c3600_t *router)
    m->eth_addr_byte[3] = pid & 0xFF;
    m->eth_addr_byte[4] = 0x00;
    m->eth_addr_byte[5] = 0x00;
+   router->board_id[0] = 0x00;
 
    c3600_init_eeprom_groups(router);
    c3600_chassis_set_type(router,C3600_DEFAULT_CHASSIS);
@@ -998,6 +1024,13 @@ static int c3600_cli_parse_options(vm_instance_t *vm,int option)
             printf("MAC address set to '%s'.\n",optarg);
          break;
 
+      /* Set the System ID */
+      case 'I':
+         if (!c3600_set_system_id(router,optarg))
+            printf("System ID set to '%s'.\n",optarg);
+         break;
+
+
       /* Unknown option */
       default:
          return(-1);
@@ -1012,6 +1045,7 @@ static void c3600_cli_show_options(vm_instance_t *vm)
    printf("  -t <chassis_type>  : Select Chassis type (default: \"%s\")\n"
           "  --iomem-size <val> : IO memory (in percents, default: %u)\n"
           "  -p <nm_desc>       : Define a Network Module\n"
+          "  -I <serialno>      : Set Processor Board Serial Number\n"
           "  -s <nm_nio>        : Bind a Network IO interface to a "
           "Network Module\n",
           C3600_DEFAULT_CHASSIS,vm->nm_iomem_size);

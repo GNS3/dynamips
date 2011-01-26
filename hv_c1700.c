@@ -77,6 +77,26 @@ static int cmd_set_iomem(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+static int cmd_set_system_id(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_vm(conn,argv[0])))
+      return(-1);
+
+   if (( c1700_set_system_id(VM_C1700(vm),argv[1])) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
+                            "unable to set the system id for router '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set the base MAC address for the chassis */
 static int cmd_set_mac_addr(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -139,6 +159,7 @@ static hypervisor_cmd_t c1700_cmd_array[] = {
    { "set_chassis", 2, 2, cmd_set_chassis, NULL },
    { "set_iomem", 2, 2, cmd_set_iomem, NULL },
    { "set_mac_addr", 2, 2, cmd_set_mac_addr, NULL },
+   { "set_system_id", 2, 2, cmd_set_system_id, NULL },
    { "show_hardware", 1, 1, cmd_show_hardware, NULL },
    { "list", 0, 0, cmd_c1700_list, NULL },
    { NULL, -1, -1, NULL, NULL },

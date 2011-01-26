@@ -184,6 +184,62 @@ int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask)
 }
 #endif
 
+/* Parse a processor board id and return the eeprom settings in a buffer */
+int parse_board_id(m_uint8_t *buf,const char *id,int encode)
+{
+  // Encode the serial board id
+  //   encode 4 maps this into 4 bytes
+  //   encode 9 maps into 9 bytes
+  //   encode 11 maps into 11 bytes
+  //
+
+  memset(buf,0,11);
+  if (encode == 4) {
+    int res;
+
+    int v;
+    res = sscanf(id,"%d",&v);
+    if (res != 1) return (-1);
+    buf[3] = (v & 0xFF); v>>=8;
+    buf[2] = (v & 0xFF); v>>=8;
+    buf[1] = (v & 0xFF); v>>=8;
+    buf[0] = (v & 0xFF); v>>=8;
+    //printf("%x %x %x %x \n",buf[0],buf[1],buf[2],buf[3]);
+    return (0);
+  } else if (encode == 9) {
+    int res;
+  
+    res = sscanf(id,"%c%c%c%2hx%2hx%c%c%c%c",
+      &buf[0],&buf[1],
+      &buf[2],(unsigned short int *)&buf[3],
+      (unsigned short int *)&buf[4],&buf[5],
+      &buf[6],&buf[7],&buf[8]
+    );
+    if (res != 9) return (-1);
+    //printf("%x %x %x %x %x %x %x %x .. %x\n",
+    //     buf[0],buf[1],buf[2],buf[3],
+    //     buf[4],buf[5],buf[6],buf[7]  ,buf[8]);
+    return (0);
+  } else if (encode == 11) {
+    int res;
+  
+    res = sscanf(id,"%c%c%c%c%c%c%c%c%c%c%c",
+      &buf[0],&buf[1],
+      &buf[2],&buf[3],
+      &buf[4],&buf[5],
+      &buf[6],&buf[7],
+      &buf[8],&buf[9],
+      &buf[10]
+    );
+    if (res != 11) return (-1);
+    //printf("%x %x %x %x %x %x %x %x %x %x .. %x\n",
+    //  buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],
+    //  buf[6],buf[7],buf[8],buf[9],       buf[10]);
+    return (0);
+  }
+  return (-1);
+}
+
 /* Parse a MAC address */
 int parse_mac_addr(n_eth_addr_t *addr,char *str)
 {

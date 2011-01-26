@@ -83,6 +83,27 @@ static int cmd_set_midplane(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Set the system id */
+static int cmd_set_system_id(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_vm(conn,argv[0])))
+      return(-1);
+
+   if (( c7200_set_system_id(VM_C7200(vm),argv[1])) == -1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
+                            "unable to set the system id for router '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Set the base MAC address for the chassis */
 static int cmd_set_mac_addr(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -204,6 +225,7 @@ static hypervisor_cmd_t c7200_cmd_array[] = {
    { "set_npe", 2, 2, cmd_set_npe, NULL },
    { "set_midplane", 2, 2, cmd_set_midplane, NULL },
    { "set_mac_addr", 2, 2, cmd_set_mac_addr, NULL },
+   { "set_system_id", 2, 2, cmd_set_system_id, NULL },
    { "set_temp_sensor", 3, 3, cmd_set_temp_sensor, NULL },
    { "set_power_supply", 3, 3, cmd_set_power_supply, NULL },
    { "show_hardware", 1, 1, cmd_show_hardware, NULL },

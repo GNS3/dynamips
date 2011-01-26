@@ -86,6 +86,8 @@ struct c1700_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -121,6 +123,12 @@ int c1700_mainboard_set_type(c1700_t *router,char *mainboard_type);
 
 /* Set chassis MAC address */
 int c1700_chassis_set_mac_addr(c1700_t *router,char *mac_addr);
+
+/* Set the system id */
+int c1700_set_system_id(c1700_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c1700_refresh_systemid(c1700_t *router);
 
 /* Show C1700 hardware info */
 void c1700_show_hardware(c1700_t *router);

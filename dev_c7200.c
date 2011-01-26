@@ -716,7 +716,7 @@ int c7200_npe_set_type(c7200_t *router,char *npe_type)
       vm_slot_set_flag(router->vm,0,0,CISCO_CARD_FLAG_OVERRIDE);
    }
 #endif
-
+   c7200_refresh_systemid(router);
    return(0);
 }
 
@@ -766,7 +766,48 @@ int c7200_midplane_set_type(c7200_t *router,char *midplane_type)
    cisco_eeprom_get_byte(&router->mp_eeprom,2,&version);
    router->midplane_version = version;  
    router->midplane_type = eeprom->name;
+   c7200_refresh_systemid(router);
    return(0);
+}
+
+/* Set the system id or processor board id in the eeprom */
+int c7200_set_system_id(c7200_t *router,char *id)
+{
+  // 11 characters is enough. Array is 20 long
+  strncpy(router->board_id,id,13);
+  // Make sure it is null terminated
+  router->board_id[13] = 0x00;
+  c7200_refresh_systemid(router);
+  return 0;
+}
+int c7200_refresh_systemid(c7200_t *router)
+{
+  //fprintf(stderr,"Starting mp dump\n");
+  //cisco_eeprom_dump(&router->mp_eeprom);
+  //fprintf(stderr,"Starting cpu dump\n");
+  //cisco_eeprom_dump(&router->cpu_eeprom);
+
+  if (router->board_id[0] == 0x00) return(0);
+
+  m_uint8_t buf[11];
+  if (  (!strcmp("npe-100",router->npe_driver->npe_type))
+      ||(!strcmp("npe-140",router->npe_driver->npe_type))
+      ||(!strcmp("npe-175",router->npe_driver->npe_type))
+      ||(!strcmp("npe-200",router->npe_driver->npe_type))
+      ||(!strcmp("npe-225",router->npe_driver->npe_type))
+      ||(!strcmp("npe-300",router->npe_driver->npe_type)))
+  {
+    //parse_board_id(buf,"4279256517",4);
+    parse_board_id(buf,router->board_id,4);
+    cisco_eeprom_set_region(&router->mp_eeprom ,4,buf,4);
+    cisco_eeprom_set_region(&router->cpu_eeprom,4,buf,4);
+    //fprintf(stderr,"Starting post mp dump\n");
+    //cisco_eeprom_dump(&router->mp_eeprom);
+    //fprintf(stderr,"Starting post cpu dump\n");
+    //cisco_eeprom_dump(&router->cpu_eeprom);
+    return (0);
+  }
+  return (-1);
 }
 
 /* Set chassis MAC address */
@@ -1440,6 +1481,8 @@ static void c7200_init_defaults(c7200_t *router)
    m->eth_addr_byte[3] = pid & 0xFF;
    m->eth_addr_byte[4] = 0x00;
    m->eth_addr_byte[5] = 0x00;
+
+   router->board_id[0] = 0x00;
 
    c7200_init_sys_eeprom_groups(router);
    c7200_init_mp_eeprom_groups(router);
@@ -2203,6 +2246,12 @@ static int c7200_cli_parse_options(vm_instance_t *vm,int option)
             printf("MAC address set to '%s'.\n",optarg);
          break;
 
+      /* Set the System ID */
+      case 'I':
+         if (!c7200_set_system_id(router,optarg))
+            printf("System ID set to '%s'.\n",optarg);
+         break;
+
       /* Unknown option */
       default:
          return(-1);
@@ -2218,7 +2267,8 @@ static void c7200_cli_show_options(vm_instance_t *vm)
           "  -M <midplane>      : Select Midplane (\"std\" or \"vxr\")\n"
           "  -p <pa_desc>       : Define a Port Adapter\n"
           "  -s <pa_nio>        : Bind a Network IO interface to a "
-          "Port Adapter\n",
+          "Port Adapter\n" 
+          "  -I <serialno>      : Set Processor Board Serial Number\n",
           C7200_DEFAULT_NPE_TYPE);
 }
 

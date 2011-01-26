@@ -89,6 +89,8 @@ struct c3745_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -124,6 +126,12 @@ u_int c3745_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Set chassis MAC address */
 int c3745_chassis_set_mac_addr(c3745_t *router,char *mac_addr);
+
+/* Set the system id */
+int c3745_set_system_id(c3745_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c3745_refresh_systemid(c3745_t *router);
 
 /* Show C3745 hardware info */
 void c3745_show_hardware(c3745_t *router);

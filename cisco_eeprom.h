@@ -65,6 +65,9 @@ int cisco_eeprom_v4_get_field(struct cisco_eeprom *eeprom,m_uint8_t *type,
 /* Dump a Cisco EEPROM with format version 4 */
 void cisco_eeprom_v4_dump(struct cisco_eeprom *eeprom);
 
+/* Dump a Cisco EEPROM with unformatted */
+void cisco_eeprom_dump(struct cisco_eeprom *eeprom);
+
 /* Returns the offset of the specified field */
 int cisco_eeprom_v4_find_field(struct cisco_eeprom *eeprom,
                                m_uint8_t field_type,

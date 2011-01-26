@@ -88,6 +88,8 @@ struct c3725_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -126,6 +128,12 @@ int c3725_nm_get_pci_device(u_int nm_bay);
 
 /* Set chassis MAC address */
 int c3725_chassis_set_mac_addr(c3725_t *router,char *mac_addr);
+
+/* Set the system id */
+int c3725_set_system_id(c3725_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c3725_refresh_systemid(c3725_t *router);
 
 /* Show C3725 hardware info */
 void c3725_show_hardware(c3725_t *router);

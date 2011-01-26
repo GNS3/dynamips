@@ -677,6 +677,22 @@ int cisco_eeprom_v4_get_field(struct cisco_eeprom *eeprom,m_uint8_t *type,
    return(1);
 }
 
+/* Dump a Cisco EEPROM unformatted */
+void cisco_eeprom_dump(struct cisco_eeprom *eeprom)
+{
+   printf("Dumping EEPROM contents:\n");
+   size_t i = 0;
+   m_uint8_t tmp;
+   do {
+     if (cisco_eeprom_get_byte(eeprom,i,&tmp) == -1) 
+            break;
+     printf(" 0x%2.2x",tmp);
+     i++;
+     if (i%16 == 0) printf("\n") ;
+   } while(1);
+   printf("\n");
+}
+
 /* Dump a Cisco EEPROM with format version 4 */
 void cisco_eeprom_v4_dump(struct cisco_eeprom *eeprom)
 {

@@ -90,6 +90,8 @@ struct c2600_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -125,6 +127,12 @@ int c2600_mainboard_set_type(c2600_t *router,char *mainboard_type);
 
 /* Set chassis MAC address */
 int c2600_chassis_set_mac_addr(c2600_t *router,char *mac_addr);
+
+/* Set the system id */
+int c2600_set_system_id(c2600_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c2600_refresh_systemid(c2600_t *router);
 
 /* Show C2600 hardware info */
 void c2600_show_hardware(c2600_t *router);

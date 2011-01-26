@@ -387,7 +387,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
 static int parse_std_cmd_line(int argc,char *argv[])
 {
    char *options_list = 
-      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:";
+      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:I:";
    vm_platform_t *platform;
    vm_instance_t *vm;
    int instance_id;

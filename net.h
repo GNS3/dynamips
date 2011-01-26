@@ -332,6 +332,9 @@ int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask);
 /* Parse a MAC address */
 int parse_mac_addr(n_eth_addr_t *addr,char *str);
 
+/* Parse a board id */
+int parse_board_id(m_uint8_t * buf,const char *id,int encode);
+
 /* Convert an Ethernet address into a string */
 char *n_eth_ntoa(char *buffer,n_eth_addr_t *addr,int format);
 

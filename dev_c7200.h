@@ -159,6 +159,7 @@ struct c7200_router {
    char *midplane_type;
    int midplane_version;
    n_eth_addr_t mac_addr;
+   char board_id[20];
 
    /* Associated VM instance */
    vm_instance_t *vm;
@@ -241,6 +242,12 @@ int dev_c7200_iofpga_init(c7200_t *router,m_uint64_t paddr,m_uint32_t len);
 
 /* Register the c7200 platform */
 int c7200_platform_register(void);
+
+/* Set the system id */
+int c7200_set_system_id(c7200_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c7200_refresh_systemid(c7200_t *router);
 
 /* Hypervisor C7200 initialization */
 extern int hypervisor_c7200_init(vm_platform_t *platform);

@@ -340,6 +340,25 @@ u_int c3745_net_irq_for_slot_port(u_int slot,u_int port)
    return(irq);
 }
 
+/* Set the system id or processor board id in the eeprom */
+int c3745_set_system_id(c3745_t *router,char *id)
+{
+  /* 11 characters is enough. Array is 20 long */
+  strncpy(router->board_id,id,13);
+  /* Make sure it is null terminated */
+  router->board_id[13] = 0x00;
+  c3745_refresh_systemid(router);
+  return 0;
+}
+int c3745_refresh_systemid(c3745_t *router)
+{
+  if (router->board_id[0] == 0x00) return(0);
+  m_uint8_t buf[11];
+  parse_board_id(buf,router->board_id,11);
+  cisco_eeprom_set_region(&router->sys_eeprom[2] ,72,buf,11);
+  return (0);
+}
+
 /* Set the base MAC address of the chassis */
 static int c3745_burn_mac_addr(c3745_t *router,n_eth_addr_t *addr)
 {
@@ -485,6 +504,7 @@ static void c3745_init_defaults(c3745_t *router)
    m->eth_addr_byte[3] = pid & 0xFF;
    m->eth_addr_byte[4] = 0x00;
    m->eth_addr_byte[5] = 0x00;
+   router->board_id[0] = 0x00;
 
    c3745_init_eeprom_groups(router);
    cisco_eeprom_copy(&router->sys_eeprom[0],&eeprom_c3745_motherboard);
@@ -875,6 +895,12 @@ static int c3745_cli_parse_options(vm_instance_t *vm,int option)
             printf("MAC address set to '%s'.\n",optarg);
          break;
 
+      /* Set the System ID */
+      case 'I':
+         if (!c3745_set_system_id(router,optarg))
+            printf("System ID set to '%s'.\n",optarg);
+         break;
+
       /* Unknown option */
       default:
          return(-1);
@@ -888,6 +914,7 @@ static void c3745_cli_show_options(vm_instance_t *vm)
 {
    printf("  --iomem-size <val> : IO memory (in percents, default: %u)\n"
           "  -p <nm_desc>       : Define a Network Module\n"
+          "  -I <serialno>      : Set Processor Board Serial Number\n"
           "  -s <nm_nio>        : Bind a Network IO interface to a "
           "Network Module\n",
           vm->nm_iomem_size);

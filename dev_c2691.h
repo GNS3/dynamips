@@ -88,6 +88,8 @@ struct c2691_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -123,6 +125,12 @@ u_int c2691_net_irq_for_slot_port(u_int slot,u_int port);
 
 /* Set chassis MAC address */
 int c2691_chassis_set_mac_addr(c2691_t *router,char *mac_addr);
+
+/* Set the system id */
+int c2691_set_system_id(c2691_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c2691_refresh_systemid(c2691_t *router);
 
 /* Show C2691 hardware info */
 void c2691_show_hardware(c2691_t *router);

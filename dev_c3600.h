@@ -96,6 +96,8 @@ struct c3600_router {
    /* Chassis MAC address */
    n_eth_addr_t mac_addr;
 
+   char board_id[20];
+
    /* Associated VM instance */
    vm_instance_t *vm;
 
@@ -132,6 +134,12 @@ void c3600_nm_show_drivers(void);
 
 /* Set chassis MAC address */
 int c3600_chassis_set_mac_addr(c3600_t *router,char *mac_addr);
+
+/* Set the system id */
+int c3600_set_system_id(c3600_t *router,char *id);
+
+/* Burn the system id into the appropriate eeprom if possible */
+int c3600_refresh_systemid(c3600_t *router);
 
 /* Set the chassis type */
 int c3600_chassis_set_type(c3600_t *router,char *chassis_type);
