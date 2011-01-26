@@ -330,19 +330,19 @@ static inline void mips64_cp0_tlb_callback(cpu_mips_t *cpu,tlb_entry_t *entry,
    if (entry->lo0 & MIPS_TLB_V_MASK) {
       paddr0 = (entry->lo0 & MIPS_TLB_PFN_MASK) << 6;
       
-      printf("TLB: vaddr=0x%8.8llx -> paddr0=0x%10.10llx (size=0x%8.8x), "
+      /*printf("TLB: vaddr=0x%8.8llx -> paddr0=0x%10.10llx (size=0x%8.8x), "
              "action=%s\n",
              vaddr,paddr0,psize,
-             (action == 0) ? "ADD" : "DELETE");
+             (action == 0) ? "ADD" : "DELETE");*/
    }
 
    if (entry->lo1 & MIPS_TLB_V_MASK) {
       paddr1 = (entry->lo1 & MIPS_TLB_PFN_MASK) << 6;
 
-      printf("TLB: vaddr=0x%8.8llx -> paddr1=0x%10.10llx (size=0x%8.8x), "
+      /*printf("TLB: vaddr=0x%8.8llx -> paddr1=0x%10.10llx (size=0x%8.8x), "
              "action=%s\n",
              vaddr,paddr1,psize,
-             (action == 0) ? "ADD" : "DELETE");
+             (action == 0) ? "ADD" : "DELETE");*/
    }
 }
 
