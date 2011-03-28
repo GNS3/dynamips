@@ -64,8 +64,9 @@ static void *__dev_access_fast(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
    return(dev->handler(cpu,dev,offset,op_size,op_type,data));
 }
 
-static void *dev_access_fast(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
-                    u_int op_size,u_int op_type,m_uint64_t *data)
+static forced_inline
+void *dev_access_fast(cpu_gen_t *cpu,u_int dev_id,m_uint32_t offset,
+		      u_int op_size,u_int op_type,m_uint64_t *data)
 {
   asm("sub $8, %rsp");
   void* ret = __dev_access_fast(cpu, dev_id, offset, op_size, op_type, data);
