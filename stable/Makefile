@@ -61,7 +61,7 @@ CFLAGS+= $(INCLUDE) -Wall -O3 -fomit-frame-pointer \
 	-DHAS_POSIX_MEMALIGN=$(HAS_POSIX_MEMALIGN)
 
 #PCAP_LIB=/usr/local/lib/libpcap.a
-PCAP_LIB=-lpcap
+PCAP_LIB?=-lpcap
 
 ifeq ($(shell uname), FreeBSD)
    PTHREAD_LIBS?=-pthread
@@ -69,7 +69,7 @@ ifeq ($(shell uname), FreeBSD)
    OSNAME=FreeBSD
    CFLAGS+=-I$(LOCALBASE)/include -I$(LOCALBASE)/include/libelf \
 	$(PTHREAD_CFLAGS) -D_FILE_OFFSET_BITS=64
-   LIBS=-L$(LOCALBASE)/lib -L. -ldl -lelf $(PTHREAD_LIBS) $(LDFLAGS)
+   LIBS=-L$(LOCALBASE)/lib -L. -lelf $(PTHREAD_LIBS) $(LDFLAGS)
 else
 ifeq ($(shell uname), Linux)
    PTHREAD_LIBS?=-lpthread
