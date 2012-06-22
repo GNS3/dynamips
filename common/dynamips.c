@@ -745,6 +745,7 @@ static int run_hypervisor(int argc,char *argv[])
 
                memcpy(hypervisor_ip_address,optarg,len);
                hypervisor_ip_address[len] = '\0';
+	       hypervisor_tcp_port = atoi(index + 1);
             }
             break;
 

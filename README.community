@@ -38,6 +38,7 @@ Patch by Christophe Fillot:
  - Bug fixes in socket handling (incorrect setsockopt() for non-RFC2553 systems)
 
 Patch by Gordon Russell:
+
  - New source code layout to allow stable and unstable to share code
    in common in a single distribution.
  - Able to set system id at runtime in cli mode using -I <systemid> or
