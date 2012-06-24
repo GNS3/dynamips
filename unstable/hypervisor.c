@@ -603,14 +603,17 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
    /* Start accepting connections */
    m_log("HYPERVISOR","Release %s/%s (tag %s)\n",
          sw_version,os_name,sw_version_tag);
-         
-   m_log("HYPERVISOR","Started on TCP port = %d.\n",tcp_port);
+
    if (ip_addr != NULL) {
        binding_addr = ip_addr;
+       m_log("HYPERVISOR","Started on IP = %s, TCP port = %d.\n", ip_addr, tcp_port);
        printf("Hypervisor TCP control server started (IP %s port %d).\n", ip_addr, tcp_port);
    }
-   else
+   else {
+       m_log("HYPERVISOR","Started on TCP port = %d.\n",tcp_port);
        printf("Hypervisor TCP control server started (port %d).\n",tcp_port);
+   }
+
    hypervisor_running = TRUE;
 
    while(hypervisor_running) {

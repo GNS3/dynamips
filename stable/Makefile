@@ -97,9 +97,9 @@ ifeq ($(shell uname -s), SunOS)
 else
 ifeq ($(shell uname -o), Cygwin)
    OSNAME=Windows
-   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf -I/usr/include/winpcap -DCYGWIN \
-	-D_FILE_OFFSET_BITS=64
-   LIBS=-L/usr/local/lib -L. -lelf -lpthread -luuid
+   CFLAGS+=-I/usr/local/include -I/usr/local/include/libelf -I/usr/include -I/usr/include/libelf \
+	-I/usr/include/winpcap -DCYGWIN -static -static-libgcc
+   LIBS=-L/usr/local/lib -L/usr/lib -L. -lintl -lelf -lpthread -luuid
    PCAP_LIB=-lpacket -lwpcap
 else
    CFLAGS+=-I/usr/include/libelf -D_FILE_OFFSET_BITS=64
