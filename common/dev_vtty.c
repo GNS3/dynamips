@@ -130,10 +130,10 @@ static void vtty_term_init(void)
 /* Wait for a TCP connection */
 static int vtty_tcp_conn_wait(vtty_t *vtty)
 {
-   struct sockaddr_in serv;
+   struct sockaddr_in6 serv;
    int one = 1;
 
-   if ((vtty->fd = socket(PF_INET,SOCK_STREAM,0)) < 0) {
+   if ((vtty->fd = socket(PF_INET6,SOCK_STREAM,0)) < 0) {
       perror("vtty_tcp_waitcon: socket");
       return(-1);
    }
@@ -157,9 +157,9 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
    }
 
    memset(&serv,0,sizeof(serv));
-   serv.sin_family = AF_INET;
-   serv.sin_addr.s_addr = htonl(INADDR_ANY);
-   serv.sin_port = htons(vtty->tcp_port);
+   serv.sin6_family = AF_INET6;
+   serv.sin6_addr = in6addr_any;
+   serv.sin6_port = htons(vtty->tcp_port);
 
    if (bind(vtty->fd,(struct sockaddr *)&serv,sizeof(serv)) < 0) {
       perror("vtty_tcp_waitcon: bind");

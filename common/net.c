@@ -418,7 +418,7 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
    char port_str[20],*addr;
    int nsock,error,i;
    int reuse = 1;
-   
+
    for(i=0;i<max_fd;i++)
       fd_array[i] = -1;
 
@@ -567,7 +567,7 @@ static int ip_socket_bind(struct addrinfo *addr)
    return(fd);
 }
 
-/* Listen on a TCP/UDP port - port is choosen in the specified rnaage */
+/* Listen on a TCP/UDP port - port is choosen in the specified range */
 int ip_listen_range(char *ip_addr,int port_start,int port_end,int *port,
                     int sock_type)
 {
@@ -655,7 +655,7 @@ static int ip_socket_bind(struct sockaddr_in *sin,int sock_type)
    return(fd);
 }
 
-/* Listen on a TCP/UDP port - port is choosen in the specified rnaage */
+/* Listen on a TCP/UDP port - port is choosen in the specified range */
 int ip_listen_range(char *ip_addr,int port_start,int port_end,int *port,
                     int sock_type)
 {

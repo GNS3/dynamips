@@ -28,7 +28,7 @@ HAS_POSIX_MEMALIGN?=1
 
 # Current dynamips release
 VERSION_TRAIN=0.2.8
-VERSION_SUB=-RC3
+VERSION_SUB=-RC4
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -81,7 +81,7 @@ ifeq ($(shell uname), Linux)
 else
 ifeq ($(shell uname -s), Darwin)
    OSNAME=Darwin
-   CFLAGS+=-I/usr/local/include -I/opt/local/include -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
+   CFLAGS+=-I/usr/local/include -I/opt/local/include/libelf -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
    LIBS=/opt/local/lib/libelf.a
 
 # To use for prod:
