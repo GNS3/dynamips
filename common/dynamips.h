@@ -59,6 +59,9 @@ extern const char *sw_version;
 /* Software version specific tag */
 extern const char *sw_version_tag;
 
+/* Global binding address */
+extern char *binding_addr;
+
 /* Command Line long options */
 #define OPT_DISK0_SIZE  0x100
 #define OPT_DISK1_SIZE  0x101

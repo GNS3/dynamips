@@ -22,11 +22,13 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <termios.h>
+#include <netdb.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
 
 #include <arpa/telnet.h>
+#include <arpa/inet.h>
 
 #include "utils.h"
 #include "cpu.h"
@@ -127,60 +129,138 @@ static void vtty_term_init(void)
    tcflush(STDIN_FILENO,TCIFLUSH);
 }
 
+#if HAS_RFC2553
 /* Wait for a TCP connection */
 static int vtty_tcp_conn_wait(vtty_t *vtty)
 {
-   struct sockaddr_in6 serv;
-   int one = 1;
+    struct addrinfo hints,*res,*res0;
+    char port_str[20],*addr;
+    int one = 1;
 
-   if ((vtty->fd = socket(PF_INET6,SOCK_STREAM,0)) < 0) {
-      perror("vtty_tcp_waitcon: socket");
-      return(-1);
-   }
+    memset(&hints,0,sizeof(hints));
+    hints.ai_family = PF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
 
-   if (setsockopt(vtty->fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
-      perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
-      goto error;
-   }
+    snprintf(port_str,sizeof(port_str),"%d",vtty->tcp_port);
+    addr = (binding_addr && strlen(binding_addr)) ? binding_addr : NULL;
+    
+    if (getaddrinfo(addr,port_str,&hints,&res0) != 0) {
+        perror("vtty_tcp_waitcon: getaddrinfo");
+        return(-1);
+    }
 
-   if (setsockopt(vtty->fd,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
-      perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
-      goto error;
-   }
+    for (res=res0;res;res=res->ai_next)
+    {
+        if ((res->ai_family != PF_INET) && (res->ai_family != PF_INET6))
+            continue;
+        
+        // No specific address to bind with. Then only listen with IPv6 (accepts IPv4 connections).
+        if ((addr == NULL) && (res->ai_family == PF_INET))
+            continue;
 
-   // Send telnet packets asap. Dont wait to fill packets up
-   if (setsockopt(vtty->fd,SOL_TCP,TCP_NODELAY,
-                  &one,sizeof(one)) < 0)
-   {
-      perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
-      goto error;
-   }
+        vtty->fd = socket(res->ai_family,res->ai_socktype,
+                          res->ai_protocol);
 
-   memset(&serv,0,sizeof(serv));
-   serv.sin6_family = AF_INET6;
-   serv.sin6_addr = in6addr_any;
-   serv.sin6_port = htons(vtty->tcp_port);
+        if (vtty->fd < 0)
+            continue;
 
-   if (bind(vtty->fd,(struct sockaddr *)&serv,sizeof(serv)) < 0) {
-      perror("vtty_tcp_waitcon: bind");
-      goto error;
-   }
+        if (setsockopt(vtty->fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
+            perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
+            goto error;
+        }
+        
+        if (setsockopt(vtty->fd,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
+            perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
+            goto error;
+        }
+        
+        // Send telnet packets asap. Dont wait to fill packets up
+        if (setsockopt(vtty->fd,SOL_TCP,TCP_NODELAY, &one,sizeof(one)) < 0) {
+            perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
+            goto error;
+        }
 
-   if (listen(vtty->fd,1) < 0) {
-      perror("vtty_tcp_waitcon: listen");
-      goto error;
-   }
+        if (bind(vtty->fd,res->ai_addr,res->ai_addrlen) < 0) {
+            perror("vtty_tcp_waitcon: bind");
+            goto error;
+        }
+        
+        if (listen(vtty->fd,1) < 0) {
+            perror("vtty_tcp_waitcon: listen");
+            goto error;
+        }
+    }
+    
+    freeaddrinfo(res0);
 
-   vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d (FD %d)\n",
-          vtty->name,vtty->tcp_port,vtty->fd);
-   
-   return(0);
+    vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d (FD %d)\n",
+           vtty->name,vtty->tcp_port,vtty->fd);
+
+    return(0);
 
  error:
-   close(vtty->fd);
-   vtty->fd = -1;
-   return(-1);
+    freeaddrinfo(res0);
+    close(vtty->fd);
+    vtty->fd = -1;
+    return(-1);
 }
+#else
+/* Wait for a TCP connection */
+static int vtty_tcp_conn_wait(vtty_t *vtty)
+{
+    struct sockaddr_in serv;
+    int one = 1;
+    
+    if ((vtty->fd = socket(PF_INET,SOCK_STREAM,0)) < 0) {
+        perror("vtty_tcp_waitcon: socket");
+        return(-1);
+    }
+    
+    if (setsockopt(vtty->fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
+        perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
+        goto error;
+    }
+    
+    if (setsockopt(vtty->fd,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
+        perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
+        goto error;
+    }
+    
+    // Send telnet packets asap. Dont wait to fill packets up
+    if (setsockopt(vtty->fd,SOL_TCP,TCP_NODELAY,
+                   &one,sizeof(one)) < 0)
+    {
+        perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
+        goto error;
+    }
+    
+    memset(&serv,0,sizeof(serv));
+    serv.sin_family = AF_INET;
+    serv.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv.sin_port = htons(vtty->tcp_port);
+    
+    if (bind(vtty->fd,(struct sockaddr *)&serv,sizeof(serv)) < 0) {
+        perror("vtty_tcp_waitcon: bind");
+        goto error;
+    }
+    
+    if (listen(vtty->fd,1) < 0) {
+        perror("vtty_tcp_waitcon: listen");
+        goto error;
+    }
+    
+    vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d (FD %d)\n",
+           vtty->name,vtty->tcp_port,vtty->fd);
+    
+    return(0);
+    
+error:
+    close(vtty->fd);
+    vtty->fd = -1;
+    return(-1);
+}
+#endif
 
 /* Accept a TCP connection */
 static int vtty_tcp_conn_accept(vtty_t *vtty)

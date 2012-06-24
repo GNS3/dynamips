@@ -75,7 +75,7 @@ const char *os_name = STRINGIFY(OSNAME);
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2011031200";
+const char *sw_version_tag = "2012062400";
 
 /* Hypervisor */
 int hypervisor_mode = 0;
@@ -91,6 +91,9 @@ volatile int vm_save_state = 0;
 
 /* Default platform */
 static char *default_platform = "7200";
+
+/* Binding address (NULL means any or 0.0.0.0) */
+char *binding_addr = NULL;
 
 /* Generic signal handler */
 void signal_gen_handler(int sig)
@@ -745,7 +748,7 @@ static int run_hypervisor(int argc,char *argv[])
 
                memcpy(hypervisor_ip_address,optarg,len);
                hypervisor_ip_address[len] = '\0';
-	       hypervisor_tcp_port = atoi(index + 1);
+               hypervisor_tcp_port = atoi(index + 1);
             }
             break;
 

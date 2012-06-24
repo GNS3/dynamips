@@ -605,7 +605,12 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
          sw_version,os_name,sw_version_tag);
          
    m_log("HYPERVISOR","Started on TCP port = %d.\n",tcp_port);
-   printf("Hypervisor TCP control server started (port %d).\n",tcp_port);
+   if (ip_addr != NULL) {
+       binding_addr = ip_addr;
+       printf("Hypervisor TCP control server started (IP %s port %d).\n", ip_addr, tcp_port);
+   }
+   else
+       printf("Hypervisor TCP control server started (port %d).\n",tcp_port);
    hypervisor_running = TRUE;
 
    while(hypervisor_running) {
