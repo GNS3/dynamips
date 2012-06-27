@@ -17,6 +17,9 @@
 /* 4 Kb should be enough for a keyboard buffer */
 #define VTTY_BUFFER_SIZE  4096
 
+/* Maximum listening socket number */
+#define VTTY_MAX_FD   10
+
 /* VTTY connection types */
 enum {
    VTTY_TYPE_NONE = 0,
@@ -62,7 +65,9 @@ struct virtual_tty {
    vm_instance_t *vm;
    char *name;
    int type;
-   int fd,tcp_port;
+   int fd_array[VTTY_MAX_FD];
+   int fd_count;
+   int tcp_port;
    int terminal_support;
    int input_state;
    int input_pending;

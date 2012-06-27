@@ -134,14 +134,18 @@ static void vtty_term_init(void)
 static int vtty_tcp_conn_wait(vtty_t *vtty)
 {
     struct addrinfo hints,*res,*res0;
-    char port_str[20],*addr;
+    char port_str[20],*addr,*proto;
+    int i, nsock;
     int one = 1;
-
+    
+    for(i=0;i<VTTY_MAX_FD;i++)
+        vtty->fd_array[i] = -1;
+    
     memset(&hints,0,sizeof(hints));
     hints.ai_family = PF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-
+    
     snprintf(port_str,sizeof(port_str),"%d",vtty->tcp_port);
     addr = (binding_addr && strlen(binding_addr)) ? binding_addr : NULL;
     
@@ -149,87 +153,75 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
         perror("vtty_tcp_waitcon: getaddrinfo");
         return(-1);
     }
-
-    for (res=res0;res;res=res->ai_next)
+    
+    nsock = 0;
+    for (res=res0;(res && (nsock < VTTY_MAX_FD));res=res->ai_next)
     {
         if ((res->ai_family != PF_INET) && (res->ai_family != PF_INET6))
             continue;
         
-        // No specific address to bind with. Then only listen with IPv6 (accepts IPv4 connections).
-        if ((addr == NULL) && (res->ai_family == PF_INET))
-            continue;
-
-        vtty->fd = socket(res->ai_family,res->ai_socktype,
-                          res->ai_protocol);
-
-        if (vtty->fd < 0)
-            continue;
-
-        if (setsockopt(vtty->fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
-            perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
-            goto error;
-        }
+        vtty->fd_array[nsock] = socket(res->ai_family,res->ai_socktype,
+                                       res->ai_protocol);
         
-        if (setsockopt(vtty->fd,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
+        if (vtty->fd_array[nsock] < 0)
+            continue;
+        
+        if (setsockopt(vtty->fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0)
+            perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
+        
+        if (setsockopt(vtty->fd_array[nsock],SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0)
             perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
-            goto error;
-        }
         
         // Send telnet packets asap. Dont wait to fill packets up
-        if (setsockopt(vtty->fd,SOL_TCP,TCP_NODELAY, &one,sizeof(one)) < 0) {
+        if (setsockopt(vtty->fd_array[nsock],SOL_TCP,TCP_NODELAY, &one,sizeof(one)) < 0)
             perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
-            goto error;
-        }
-
-        if (bind(vtty->fd,res->ai_addr,res->ai_addrlen) < 0) {
-            perror("vtty_tcp_waitcon: bind");
-            goto error;
+        
+        if ((bind(vtty->fd_array[nsock],res->ai_addr,res->ai_addrlen) < 0) ||
+            (listen(vtty->fd_array[nsock],1) < 0))
+        {
+            close(vtty->fd_array[nsock]);
+            vtty->fd_array[nsock] = -1;
+            continue;
         }
         
-        if (listen(vtty->fd,1) < 0) {
-            perror("vtty_tcp_waitcon: listen");
-            goto error;
-        }
+        proto = (res->ai_family == PF_INET6) ? "IPv6" : "IPv4";
+        vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d for protocol %s (FD %d)\n",
+               vtty->name,vtty->tcp_port,proto,vtty->fd_array[nsock]);
+        
+        nsock++;
     }
-    
+
     freeaddrinfo(res0);
-
-    vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d (FD %d)\n",
-           vtty->name,vtty->tcp_port,vtty->fd);
-
-    return(0);
-
- error:
-    freeaddrinfo(res0);
-    close(vtty->fd);
-    vtty->fd = -1;
-    return(-1);
+    return(nsock);
 }
 #else
 /* Wait for a TCP connection */
 static int vtty_tcp_conn_wait(vtty_t *vtty)
 {
     struct sockaddr_in serv;
+    int i;
     int one = 1;
     
-    if ((vtty->fd = socket(PF_INET,SOCK_STREAM,0)) < 0) {
+    for(i=0;i<VTTY_MAX_FD;i++)
+        vtty->fd_array[i] = -1;
+    
+    if ((vtty->fd_array[0] = socket(PF_INET,SOCK_STREAM,0)) < 0) {
         perror("vtty_tcp_waitcon: socket");
         return(-1);
     }
     
-    if (setsockopt(vtty->fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
+    if (setsockopt(vtty->fd_array[0],SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one)) < 0) {
         perror("vtty_tcp_waitcon: setsockopt(SO_REUSEADDR)");
         goto error;
     }
     
-    if (setsockopt(vtty->fd,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
+    if (setsockopt(vtty->fd_array[0],SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(one)) < 0) {
         perror("vtty_tcp_waitcon: setsockopt(SO_KEEPALIVE)");
         goto error;
     }
     
     // Send telnet packets asap. Dont wait to fill packets up
-    if (setsockopt(vtty->fd,SOL_TCP,TCP_NODELAY,
-                   &one,sizeof(one)) < 0)
+    if (setsockopt(vtty->fd_array[0],SOL_TCP,TCP_NODELAY,&one,sizeof(one)) < 0)
     {
         perror("vtty_tcp_waitcon: setsockopt(TCP_NODELAY)");
         goto error;
@@ -240,30 +232,30 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
     serv.sin_addr.s_addr = htonl(INADDR_ANY);
     serv.sin_port = htons(vtty->tcp_port);
     
-    if (bind(vtty->fd,(struct sockaddr *)&serv,sizeof(serv)) < 0) {
+    if (bind(vtty->fd_array[0],(struct sockaddr *)&serv,sizeof(serv)) < 0) {
         perror("vtty_tcp_waitcon: bind");
         goto error;
     }
     
-    if (listen(vtty->fd,1) < 0) {
+    if (listen(vtty->fd_array[0],1) < 0) {
         perror("vtty_tcp_waitcon: listen");
         goto error;
     }
     
     vm_log(vtty->vm,"VTTY","%s: waiting connection on tcp port %d (FD %d)\n",
-           vtty->name,vtty->tcp_port,vtty->fd);
+           vtty->name,vtty->tcp_port,vtty->fd_array[0]);
     
-    return(0);
+    return(1);
     
 error:
-    close(vtty->fd);
-    vtty->fd = -1;
+    close(vtty->fd_array[0]);
+    vtty->fd_array[0] = -1;
     return(-1);
 }
 #endif
 
 /* Accept a TCP connection */
-static int vtty_tcp_conn_accept(vtty_t *vtty)
+static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
 {
    int fd,*fd_slot;
    
@@ -272,7 +264,7 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
       return(-1);
    }
    
-   if ((fd = accept(vtty->fd,NULL,NULL)) < 0) {
+   if ((fd = accept(vtty->fd_array[nsock],NULL,NULL)) < 0) {
       vm_error(vtty->vm,"vtty_tcp_conn_accept: accept on port %d failed %s\n",
               vtty->tcp_port,strerror(errno));
       return(-1);
@@ -282,7 +274,7 @@ static int vtty_tcp_conn_accept(vtty_t *vtty)
    *fd_slot = fd;
 
    vm_log(vtty->vm,"VTTY","%s is now connected (accept_fd=%d,conn_fd=%d)\n",
-          vtty->name,vtty->fd,fd);
+          vtty->name,vtty->fd_array[nsock],fd);
 
    /* Adapt Telnet settings */
    if (vtty->terminal_support) {      
@@ -366,7 +358,7 @@ static int vtty_serial_setup(vtty_t *vtty, const vtty_serial_option_t *option)
    struct termios tio;
    int tio_baudrate;
 
-   if (tcgetattr(vtty->fd, &tio) != 0) { 
+   if (tcgetattr(vtty->fd_array[0], &tio) != 0) { 
       fprintf(stderr, "error: tcgetattr failed\n");
       return(-1);
    }
@@ -462,18 +454,18 @@ static int vtty_serial_setup(vtty_t *vtty, const vtty_serial_option_t *option)
 
 #if 0
    /* not neccessary unless O_NONBLOCK used */
-   if (fcntl(vtty->fd, F_SETFL, 0) != 0) {  /* enable blocking mode */
+   if (fcntl(vtty->fd_array[0], F_SETFL, 0) != 0) {  /* enable blocking mode */
       fprintf(stderr, "error: fnctl F_SETFL failed\n");
       return(-1);
    }
 #endif
   
-   if (tcflush(vtty->fd, TCIOFLUSH) != 0) {
+   if (tcflush(vtty->fd_array[0], TCIOFLUSH) != 0) {
       fprintf(stderr, "error: tcflush failed\n");
       return(-1);
    }
   
-   if (tcsetattr(vtty->fd, TCSANOW, &tio) != 0 ) {
+   if (tcsetattr(vtty->fd_array[0], TCSANOW, &tio) != 0 ) {
       fprintf(stderr, "error: tcsetattr failed\n");
       return(-1);
    }
@@ -486,46 +478,48 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
                     const vtty_serial_option_t *option)
 {
    vtty_t *vtty;
+   int i;
 
    if (!(vtty = malloc(sizeof(*vtty)))) {
       fprintf(stderr,"VTTY: unable to create new virtual tty.\n");
       return NULL;
    }
-
    memset(vtty,0,sizeof(*vtty));
    vtty->name = name;
    vtty->type = type;
    vtty->vm   = vm;
-   vtty->fd   = -1;
+   vtty->fd_count = 0;
    pthread_mutex_init(&vtty->lock,NULL);
    vtty->terminal_support = 1;
    vtty->input_state = VTTY_INPUT_TEXT;
    fd_pool_init(&vtty->fd_pool);
-
+   for(i=0;i<VTTY_MAX_FD;i++)
+       vtty->fd_array[i] = -1;
+    
    switch (vtty->type) {
       case VTTY_TYPE_NONE:
          break;
 
       case VTTY_TYPE_TERM:
          vtty_term_init();
-         vtty->fd = STDIN_FILENO;
+         vtty->fd_array[0] = STDIN_FILENO;
          break;
 
       case VTTY_TYPE_TCP:
          vtty->tcp_port = tcp_port;
-         vtty_tcp_conn_wait(vtty);
+         vtty->fd_count = vtty_tcp_conn_wait(vtty);
          break;
 
       case VTTY_TYPE_SERIAL:
-         vtty->fd = open(option->device, O_RDWR);
-         if (vtty->fd < 0) {
+         vtty->fd_array[0] = open(option->device, O_RDWR);
+         if (vtty->fd_array[0] < 0) {
             fprintf(stderr,"VTTY: open failed\n");
             free(vtty);
             return NULL;
          }
          if (vtty_serial_setup(vtty,option)) {
             fprintf(stderr,"VTTY: setup failed\n");
-            close(vtty->fd);
+            close(vtty->fd_array[0]);
             free(vtty);
             return NULL;
          }
@@ -553,6 +547,8 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
 /* Delete a virtual tty */
 void vtty_delete(vtty_t *vtty)
 {
+   int i;
+
    if (vtty != NULL) {
       if (vtty->pprev != NULL) {
          VTTY_LIST_LOCK();
@@ -562,13 +558,27 @@ void vtty_delete(vtty_t *vtty)
          VTTY_LIST_UNLOCK();
       }
 
-      /* We don't close FD 0 since it is stdin */
-      if (vtty->fd > 0) {
-         vm_log(vtty->vm,"VTTY","%s: closing FD %d\n",vtty->name,vtty->fd);
-         close(vtty->fd);
-      }
-      
-      fd_pool_free(&vtty->fd_pool);
+      switch(vtty->type) {
+           case VTTY_TYPE_TCP:
+               
+               for(i=0;i<vtty->fd_count;i++)
+                   if (vtty->fd_array[i] != -1) {
+                       vm_log(vtty->vm,"VTTY","%s: closing FD %d\n",vtty->name,vtty->fd_array[i]);
+                       close(vtty->fd_array[i]);
+                   }
+
+           fd_pool_free(&vtty->fd_pool);
+           vtty->fd_count = 0;
+           break;
+        
+           default:
+               
+               /* We don't close FD 0 since it is stdin */
+               if (vtty->fd_array[0] > 0) {
+                   vm_log(vtty->vm,"VTTY","%s: closing FD %d\n",vtty->name,vtty->fd_array[0]);
+                   close(vtty->fd_array[0]);
+               }
+       }
       free(vtty);
    }
 }
@@ -626,7 +636,7 @@ static int vtty_term_read(vtty_t *vtty)
 {
    u_char c;
 
-   if (read(vtty->fd,&c,1) == 1)
+   if (read(vtty->fd_array[0],&c,1) == 1)
       return(c);
 
    perror("read from vtty failed");
@@ -1073,7 +1083,7 @@ void vtty_put_char(vtty_t *vtty, char ch)
 
       case VTTY_TYPE_TERM:
       case VTTY_TYPE_SERIAL:
-         if (write(vtty->fd,&ch,1) != 1) {
+         if (write(vtty->fd_array[0],&ch,1) != 1) {
             vm_log(vtty->vm,"VTTY","%s: put char 0x%x failed (%s)\n",
                    vtty->name,(int)ch,strerror(errno));
          }
@@ -1106,8 +1116,8 @@ void vtty_flush(vtty_t *vtty)
    switch(vtty->type) {
       case VTTY_TYPE_TERM:
       case VTTY_TYPE_SERIAL:
-         if (vtty->fd != -1)
-            fsync(vtty->fd);
+         if (vtty->fd_array[0] != -1)
+            fsync(vtty->fd_array[0]);
          break;         
    }
 }
@@ -1125,6 +1135,7 @@ static void *vtty_thread_main(void *arg)
    struct timeval tv;
    int fd_max,fd_tcp,res;
    fd_set rfds;
+   int i;
 
    for(;;) {
       VTTY_LIST_LOCK();
@@ -1133,17 +1144,28 @@ static void *vtty_thread_main(void *arg)
       FD_ZERO(&rfds);
       fd_max = -1;
       for(vtty=vtty_list;vtty;vtty=vtty->next) {
-         if (vtty->fd == -1)
-            continue;
 
-         FD_SET(vtty->fd,&rfds);
-         fd_max = m_max(vtty->fd,fd_max);
-         
-         /* If we have a TCP VTTY, handle established connections */
-         if (vtty->type == VTTY_TYPE_TCP) {
-            fd_tcp = fd_pool_set_fds(&vtty->fd_pool,&rfds);
-            fd_max = m_max(fd_tcp,fd_max);
-         }
+          switch(vtty->type) {
+              case VTTY_TYPE_TCP:
+
+                  for(i=0;i<vtty->fd_count;i++)
+                      if (vtty->fd_array[i] != -1) {
+                          FD_SET(vtty->fd_array[i],&rfds);
+                          if (vtty->fd_array[i] > fd_max)
+                              fd_max = vtty->fd_array[i];
+                      }
+
+                  fd_tcp = fd_pool_set_fds(&vtty->fd_pool,&rfds);
+                  fd_max = m_max(fd_tcp,fd_max);
+                  break;
+
+              default:
+                  if (vtty->fd_array[0] != -1) {
+                      FD_SET(vtty->fd_array[0],&rfds);
+                      fd_max = m_max(vtty->fd_array[0],fd_max);
+                  }
+          }
+
       }
       VTTY_LIST_UNLOCK();
 
@@ -1162,23 +1184,30 @@ static void *vtty_thread_main(void *arg)
       /* Examine active FDs and call user handlers */
       VTTY_LIST_LOCK();
       for(vtty=vtty_list;vtty;vtty=vtty->next) {
-         if (vtty->fd == -1)
-            continue;
-         
+
          switch(vtty->type) {
             case VTTY_TYPE_TCP:
+
                /* check incoming connection */
-               if (FD_ISSET(vtty->fd,&rfds))
-                  vtty_tcp_conn_accept(vtty);
+               for(i=0;i<vtty->fd_count;i++) {
+                   
+                   if (vtty->fd_array[i] == -1)
+                       continue;
+                   
+                   if (!FD_ISSET(vtty->fd_array[i],&rfds))
+                       continue;
+                   
+                   vtty_tcp_conn_accept(vtty, i);
+               }
 
                /* check established connection */
                fd_pool_check_input(&vtty->fd_pool,&rfds,vtty_tcp_input,vtty);
                break;
       
-            /* Term, Serial */         
+            /* Term, Serial */
             default:
-               if (FD_ISSET(vtty->fd,&rfds)) {
-                  vtty_read_and_store(vtty,&vtty->fd);
+               if (vtty->fd_array[0] != -1 && FD_ISSET(vtty->fd_array[0],&rfds)) {
+                  vtty_read_and_store(vtty,&vtty->fd_array[0]);
                   vtty->input_pending = TRUE;
                }
          }
