@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "cpu.h"
 #include "vm.h"
@@ -56,7 +57,7 @@ static cpu_gen_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
       hypervisor_send_reply(conn,HSC_ERR_BAD_OBJ,1,"Bad CPU specified");
       return NULL;
    }
-   
+
    return cpu;
 }
 
@@ -74,7 +75,7 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
 
    vm->vtty_con_type = VTTY_TYPE_NONE;
    vm->vtty_aux_type = VTTY_TYPE_NONE;
-   
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' created",argv[0]);
    return(0);
@@ -118,7 +119,7 @@ static int cmd_start(hypervisor_conn_t *conn,int argc,char *argv[])
                             argv[0]);
       return(-1);
    }
-   
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' started",argv[0]);
    return(0);
@@ -139,7 +140,7 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
                             argv[0]);
       return(-1);
    }
-   
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' stopped",argv[0]);
    return(0);
@@ -333,7 +334,7 @@ static int cmd_set_idle_pc_online(hypervisor_conn_t *conn,
 
 /* Get the idle PC proposals */
 static int cmd_get_idle_pc_prop(hypervisor_conn_t *conn,int argc,char *argv[])
-{  
+{
    vm_instance_t *vm;
    cpu_gen_t *cpu;
    int i;
@@ -591,10 +592,10 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
 
    /* Extract the IOS configuration */
    if (((cfg_len = vm->platform->nvram_extract_config(vm,&cfg_buffer)) < 0) ||
-       (cfg_buffer == NULL)) 
+       (cfg_buffer == NULL))
       goto err_nvram_extract;
 
-   /* 
+   /*
     * Convert config to base64. base64 is about 1/3 larger than input,
     * let's be on the safe side with twice longer.
     */
@@ -678,6 +679,25 @@ static int cmd_show_cpu_info(hypervisor_conn_t *conn,int argc,char *argv[])
       cpu->reg_dump(cpu);
       cpu->mmu_dump(cpu);
    }
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
+/* Show CPU usage - experimental */
+static int cmd_show_cpu_usage(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   clock_t usage;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   usage = clock() / CLOCKS_PER_SEC;
+   if (usage == -1)
+      return(-1);
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%llu", (uint_least64_t) usage);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
@@ -772,7 +792,7 @@ static int cmd_slot_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
                                card->slot_id,card->subslot_id,card->dev_type);
       }
    }
-   
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -780,7 +800,7 @@ static int cmd_slot_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
 
 /* Show NIO bindings for the specified slot */
 static int cmd_slot_nio_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
-{     
+{
    struct cisco_nio_binding *nb;
    struct cisco_card *card,*sc;
    vm_instance_t *vm;
@@ -810,7 +830,7 @@ static int cmd_slot_nio_bindings(hypervisor_conn_t *conn,int argc,char *argv[])
          }
       }
    }
-   
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
@@ -1092,6 +1112,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "extract_config", 1, 1, cmd_extract_config, NULL },
    { "push_config", 2, 2, cmd_push_config, NULL },
    { "cpu_info", 2, 2, cmd_show_cpu_info, NULL },
+   { "cpu_usage", 2, 2, cmd_show_cpu_usage, NULL },
    { "suspend", 1, 1, cmd_suspend, NULL },
    { "resume", 1, 1, cmd_resume, NULL },
    { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
