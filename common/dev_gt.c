@@ -1383,6 +1383,9 @@ int dev_gt96100_mpsc_unset_nio(struct gt_data *d,u_int chan_id)
    if (chan_id >= GT_MPSC_CHANNELS)
       return(-1);
 
+   if (d == NULL)
+      return(0);
+
    channel = &d->mpsc[chan_id];
 
    if (channel->nio != NULL) {
