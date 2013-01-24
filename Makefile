@@ -30,7 +30,7 @@ export HAS_POSIX_MEMALIGN?=1
 
 # Current dynamips release
 export VERSION_TRAIN=0.2.8
-export VERSION_SUB=-RC4
+export VERSION_SUB=-RC5
 
 # Executable binary extension
 export DESTDIR?=/usr

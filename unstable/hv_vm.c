@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "cpu.h"
 #include "vm.h"
@@ -704,6 +705,25 @@ static int cmd_show_cpu_info(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Show CPU usage - experimental */
+static int cmd_show_cpu_usage(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   clock_t usage;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   usage = clock() / CLOCKS_PER_SEC;
+   if (usage == -1)
+      return(-1);
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%llu", (uint_least64_t) usage);
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   return(0);
+}
+
 /* Suspend a VM instance */
 static int cmd_suspend(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -1113,6 +1133,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "extract_config", 1, 1, cmd_extract_config, NULL },
    { "push_config", 2, 2, cmd_push_config, NULL },
    { "cpu_info", 2, 2, cmd_show_cpu_info, NULL },
+   { "cpu_usage", 2, 2, cmd_show_cpu_usage, NULL },
    { "suspend", 1, 1, cmd_suspend, NULL },
    { "resume", 1, 1, cmd_resume, NULL },
    { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
