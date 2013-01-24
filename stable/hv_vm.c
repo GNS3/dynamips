@@ -22,7 +22,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <time.h>
 
 #include "cpu.h"
 #include "vm.h"
@@ -43,6 +42,7 @@
 #endif
 #include "registry.h"
 #include "hypervisor.h"
+#include "get_cpu_time.h"
 
 /* Find the specified CPU */
 static cpu_gen_t *find_cpu(hypervisor_conn_t *conn,vm_instance_t *vm,
@@ -689,15 +689,15 @@ static int cmd_show_cpu_info(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_show_cpu_usage(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   clock_t usage;
+   double usage;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   usage = clock() / CLOCKS_PER_SEC;
+   usage = get_cpu_time();
    if (usage == -1)
       return(-1);
-   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%llu", (uint_least64_t) usage);
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%ul", (unsigned long)usage);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
