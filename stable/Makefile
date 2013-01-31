@@ -76,7 +76,7 @@ ifeq ($(shell uname), Linux)
 #   PCAP_LIB=-lpcap
    OSNAME=Linux
    CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. -ldl -luuid /usr/$(DYNAMIPS_LIB)/libelf.a $(PTHREAD_LIBS)
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid /usr/$(DYNAMIPS_LIB)/libelf.a $(PTHREAD_LIBS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
