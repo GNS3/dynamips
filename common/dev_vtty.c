@@ -1028,8 +1028,7 @@ static void vtty_read_and_store(vtty_t *vtty,int *fd_slot)
          /* parse ttype string: first char is sufficient */
          /* if client is xterm or vt, set the title bar */
          if ((c == 'x') || (c == 'X') || (c == 'v') || (c == 'V')) {
-            fd_printf(*fd_slot,0,"\033]0;Dynamips(%i): %s, %s\07", 
-                      vtty->vm->instance_id, vtty->vm->name, vtty->name);
+            fd_printf(*fd_slot,0,"\033]0;%s\07", vtty->vm->name);
          }
          vtty->input_state = VTTY_INPUT_TELNET_NEXT;
          return;

@@ -191,8 +191,10 @@ static void ethsw_iv_qinq(ethsw_table_t *t,ethsw_packet_t *sp,
        * on two ports (so with identical VLAN id on tunnel ports).
        */
       case ETHSW_PORT_TYPE_QINQ:
-         if (sp->input_port->vlan_id == op->vlan_id)
-            netio_send(op,pkt,sp->pkt_len);
+         if (sp->input_port->vlan_id == op->vlan_id) {
+            dot1q_pop_tag(pkt,sp);
+            netio_send(op,pkt,sp->pkt_len-4);
+         }
          break;
 
       default:
