@@ -53,8 +53,11 @@ struct ppc32_jit_patch_table {
    u_int cur_patch;
 };
 
+#define PPC32_JIT_TCB_FLAG_NO_FLUSH  0x2   /* No flushing */
+
 /* PPC32 translated code block */
 struct ppc32_jit_tcb {
+   u_int flags;
    m_uint32_t start_ia;
    u_char **jit_insn_ptr;
    m_uint64_t acc_count;

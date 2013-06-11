@@ -54,6 +54,7 @@ struct ppc32_jit_patch_table {
 };
 
 #define PPC32_JIT_TCB_FLAG_SMC  0x1   /* Self-modifying code */
+#define PPC32_JIT_TCB_FLAG_NO_FLUSH  0x2   /* No flushing */
 
 /* PPC32 translated code block */
 struct ppc32_jit_tcb {

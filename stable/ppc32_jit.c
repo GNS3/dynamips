@@ -136,6 +136,10 @@ u_int ppc32_jit_flush(cpu_ppc_t *cpu,u_int threshold)
    for(p=cpu->tcb_list;p;p=next) {
       next = p->next;
 
+      /* flushing not allowed */
+      if (p->flags & PPC32_JIT_TCB_FLAG_NO_FLUSH)
+         continue;
+
       if (p->acc_count <= threshold) {
          ia_hash = ppc32_jit_get_ia_hash(p->start_ia);
          ppc32_jit_tcb_free(cpu,p,TRUE);
@@ -1180,12 +1184,16 @@ int ppc32_jit_tcb_recompile(cpu_ppc_t *cpu,ppc32_jit_tcb_t *block)
    if (!(block->jit_buffer = exec_page_alloc(cpu)))
       return(-1);
 
+   /* Disable flushing to avoid dangling pointers */
+   block->flags |= PPC32_JIT_TCB_FLAG_NO_FLUSH;
+
    /* Recompile the page */
    if (ppc32_op_gen_page(cpu,block) == -1) {
       fprintf(stderr,"insn_page_compile: unable to recompile page.\n");
       return(-1);
    }
 
+   block->flags &= ~PPC32_JIT_TCB_FLAG_NO_FLUSH;
    block->target_undef_cnt = 0;
    return(0);
 }
