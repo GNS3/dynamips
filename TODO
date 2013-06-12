@@ -1,0 +1,26 @@
+
+- Correct branch delay slot handling with exceptions.
+- Complete/accurate console driver.
+- Memory write protection and proper TLB management.
+- TLB exceptions.
+- FPU operations.
+- add/addi: to implement with integer overflow exception support ?
+- Multicore CPU ?
+
++ TODO list on Web-site.
+
+
+object referencing
+==================
+* at this time, only at high-level, should be done at low-level ?
+* nio management for atmsw/frsw/bridge/...: really useful to record NIOs ?
+* nio bindings for instances: add_nio_binding / pa_set_nio / pa_unset_nio ...
+
+add_nio_binding is used before instance startup.
+
+===> add_nio_binding/remove_nio_binding: manage NIO bindings with object
+     reference.
+===> pa_set_nio/pa_unset_nio become pa_enable_nio/pa_disable_nio => without
+     NIO parameter (NIO must be defined with add_nio_binding)
+===> remove_nio_binding: check the NIO is not used anymore in instance ???
+===> Remark: a NIO can be used many times (example: shared eth media)

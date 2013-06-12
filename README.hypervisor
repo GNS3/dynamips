@@ -1,0 +1,359 @@
+Description of the hypervisor mode
+==================================
+
+The hypervisor mode of dynamips allows you to run simultaneously
+many virtual router instances, and to simulate ATM, Ethernet
+or Frame-Relay networks. 
+
+Running dynamips in hypervisor mode
+===================================
+
+dynamips -H [<ip_address>:]<tcp_port>
+
+Managing the hypervisor
+=======================
+
+You can connect directly to the TCP control port with telnet, or use
+dynagen/dynagui that will pass commands transparently. The second method
+is highly recommended.
+
+The command syntax is simple: <module> <function> [arguments...]
+For example: "c7200 start R1" starts virtual instance named "R1".
+
+The modules that are currently defined are given below:
+
+  * hypervisor : General hypervisor management
+  * vm         : General virtual machine (VM) management
+  * c7200      : Virtual instances of Cisco 7200
+  * c3600      : Virtual instances of Cisco 3600
+  * nio        : Network Input/Output (NIO) descriptors
+  * nio_bridge : NIO bridges (shared media)
+  * atmsw      : ATM switches
+  * frsw       : Frame-Relay switches
+  * ethsw      : Ethernet switches
+
+
+Hypervisor management module ("hypervisor")
+============================================
+
+* "hypervisor module_list" : Display the module list.
+
+* "hypervisor cmd_list <module>" : Display commands recognized by the
+  specified module.
+
+* "hypervisor close" : Close the current session.
+
+* "hypervisor stop"  : Destroy all objects and stop hypervisor.
+
+* "hypervisor reset" : Destroy all objects (used to get an empty 
+  configuration)
+
+* "hypervisor working_dir <directory>" : Set the directory to use to store
+  files.
+
+* "hypervisor save_config <filename>" : Save the configuration of all objects
+  into the specified file.
+
+
+Virtual Machine module ("vm")
+=============================
+
+* "vm list" : List all VM instances (c7200, c3600).
+
+* "vm set_debug_level <instance_name> <level>" : Set the debug level
+  (which is a number) for a VM. By default, no specific debug is enabled
+  (level = 0).
+
+* "vm set_ios <instance_name> <ios_file>" : Set the IOS image file to
+  use. There is no default.
+
+* "vm set_config <instance_name> <config_reg>" : Set the config register
+  value.
+
+* "vm set_ram <instance_name> <ram_size>" : Set the RAM size, specified
+  in Mbytes.
+
+* "vm set_nvram <instance_name> <nvram_size>" : Set the NVRAM size,
+  specified in Kbytes.
+
+* "vm set_ram_mmap <instance_name> <0|1>" : Enable/Disable use
+  of a mapped file to simulate router memory. By default, a mapped file
+  is used. This is a bit slower, but requires less memory.
+
+* "vm suspend <instance_name>" : Suspend execution of the instance.
+
+* "vm resume <instance_name>" : Resume execution of the instance.
+
+* "vm set_clock_divisor <instance_name> <clock_div>" : Set the clock
+  divisor value. The higher is the value, the faster is the clock in the
+  virtual machine. The default is 4, but it is often required to adjust it.
+
+* "vm set_idle_pc <instance_name> <pc_value>" : Set the idle Pointer
+  Counter (PC). You must determine it through the method explained in the
+  main README file.
+
+* "vm set_exec_area <instance_name> <area_size>" : Set the exec area
+  size. The exec area is a pool of host memory used to store pages
+  translated by the JIT (they contain the native code corresponding to MIPS 
+  code pages).
+
+* "vm set_disk0 <instance_name> <value>" : Set size of PCMCIA ATA disk0.
+
+* "vm set_disk1 <instance_name> <value>" : Set size of PCMCIA ATA disk1.
+
+* "vm set_conf_reg <instance_name> <value>" : Set the config register
+  value. The default is 0x2102. 
+
+* "vm set_con_tcp_port <instance_name> <tcp_port>" : Set the TCP port
+  to use for console. By default, no TCP port is chosen, meaning that you
+  cannot get access to the console.
+
+* "vm set_aux_tcp_port <instance_name> <tcp_port>" : Set the TCP port
+  to use for AUX port. By default, no TCP port is chosen, meaning that you
+  cannot get access to the AUX port.
+
+* "vm cpu_info <instance_name> <cpu_id>" : Show info about the CPU identified
+  by "cpu_id". The boot CPU (which is typically the only CPU) has ID 0.
+
+
+Virtual Cisco 7200 instances module ("c7200")
+==============================================
+
+* "c7200 list" : List all existing Cisco 7200 instances.
+
+* "c7200 create <instance_name> <instance_id>" : Create a new router 
+  instance. The ID must be unique and is used to name files on disk.
+
+* "c7200 delete <instance_name>" : Delete the specified instance.
+
+* "c7200 start <instance_name>" : Start the instance. 
+  At least the IOS image must be set.
+
+* "c7200 stop <instance_name>" : Stop the instance. The settings are kept.
+
+* "c7200 set_npe <instance_name> <npe_name>" : Set the NPE model.
+  For example: npe-100, npe-400, ... The default is "npe-200".
+
+* "c7200 set_midplane <instance_name> <midplane_name>" : Set the midplane
+  model, it can be either "std" or "vxr". The default is "vxr".
+
+* "c7200 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. By default, the address is automatically generated
+  with this pattern : ca<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c7200 add_pa_binding <instance_name> <slot> <pa_type>" : Add a
+  Port Adapter binding for the specified slot.
+  For example: "c7200 add_pa_binding R1 1 PA-A1" adds a PA-A1 card into
+  slot 1.
+
+* "c7200 remove_pa_binding <instance_name> <slot>" : Remove a Port Adapter
+  binding (if it exists) for the specified slot.
+
+* "c7200 pa_bindings <instance_name>" : Display all PA bindings for the
+  router instance.
+
+* "c7200 add_nio_binding <instance_name> <slot> <port> <nio_name>":
+  Add a NIO binding for the interface designated by "slot/port".
+  For example: "c7200 add_nio_binding R1 1 0 nio1" (with PA-A1 bound
+  to slot 1) binds the NIO called "nio1" to the interface ATM1/0.
+
+* "c7200 remove_nio_binding <instance_name> <slot> <port>":
+  Removes the NIO binding for the interface designated by "slot/port".
+
+* "c7200 pa_nio_bindings <instance_name> <slot>": Display NIO bindings
+  for all ports of the specified slot.
+
+* "c7200 pa_enable_nio <instance_name> <slot> <port>" : Enable NIO for
+  the interface "slot/port" (used when NIO has to be changed while the
+  virtual router is online).
+
+* "c7200 pa_disable_nio <instance_name> <slot> <port>" : Disable NIO for
+  the interface "slot/port" (used when NIO has to be changed while the
+  virtual router is online).
+
+* "c7200 pa_init_online <instance_name> <slot>" : Initialize a Port
+  Adapter while the router is online (this triggers an OIR event).
+
+* "c7200 pa_stop_online <instance_name> <slot>" : Stop a Port
+  Adapter while the router is online (this triggers an OIR event).
+
+* "c7200 show_hardware <instance_name>" : Display virtual hardware info 
+  about the instance.
+
+
+Virtual Cisco 3600 instances module ("c3600")
+==============================================
+
+* "c3600 list" : List all existing Cisco 3600 instances.
+
+* "c3600 create <instance_name> <instance_id>" : Create a new router 
+  instance. The ID must be unique and is used to name files on disk.
+
+* "c3600 delete <instance_name>" : Delete the specified instance.
+
+* "c3600 start <instance_name>" : Start the instance. 
+  At least the IOS image must be set.
+
+* "c3600 stop <instance_name>" : Stop the instance. The settings are kept.
+
+* "c3600 set_chassis <instance_name> <chassis_name>" : Set the chassis model.
+  Possible values: 3620, 3640, 3660. The default is "3640".
+
+* "c3600 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. By default, the address is automatically generated
+  with this pattern : cc<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c3600 add_nm_binding <instance_name> <slot> <pa_type>" : Add a
+  Network Module binding for the specified slot.
+  For example: "c3600 add_nm_binding R1 1 NM-1FE-TX" adds a NM-1FE-TX card 
+  into slot 1.
+
+* "c3600 remove_pa_binding <instance_name> <slot>" : Remove a Network Module
+  binding (if it exists) for the specified slot.
+
+* "c3600 nm_bindings <instance_name>" : Display all NM bindings for the
+  router instance.
+
+* "c3600 add_nio_binding <instance_name> <slot> <port> <nio_name>":
+  Add a NIO binding for the interface designated by "slot/port".
+  For example: "c3600 add_nio_binding R1 1 0 nio1" (with NM-1FE-TX bound
+  to slot 1) binds the NIO called "nio1" to the interface FastEthernet1/0.
+
+* "c3600 remove_nio_binding <instance_name> <slot> <port>":
+  Removes the NIO binding for the interface designated by "slot/port".
+
+* "c3600 nm_nio_bindings <instance_name> <slot>": Display NIO bindings
+  for all ports of the specified slot.
+
+* "c3600 nm_enable_nio <instance_name> <slot> <port>" : Enable NIO for
+  the interface "slot/port" (used when NIO has to be changed while the
+  virtual router is online).
+
+* "c3600 nm_disable_nio <instance_name> <slot> <port>" : Disable NIO for
+  the interface "slot/port" (used when NIO has to be changed while the
+  virtual router is online).
+
+* "c3600 show_hardware <instance_name>" : Display virtual hardware info 
+  about the instance.
+
+
+Network Input/Output (NIO) module ("nio")
+==========================================
+
+* "nio list" : List all exiting NIOs.
+
+* "nio create_udp <nio_name> <local_port> <remote_host> <remote_port>" :
+  Create an UDP NIO with the specified parameters.
+
+* "nio create_unix <nio_name> <local_file> <remote_file>" : 
+  Create an UNIX NIO with the specified parameters.
+
+* "nio create_vde <nio_name> <control_file> <local_file>" : 
+  Create a VDE NIO with the specified parameters. VDE stands for "Virtual
+  Distributed Ethernet" and is compatible with UML (User-Mode-Linux) switch.
+
+* "nio create_tap <nio_name> <tap_device>" : Create a TAP NIO. TAP devices
+  are supported only on Linux and FreeBSD and require root access.
+
+* "nio create_gen_eth <nio_name> <eth_device>" : Create a generic ethernet
+  NIO, using PCAP (0.9.4 and greater). It requires root access.
+
+* "nio create_linux_eth <nio_name> <eth_device>" : Create a Linux ethernet
+  NIO. It requires root access and is supported only on Linux platforms.
+
+* "nio delete <nio_name>" : Delete the specified NIO. The NIO can be deleted
+  only when it is not anymore in use by another object.
+
+* "nio set_debug <nio_name> <debug>" : Enable/Disable debugging for the
+  specified NIO. When debugging is enabled, received and emitted packets are
+  displayed at screen. It is mainly used to debug interface drivers.
+
+
+NIO bridge mdoule ("nio_bridge")
+=================================
+
+* "nio_bridge list" : List all NIO bridges.
+
+* "nio_bridge create <bridge_name>" : Create a NIO bridge. A NIO bridge
+  acts as a shared media (a kind of hub).
+
+* "nio_bridge delete <bridge_name>" : Delete a NIO bridge.
+
+* "nio_bridge add_nio <bridge_name> <nio_name>" : Add a NIO as new port
+  in a NIO bridge. The NIO must be created through the "nio" module.
+
+* "nio_bridge remove_nio <bridge_name> <nio_name>" : Remove the specified
+  NIO as member of the NIO bridge.
+
+
+Virtual Ethernet switch ("ethsw")
+==================================
+
+* "ethsw list" : List all Ethernet switches.
+
+* "ethsw create <switch_name>" : Create a new Ethernet switch.
+
+* "ethsw delete <switch_name>" : Delete the specified Ethernet switch.
+
+* "ethsw add_nio <switch_name> <nio_name>" : Add a NIO as new port in an
+  Ethernet switch. The NIO must be created through the "nio" module.
+
+* "ethsw remove_nio <switch_name> <nio_name>" : Remove the specified NIO
+  as member of the Ethernet switch.
+
+* "ethsw set_access_port <switch_name> <nio_name> <vlan_id>" : 
+  Set the specified port as an ACCESS port in VLAN <vlan_id>.
+
+* "ethsw set_dot1q_port <switch_name> <nio_name> <native_vlan>" :
+  Set the specified port as a 802.1Q trunk port, with native 
+  VLAN <native_vlan>.
+
+* "ethsw clear_mac_addr_table <switch_name>" : Clear the MAC address table.
+
+* "ethsw show_mac_addr_table <switch_name>" : Show the MAC address table
+  (output format: Ethernet address, VLAN, NIO)
+
+
+Virtual ATM switch ("atmsw")
+=============================
+
+* "atmsw list" : List all ATM switches.
+
+* "atmsw create <switch_name>" : Create a new ATM switch.
+
+* "atmsw delete <switch_name>" : Delete the specified ATM switch.
+
+* "atmsw create_vpc <switch_name> <input_nio> <input_vpi> 
+  <output_nio> <output_vpi>" : 
+  Create a new Virtual Path connection (unidirectional).
+
+* "atmsw delete_vpc <switch_name> <input_nio> <input_vpi> 
+  <output_nio> <output_vpi>" : 
+  Delete a Virtual Path connection (unidirectional).
+
+* "atmsw create_vcc <switch_name> <input_nio> <input_vpi> <input_vci>
+  <output_nio> <output_vpi> <output_vci>" : 
+  Create a new Virtual Channel connection (unidirectional).
+
+* "atmsw delete_vcc <switch_name> <input_nio> <input_vpi> <input_vci>
+  <output_nio> <output_vpi> <output_vci>" : 
+  Delete a Virtual Channel connection (unidirectional).
+
+
+Virtual Frame-Relay switch ("frsw")
+====================================
+
+* "frsw list" : List all Frame-Relay switches.
+
+* "frsw create <switch_name>" : Create a new Frame-Relay switch.
+
+* "frsw delete <switch_name>" : Delete the specified Frame-Relay switch.
+
+* "frsw create_vc <switch_name> <input_nio> <input_dlci> 
+  <output_nio> <output_dlci>" : 
+  Create a new Virtual Circuit connection (unidirectional).
+
+* "frsw delete_vc <switch_name> <input_nio> <input_dlci> 
+  <output_nio> <output_dlci>" : 
+  Delete a Virtual Circuit connection (unidirectional).
+
