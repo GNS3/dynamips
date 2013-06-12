@@ -1,6 +1,33 @@
-Help for Cisco router simulator (dynamips-0.2.8)
-================================================
-Authors of this document: Fabien Devaux, Christophe Fillot, MtvE
+Dynamips-community (fork of Dynamips) 
+=====================================
+Authors of this document: Fabien Devaux, Christophe Fillot, MtvE, Gordon Russell
+and Jeremy Grossmann.
+
+This an unofficial version of Dynamips provided without warranty, based on a
+development version and improved with patches wrote by various people from 
+the community.
+
+You can compile two different versions of dynamips with this code.
+Edit the Makefile to set the flags to suit your environment.
+One of the flags, DYNAMIPS_CODE, can be "stable" or "unstable".
+
+Unstable is the code which contains most of the development code, and is
+in particular suitable for use on a 64 bit Mac. Unfortunately this has
+proved to be unstable on other platforms.
+
+Stable contains the same code as Unstable, minus some mips64 bit optimisations
+and tcb code which seems to trigger instability on a number of platforms.
+You should probably use stable unless you have a very good reason.
+
+License: GNU GPLv2
+Current website: http://www.gns3.net/dynamips/
+
+Original websites:
+http://www.ipflow.utc.fr/index.php/Cisco_7200_Simulator
+http://www.ipflow.utc.fr/blog/
+
+Help for Cisco router simulator (Dynamips)
+==========================================
 
 Emulated hardware
 *****************
