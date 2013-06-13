@@ -5,18 +5,18 @@
 #   - Use "amd64" for a build on x86_64 (64-bits)
 #   - Use "ppc32" for a build on powerpc (32-bits)
 #   - Use "nojit" for unsupported architectures.
-export DYNAMIPS_ARCH?=amd64
+export DYNAMIPS_ARCH?=x86
 
 # Do you want to use lib (for 32 bit compiling) or lib64
-#export DYNAMIPS_LIB?=lib
-export DYNAMIPS_LIB?=lib64
+export DYNAMIPS_LIB?=lib
+#export DYNAMIPS_LIB?=lib64
 
 # For MAC x64 you can compile the "unstable" version, which should work
 # fine, or use stable if you prefer.
 # For all other targets you should really choose "stable" here.
 # Unstable has some optimizations in it, plus new TLA code.
 # However it does not seem stable for non-mac users
-export DYNAMIPS_CODE?=unstable
+export DYNAMIPS_CODE?=stable
 
 # Change this to 0 if your system doesn't support RFC2553 extensions
 export HAS_RFC2553?=1
