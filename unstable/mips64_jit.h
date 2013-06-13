@@ -10,6 +10,7 @@
 
 #include "utils.h"
 #include "sbox.h"
+#include "tcb.h"
 
 /* Size of hash for virtual address lookup */
 #define MIPS_JIT_VIRT_HASH_BITS   16
