@@ -568,10 +568,11 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
          /* Log file */
          case 'l':
-            if (!(log_file_name = strdup(optarg))) {
+            if (!(log_file_name = realloc(log_file_name, strlen(optarg)+1))) {
                fprintf(stderr,"Unable to set log file name.\n");
                goto exit_failure;
             }
+            strcpy(log_file_name, optarg);
             printf("Log file: writing to %s\n",log_file_name);
             break;
 
@@ -754,7 +755,7 @@ static int run_hypervisor(int argc,char *argv[])
                hypervisor_tcp_port = atoi(optarg);
             } else {
                len = index - optarg;
-               hypervisor_ip_address = malloc(len + 1);
+               hypervisor_ip_address = realloc(hypervisor_ip_address, len + 1);
 
                if (!hypervisor_ip_address) {
                   fprintf(stderr,"Unable to set hypervisor IP address!\n");
@@ -769,7 +770,7 @@ static int run_hypervisor(int argc,char *argv[])
 
          /* Log file */
          case 'l':
-            if (!(log_file_name = malloc(strlen(optarg)+1))) {
+            if (!(log_file_name = realloc(log_file_name, strlen(optarg)+1))) {
                fprintf(stderr,"Unable to set log file name!\n");
                exit(EXIT_FAILURE);
             }
@@ -864,6 +865,19 @@ static void register_default_platforms(void)
       platform_register[i]();
 }
 
+/* Destroy variables generated from the standard command line */
+static void destroy_cmd_line_vars(void)
+{
+   if (log_file_name) {
+      free(log_file_name);
+      log_file_name = NULL;
+   }
+   if (hypervisor_ip_address) {
+      free(hypervisor_ip_address);
+      hypervisor_ip_address = NULL;
+   }
+}
+
 int main(int argc,char *argv[])
 {
    vm_instance_t *vm;
@@ -910,6 +924,7 @@ int main(int argc,char *argv[])
    vtty_init();
    
    /* Parse standard command line */
+   atexit(destroy_cmd_line_vars);
    if (!run_hypervisor(argc,argv))
       parse_std_cmd_line(argc,argv);
 
