@@ -1209,7 +1209,7 @@ int ppc32_jit_tcb_recompile(cpu_ppc_t *cpu,ppc32_jit_tcb_t *tcb)
       return(-1);
 
    /* Disable flushing to avoid dangling pointers */
-   block->flags |= PPC32_JIT_TCB_FLAG_NO_FLUSH;
+   tcb->flags |= PPC32_JIT_TCB_FLAG_NO_FLUSH;
 
    /* Recompile the page */
    if (ppc32_op_gen_page(cpu,tcb) == -1) {
@@ -1217,7 +1217,7 @@ int ppc32_jit_tcb_recompile(cpu_ppc_t *cpu,ppc32_jit_tcb_t *tcb)
       return(-1);
    }
 
-   block->flags &= ~PPC32_JIT_TCB_FLAG_NO_FLUSH;
+   tcb->flags &= ~PPC32_JIT_TCB_FLAG_NO_FLUSH;
    tcb->target_undef_cnt = 0;
    return(0);
 }
