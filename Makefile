@@ -50,13 +50,13 @@ dynamips.unstable:
 
 install: dynamips.$(DYNAMIPS_CODE)
 	@echo "Installing"
-	install -d $(DESTDIR)/bin $(DESTDIR)/man/man1 $(DESTDIR)/man/man7 $(DESTDIR)/etc
+	install -d $(DESTDIR)/bin $(DESTDIR)/share/man/man1 $(DESTDIR)/share/man/man7
 	cp dynamips.$(DYNAMIPS_CODE) dynamips
 	install dynamips $(DYNAMIPS_CODE)/nvram_export   $(DESTDIR)/bin/
 	rm -f dynamips
-	install -m644 dynamips.1        $(DESTDIR)/man/man1
-	install -m644 nvram_export.1    $(DESTDIR)/man/man1
-	install -m644 hypervisor_mode.7 $(DESTDIR)/man/man7
+	install -m644 dynamips.1        $(DESTDIR)/share/man/man1
+	install -m644 nvram_export.1    $(DESTDIR)/share/man/man1
+	install -m644 hypervisor_mode.7 $(DESTDIR)/share/man/man7
 
 
 .PHONY: clean
