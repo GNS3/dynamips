@@ -275,6 +275,9 @@ mips64_microcode_dump.inc: rom2c$(BIN_EXT) mips64_microcode
 ppc32_microcode_dump.inc: rom2c$(BIN_EXT) ppc32_microcode
 	@./rom2c ppc32_microcode ppc32_microcode_dump.inc 0xfff00000
 
+# explicit dependencies needed for parallel jobs
+dev_rom.c: mips64_microcode_dump.inc ppc32_microcode_dump.inc
+
 asmdefs$(BIN_EXT): asmdefs.c mips64.h
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) -o $@ asmdefs.c

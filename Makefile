@@ -42,17 +42,17 @@ all: dynamips.$(DYNAMIPS_CODE)
 
 dynamips.stable:
 	$(MAKE) -C stable
-	mv stable/dynamips dynamips.$(DYNAMIPS_CODE)
+	mv stable/dynamips$(BIN_EXT) dynamips.stable$(BIN_EXT)
 
 dynamips.unstable:
 	$(MAKE) -C unstable
-	mv unstable/dynamips dynamips.$(DYNAMIPS_CODE)
+	mv unstable/dynamips$(BIN_EXT) dynamips.unstable$(BIN_EXT)
 
 install: dynamips.$(DYNAMIPS_CODE)
 	@echo "Installing"
 	install -d $(DESTDIR)/bin $(DESTDIR)/share/man/man1 $(DESTDIR)/share/man/man7
-	cp dynamips.$(DYNAMIPS_CODE) dynamips
-	install dynamips $(DYNAMIPS_CODE)/nvram_export   $(DESTDIR)/bin/
+	cp dynamips.$(DYNAMIPS_CODE)$(BIN_EXT) dynamips$(BIN_EXT)
+	install dynamips$(BIN_EXT) $(DYNAMIPS_CODE)/nvram_export$(BIN_EXT)   $(DESTDIR)/bin/
 	rm -f dynamips
 	install -m644 dynamips.1        $(DESTDIR)/share/man/man1
 	install -m644 nvram_export.1    $(DESTDIR)/share/man/man1
@@ -63,5 +63,5 @@ install: dynamips.$(DYNAMIPS_CODE)
 clean:
 	$(MAKE) -C stable clean
 	$(MAKE) -C unstable clean
-	$(RM) -f dynamips.stable dynamips.unstable
+	$(RM) -f dynamips$(BIN_EXT) dynamips.stable$(BIN_EXT) dynamips.unstable$(BIN_EXT)
 
