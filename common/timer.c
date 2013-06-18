@@ -22,6 +22,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include "utils.h"
 #include "mempool.h"
@@ -511,6 +512,7 @@ void timer_flush_queues(void)
       pthread_mutex_destroy(&queue->lock);
       free(queue);
    }
+   timer_queue_pool = NULL;
 
    TIMER_UNLOCK();
 }
@@ -535,10 +537,21 @@ int timer_pool_add_queues(int nr_queues)
    return(0);
 }
 
+/* Terminate timer sub-sytem */
+static void timer_terminate(void)
+{
+   timer_flush_queues();
+
+   assert(timer_id_hash);
+   hash_table_delete(timer_id_hash);
+   timer_id_hash = NULL;
+}
+
 /* Initialize timer sub-system */
 int timer_init(void)
 {
    /* Initialize hash table which maps ID to timer entries */
+   assert(!timer_id_hash);
    if (!(timer_id_hash = hash_u64_create(TIMER_HASH_SIZE))) {
       fprintf(stderr,"timer_init: unable to create hash table.");
       return(-1);
@@ -549,6 +562,8 @@ int timer_init(void)
       fprintf(stderr,
               "timer_init: unable to initialize at least one timer queue.");
    }
+
+   atexit(timer_terminate);
 
    return(0);
 }
