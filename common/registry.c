@@ -36,6 +36,17 @@ static registry_t *registry = NULL;
 #define REGISTRY_LOCK()    pthread_mutex_lock(&registry->lock)
 #define REGISTRY_UNLOCK()  pthread_mutex_unlock(&registry->lock)
 
+/* Terminate the registry */
+static void registry_terminate(void)
+{
+   mp_free(registry->ht_types);
+   mp_free(registry->ht_names);
+   mp_free_pool(&registry->mp);
+   pthread_mutex_destroy(&registry->lock);
+   free(registry);
+   registry = NULL;
+}
+
 /* Initialize registry */
 int registry_init(void)
 {
@@ -50,6 +61,7 @@ int registry_init(void)
    pthread_mutexattr_init(&attr);
    pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
    pthread_mutex_init(&registry->lock,&attr);
+   pthread_mutexattr_destroy(&attr);
 
    /* initialize registry memory pool */
    mp_create_fixed_pool(&registry->mp,"registry");
@@ -76,6 +88,8 @@ int registry_init(void)
       p = &registry->ht_types[i];
       p->htype_next = p->htype_prev = p;
    }
+
+   atexit(registry_terminate);
 
    return(0);
 }
