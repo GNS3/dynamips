@@ -396,7 +396,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
    char *options_list = 
       "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:I:";
    vm_platform_t *platform;
-   vm_instance_t *vm;
+   vm_instance_t *vm = NULL;
    int instance_id;
    int option;
    char *str;
@@ -420,11 +420,11 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
    /* Get the platform type */
    if (!(platform = cli_get_platform_type(argc,argv)))
-      exit(EXIT_FAILURE);
+      goto exit_failure;
 
    /* Create the default instance */
    if (!(vm = cli_create_instance("default",platform->name,instance_id)))
-      exit(EXIT_FAILURE);
+      goto exit_failure;
 
    opterr = 0;
    
@@ -550,7 +550,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
             if (!vm->clock_divisor) {
                fprintf(stderr,"Invalid Clock Divisor specified!\n");
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             }
 
             printf("Using a clock divisor of %d.\n",vm->clock_divisor);
@@ -570,7 +570,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
          case 'l':
             if (!(log_file_name = strdup(optarg))) {
                fprintf(stderr,"Unable to set log file name.\n");
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             }
             printf("Log file: writing to %s\n",log_file_name);
             break;
@@ -594,7 +594,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
             if (vtty_parse_serial_option(&vm->vtty_con_serial_option,optarg)) {
                fprintf(stderr,
                        "Invalid Console serial interface descriptor!\n");
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             }
             break;
 
@@ -609,7 +609,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
             vm->vtty_aux_type = VTTY_TYPE_SERIAL;
             if (vtty_parse_serial_option(&vm->vtty_aux_serial_option,optarg)) {
                fprintf(stderr,"Invalid AUX serial interface descriptor!\n");
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             }
             break;
 
@@ -626,38 +626,38 @@ static int parse_std_cmd_line(int argc,char *argv[])
          /* Virtual ATM switch */
          case 'a':
             if (atmsw_start(optarg) == -1)
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             break;
 
          /* Virtual ATM bridge */
          case 'M':
             if (atm_bridge_start(optarg) == -1)
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             break;
 
          /* Virtual Frame-Relay switch */
          case 'f':
             if (frsw_start(optarg) == -1)
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             break;
 
          /* Virtual Ethernet switch */
          case 'E':
             if (ethsw_start(optarg) == -1)
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             break;
 
          /* Virtual bridge */
          case 'b':
             if (netio_bridge_start(optarg) == -1)
-               exit(EXIT_FAILURE);
+               goto exit_failure;
             break;
 
 #ifdef GEN_ETH
          /* Ethernet device list */
          case 'e':
             gen_eth_show_dev_list();
-            exit(EXIT_SUCCESS);           
+            goto exit_success;
 #endif            
 
          /* Load plugin (already handled) */
@@ -667,7 +667,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
          /* Oops ! */
          case '?':
             show_usage(vm,argc,argv);
-            exit(EXIT_FAILURE);
+            goto exit_failure;
 
          /* Parse options specific to the platform */
          default:
@@ -676,7 +676,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
                /* Wont be pretty for a long option, but it will at least help */
                if (vm->platform->cli_parse_options(vm,option) == -1) {
                  printf("Flag not recognised: -%c\n",(char)option);
-                 exit(EXIT_FAILURE);
+                 goto exit_failure;
                }
       }
    }
@@ -690,11 +690,26 @@ static int parse_std_cmd_line(int argc,char *argv[])
       /* IOS missing */
       fprintf(stderr,"Please specify an IOS image filename\n");
       show_usage(vm,argc,argv);
-      exit(EXIT_FAILURE);
+      goto exit_failure;
    }
 
    vm_release(vm);
    return(0);
+
+exit_success:
+   if (vm) {
+      vm_release(vm);
+      vm_delete_instance("default");
+   }
+   exit(EXIT_SUCCESS);
+   return(-1);
+exit_failure:
+   if (vm) {
+      vm_release(vm);
+      vm_delete_instance("default");
+   }
+   exit(EXIT_FAILURE);
+   return(-1);
 }
 
 /* 
