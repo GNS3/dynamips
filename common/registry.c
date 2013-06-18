@@ -160,6 +160,11 @@ int registry_add(char *name,int object_type,void *data)
    entry->ref_count = 1;   /* consider object is referenced by the caller */
    registry_insert_entry(entry);
 
+#if DEBUG_REGISTRY
+   printf("Registry: object %s: ref_count = %d after add.\n",
+          entry->name, entry->ref_count);
+#endif
+
    REGISTRY_UNLOCK();
    return(0);
 }
@@ -180,6 +185,10 @@ int registry_delete(char *name,int object_type)
 
    /* if the entry is referenced, just decrement ref counter */
    if (--entry->ref_count > 0) {
+#if DEBUG_REGISTRY
+      printf("Registry: object %s: ref_count = %d after delete.\n",
+             entry->name, entry->ref_count);
+#endif
       REGISTRY_UNLOCK();
       return(0);
    }
@@ -201,6 +210,10 @@ void *registry_find(char *name,int object_type)
 
    if ((entry = registry_find_entry(name,object_type))) {
       entry->ref_count++;
+#if DEBUG_REGISTRY
+      printf("Registry: object %s: ref_count = %d after find.\n",
+             entry->name, entry->ref_count);
+#endif
       data = entry->data;
    } else
       data = NULL;
