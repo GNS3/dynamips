@@ -1038,6 +1038,18 @@ vm_platform_t *vm_platform_find_cli_name(char *name)
    return NULL;
 }
 
+/* Destroy vm_platforms */
+static void destroy_vm_platforms(void)
+{
+   struct vm_platform_list *p, *next;
+
+   for (p = vm_platforms; p ;p = next) {
+      next = p->next;
+      free(p);
+   }
+   vm_platforms = NULL;
+}
+
 /* Register a platform */
 int vm_platform_register(vm_platform_t *platform)
 {
@@ -1052,6 +1064,10 @@ int vm_platform_register(vm_platform_t *platform)
    if (!(p = malloc(sizeof(*p)))) {
       fprintf(stderr,"vm_platform_register: unable to record platform.\n");
       return(-1);
+   }
+
+   if (!vm_platforms) {
+      atexit(destroy_vm_platforms);
    }
 
    p->platform = platform;
