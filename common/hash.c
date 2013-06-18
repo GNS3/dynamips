@@ -124,10 +124,21 @@ hash_table_t *hash_table_create(hash_fcompute hash_func,hash_fcompare key_cmp,
 /* Delete an existing Hash Table */
 void hash_table_delete(hash_table_t *ht)
 {
-   if (ht) {
-      /* todo */
-      free(ht);
+   hash_node_t *node, *node_next;
+   u_int hash_val;
+
+   if (!ht)
+      return;
+
+   for (hash_val = 0; hash_val < ht->size; hash_val++) {
+      for (node = ht->nodes[hash_val]; node; node = node_next) {
+         node_next = node->next;
+         hash_node_free(node);
+      }
+      ht->nodes[hash_val] = NULL;
    }
+   free(ht->nodes);
+   free(ht);
 }
 
 /* Insert a new (key,value). If key already exists in table, replace value */
