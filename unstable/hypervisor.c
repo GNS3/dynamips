@@ -290,6 +290,18 @@ void *hypervisor_find_vm(hypervisor_conn_t *conn,char *name)
    return vm;
 }
 
+/* Destroy module_list */
+static void destroy_module_list(void)
+{
+   hypervisor_module_t *m, *next;
+
+   for (m = module_list; m; m = next) {
+      next = m->next;
+      free(m);
+   }
+   module_list = NULL;
+}
+
 /* Register a module */
 hypervisor_module_t *hypervisor_register_module(char *name,void *opt)
 {
@@ -304,6 +316,9 @@ hypervisor_module_t *hypervisor_register_module(char *name,void *opt)
       fprintf(stderr,"Hypervisor: unable to register new module.\n");
       return NULL;
    }
+
+   if (!module_list)
+      atexit(destroy_module_list);
 
    m->name = name;
    m->opt  = opt;
