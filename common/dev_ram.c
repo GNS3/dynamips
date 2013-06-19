@@ -35,8 +35,9 @@ void dev_ram_shutdown(vm_instance_t *vm,struct ram_data *d)
       free(d->dev);
 
       /* Remove filename used to virtualize RAM */
-      if (d->filename && d->delete_file) {
-         unlink(d->filename);
+      if (d->filename) {
+         if (d->delete_file)
+            unlink(d->filename);
          free(d->filename);
       }
 
