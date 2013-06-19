@@ -182,6 +182,40 @@ static rfc_array_t *rfc_alloc_array(int nr_elements)
    return(array);
 }
 
+/* Free value of cbm_hash */
+static void rfc_free_array_cbm_hash_value(void *key,void *value,void *opt_arg)
+{
+   free(value); // rfc_eqclass_t *
+}
+
+/* Free an array for Recursive Flow Classification */
+static void rfc_free_array(rfc_array_t *array)
+{
+   int i;
+
+   assert(array);
+
+   /* Free hash table for Class Bitmaps */
+   if (array->cbm_hash) {
+      hash_table_foreach(array->cbm_hash, rfc_free_array_cbm_hash_value, array);
+      hash_table_delete(array->cbm_hash);
+      array->cbm_hash = NULL;
+   }
+
+   /* Free table for converting ID to CBM */
+   if (array->id2cbm) {
+      for (i = 0; i < array->nr_elements; i++) {
+         if (array->id2cbm[i])
+            free(array->id2cbm[i]);
+      }
+      free(array->id2cbm);
+      array->id2cbm = NULL;
+   }
+
+   /* Free array */
+   free(array);
+}
+
 /* Check an instruction with specified parameter */
 static void rfc_check_insn(insn_lookup_t *ilt,cbm_array_t *cbm,
                            ilt_check_cbk_t pcheck,int value)
@@ -514,4 +548,21 @@ insn_lookup_t *ilt_create(char *table_name,
    /* Store the result on disk for future exec */
    ilt_cache_store(table_name,ilt);
    return(ilt);
+}
+
+/* Destroy an instruction lookup table */
+void ilt_destroy(insn_lookup_t *ilt)
+{
+   int i;
+
+   assert(ilt);
+
+   /* Free instruction opcodes */
+   for (i = 0; i < RFC_ARRAY_NUMBER; i++) {
+      if (ilt->rfct[i])
+         rfc_free_array(ilt->rfct[i]);
+   }
+
+   /* Free instruction lookup table */
+   free(ilt);
 }

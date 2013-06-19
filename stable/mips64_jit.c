@@ -75,6 +75,14 @@ static int mips64_jit_chk_hi(struct mips64_insn_tag *tag,int value)
    return((value & (tag->mask >> 16)) == (tag->value >> 16));
 }
 
+/* Destroy instruction lookup table */
+static void destroy_ilt(void)
+{
+   assert(ilt);
+   ilt_destroy(ilt);
+   ilt = NULL;
+}
+
 /* Initialize instruction lookup table */
 void mips64_jit_create_ilt(void)
 {
@@ -87,6 +95,8 @@ void mips64_jit_create_ilt(void)
                     (ilt_get_insn_cbk_t)mips64_jit_get_insn,
                     (ilt_check_cbk_t)mips64_jit_chk_lo,
                     (ilt_check_cbk_t)mips64_jit_chk_hi);
+
+   atexit(destroy_ilt);
 }
 
 /* Initialize the JIT structure */

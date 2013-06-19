@@ -100,4 +100,7 @@ insn_lookup_t *ilt_create(char *table_name,
                           int nr_insn,ilt_get_insn_cbk_t get_insn,
                           ilt_check_cbk_t chk_lo,ilt_check_cbk_t chk_hi);
 
+/* Destroy an instruction lookup table */
+void ilt_destroy(insn_lookup_t *ilt);
+
 #endif
