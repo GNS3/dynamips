@@ -81,7 +81,7 @@ will give better results). When the image is fully booted, wait for the
 "Press RETURN to get started!" message prompt, but do not press Enter key.
 Wait about 5 seconds, then press "Ctrl-] + i". Some statistics will be
 gathered during 10 seconds. At the end, the emulator will display a list of
-possible values to pass to the "--idle-pc" option. You may have to try some
+possible values to pass to the "\-\-idle-pc" option. You may have to try some
 values before finding the good one. To check if the idle PC value is good,
 just boot the Cisco IOS image, and check your CPU load when the console
 prompt is available. If it is low, you have found a good value, keep it
@@ -266,7 +266,7 @@ WinPcap. Works on Windows and Unix systems.
 .br
 <dev_name> is the name of the Ethernet device (ex. "eth0")
 .br
-The device list can be found using the "-e" option.
+The device list can be found using the "\-e" option.
 .IP linux_eth:<dev_name>
 Use a real ethernet device for communication (Linux specific).
 <dev_name> is the name of the Ethernet device (ex. "eth0")
@@ -364,7 +364,7 @@ The virtual bridge is used to emulate a shared network between emulator
 instances.
 Any emulator instance can act as a virtual bridge.
 .br
-The configuration file (specified by the "-b" option) contains a list of
+The configuration file (specified by the "\-b" option) contains a list of
 NetIO descriptors, with the following syntax:
 .TP
 .B interface_name:netio_type[:netio_parameters]
@@ -381,7 +381,7 @@ I2:udp:10004:127.0.0.1:10005
 .PP
 The "I0" instance would be launched with the following parameters:
 .TP
-dynamips ios.bin -p 1:PA-FE-TX -s 1:0:udp:10001:127.0.0.1:10000
+dynamips ios.bin \-p 1:PA-FE-TX \-s 1:0:udp:10001:127.0.0.1:10000
 
 .SH Virtual Ethernet switch
 The virtual ethernet switch is used to emulate an Ethernet network between
@@ -390,7 +390,7 @@ ISL will be available in a future release.
 .br
 Any emulator instance can act as a virtual ethernet switch.
 .br
-The configuration file (specified by the "-E" option) contains a list of
+The configuration file (specified by the "\-E" option) contains a list of
 NetIO descriptors (representing interfaces) and a list of interface properties
 (access/trunk port, VLAN info...)
 .br
@@ -426,7 +426,7 @@ support for ILMI/QSAAL/\|.\|.\|. or other specific ATM protocols.
 .br
 Any emulator instance can act as a virtual ATM switch.
 .TP
-Example of configuration file (specified by the "-a" option):
+Example of configuration file (specified by the "\-a" option):
 .nf
 # Virtual Interface List
 IF:A0:udp:10001:127.0.0.1:10000
@@ -504,7 +504,7 @@ There is only a basic implementation of the LMI protocol (ANSI Annex D), which
 is probably not conforming but works with Cisco IOS. Fortunately, Cisco IOS
 is able to detect automatically the LMI protocol.
 .TP
-Example of configuration file (specified by the "-f" option):
+Example of configuration file (specified by the "\-f" option):
 .nf
 # Virtual Interface List
 IF:S0:udp:10001:127.0.0.1:10000
