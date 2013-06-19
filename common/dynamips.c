@@ -499,12 +499,14 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
          /* Use a ghost file to simulate RAM */           
          case 'G':
+            free(vm->ghost_ram_filename);
             vm->ghost_ram_filename = strdup(optarg);
             vm->ghost_status = VM_GHOST_RAM_USE;
             break;
 
          /* Generate a ghost RAM image */
          case 'g':
+            free(vm->ghost_ram_filename);
             vm->ghost_ram_filename = strdup(optarg);
             vm->ghost_status = VM_GHOST_RAM_GENERATE;
             break;

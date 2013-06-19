@@ -501,6 +501,7 @@ static int cmd_set_ghost_file(hypervisor_conn_t *conn,int argc,char *argv[])
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
+   free(vm->ghost_ram_filename);
    vm->ghost_ram_filename = strdup(argv[1]);
 
    vm_release(vm);
