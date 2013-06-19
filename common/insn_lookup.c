@@ -376,6 +376,7 @@ static int ilt_dump(char *table_name,insn_lookup_t *ilt)
    }
    
    fclose(fd);
+   free(filename);
    return(0);
 }
 
@@ -495,6 +496,7 @@ static insn_lookup_t *ilt_cache_load(char *table_name)
 
    ilt = ilt_load_table(fd);
    fclose(fd);
+   free(filename);
    return ilt;
 }
 
