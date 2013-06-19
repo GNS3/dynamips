@@ -210,6 +210,7 @@ void cpu_delete(cpu_gen_t *cpu)
             break;
       }
 
+      free(cpu->jit_op_array);
       free(cpu);
    }
 }
