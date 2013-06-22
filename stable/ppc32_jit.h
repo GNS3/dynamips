@@ -266,13 +266,11 @@ static inline void ppc32_op_emit_require_flags(cpu_ppc_t *cpu,int field)
 static inline void ppc32_op_emit_branch_target(cpu_ppc_t *cpu,
                                                ppc32_jit_tcb_t *b,
                                                m_uint32_t ia)
-{   
-   cpu_gen_t *c = cpu->gen;
-   jit_op_t *op = jit_op_get(c,0,JIT_OP_BRANCH_TARGET);
-   u_int pos;
-
+{
    if ((ia & PPC32_MIN_PAGE_MASK) == b->start_ia) {
-      pos = (ia & PPC32_MIN_PAGE_IMASK) >> 2;
+      cpu_gen_t *c = cpu->gen;
+      jit_op_t *op = jit_op_get(c,0,JIT_OP_BRANCH_TARGET);
+      u_int pos = (ia & PPC32_MIN_PAGE_IMASK) >> 2;
 
       /* Insert in head */
       op->next = c->jit_op_array[pos];
