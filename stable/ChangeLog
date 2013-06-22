@@ -1,0 +1,2492 @@
+/*
+ * Cisco 7200/3600/2691 simulation platform.
+ */
+
+15-Aug-2005, the project is starting.
+	
+18-Aug-2005
+-----------
+  - Added support for: sll, addu/subu.
+  - Fixed bugs with b... branch instructions (bad computation of new pc).
+  - Added patch recording for blocks.
+  - A sequence of MIPS instructions (without memory access instructions)
+    from IOS was successfully run ! (need to check correctness).
+
+22-Aug-2005
+-----------
+  - Implemented a basic memory subsystem with an mmaped file.
+  - Added memory access instructions (lb,lbu,lh,lhu,lw,lwu,ld,sb,sh,sw,sd).
+  - Added a cross-compiled test program.
+	
+23-Aug-2005
+-----------
+  - Fixed slti, sltiu, slt instructions.
+  - Fixed memory endianness.
+  - Fixed host memory addressing (bad haddr computation).
+
+24-Aug-2005
+-----------
+  - Added a generic memory address lookup function.
+  - Added a minimal ELF loader.
+
+28-Aug-2005
+-----------
+  - ELF loader now loads files page per page.
+  - Added device support (with RAM support).
+  - Added MTS32 support for mapping of 4 Kb pages.
+  - Added MTS32 support for device mapping in kernel mode and generic
+    virtual to physical mapping (preparation for TLB).
+  - Added a dummy console driver.
+  - Added mult,multu,div,divu instructions.
+	
+29-Aug-2005
+-----------
+  - Added a Red-Black trees module.
+  - Block locator uses RB tree module.
+  - It is now possible to run a program with multiple functions!
+  - ELF loader now support multiple program headers and entry point is
+    now used.
+  - Fixed x86 buffer adjustment.
+  - Modified console to be at the same address than c7200 DUART (to test
+    microcode).
+  - Memory access functions now update PC.
+  - Added sra, srl, sllv, srlv, srav instructions.
+
+30-Aug-2005
+-----------
+  - Added dsrl32, dsll32, dsra, dsrav, dsra32 instructions.
+  - Added bgtz, blez, bgez instructions.
+  - Fixed sltu instruction.
+  - ELF Entry point is now sign-extended.
+  - Added blezl, bgtzl instructions.
+  - Fixed the MIPS scanner to use unsigned 64-bits integers for addresses.
+  - Added unknown opcode management (basic, it just print the unhandled
+    opcode value and continues).
+  - Added cache instruction.
+  - Added bltzal, bltzall, bgezal, bgezall instructions.
+
+31-Aug-2005
+-----------
+  - Added System coprocessor (CP0) definitions.
+  - Added tlbr instruction.
+  - Added basic tlbwi instruction (doesn't change the MTS mappings now).
+  - Added dmfc0, dmtc0, mfc0, mtc0 instructions.
+  - Added TLB dump functions.
+  - Added dummy pref/prefi instructions.	
+  - Added basic exception trigger.
+  - Added syscall, break instructions.
+	
+01-Sep-2005
+-----------
+  - Fixed exception trigger.
+  - Added dmfc1, dmtc1, mfc1, mtc1, sdc1 instructions.
+  - Fixed the break instruction.
+  - Modified the memory handling to be more friendly with instructions
+    like sdc1 and for more safety in case of badly written device drivers.
+  - Added ldc1 instruction.
+
+02-Sep-2005
+-----------
+  - Fixed sltiu/sltu instructions that were doing signed comparisons
+    instead of unsigned comparisons (mis-use of jit).
+  - Added lwr/lwl, swr/swl, ldl/ldr, sdr/sdl, ll/sc instructions 
+    (not tested).	
+  - Added PCI bus management.
+  - Added GT64010 (PCI controller) device.
+  - Added DEC 21050 (PCI bridge) device.
+  - Added NVRAM.
+
+03-Sep-2005
+-----------
+  - Beginning of work on IRQs.
+
+04-Sep-2005
+-----------
+  - Timer IRQ should be OK.
+  - Added C7200 bay management and Midplane FPGA.
+  - Fixed the JR instruction which was broken in a case like that:
+	lwu k1,0(k1)
+	jr k1
+	move k1,zero
+
+05-Sep-2005
+-----------
+  - Fixed jalr (as jr) instruction.
+  - Added RAM "aliasing".
+  - Added SRAM management.
+  - Fixed NVRAM size.
+  - Fixed ldr, swl/swr instructions.
+  - Added c7200 IOcard.
+  - Count register is now properly handled.
+  - Added basic functions to set/clear interrupts.
+  - Modified the console driver to trigger DUART interrupt.
+  - IOS now starts!
+	
+06-Sep-2005
+-----------
+  - Added "move" virtual instruction. It correspond to "addu" with rt=0.
+    Here it avoids an useless add.
+  - Added b/bal virtual instructions.
+  - Packed NVRAM.
+
+08-Sep-2005
+-----------
+  - Added Dallas DS1620 temperature sensors.
+  - Added voltage sensors.
+  - Power supplies are now faked.
+  - IOS Environmental Monitor doesn't try to shutdown the router anymore!
+  - Device list is now displayed at startup.
+	
+18-Sep-2005
+-----------
+  - Added Address Error Load/Save, TLB Load/Save exceptions.
+    TODO: Branch Delay Slot management.
+  - Modified the default value in config register in CP0 to set appropriate
+    cache sizes. Now it is possible to boot compressed images directly!
+  - Added the teq/teqi instructions.
+  - Hmm, seen some IOS images (k9?) that seem to use the FPU (CP1). This
+    does not prevent the image to boot, but some features will probably
+    be not functional.
+	
+19-Sep-2005
+-----------
+  - Tweaked the console driver to generate a dummy interrupt. It avoids
+    the console problems.
+  - Fixed the serial driver mueslix PCI vendor/device code.
+  - The midplane FPGA now returns voltages based on virtual PA EEPROM
+    presence. Up to 6 PA-8T were successfully emulated!
+
+20-Sep-2005
+-----------
+  - Included amd64-codegen.h with a (near empty) translator.
+  - Some code factorization.
+	
+21-Sep-2005
+-----------
+  - Added CPU state save/restore on disk.
+  - Sending SIGQUIT to the process dumps the MIPS64 VM state on disk.
+    (only CPU state is saved for now).
+    Device state is not saved, so this does not work with booted IOS images
+    for now (it works for an IOS image being self-decompressing, though).
+  - Some code cleanups.
+
+23-Sep-2005
+-----------
+  - Fixed "Dirty" bit in TLB entries.
+  - Extended the number of TLB entries from 48 to 64.
+  - Added tlbp instruction.
+  - Modified the nmc93c46 eeprom driver to allow more than 32 bytes reading.
+
+24-Sep-2005
+-----------
+  - Added a symbol table loader.
+
+26-Sep-2005
+-----------
+  - Added support for writing in PCI registers
+  - Added a RAW file loader.
+  - Added "add" instruction (without exception support).
+
+07-Oct-2005
+-----------
+  - Continued work on SMP support.
+	
+08-Oct-2005
+-----------
+  - Replaced memory operations with fastcalls instead of asmlinkage functions.
+  - Continued work on SMP support. Now it should be complete, except for
+    LL/SC instructions.
+
+10-Oct-2005
+-----------
+  - A lot of work on amd64 jit compiler.
+  - The memory management should be 64-bit compliant now.
+	
+17-Oct-2005
+-----------
+  - Fixed a bug in SRA instruction in amd64 jit code. Dynamips is now working
+    on amd64!
+
+26-Oct-2005
+-----------
+  - Created a virtual device giving the VM parameters.
+  - Added command line parsing (patch from Nicolas Szalay).
+  - Fixed ERET instruction (LLbit clearing was lacking).
+  - Fixed BREAK instruction (x86/amd64).
+  - Fixed 2 GB limit for log file.
+  - Fixed clobbered registers in x86 translation.
+	 
+28-Oct-2005
+-----------
+  - Added a non-JIT mode (not completely working now)
+  - Added "-j" flag on the command line to disable JIT.
+  - Fixed some stupid bugs in shift operations.
+
+31-Oct-2005
+-----------
+  - Thanks to the great help of mtve, we have a working DEC21140 Ethernet
+    driver and now the virtual C7200 can see the real world!!!
+
+01-Nov-2005
+-----------
+  - Beginning of a NETIO module to handle network I/O with external world.
+  - Studied (a bit) the PA-8T controller on a real router.
+  - It is now possible to set the base MAC address of the router
+    using the "-m" flag.
+  - Improved logging
+  - The dec21140 code is generalized and it is now possible to have a 
+    PA-FE-TX in any slot.
+	
+02-Nov-2005
+-----------
+  - Fixed some problems with the NVRAM when it is empty ;
+  - Added a "net_io.c" module that is an abstraction layer
+    for network communications (TAP, Unix sockets...)
+  - Added the "virtual" MIPS "li" instruction which
+    is in fact "addiu reg,zero,value". This permits to have
+    a more optimized JIT code.
+  - Code factorization in the DEC21140 module.
+  - mtve (aka "Mtv Europe") sent a patch for much better console handling,
+    merge is planned on 03-Nov.
+  - Added a "PA driver" framework.
+
+03-Nov-2005
+-----------
+  - The console is better handled: special keys are working, and there
+    is a FIFO buffer to avoid character loss (added a "dev_vtty.c" module).
+  - Merging with Mtve patch, that cleans NETIO module and adds features
+    to the console.
+  - Added a clock divisor hack, but it is not completely working.
+    todo: implement a command line option for this.	
+
+08-Nov-2005
+-----------
+  - Mtve added tcp client/server NETIO.
+  - The clock divisor is now working! It is set by the "-k" command line
+    option.
+  - Fixed the csr5 register handling in DEC21140 driver code.
+
+13-Nov-2005
+-----------
+  - A lot of cosmetic changes from Mtve.
+  - Modified the infrastructure to allow the use of CPU groups
+    that share a certain number of devices (per-CPU device array).
+    All device drivers have been modified to handle this.
+  - Took a look at LSI ATMizer II+, which is the circuit used on
+    PA-A3-OC3 boards. The ATMizer is based on a MIPS CPU, so it should
+    be possible to emulate it.
+  - Added a per-CPU dedicated thread.
+	
+23-Nov-2005
+-----------
+  - The PA-A1 ATM stuff is working!!!
+
+24-Nov-2005
+-----------
+  - Fixed a bug in the PA-A1 driver in TX buffer chaining.
+
+25-Nov-2005
+-----------
+  - Address bus masking, which clears bits 32 and 33 of physical addresses.
+    It avoids the use of device aliasing.
+  - Fixed the DEC21140 TX part which was incomplete.
+
+29-Nov-2005
+-----------
+  - There are still bugs in big packet forwarding. This is probably the ATM
+    driver (added more debugging info).
+  - Fabien Devaux wrote a README explaining the command line options.
+	
+30-Nov-2005
+-----------
+  - Code cleanup in the net_io module.
+  - Added the "ptask" (periodic tasks) module, this is mainly for TX ring
+    scanning of network devices.
+
+01-Dec-2005
+-----------
+  - Added a memory logger (FIFO of 10 accesses), this was useful to debug the
+    PA-A1 RX problem.
+  - Fixed a RX buffer chaining problem in PA-A1.
+
+02-Dec-2005
+-----------
+  - Added support for PA-A1 reset ("clear int", "shut/no shut").
+  - Optimized the IRQ handling (irq_pending flag in CPU structure
+    is used as a "cache").
+
+05-Dec-2005
+-----------
+  - Optimized the cp0 count/compare process for the x86_64 platform
+    (unfortunately, this doesn't work for the x86 platform).
+
+06-Dec-2005
+-----------
+  - Modified the NVRAM handling to allow calendar emulation ("sh calendar" is
+    now working).
+
+12-Dec-2005
+-----------
+  - Added support for the NPE-400.
+  - Playing with the PA-POS-2OC3 (called "Charlotte" by Cisco).
+
+15-Dec-2005
+-----------
+  - Added teq/teqi instructions to the x86_64 jit.
+
+20-Dec-2005
+-----------
+  - Added a Virtual ATM switch fabric to emulate an ATM backbone.
+
+22-Dec-2005
+-----------
+  - Final release for 0.2.2 train (0.2.2i).
+	
+23-Dec-2005
+-----------
+  - Starting 0.2.3 train (0.2.3a)
+  - Added proper NPE-150 support.
+  - Added bit-bucket support (zeroed memory zone).
+  - Added NPE type selection.
+
+24-Dec-2005
+-----------
+  - Added beginning of support for NPE-300 (endianness problems with PCI
+    controllers ?)
+
+28-Dec-2005
+-----------
+  - Fixed the endianness problem with the NPE-300.
+  - Added NPE300-IO-FE.
+
+31-Dec-2005
+-----------
+  - Added CLI option to load a symbol file.
+  - Moved JIT code from dynamips.c to mips64_jit.c
+  - Added support for NPE-100.
+  - Updated the README file for NPE type selection.
+  - Suppressed the annoying message "%%Error: Unrecognized I/O card in bay 0"
+
+03-Jan-2006
+-----------
+  - The bit clearing in physical addresses was done stupidly.
+    Only the bit 33 is used to bypass L2 caching. 
+    Re-introduced SRAM aliasing.
+    PHY address 0x100000000 is in fact for PCI I/O space.
+  - Began to play with the Cirrus Logic PD6729.
+  - Added Bootflash based on Intel 28F008SA chips (1 Mb)
+  - Fixed the alignment error occuring with "show version".
+
+04-Jan-2006
+-----------
+  - Better understanding of Flash SIMM register with bank number and bank
+    size: modified the Flash SIMM code to handle a 8 Mb flash in 1 bank
+    (emulation of Intel 28F016SA chip) which should be sufficient to store 
+    crashinfo files or misc files like configs,...
+  - Added ROM remote logging capabilities (with remote emulator control).
+
+05-Jan-2006
+-----------
+  - Integrated HEC and AAL5 field computation functions found at:
+    http://cell-relay.indiana.edu/cell-relay/publications/software/CRC/
+    (Author is Charles Michael Heard).
+  - Added HEC field management to the virtual ATM switch fabric.
+  - Added HEC and AAL5 CRC fields to the TX part of the TNETA1570 driver.
+
+06-Jan-2006
+-----------
+  - Added block timestamping, to evaluate use of JIT blocks and eventually
+    enhance algorithm of block classifying.
+  - Added a flag to the virtual devices to prevent use of MMAPed zones
+    by MTS (used by NVRAM driver).
+  - Added functions to extract IOS configuration from NVRAM.
+    Pressing "Ctrl-] + c" nows write configuration to disk at any time.
+	
+08-Jan-2006
+-----------
+  - Added support for PEM (NPE-B) EEPROM. It will probably allow support
+    of NPE-175/NPE-225.
+
+09-Jan-2006
+-----------
+  - Added support for NPE-175/NPE-225 and added NPEB-IO-FE.
+
+10-Jan-2006
+-----------
+  - Enhancements to the remote console over TCP port.
+  - Port to the Cygwin environment, allowing the emulator to run on Windows
+    machines!
+
+11-Jan-2006
+-----------
+  - Added a feature to push an IOS configuration into NVRAM ("-C" command line
+    option). 
+  - Added enhanced checks to the NVRAM config export.
+  - Added a variant of udp_connect() function for systems that do not support
+    RFC 2553.
+  - Added support for AUX port (TCP port).
+
+12-Jan-2006
+-----------
+  - Better memory logger.
+  - Added breakpoint capabilities.
+  - Fixed a segfault occuring on some IOS images with x86_64 JIT.
+    (modified the minimum remaining size in JIT buffer adjustment).
+
+13-Jan-2006
+-----------
+  - The ROM is now embedded in the source code (added an utility to convert
+    ELF file to C code). It is possible to use an alternate ROM using the
+    "-R" option.
+  - Enhanced the MTS lookups to allow use of embedded ROM for code execution.
+
+15-Jan-2006
+-----------
+  - Added PCI I/O space management.
+  - Added a fake Cirrus Logic PD6729 PCI-to-PCMCIA host adapter.
+  - Cleanups in NPE initialization code.
+  - Fixed some bridge problems with the NPE-300.
+  - Code factorization in the C7200 initialization module.
+  - Generalization of C7200-IO-FE driver for all NPE types.
+  - Added Fault History support.
+  - Added chassis selection (standard or VXR)
+  - Finally found the bug in the non-jit emulation code! It was a cast problem
+    in mult/multu instructions.
+
+16-Jan-2006
+-----------
+  - Added generic hash tables.
+  - Added "instruction lookup tables" (ILT), which greatly improve performance
+    of non-JIT mode.
+  - Added instruction statistics for the non-JIT mode ("Ctrl-] + j")
+
+17-Jan-2006
+-----------
+  - Added a port for non-x86 hosts. The emulator ran successfully on a
+    Tru64 Unix box (Alpha CPU)! It should also be able to compile and run
+    on MacOS X (PowerPC).
+
+24-Jan-2006
+-----------
+  - Added support for DMA channels on Galileo GT64k controllers since it seems
+    that they may be used by IOS (NPE-400 for sure, other NPE?).
+	
+25-Jan-2006
+-----------
+  - Added Linux Raw Ethernet driver to the NetIO infrastructure.
+  - Hmm, I'm probably missing something in the DMA/SRAM interaction and
+    endianness... 
+
+26-Jan-2006
+-----------
+  - The DMA problem is finally fixed, in fact the SRAM can be accessed with
+    byte-swapping.
+  - Added an unicast limiter to the DEC21140, to receive only trafic directed
+    to the virtual machine (+ multicast/broadcast). This is done by analyzing
+    the setup frames (MAC address filter).
+
+27-Jan-2006
+-----------
+  - The Linux Raw Ethernet driver needs promiscuous mode to be enabled to 
+    receive appropriate packets, added the required code.
+  - Added endianness definitions, and replaced hton[sl]/ntoh[sl] by the new
+    definitions (for exchanges between VM and host).
+
+28-Jan-2006
+-----------
+  - Added parser infrastructure.
+
+29-Jan-2006
+-----------
+  - Added a virtual bridge system.
+  - Release 0.2.3b
+
+31-Jan-2006
+-----------
+  - Fixed a stupid bug in DMA handling, which in certain conditions can
+    cause an infinite loop.
+
+01-Feb-2006
+-----------
+  - Added an "instruction block hash" which avoids lookups in the instruction
+    red-black tree. The IBH table takes only 16 Kb of memory.
+  - Added CRC-12 and CRC-16 functions for future use.
+  - Added a "gen_eth" NetIO driver, which allow to access ethernet interfaces
+    in a portable way (tested on Linux and Cygwin).
+  - Fixes to the PowerPC build on Darwin thanks to Olivier Cahagne.
+  - Minor cosmetic changes to display supported/unsupported PA and NPE.
+  - Release 0.2.3c
+
+06-Feb-2006
+-----------
+  - Added working Serial interfaces (PA-4T+) !
+  - Bug: CDP not working with serial interfaces ("debug cdp events" reports
+    a checksum problem).
+
+07-Feb-2006
+-----------
+  - Started the 0.2.4 release.
+  - Modified the command line parser to allow many NIO per PA (for example
+    for serials).
+  - A lot of code cleanups in the C7200 initialization.
+  - Added PA-8T support.
+  - To fix: CDP with Serial interfaces: using cp_len (instead of cp_len+4)
+    in packet rx fixes the problem but breaks IP. Probably something related
+    to padding, see how a CDP packet is sent (special flag in tx ring ?)
+  - Added virtual "beqz" instruction.
+  - Added the "-X" option, allowing to use host memory directly instead of
+    mapping a file to simulate RAM (faster).
+  - Beginning of code reorganization to allow multiple instance contexts.
+
+08-Feb-2006
+-----------
+  - Added a basic virtual Frame-Relay switch. Unfortunately, LMI must be
+    implemented to maintain links up.
+  - Finally found the problem related to CDP! It was simply a padding problem.
+
+09-Feb-2006
+-----------
+  - Add support of promiscuous mode for the DEC21140 "unicast limiter":
+    promiscuous mode is used in bridging configurations.
+  - Fixed another bug with the serial interfaces: it seems that there is
+    a "length substractor" for the txring.
+
+10-Feb-2006
+-----------
+  - Played a little with the PA-POS-OC3, without success.
+	
+14-Feb-2006
+-----------
+  - Finally implemented the basic LMI stuff (only ANSI Annex D). Fortunately,
+    IOS rocks and uses auto-detection, so no extra configuration is needed.
+  - Integrated a Makefile patch from Max Khon for FreeBSD.
+  - Updated documentation.
+  - Release 0.2.4.
+
+15-Feb-2006
+-----------
+  - Fixed a cosmetic bug when displaying MAC address at startup.
+  - Fixed a stupid bug in "srav" instruction in x86_64 JIT code. The
+    arithmetic shift operation was done on a 64-bit basic instead of 32-bit,
+    causing bad propagation of the sign-bit.
+  - Added support for multiple instances (no CLI present yet).
+
+17-Feb-2006
+-----------
+  - Fixed 2 bugs in Frame-Relay switch: a crash occured when receiving
+    a packet gave an error, and if many DLCI with the same ID on different
+    interfaces were used, only one was announced on one interface.
+
+18-Feb-2006
+-----------
+  - Began work on advanced configuration parsing (instances).
+
+19-Feb-2006
+-----------
+  - Is the count/compare mechanism pertinent ?
+
+23-Feb-2006
+-----------
+  - Continued work on advanced config parsing (instances,NIO).
+  - Added registry infrastructure.
+  - Fixed some mistakes in documentation.
+
+28-Feb-2006
+-----------
+  - Continued work on advanced config parsing (NIO).
+  - Added an IRQ counter.
+  - Continued debugging on recurrent crashes problem.
+  - Added proper checks to mts32_raw_lookup (at least it avoids the
+    coredump...)
+  - Added display of all CP0 registers (except TLB).
+
+02-Mar-2006
+-----------
+  - Hardened a little the IRQ subsystem, but this doesn't fix the problem.
+  - Added a debugging mode to track jumps to address 0 (x86_64 only!).
+  - Fixed the teq/teqi instructions in amd64/x86 modes that were buggy.
+
+04-Mar-2006
+-----------
+  - Added some assembly optimized routines for x86 hosts.
+  - Fixed a stupid bug in mts32_raw_lookup (op_size and op_type were
+    swapped).
+	
+06-Mar-2006
+-----------
+  - Added Unix and Null NETIO types for config files.
+  - Fixes for incorrect behavior in virtual memory access routines, in
+    case of exception.
+
+08-Mar-2006
+-----------
+  - Removed the configuration file parsing, in favor of a remote control
+    system for use with the dynagen project.
+	
+09-Mar-2006
+-----------
+  - Added basic hypervisor infrastructure.
+  - Added basic NIO code to the hypervisor commands.
+	
+10-Mar-2006
+-----------
+  - Added the hypervisor NIO code.
+  - Added Frame-Relay and ATM switches to the hypervisor commands.
+	
+11-Mar-2006
+-----------
+  - Played (successfully) with OIR (Online Insertion and Removal). OIR
+    will require device deletion...
+
+12-Mar-2006
+-----------
+  - Fixed EEPROM code which used global variables.
+  - Added the necessary code for basic OIR.
+  - Added PCI device removal.
+
+15-Mar-2006
+-----------
+  - A lot of work on C3600 integration (although it is not functional).
+  - Added a basic ns16552 driver.
+
+17-Mar-2006
+-----------
+  - Added some hypervisor commands for PA setup and OIR.
+	
+20-Mar-2006
+-----------
+  - Hardened the Mueslix driver: after OIR, a "no shut" on a new interface
+    crashed the virtual router. Now, IRQ status is managed appropriately.
+
+24-Mar-2006
+-----------
+  - Added ptask (periodic task) removal.
+  - Added a basic (nearly empty) C3600 IO FPGA chip.
+
+25-Mar-2006
+-----------
+  - Added a NIO RX multiplexer.
+  - Added NIO unset operation for PA.
+
+26-Mar-2006
+-----------
+  - Modified the virtual ATM/Frame-Relay switches and NIO bridge to use
+    the new NIO RX multiplexer.
+  - Added the NIO bridges to the hypervisor commands.
+  - Fixed a stupid bug in hypervisor ATM/FR switch command, the VC were
+    badly parsed.
+  - Fixed a memory leak in the hypervisor module (tokens not freed).
+
+27-Mar-2006
+-----------
+  - Added appropriate locks to the ATM and Frame-Relay switches.
+  - Added VC removal for ATM and Frame-Relay switches.
+
+28-Mar-2006
+-----------
+  - Added registry management to the ATM/FR switches and NIO bridge.
+
+30-Mar-2006
+-----------
+  - Added a refcount system to the NIO RX multiplexer.
+
+31-Mar-2006
+-----------
+  - Added NIO removal for NIO bridges.
+  - Added NIO bridge removal.
+  - Modified the NIO bridge code to use the registry infrastructure.
+  - Same as above, for ATM and Frame-Relay switches.
+
+03-Apr-2006
+-----------
+  - Added the required infrastructure for online removal.
+  - Added hypervisor commands for PA removal and to display C7200 hardware.
+  - Fixed a bug in PCI device removal.
+  - It's now possible to change cards on the fly!
+  - The Mueslix driver was incorrectly modified: the TX ring scanner must
+    run even if the NIO is not defined.
+  - Modified the DEC21140 driver to report a Link Down when the NIO is not
+    defined.
+
+04-Apr-2006
+-----------
+  - Added packet dump (for debugging) to NetIO receive/send operations.
+
+08-Apr-2006
+-----------
+  - The SMP bug seems to be fixed! The irq_cause field is now manipulated
+    atomically (inline asm for x86 and x86_64, pthread mutex on other 
+    machines).
+
+12-Apr-2006
+-----------
+  - Added a VM abstraction layer (for different platforms).
+  - Fix of X86 assembly file for Cygwin.
+  - The IOS config file is now saved with a specific filename from the
+    VM instance.
+
+13-Apr-2006
+-----------
+  - Added per-instance logfile.
+
+14-Apr-2006
+-----------
+  - Fixed a stupid bug in non-JIT mode with IRQs.
+
+17-Apr-2006
+-----------
+  - bugfix: "null" NIO creation didn't record the NIO in registry.	
+  - bugfix: mueslix logging.
+  - bugfix: adding an NIO to the RX listener list (bad double linked-list)
+  - bugfix: bad fgets() use in NIO bridge and ATM/FR switches.
+
+18-Apr-2006
+-----------
+  - bugfix: the same NIO could be recorded many times in the NIO RX
+    multiplexer due to bad design in NIO adding.
+
+19-Apr-2006
+-----------
+  - Beginning of work on AMD Am79c971 ethernet controller (used by PA-4E
+    and PA-8E).
+
+20-Apr-2006
+-----------
+  - The emulation of AMD Am79c971 seems to be working very well.
+  - Modified the physical memory dump function to use the VM log file.
+
+21-Apr-2006
+-----------
+  - Modified the PA-4E/PA-8E EEPROM definitions to work with VXR midplanes.
+  - PA-4E is now usable.
+
+23-Apr-2006
+-----------
+  - Added "shutdown" operation for PA-4E/PA-8E drivers.
+
+24-Apr-2006
+-----------
+  - Enhanced lock file management (with POSIX locks).
+  - The devices are now dependent from VMs instead of being dependent
+    of CPU groups. This makes a lot of things cleaner.
+
+27-Apr-2006
+-----------
+  - Added IRQ clearing with GT64K (DMA transfers).
+  - Study of GT64120 controller to understand address decoding process.
+	
+28-Apr-2006
+-----------
+  - Fixed a bug with NPE-175/NPE-225 PEM EEPROM selection.
+  - The NPE-400 is now able to support 512 Mb of DRAM! (the supplemental
+    memory is in fact considered as IO memory)
+  - Added a safety check with RAM size.
+  - The CPU identifier (PRID register) is now fixed depending on the NPE
+    board.
+
+01-May-2006
+-----------
+  - Modified device subsystem to order devices by physical addresses,
+    optimized dev_lookup/dev_lookup_next.
+  - Added infrastructure for various object cleanup.
+  - Added "shutdown" code for SRAM, NVRAM, Bootflash, Zero, remote control
+    devices.
+  - Added CPU deletion support (incomplete).
+
+02-May-2006
+-----------
+  - Added PCI bus removal.
+  - Added "shutdown" code for GT64010 and GT64120.
+  - Added CFC0/CTC0 instructions (R7000) and handling for associated 
+    registers. TODO: customized vector spacing.
+
+04-May-2006
+-----------
+  - Introduction of the new MTS64 subsystem!
+  - Note: incorrect uses of assert(), especially in insn_lookup.c module.
+
+05-May-2006
+-----------
+  - Added a free list of chunks for MTS64 + some basic optimizations.
+  - Added basic PCI/HT stuff for SB-1 processor (dev_sb1_pci.c module).
+  - Added AP1011 (Sturgeon HyperTransport-PCI Bridge) device.
+  - Fixed masks for MFC0/MTC0 instructions, and added new definition for MFC0
+    to access set 1.
+  - Fixed incorrect uses of assert().
+
+07-May-2006
+-----------
+  - Modified the console handling to be more efficient. 
+  - Added global invalidation of the MTS64 cache.
+	
+08-May-2006
+-----------
+  - Added selective invalidation of the MTS64 cache (for TLB management).
+  - Added MTS64 statistics.
+  - Modified the MTS64 hash settings. Origin: shift: 12, hash_bits: 16.
+    Replaced by shift: 16, hash_bits: 12 -> more efficient and consumes
+    less memory! (logical since IOS uses large TLB entries).
+  - Modified cp0 module to use an abstraction layer for MTS access, allowing
+    32 or 64 bit modes.
+
+09-May-2006
+-----------
+  - Fixed MTS64 on x86_64 machines.
+  - The clock divisor can now be set per VM and with an hypervisor command.
+
+10-May-2006
+-----------
+  - Added "shutdown" code for RAM and ROM devices.
+  - Added VM object dump ("Ctrl-] + o")
+
+11-May-2006
+-----------
+  - Bugfix: missing initialization of the address length parameter of accept()
+    in the main hypervisor module.
+  - Bugfix: missing initialization of registry memory pool (noticed with
+    Valgrind).
+  - Added NPE and midplane selections to the hypervisor.
+
+12-May-2006
+-----------
+  - Added NIO deletion to the hypervisor.
+  - Fixed status message in hypervisor for object deletion.
+  - Added "sub" instruction (without exception support).
+
+14-May-2006
+-----------
+  - Fixed CPU state change. It is now possible to reboot at any time using
+    "Ctrl-] + k".
+  - Added VTTY deletion.
+  - Added "c7200 stop" command to the hypervisor (not finished).
+  - The memory-mapped devices of port adapters are now enabled dynamically,
+    depending on the PCI BAR (Base Address Registers) settings. This avoids
+    use of hardcoded values.
+  - Integrated a patch from Philipp Brenner, which fixes ELF loading problem
+    on Cygwin when default text file type is set to DOS. Many thanks to him.
+    (symptom was: "load_elf_image: elf_begin: I/O error: raw read")
+
+15-May-2006
+-----------
+  - Added "c7200 set_config" and "c7200 set_mac_addr" hypervisor commands.
+  - Fixed a stupid bug in PCI bus removal.
+  - Added more complete shutdown code.
+
+16-May-2006
+-----------
+  - Fixed uninitialized MTS64 allocated entries (seen with Valgrind).
+  - Added missing unmapping of memory-mapped files (reported by Greg).
+  - The VTTY shutdown doesn't close stdin anymore (causing terminal
+    problems at exit).  
+  - Fixed the shutdown procedure, added VM_STATUS_SHUTDOWN as status
+    for a VM. Adapted the virtual CPU synchronization.
+
+17-May-2006
+-----------
+  - Some basic work on the hypervisor main modules (cleanup).
+	
+19-May-2006
+-----------
+  - bugfix: base MAC address setup broken (reported by Greg).
+  - Added global deletion of: ATM/FR switches, NetIO bridges, NetIO
+    descriptors, C7200 instances ...
+  - Added "hypervisor reset" command to go back to a clean state.
+
+20-May-2006
+-----------
+  - Modified the CPU synchronization system which was not working correctly.
+
+21-May-2006
+-----------
+  - bugfix: NIO unset in PA-4T+/PA-8T driver.
+  - Added C7200 PA cleanup code.
+
+22-May-2006
+-----------
+  - Better handling of PA/NIO removal.
+  - Base MAC addresses are now generated automatically if not specified.
+    ("cafe.<instance_id>.0000")
+
+23-May-2006
+-----------
+  - Added "VDE" NetIO type to connect to UML switches / Virtual Distributed
+    Ethernet switches.
+  - Some cleanups in NetIO code.
+  - Added shutdown code for MTS32/MTS64 (not used yet).
+
+24-May-2006
+-----------
+  - Minor optimizations for non-JIT mode.
+  - bugfix: crash when dumping instruction block tree (JIT).
+  - Some memory leak fixes (again with Valgrind, definitely this tool rocks).
+    TOFIX: * clpd6729 + PCI I/O space (to check carefully).
+           * IO/supplemental memory created with dev_create_ram().
+  - Use of MTS shutdown code.
+
+25-May-2006
+-----------
+  - The compressed IOS images were not booting anymore: fixed the MIPS config
+    register at startup (reported by Davide Brini).
+  - Minor code cleanup for MIPS CPU reset.
+  - I/O and supplemental memory are now created with dev_ram_init().
+  - bugfix: in PA shutdown code, the driver shutdown operation was called
+    even if the driver was not initialized.
+  - bugfix: order of memory freeing in c7200_free_instance() wasn't good,
+    producing a segfault (seen on windows machines).
+
+26-May-2006
+-----------
+  - Played with the PA-POS-OC3 driver, it seems that it is working. Need
+    to check if the TX ring guess is correct (ie, with "routing" conditions).
+
+27-May-2006
+-----------
+  - PA-POS-OC3: Fixed the TX ring part to work with multiple buffers. There 
+    is still a problem with buffer addresses (doesn't work with platforms 
+    using SRAM).
+
+29-May-2006
+-----------
+  - Playing with ISDN emulation (PA-4B), and Munich32 chip. Interfaces
+    are only visible for now.
+
+30-May-2006
+-----------
+  - Moved VM lockfile deletion to VM instance freeing function.
+  - Ugly hack to allow the POS driver to work with SRAM-based platforms.
+  - Added support for "VDE" NIO in hypervisor.
+  - Beginning of hypervisor documentation (README.hypervisor).
+
+31-May-2006
+-----------
+  - Removed "c7200 trigger_oir" hypervisor command which was redundant.
+
+01-Jun-2006
+-----------
+  - bugfix: fixed some reference counting leaks with default ATM and 
+    Frame-Relay switches and NIO bridge.
+  - bugfix: DLCI were not announced in ascending order in LMI packets.
+  - studied a bit how to use larger bootflash sizes.
+
+02-Jun-2006
+-----------
+  - DEC21140: Added multicast flag management for received frames.
+  - Debugging of ISL problem reported by Valentin.
+  - Added CRC-32 functions to the appropriate module.
+	
+03-Jun-2006
+-----------
+  - ISL is now working with DEC21140. It seems that to handle ISL, another
+    chip (FPGA ?) is present on PA-FE-TX and C7200-IO-FE to add the second
+    FCS field. 
+  - Added basic disassembly code (need to do something more generic).
+
+04-Jun-2006
+-----------
+  - Added virtual instruction "bnez" (basic optimization).
+  - Added RM7000 "mul" instruction (not tested).
+  - Added teq/teqi instructions to non-JIT mode.
+
+05-Jun-2006
+-----------
+  - Added output packet exclusion to PCAP module (not possible with WinPCAP
+    though).
+  - Enhanced packet filtering in dec21140 emulation (for Windows users).
+  - bugfix: stupid cast problem in bootflash code preventing proper unmapping.
+    (seen with /proc/<pid>/maps on Linux).
+  - Added debugging message for device removal.
+  - bugfix: memory not freed / file not closed with ELF loader.
+  - bugfix: config register keeping the "ignore config" flag between instance
+    reloads.
+  - Added "c7200 set_conf_reg" hypervisor command.
+  - ==> pre19
+  - Experiment: Pending IRQ are now checked only at jump instructions.
+
+06-Jun-2006
+-----------
+  - bugfix: bootflash not working anymore with previous bugfix. 
+  - Some optimizations for Program Counter (PC) handling in JIT mode.
+  - Some optimizations for non-JIT mode (use of fastcalls).
+  - Added a performance counter.
+
+07-Jun-2006
+-----------
+  - Added configuration saving command for hypervisor
+    ("hypervisor save_config <file>")
+  - The SB-1 DUART is working, allowing NPE-G1 console to work :)
+  - Environmental monitor working with NPE-G1.
+  - NPE-G1 next priorities: Ethernet (because it delays boot) and NVRAM
+    (seems to be at a different address?)
+
+08-Jun-2006
+-----------
+  - NVRAM is now ok on NPE-G1 (it is at a different physical address).
+
+13-Jun-2006
+-----------
+  - Optimizations on fast lw/sw operations (x86 only for now).
+  - Changed offset size for branches (x86_jump32 instead of x86_jump8).
+
+14-Jun-2006
+-----------
+  - Base MAC address now generated from PID and instance ID.
+
+15-Jun-2006
+-----------
+  - Optimizations on fast lw/sw operations (x86_64).
+  - bugfix: fixed console problems when using TCP mode on Windows platforms 
+    (Telnet, Putty). It just requires to ignore LF (Line Feed) character 
+    (BTS entry #4)
+
+16-Jun-2006
+-----------
+  - bugfix: importing config to NVRAM was broken (device lookup was done on
+    "cacheable" devices only in physmem* functions) (BTS entry #5)
+
+17-Jun-2006
+-----------
+  - bugfix: memory not freed when using host memory to emulate virtual RAM.
+    (BTS entry #8).
+  - Minor enhancements to clpd6729 driver.
+
+19-Jun-2006
+-----------
+  - Included a patch from Peter Ross (suxen_drol@hotmail.com) which allows
+    to bind console and AUX ports to real serial ports. Many thanks to him.
+
+20-Jun-2006
+-----------
+  - Playing with the PCMCIA stuff (especially CIS)
+
+21-Jun-2006
+-----------
+  - Continuing on PCMCIA.
+
+22-Jun-2006
+-----------
+  - The PCMCIA ATA disk is working, although the ATA command set is not
+    completely implemented. 
+
+23-Jun-2006
+-----------
+  - Added virtual ethernet switch module.
+  - bugfix: linux_eth file descriptor was not used correctly with NIO RXL.
+  - Modified the ELF loader to use all sections.
+
+26-Jun-2006
+-----------
+  - Modified the NIO RX handling (packet receiving is done in NIO module).
+
+27-Jun-2006
+-----------
+  - bugfix: PA-4E/PA-8E not working with IOS 12.0T (incorrect device length).
+    (BTS entry #17).
+  - Some cleanups (untested though) in ATM and Frame-Relay switch modules
+    (locking).
+
+29-Jun-2006
+-----------
+  - Added support for 2nd ATA disk.
+  - Added command line options for disk0: and disk1: ATA devices.
+    By default, disk0: has a capacity of 64 Mb, disk1: is not defined.
+  - Added hypervisor commands "c7200 set_disk0" and "c7200 set_disk1".
+  - Fixed some mistakes and typos in documentation. 
+
+30-Jun-2006
+-----------
+  - Factorized code of fast memory operations to have something cleaner.
+
+02-Jul-2006
+-----------
+  - Modified the JIT compiler to translate pages instead of "blocks"
+    (improves performance).
+
+03-Jul-2006
+-----------
+  - Some code cleanup for the new JIT compiler.
+  - bugfix: PA-4T+/PA-8T not working with IOS 12.0T (incorrect device length).
+    (BTS entry #23).
+  - Added JIT flush to limit the memory used for translation. At this time,
+    this is basic, we count the number of translated pages and we flush when
+    this number reaches a threshold (512 pages seems to be a good value).
+  - Integrated a patch from Philipp Brenner (BTS entry #21)
+    Description: "In standard mode it intercepts SIGINT and sends a CTRL+C 
+    (0x03) to the target's vtty_con buffer, while in hypervisor mode it 
+    gracefully shuts down the hypervisor which causes the application to 
+    quit."
+
+04-Jul-2006
+-----------
+  - Fixed a stupid bug in mts_cache (phys_page boundary not checked).
+  - Optimized JIT flushing and insn block allocation.
+  - Changed the maximum number of translated pages to 2048, which seems to 
+    be a more adequate value.
+
+05-Jul-2006
+-----------
+  - Added an "exec zone" which is a pool of host executable pages. This
+    zone is limited by default to 64 Mb for Linux/Unix and 16 Mb for Cygwin. 
+    When the zone is fully used, the JIT structures are flushed (removed the 
+    maximum number of translated pages).
+    Now, there is no need to disable ExecShield or similar systems.
+  - Added explicit error message when failing to open an ELF file.
+  - Fixed getopt_long() usage.
+  - Added CLI option "--exec-area <size>" to define exec zone size for the 
+    default VM.
+
+06-Jul-2006
+-----------
+  - Added "tlbwr" (TLB Write Random) instruction and coprocessor 0 random 
+    register management.
+  - Added "c7200 set_exec_area" hypervisor command.
+  - Allowed the hypervisor to run on Windows 2000 machines (ip_listen()
+    version is now ok for non-rfc2553 systems).
+
+07-Jul-2006
+-----------
+  - Added command line help for "--exec-area" option.
+  - Updated documentation.
+
+11-Jul-2006
+-----------
+  - bugfix: missing pointer cleanup in c7200_pa_shutdown() (BTS entry #30)
+  - bugfix: incomplete shutdown code for NIO (little memory leak + no
+    freeing code for NIO with null type).
+  - bugfix: memory leak in udp_connect() + incorrect error checking.
+  - Added cleanup code for general log file.
+  - bugfix: memory leak in hypervisor command execution.
+  - Added logging for hypervisor commands.
+  - Invalid instructions in delay slots are now properly handled by the JIT
+    compiler (error message + CPU stop).
+
+13-Jul-2006
+-----------
+  - Added an idle loop detector (--idle-pc CLI option + "Ctrl-] + i" key)
+  - Added "c7200 set_idle_pc" hypervisor command.
+
+14-Jul-2006
+-----------
+  - Updated documentation.
+  - Checked the idle loop system on Windows and Linux x86_64, seems to be
+    working correctly.
+  - Added idle loop system to non-JIT mode.
+  - Fixed a bug in "cache" instruction when used in non-JIT mode.
+
+16-Jul-2006
+-----------
+  - Integrated a patch from Peter Ross (suxen_drol@hotmail.com) for the 
+    Makefile.
+
+17-Jul-2006
+-----------
+  - bugfix: no empty mips64_emit_invalid_delay_slot() function for non-JIT
+    build.
+  - Added definition for mmap() MAP_ANONYMOUS flag for systems where only
+    MAP_ANON is defined.
+  - Accurate Timer IRQ (added --timer-itv parameter for tuning).
+
+18-Jul-2006
+-----------
+  - Fixed inter-pages jumps in delay slots (reported by nula)
+  - Added a check preventing to run the idle-pc feature when an idle-pc value
+    is already defined (since it would give biased results).
+  - bugfix: VTTY list not locked in vtty_create()
+  - bugfix: ensure the CPU is running before incrementing pending timer IRQs.
+  - Added a checklist for minimal C7200 hardware components. It checks good
+    init of ram, rom, nvram and zero devices.
+
+19-Jul-2006
+-----------
+  - Some work on JIT tuning (flush).
+
+20-Jul-2006
+-----------
+  - Better info logging for VTTY and C7200 modules.
+  - Added a debug level for VMs.
+	
+21-Jul-2006
+-----------
+  - Various code cleanups.
+  - Added "c7200 set_debug_level" hypervisor command and "--vm-debug" command
+    line option. Now, by default, less details are printed.
+  - Fixed a bug with select() on Cygwin platform: before, only 64 FDs 
+    could be used.
+
+24-Jul-2006
+-----------
+  - bugfix: accept_fd was not closed in VTTY module (BTS entry #42)
+  - bugfix: properly handle CR/LF in configuration files (FR, ATM, ...)
+    (BTS entry #36)
+  - bugfix: accept fd not correctly printed in log file.
+  - Added a mini-parser for hypervisor: allows directory with blanks, ...
+  - bugfix: bad use of setsockopt() in the hypervisor.
+
+25-Jul-2006
+-----------
+  - Added the capability to use Null NetIO with the hypervisor 
+    ("nio create_null" command).
+  - Added a FIFO NetIO for intra-hypervisor communications.
+  - Merged a patch from Peter Ross for incorrect idle-pc parsing with 64-bit
+    values.
+  - Non-JIT mode optimization for instruction fetch (although it could be
+    enhanced again).
+  - Various code cleanups.
+
+26-Jul-2006
+-----------
+  - Added "ethsw clear_mac_addr_table" to clear MAC address table of a
+    virtual ethernet switch.
+  - Added "ethsw show_mac_addr_table" to show all MAC addresses learnt by
+    a virtual ethernet switch.
+  - Fixed a potential bug with jalr/jr instructions, where the stack is used
+    to save the return PC. If the instruction in the delay slot returned
+    directly to the jit main loop (exception,...), the stack would be in
+    an inconsistent state. This fix is also required for Darwin/x86.
+  
+27-Jul-2006
+-----------
+  - Stack alignment for Darwin/x86 in memop functions and unknown opcode
+    handling.
+  - The Darwin/x86 build requires -mdynamic-no-pic as compilation option.
+  - Fixed some inline assembly mistakes with "lock" prefix.
+  - The Darwin/x86 port seems to be working correctly.
+  - Fixed the amd64 version of "jr" instruction similarly to the x86 version
+    (no problem with "jalr" in this case).
+
+29-Jul-2006
+-----------
+  - Merged a patch from Peter Ross (suxen_drol@hotmail.com):
+	* disable dynamips escape commands for serial
+        * support receipt of char 0x00
+        * force the device to into raw mode (cfmakeraw)
+        * include additional uart register addresses in c7200 iofpga switch.
+    The README is also updated.
+  - Fixed some sign problems in VTTY module.
+
+31-Jul-2006
+-----------
+  - Merged a parch from Peter Ross for correct handling of Ctrl-C when
+    a TCP console is used.
+  - Code cleanup (JIT usage flag per VM, ...)
+  - C3600: implemented a working ns16552 console driver.
+  - C3600: fixed clpd6719 driver.
+  - C3600: working environmental monitor.
+  - C3600: changed default RAM to 128 Mb.
+  - Fixed clobbered registers on AMD64 platform ("r14" was missing).
+
+01-Aug-2006
+-----------
+  - Added command line support for C3600 instances.
+  - C3600: added appropriate deletion code.
+  - C3600: added mainboard EEPROM support.
+  - C3600: added bootflash of 8 Mb.
+  - C3600: analyzed triggering of various IRQs.
+
+03-Aug-2006
+-----------
+  - C3600: added NM EEPROM support, slot activation now depends on the NM
+    state.
+  - Fixed nmc93c46 EEPROM code to set the data out bit to a high value when
+    not reading data (was required for C3600 NM EEPROM) + various bug-fixes
+    and cleanups.
+
+04-Aug-2006
+-----------
+  - C7200: some cleanups in PA function naming.
+  - C7200: code refactoring for PA drivers.
+  - C7200: ethernet stuff is now independent of dec21140 and am79c971 code.
+  - C3600: added NM management stuff.
+  - Mueslix serial stuff is now independent for C3600 and C7200.
+  - C3600: added NM-1E, NM-1FE and NM-4T network modules.
+    => problems: * no keepalive required for NM-1E/NM-1FE (media status ?)
+	         * NM-4T packet delivery failure when end of RX ring is hit.
+
+06-Aug-2006
+-----------
+  - Modified Am79c971 MII registers to keep the link up in FastEthernet mode.
+  - Merged a patch from Peter Ross for Console and AUX ports optimizations
+    (especially with TCP mode)
+	* console and aux FILE streams
+        * reimplement vtty_read_and_store() as state machine:
+          - parse telnet escape codes, instead of forwarding them to router.
+          - display instance and router name in xterm/vt title bar.
+  - Modified the Mueslix driver to have something working for both C3600 and
+    C7200 models. Added some debugging info.
+  - C3600: better ethernet NM code.
+  - C3600: Added NM-4E (4 ethernet ports) network module.
+
+07-Aug-2006
+-----------
+  - Fixed the remote control driver which incorrectly used static variables.
+  - NVRAM address can now be known with the remote control driver.
+  - Command line usage is now correctly displayed depending on the selected
+    platform.
+
+08-Aug-2006
+-----------
+  - Some work on PA-4B (Munich32 chip).
+
+09-Aug-2006
+-----------
+  - Continuing on PA-4B (trying to understand TP3420).
+
+10-Aug-2006
+-----------
+  - C7200: Added PA Mgmt IRQ support (required for PA-4B, seen on a real
+    c7200 with PA-4B offered by Vernon Missouri).
+  - Added TP3420 definitions.
+
+15-Aug-2006
+-----------
+  - Continuing on PA-4B. Better understanding of the TX ring. 
+    Fixed interrupt queue management.
+	
+19-Aug-2006
+-----------
+  - Added hv_vm.c module to handle generic VM operations.
+  - Added hv_c3600.c module for the Cisco 3600 platform.
+  - Fixed a bug in VTTY flushing.
+
+20-Aug-2006
+-----------
+  - Added code to gen_eth module for Cygwin to prevent WinPCAP from giving
+    back transmitted packets. It requires WinPCAP 0.4-alpha1 or better.
+    TODO: need to be tested!
+	
+21-Aug-2006
+-----------
+  - Fixed C3660 boot. Trying to understand/discover the hardware.
+    Environmental monitor should be ok.
+
+24-Aug-2006
+-----------
+  - Added NS16552 flush optimization (Peter Ross).
+  - Fixed missing periodic task removal in NS16552.
+
+26-Aug-2006
+-----------
+  - C3660: * Better understanding of NM presence / EEPROM registers.
+           * Analyzed registers used when a Net IRQ is triggered.
+
+28-Aug-2006
+-----------
+  - C3660: Network Modules are now working! Remaining stuff: OIR.
+
+29-Aug-2006
+-----------
+  - Added more generic code to handle Cisco EEPROM to change easily
+    chassis MAC addresses.
+  - Updated README with C3600 information.
+  - Updated hypervisor documentation (README.hypervisor).
+  - Added dated package build to the Makefile (make packdev)
+  - Checked WinPCAP fix of 20-Aug-2006: working.
+  - Added the capability for high priority IRQ (like NetIO IRQ) to break
+    the idle loop. Great latency improvement with NetIO IRQ.
+  - C3600: the DUART irq is now higly prioritized. It gives better console
+    reactivity. 
+
+30-Aug-2006
+-----------
+  - Huge performance improvement on dec21140 and am79c971 drivers, by
+    transmitting up to 16 packets in one TX ring scan pass.
+  - Added the same to Serial driver (untested).
+  - Added "unicast limiter" feature to the am79c971 driver, similarly to the
+    dec21140 driver. Not having this caused the virtual instances to see
+    unrelated host traffic when using linux_eth/gen_eth NIO and consequently
+    a bad performance was obtained. Thanks to Greg for noticing that.
+  - Beginning of rework of PCI subsystem for PCI bridge support.
+    (Greg noticed that with 12.2T releases, the PCI bus numbering is
+    different for the C3660).
+	
+31-Aug-2006
+-----------
+  - Finished the PCI subsystem rework.
+  - C7200: Fixed PCI bridge use for midplanes (std: dec21050, vxr: dec21150).
+
+01-Sep-2006
+-----------
+  - Finally fixed the Serial problem on C3620 platform (hack in the driver
+    to trigger interrupts differently).
+  - Cleanup for VM PCI bus pool and C7200 "hidden" I/O bridge was missing.
+
+03-Sep-2006
+-----------
+  - Added safety checks to the PCI bus management.
+  - Added a PLX9060 device (very basic for now).
+  - Rewritten the PA-POS-OC3 driver to use the new PLX9060 driver.
+  - Cleanup: removed use of c7200 bay info in drivers (everything uses
+    PCI for configuration).
+  - C7200: removed the bay module which contained static definitions of
+    PCI bus, physical addresses for PA, ... Now everything is handled
+    dynamically by the PCI subsystem and the remaining drivers (PA-4B,
+    PA-POS-OC3) have been fixed.
+  - C3600: removed PCI bus info from the bay module (due to PCI bridge new
+    code).
+
+04-Sep-2006
+-----------
+  - Fixed some typos in comments.
+  - Added a standalone utility to extract IOS configuration from an 
+    NVRAM file.
+  - Removed pcireg.h (from NetBSD) which was just used for one definition.
+  - Added a "COPYING" file for the GPLv2 licence.
+
+05-Sep-2006
+-----------
+  - Added basic packet filtering framework, to simulate packet loss or
+    alteration.
+  - Hypervisor commands now supports a variable number of parameters.
+  - bugfix: doing a "sh run" and then pressing "Escape" was causing trouble
+    to the VTTY (the state machine was in an incorrect state).
+  
+06-Sep-2006
+-----------
+  - Removed erroneous special handling of intra-page jumps in delay slots.
+    (problem with c3640 12.0(7)T IP+ image).
+
+07-Sep-2006
+-----------
+  - C3600: processors ID are now correct.
+  - Avoid removing the JIT block of the caller with the "cache" instruction.
+  - Added "hypervisor version" to allow clients (Dynagen) to know the current
+    version.
+  - Added missing explanation for "-P <platform>" command line parameter.
+  - C7200: Fixed incorrect cleanup of IO PCI bridge.
+
+08-Sep-2006
+-----------
+  - Better code for VM error messages.
+  - Fixed the write attempts to ROM at startup.
+
+09-Sep-2006
+-----------
+  - C3600: added support for io memory size, which prevents Smart Init
+    from running (hypervisor command: c3600 set_iomem <router> <val>).
+  - C3600: fixed incorrect handling of commands for this platform, which
+    caused port 0 to be disabled when manipulating other ports.
+
+11-Sep-2006
+-----------
+  - Fixed loop overflow in idle pc computation.
+  - Added base64 encoding/decoding module from Yannick Le Teigner.
+  - Added hypervisor commands "vm push_config" and "vm extract_config"
+    to manage IOS configurations. Extracting to base64 is ok (verified with
+    a third party decoder:
+    http://www.opinionatedgeek.com/dotnet/tools/Base64Decode/Default.aspx )
+  - C3600: NVRAM checksum is now correctly computed.
+
+12-Sep-2006
+-----------
+  - Following a suggestion of Yannick Le Teigner, applied the optimization
+    principle to PA-A1 card already used in dec21140, ... Latency is clearly 
+    better (on my system, this dropped from about 150ms to 50 ms).
+
+14-Sep-2006
+-----------
+  - Incorrect display of device name in PLX9060 driver.
+  - Added manpages provided by Erik Wenzel (erik@debian.org). Many thanks
+    to him for this and for his work on packaging for Debian.
+  - Final 0.2.5 release.
+  - C7200: Added missing NVRAM checksum.
+
+15/21-Sep-2006
+-----------
+  - Working on NM-16ESW.
+	
+22-Sep-2006
+-----------
+  - NM-16ESW: interfaces are now up (handles specifically the appropriate
+    MII register).
+
+23/25-Sep-2006
+--------------
+  - Still continuing on the NM-16ESW (first packets received/transmitted).
+
+26-Sep-2006
+-----------
+  - NM-16ESW: seems to be working! (although there are still a lot of things
+    to do).
+
+28-Sep-2006
+-----------
+  - Added a hack to allow Ethernet NM to work correctly in 3620/3640
+    (seen when directly attached to the real network with very few packets
+    incoming).
+  - NM-16ESW: proper support for tx ring scatter/gather support.
+  - NM-16ESW: fixed a bug in ARL insertion.
+  - NM-16ESW: send directly BPDU packets to the CPU.
+
+29-Sep-2006
+-----------
+  - NM-16ESW: added support for "trunks" (ie etherchannel).
+  - Added "Ctrl+p" sequence key to dump Port Adapter / Network Module info
+    (only NM-16ESW reports something at this time).
+
+30-Sep-2006
+-----------
+  - NM-16ESW: proper management of station movement (etherchannel is handled).
+
+01-Oct-2006
+-----------
+  - NM-16ESW: added register handling.
+
+02-Oct-2006
+-----------
+  - NM-16ESW: playing with the port mirroring feature.
+	
+04-Oct-2006
+-----------
+  - Finally understood how to handle link status changes! Now, 
+    "shut"/"no shut" is working. Better understanding of MII registers
+    in general.
+
+05-Oct-2006
+-----------
+  - Fixed bug described in BTS entry #65 (in the case where two virtual 
+    addresses point at the same physical address, the JIT can use
+    inappropriate block). This was a "silent" bug.
+
+07-Oct-2006
+-----------
+  - Modified the hypervisor parser to allow long lines (to upload IOS configs).
+
+09-Oct-2006
+-----------
+  - NM-16ESW: added ingress and egress port mirroring (todo: BPDU and CDP
+    packets shouldn't be replicated).
+
+10-Oct-2006
+-----------
+  - 0.2.6-RC1 release.
+  - NM-16ESW: implemented ARL count. Fixed the MAC address table display 
+    problems.
+
+11-Oct-2006
+-----------
+  - C3600: fixed NVRAM configuration export.
+  - Merged a patch for Solaris/x86 from Damjan Marion.
+  - Cleaned the EEPROM stuff to have something more generic.
+  - NM-16ESW: base MAC address is now automatically generated.
+
+12-Oct-2006
+-----------
+  - NM-16ESW: added support to discard input packets.
+
+13-Oct-2006
+-----------
+  - NM-16ESW: modified the discard support to let BPDU packets arrive to
+    the CPU.
+  - Added online setup of idle-pc through the hypervisor command
+    "vm set_idle_pc_online <vm_name> <cpu_id>".
+  - Values computed for idle-pc are now stored in the virtual MIPS CPU
+    and can be known through the hypervisor command 
+    "vm show_idle_pc_prop <vm_name> <cpu_id>".
+
+15-Oct-2006
+-----------
+  - Added a timer module.
+  - NM-16ESW: added an ARL ager that removes expired MAC addresses.
+
+18-Oct-2006
+-----------
+  - Added hypervisor commands to tune idle-pc parameters
+    ("vm set_idle_max" and "vm set_idle_sleep_time").
+  - Centralized NM/PA EEPROM to have common definitions for platforms
+    with the same type of network interfaces.
+  - 0.2.6-RC2 release.
+
+19-Oct-2006
+-----------
+  - C2691: added sketelon code.
+  - C2691: working DUART.
+  - C2691: added mainboard EEPROM.
+
+20-Oct-2006
+-----------
+  - Bugfix: dec21140 and amd79c97x were incorrectly discarding frames based
+    on the source address, preventing HSRP/VRRP to work (BTS entry #75).
+  - C2691: added hypervisor module to handle instances.
+
+22-Oct-2006
+-----------
+  - C2691: trying to understand the network interrupt mechanism.
+
+23-Oct-2006
+-----------
+  - C2691: fixed Galileo interrupt (IRQ 3), allowing packets to be received!
+  - Added a basic GT96100 system controller (for C2691).
+  - GT96100: added MII registers.
+  - Added a basic Flash device to be used as ROM+NVRAM for C2691.
+  - C2691: NVRAM (simulated from flash) is now ok.
+  - C2691: Analyzed environmental monitor register. No warning anymore.
+
+24-Oct-2006
+-----------
+  - C2691: NVRAM config export is working, config import requires more work
+    (since write operations to flash are not immediate).
+  - Allowed Galileo DMA IRQ to preempt the idle loop.
+  - Fixed ATA Flash "current of sectors per card" which must be in LSW/MSW
+    order and not MSW/LSW.
+  - Added another ATA Flash access method (for c2691).
+  - C2691: added support for CompactFlash.
+
+25-Oct-2006
+-----------
+  - GT96100: added some definitions for the Ethernet part.
+
+26-Oct-2006
+-----------
+  - Working on TX part for GT96100. Unfortunately, don't know yet how to
+    signal an interrupt for it on the 2691 platform :(
+
+27-Oct-2006
+-----------
+  - C2691: found how to announce correctly NM presence in slot 1.
+  - GT96100: finally found how to notify appropriately the network interrupt:
+    the Serial Cause Register has to be handled.
+  - C2691: added the glue code to set up GT96100 ethernet ports.
+  - GT96100: added RX part. Packets are now sucessfully handled.
+  - C2691: better understanding of network interrupt status registers.
+  - C2691: added correct flash code detection.
+  - GT96100: fixed the "PHY reset" problem.
+  - C2691: added default correct chassis base MAC address.
+
+28-Oct-2006
+-----------
+  - GT96100: added hash function (Mode 0 ok, Mode 1 to fix) for Ethernet
+    address filtering + appropriate definitions.
+
+29-Oct-2006
+-----------
+  - GT96100: fixed hash mode 1 (not tested).
+  - GT96100: added address filtering process.
+
+30-Oct-2006
+-----------
+  - GT96100: added minimal MIB counters.
+  - Implemented LBA mode for PCMCIA ATA disk devices and fixed data access.
+  - Changed the default idle sleep time from 50ms to 30ms to avoid timer 
+    IRQ loss and timer drift.
+  - Added hypervisor command "vm show_timer_drift <vm_instance> <cpu_id>"
+    to display potential problem with a given idle-pc value.
+  - C2691: added proper support for IO memory.
+  - NM-16ESW: generalized code to support multiple platforms.
+  - C2691: added support for NM-16ESW.
+
+31-Oct-2006
+-----------
+  - C3725: initial support. Hardware very similar to c2691: Cisco rocks!
+  - C3745: added skeleton.
+  - C3745: fixed GT96100 address.
+  - C3745: added PCI bridges.
+  - C3745: Network Modules are working!
+  - C3745: CompactFlash working.
+
+01-Nov-2006
+-----------
+  - C3745: finally understood how to handle the system EEPROMs.
+  - Updated documentation (README).
+  - GT96100: minor enhancement of interrupt handling.
+
+02-Nov-2006
+-----------
+  - Added support for "ghost" RAM: instances use a RAM file (previously
+    created) and use copy-on-write on it. It allows to share common memory 
+    between instances and so less memory is used.
+
+03-Nov-2006
+-----------
+  - Better support for ghost RAM, added hypervisor commands 
+    "vm set_ghost_status" and "vm set_ghost_file".
+
+04-Nov-2006
+-----------
+  - NM-16ESW: fixed incorrect BPDU handling (which caused to add a 2nd
+    802.1Q tag to BPDU packets) and now 0100.0ccc.cccd is recognized as
+    a BPDU MAC address (BTS entry #).
+  - DEC21140: fixed CSR8 handling (missed frame counter), which returned
+    an undefined value (BTS entry #81).
+  - Merged a patch from Rostislav Opocensky who added support for C3600
+    in nvram_export utility.
+  - Re-enaebled debugging info for NM-16ESW on 2691/3600/37xx.
+
+05-Nov-2006
+-----------
+  - NM-16ESW: fixed a crash due to incomplete device removal.
+
+06-Nov-2006
+-----------
+  - Validated use of Serial interfaces with 2691/3725/3745.
+  - Correct config register handling for 3600/2691/3725/3745 platforms
+    (config register setting was ignored).
+  - Added detection of empty NVRAM for 2691/3725/3745 to set the ignore config
+    flag in the config register (to boot faster).
+  - C3745: Fixed NVRAM properties.
+  - C7200/C3600: rewrite of configuration push into NVRAM (can now be done 
+    offline).
+  - C2691/C3725/C3745: added support for config push into ROM flash
+    (simulated NVRAM).
+
+07-Nov-2006
+-----------
+  - Modified config export from NVRAM for all platforms (can now be done
+    offline).
+  - Better handling of base MAC address (2691/3725/3745 + NM-16ESW).
+
+08-Nov-2006
+-----------
+  - Rework of the MTS subsystem (generalization of MTS64 algorithms to MTS32
+    which was broken).
+  - Fast memory operations for 32-bit mode.
+
+09-Nov-2006
+-----------
+  - Rewrite of the MIPS TLB lookup operation.
+
+10-Nov-2006
+-----------
+  - Fixed another bug in TLB lookup.
+  - Beginning of work for PA-MC-8TE1 support.
+  - Added hypervisor commands to send messages to instances VTTY.
+  - Working on PLX PCI9054 for PA-MC-8TE1.
+
+11-Nov-2006
+-----------
+  - Continuing a bit on PA-MC-8TE1.
+	
+14-Nov-2006
+-----------
+  - Correct handling of VPN2 mask for TLB lookup.
+  - bugfix: support of c3745 was missing in the hypervisor.
+  - Merged a patch from Akim Dreyer for Debian support.
+  - 0.2.6-RC3 release.
+	
+15-Nov-2006
+-----------
+  - C2691/C3725: fixed a crash occuring on some IOS images due to incorrect
+    platform type.
+  - Modified performance counter to have stats for instructions or blocks
+    (cannot be used simultaneously).
+  - "beq" jump code (x86) was incorrectly using non-local jump.
+  - Bugfix: incorrect number of arguments for hypervisor commands related
+    to ghost file handling.
+  - 0.2.6-RC4 release.
+
+17-Nov-2006
+-----------
+  - Major code cleanup to make devices independent from the virtual processors.
+  - Generic CPU stuff.
+
+20-Nov-2006
+-----------
+  - Merged of patch from Thomas Pani to list VM TCP console ports (required 
+    for gDynagen).
+  - NM-16ESW: fixed (again) BPDU handling (incorrect VLAN tagging with non
+    trunk ports).
+  - Very minimal PowerPC definitions. Only non-JIT mode at this time.
+  - PPC: added "crorc", "cror", "crnor", "crnand", "crandc", "crand".
+  - PPC: added "and", "andc", "andi", "andis", "creqv", "crxor".
+  - PPC: added "eqv", "isync", "mfmsr", "mtmsr", "nand", "nor", "or", "orc".
+  - PPC: added "ori", "oris", "sync", "xor", "xori", "xoris", "mfcr".
+  - PPC: added "addi", "addis".
+
+21-Nov-2006
+-----------
+  - PPC: added "cmp", "cmpl", "cmpi", "cmpli", "extsb", "extsh".
+  - PPC: added "add", "add.", "and.", "andc.", "extsb.", "extsh.".
+  - PPC: added a dummy memory access function (does nothing yet).
+  - PPC: added "lbz", "lbzu", "lbzux", "lbzx".
+  - PPC: added "lhz", "lhzu", "lhzux", "lhzx".
+  - PPC: added "lwz", "lwzu", "lwzux", "lwzx".
+  - PPC: added "stb", "stbu", "stbux", "stbx".
+  - PPC: added "sth", "sthu", "sthux", "sthx".
+  - PPC: added "stw", "stwu", "stwux", "stwx".
+  - PPC: added "xor.", "b", "ba", "bl", "bla".
+  - bugfix: hypervisor commands specific to CPU crashed if the VM was not
+    started (noticed by Greg).
+
+22-Nov-2006
+-----------
+  - PPC: added "addo", "addo.", "addc", "addc.", "addco", "addco."
+  - PPC: added "addic", "addic.", "adde", "adde.", "addeo", "addeo."
+  - PPC: added "neg", "neg.", "nego", "nego.", "nand.", "nor.", "or.", "orc."
+  - PPC: added "slw", "slw.", "srw", "srw."
+
+23-Nov-2006
+-----------
+  - PPC: added "rlwimi", "rlwimi.", "rlwinm", "rlwinm.", "rlwnm", "rlwnm."
+
+24-Nov-2006
+-----------
+  - PPC: added "mulhw", "mulhw.", "mulhwu", "mulhwu.", "mulli".
+  - PPC: added "mullw", "mullw.", "mullwo", "mullwo."
+  - PPC: added "subf", "subf.", "subfo", "subfo."
+  - PPC: added "bc", "bca", "bcl", "bcla", "bclr", "bclrl".
+  - PPC: added minimal memory operation glue code.
+	
+25-Nov-2006
+-----------
+  - PPC: added dump functions for MMU registers.
+  - PPC: added support for BAT registers.
+	
+26-Nov-2006
+-----------
+  - PPC: fixed branch offset computation.
+  - PPC: added a dummy virtual machines for tests.
+  - PPC: fixed bclrx opcodes.
+  - PPC: added "mflr", "mtlr".
+
+27-Nov-2006
+-----------
+  - PPC: fixes in comparison functions.
+  - PPC: added "subfc", "subfc.", "subfco", "subfco."
+
+28-Nov-2006
+-----------
+  - PPC: added "subfic", "mfctr".
+  - PPC: fixed a lot of bugs.
+
+29-Nov-2006
+-----------
+  - PPC: added "rfi", "lha", "lhau", "lhaux", "lhax", "addze", "addme".
+  - PPC: fixed "mtcrf".
+	
+30-Nov-2006
+-----------
+  - Added IRQ routing vectors for virtual machines.
+
+01-Dec-2006
+-----------
+  - Playing with NPE-G2, just for fun.
+	
+02-Dec-2006
+-----------
+  - NPE-G2: environmental monitor is now working!
+	
+03-Dec-2006
+-----------
+  - PPC: added an empty MV64460 controller (need the datasheet).
+  - PPC: added "lmw" instruction, fixed "stmw".
+  - PPC: added "cntlzw".
+
+05-Dec-2006
+-----------
+  - NPE-G2: analyzed midplane data: this is similar to other NPE.
+  - Added a basic PLX6520CB PCI bridge.
+  - NPE-G2: added appropriate PCI bridges and PCI busses for Port Adapters.
+
+06-Dec-2006
+-----------
+  - NPE-G2: added PCI I/O space.
+  - NPE-G2: added CLPD6729, it is now possible to use PCMCIA ATA disks.
+
+08-Dec-2006
+-----------
+  - MV64460: added ugly experimental SDMA support to have a console for the
+    NPE-G2 (using the GT96100A datasheet). This code must be rewritten.
+  - MV64460/NPE-G2: playing with the various IRQs.
+	
+09-Dec-2006
+-----------
+  - PPC: added idle-pc support.
+
+10-Dec-2006
+-----------
+  - PPC: added virtual breakpoint support.
+
+15-Dec-2006
+-----------
+  - PPC: added functions to manually set up page tables.
+  - MV64460: added more interrupt definitions (with help of GT96100A manual).
+
+19-Dec-2006
+-----------
+  - MV64460: fixed interrupt loss problem.
+	
+20-Dec-2006
+-----------
+  - Basic port of the microcode for the PowerPC platforms. IOS now starts
+    normally (like the MIPS64 platforms).
+
+21-Dec-2006
+-----------
+  - NPE-G2: found OIR IRQ.
+  - MV64460: added more definitions (for SDMA).
+  - Cleanup of MIPS64 JIT code (better naming).
+
+22-Dec-2006
+-----------
+  - PPC32: added the minimal JIT core infrastructure.
+  - PPC32-JIT: added unknown opcode handling.
+  - PPC32-JIT: added some instructions.
+
+23-24-Dec-2006
+--------------
+  - PPC32-JIT: added more instructions.
+	
+26-Dec-2006
+-----------
+  - PPC32-JIT: continuing...
+	
+27-Dec-2006
+-----------
+  - PPC32-JIT: added fast memory operations.
+
+28-Dec-2006
+-----------
+  - Added PPC32 nojit support.
+  - PPC32: better checking for IRQs.
+
+29-Dec-2006
+-----------
+  - PPC32-JIT: added "amd64" support.
+  - PPC32: added "lwbrx" and "stwbrx" instructions.
+
+30-Dec-2006
+-----------
+  - PPC32: added "tw"/"twi" instructions.
+  - PPC32: added TLB support for PowerPC 405.
+  - PPC32: added "tlbre", "tlbwe", "iccci", "dccci", "mfdcr", "mtdcr" for
+    PowerPC 405.
+  - Fixed a bug with ILT tables (incorrect count - last entry was missing).
+	
+31-Dec-2006
+-----------
+  - PPC32: added "dcbst" instruction.
+
+05-Jan-2007
+-----------
+  - NPE-G2: correct handling of DUART interrupt with I/O card.
+
+07-Jan-2007
+-----------
+  - NPE-G2: correct console selection (NPE or I/O board) depending on slot 0.
+  - PPC32: fixup for decrementer interrupt.
+  - Generic CPU MTS rebuild (mips64/ppc32).
+  - Split of memory.c / mips64_mem.c. memory.c will only contain generic 
+    functions independent of the CPU model.
+  - Memlogger is now independent of CPU type (untested).
+
+08-Jan-2007
+-----------
+  - Rewrite of the MTS subsystem to have less overhead with inlined 
+    operations -> better performance.
+	
+09-Jan-2007
+-----------
+  - Finished the MTS rewrite (amd64, statistics).
+  - NPE-G2: added a 64 Mb bootflash (needs to be tested).
+
+10-Jan-2007
+-----------
+  - PPC32: added clean loading of BAT registers.
+  - Fixed device remapping.
+
+12-Jan-2007
+-----------
+  - PPC32: added "lswi", "stswi", "lswx", "stswx".
+
+13-Jan-2007
+-----------
+  - PPC32: fixed carry evaluation for "srawi" instruction.
+
+15-Jan-2007
+-----------
+  - Playing with c2600 to see if support can be added.
+
+17-Jan-2007
+-----------
+  - C2600: adding skeleton code, added NM selection. However, unable
+    to get a positive result for "sh diag 0".
+	
+19-Jan-2007
+-----------
+  - Experimenting with sparse memory to reduce virtual memory use in
+    hypervisor mode.
+	
+20-Jan-2007
+-----------
+  - Continuing on sparse memory work.
+	
+21-Jan-2007
+-----------
+  - C2600: added mainboard basic support.
+  - MPC860: added a basic IDMA support.
+  - C2600: first packet exchange :)
+
+22-Jan-2007
+-----------
+  - C2600: added basic mainboard drivers for integrated Ethernet ports.
+  - C2600: added IRQ preemption for network interrupt and DUART.
+  - Fixed use of sparse memory with ghost files.
+  - Added a command line option to test sparse memory ("--sparse-mem").
+  - Added locking for shared ghost images.
+
+24-Jan-2007
+-----------
+  - Validation of dynagen 0.8.3 with sparse memory and ghost image enabled.
+  - MIPS64: fixed a bug of the JIT which incorrectly handled jump instructions 
+    with a delay slot in another page.
+
+25-Jan-2007
+-----------
+  - C2600: added NVRAM configuration import/export and appropriate config
+    register setting if NVRAM is empty at startup.
+  - C2600: added a basic bootflash support.
+
+26-Jan-2007
+-----------
+  - C2600: io-mem size support.
+
+31-Jan-2007
+-----------
+  - i8254x: added skeleton code (for PA-2FE-TX).
+
+01-Feb-2007
+-----------
+  - i8254x: added MDIO code.
+
+04-Feb-2006
+-----------
+  - C2600: added "set_chassis" hypervisor command.
+  - C2600: possible chassis/mainboards now displayed at command line help.
+	
+05-Feb-2007
+-----------
+  - Fixed a bug when handling packet discard flag on NM-16ESW (seems to be
+    only valid for native packets).
+
+06-Feb-2007
+-----------
+  - Working on i8254x TX part. Problem with TX ring wrapping.
+	
+08-Feb-2007
+-----------
+  - Added packet capture to NIO filters, with PCAP output (Greg Anuzelli).
+  - i82543: RX and TX parts are now basically working (of course, no IP/TCP
+    checksum offloading, but this doesn't seem to be used).
+
+09-Feb-2007
+-----------
+  - C7200: added C7200-IO-2FE card, based on Intel i82543 chips.
+  - C7200: added PA-GE interface, but TX part is broken.
+  - i8254x: TDH/TDT and RDH/RDT registers are located at a different address.
+    PA-GE is now working.
+
+12-Feb-2007
+-----------
+  - i8254x: delayed RX IRQ.
+  - MIPS64: fixed (again) TLB lookup for entries in ksseg and kseg3.
+  - Added a "byte-swapping" device.
+	
+13-Feb-2007
+-----------
+  - i8254x: added byte-swapped data transfer.
+  - PA-POS-OC3: applied byte-swapped data transfer for TX ring (RX ring
+    doesn't seem to need this - strange).
+
+14-Feb-2007
+-----------
+  - C7200: added C7200-IO-GE+E, based on Intel i82543 chips.
+
+16-Feb-2007
+-----------
+  - MIPS64: fixed a problem of jump in delay slots (occuring with a "forward"
+    jump). This caused a malfunction for C7200-IO-2FE and C7200-IO-GE-E cards.
+  - C7200: adjusted the byte-swapped zone for NPE-300 io-memory.
+
+18-Feb-2007
+-----------
+  - PPC32: Remove JIT compiled pages when a write occurs (required for c2600).
+
+19-Feb-2007
+-----------
+  - PPC32: Optimization for writes on JIT page at address 0.
+	
+20-Feb-2007
+-----------
+  - Working on MSFC1 - just for fun (this will probably never route any 
+    packet).
+  - Fixed DEC21140 TX ring interrupt generation.
+	
+21-Feb-2007
+-----------
+  - Continuing on MSFC1 (added EEPROM, SRAM, ...)
+  - Added NMC93C56 EEPROM support.
+
+23-Feb-2007
+-----------
+  - MPC860: fixed a bug in DMA handling which caused incorrect writes out
+    of DPRAM memory.
+  - PPC32: added missing breakpoint function for JIT.
+  - C7200: rework on network interrupts, for clean handling per slot/port.
+
+24-Feb-2007
+-----------
+  - C7200: Net IRQs are now correctly dispatched. Need to fix all drivers
+    to generate IRQs correctly.
+  - DEC21140: proper management of CSR5 register for new interrupt handling.
+  - i8254x: converted to new interrupt handling.
+  - Am79c971: fixed interrupt management + a bug with IRQ mask.
+  - PA-A1/PA-POS-OC3/Mueslix: fixed interrupt management.
+
+25-Feb-2007
+-----------
+  - C2691: updated interrupt infrastructure.
+  - NM-16ESW: fixed interrupt handling.
+
+26-Feb-2007
+-----------
+  - C3725/C3745: updated interrupt infrastructure.
+
+27-Feb-2007
+-----------
+  - C2600: updated interrupt infrastructure.
+
+02-Mar-2007
+-----------
+  - Added a cache for the instruction lookup tables (ILT), allowing a faster
+    start.
+
+03-Mar-2007
+-----------
+  - Fixed instruction tables (problem seen on amd64 platforms).
+
+07-Mar-2007
+-----------
+  - MIPS64/PPC32: various code cleanups in JIT code.
+  - MIPS64: replace the JIT block lookup algorithm based on physical
+    pages by s-boxes (x86 only).
+
+08-Mar-2007
+-----------
+  - PPC32: JIT block lookup optimization (x86 only).
+
+09-Mar-2007
+-----------
+  - MIPS64/PPC32: JIT block lookup optimization (amd64).
+
+12-Mar-2007
+-----------
+  - PPC32: fixed invalid hash index in JIT block invalidation (thanks to Greg).
+	
+13-Mar-2007
+-----------
+  - Updated the Mueslix driver and fixed it for packets > 128 bytes
+    (IRQ clearing delay required because of the new interrupt system).
+  - Allowed MTU up to 18000 bytes on the Mueslix driver. This required an
+    update of the NIO core.
+  - Full dump of the idle-pc values when no "good" value can be determined.
+
+25-Mar-2007
+-----------
+  - Store the idle-pc values in the CPU structure when no "good" value is
+    available, so they are readable/usable by dynagen.
+  - PA-POS-OC3: fixed memory copy which caused invalid frames to be sent.
+
+27-Mar-2007
+-----------
+  - Added a device access counter for each CPU for diagnostics purposes.
+
+29-Mar-2007
+-----------
+  - PPC32: optimizations for eflags->cr computing.
+
+30-Mar-2007
+-----------
+  - PPC32: optimizations in CR handling (split in 8 fields).
+
+31-Mar-2007
+-----------
+  - PPC32: added CR optimizations to amd64 backend.
+
+02-Apr-2007
+-----------
+  - Fixed "nojit" build (reported by Philipp Brenner, BTS entry #156).
+  - AMD Am79c970 FastEthernet interfaces now announce 100 Mb/s Full duplex.
+
+04-Apr-2007
+-----------
+  - Fixed build (NetIO filters) when PCAP is lacking.
+
+09-Apr-2007
+-----------
+  - Added NM-1A-OC3MM EEPROM definition for future work.
+  - NM-16ESW: filter CDP specifically to not propagate frames to all ports.
+
+12-Apr-2007
+-----------
+  - Added an hypervisor command to disable direct jumps between JIT blocks
+    (vm set_blk_direct_jump <vm_name> <0|1>).
+
+15-Apr-2007 => 22-Apr-2007
+===========================
+  - PPC32: rewrite of JIT with peephole and CR flags optimizations.
+	
+23-Apr-2007
+-----------
+  - PPC32: converted amd64 JIT to new system.
+	
+24-Apr-2007
+-----------
+  - MIPS64: fixed a bug in cache instruction preventing compressed IOS images
+    to boot.
+  - PPC32: same as above for ICBI instruction.
+  - PPC32: fixed ADDZE instruction.
+
+25-Apr-2007
+-----------
+  - C3725: fixed interrupt problems with slot 2 (bad shift - only 4 irq
+    lines per port).
+
+28-Apr-2007
+-----------
+  - Changed instruction counters to 32-bit type, to get more accurate
+    results.
+
+29-Apr-2007
+-----------
+  - Experimenting with a per-register memory translation cache.
+
+30-Apr-2007
+-----------
+  - C2600: playing with MPC860 SPI to access WIC eeproms (slot 0 only).
+
+01-May-2007
+-----------
+  - MPC860: continuing on SPI.
+  - Rewriting/Refactoring code to handle network interfaces (required for WIC
+    support).
+
+02-May-2007
+-----------
+  - Continuing rework of network interfaces.
+
+03-May-2007
+-----------
+  - Added slot handling hypervisor commands to VM module.
+  - Fixed some bugs/lacking checks in network card module.
+  - C2600: added WIC EEPROM read through MPC860 SPI code.
+  - C2600: beginning of work for basic SCC implementation.
+	
+04-May-2007
+-----------
+  - C2600: continuing on SCC.
+  - C2600: WIC-1T is now working!
+  - C2600: added WIC-2T (async mode is not supported).
+  - C1700: introduction of this platform (took c2600 as base model).
+	
+05-May-2007
+-----------
+  - MPC860: added SPI relocation support (required for c1700).
+  - C1700: added NVRAM.
+  - C1700: added WIC detection / correct EEPROM support.
+  - MPC860: beginning of work on Fast Ethernet Controller.
+	
+07-May-2007
+-----------
+  - MPC860: Fast Ethernet Controller basically working (MII registers 
+    required).
+  - MPC860: better handling of interrupt levels.
+  - C1700: added WIC support (WIC-1T/WIC-2T).
+
+14/15-May-2007
+--------------
+  - Flash code rework (required for c1700) to have something more generic.
+	
+16-May-2007
+-----------
+  - New flash code re-enabled for all routers requiring it (NPE-G2 bootflash
+    is broken however).
+  - C1700: added WIC-1ENET code base with EEPROM MAC address programming.
+
+18-May-2007
+-----------
+  - Memory exceptions are now handled through setjmp/longjmp, avoiding error
+    checks in memory access functions.
+
+19-May-2007
+-----------
+  - C2600: fixed PCI handling which prevented i82559 device to work.
+    In fact, the PCI bridge is in a Xilinx device, and the output of 
+    "sh pci hardware" was very different from a real router.
+  - i8255x (eepro100): added basic code (no RX/TX, only MII working).
+
+20-May-2007
+-----------
+  - Continuing on i8255x.
+
+21-May-2007
+-----------
+  - i8255x: Intel doesn't provide enough info in its documentation for
+    the RX flexible mode...
+
+22-May-2007
+-----------
+  - i8255x: RX flexible mode works similarly to the 82596CA chipset.
+    Packet TX and RX seems ok.
+
+23-May-2007
+-----------
+  - C2691/C3725/C3745: fixed GT96100 binding to slot 0.
+  - GT96100/ETH: fixed interrupt handling for TX packets (the interrupt was 
+    incorrectly disabled when no packet was available on a ring, causing
+    packet loss when the two ports were enabled) - BTS entry #171.
+
+25-May-2007
+-----------
+  - C3660: correct support of mainboard FastEthernet ports with the new
+    card subsystem.
+  - C7200: fixed I/O card definition with new card subsystem.
+  - Added compatibility mode with old version for slot binding in the
+    command line.
+
+01-Jun-2007
+-----------
+  - Heavily fixed/tested the Serial drivers to correctly transmit/receive
+    frames. Now the CRC is not anymore transmitted and the correct size is
+    set for RX rings (TODO: crc-32 for Mueslix and PA-POS-OC3).
+
+03-Jun-2007
+-----------
+  - Fixed incorrect free in deletion of frame-relay switch VC.
+
+04-Jun-2007
+-----------
+  - PA-POS-OC3/Mueslix: added correct handling of crc-16/crc-32.
+
+10-Jun-2007
+-----------
+  - MIPS64: correct handling of stack for MacOS X (alignment).
+  - MSFC1: cleaned up module to use the new card infrastructure.
+  - Frame-Relay switch: removed "trailing" handling which was in fact
+    only the CRC + final byte. 
+  
+09-Jul-2007
+-----------
+  - Fixed PA-FE-TX initialization (EEPROM setting lacking).
+
+11-Jul-2007
+-----------
+  - PPC32-JIT: fixed stack alignment for MacOSX/Darwin.
+  - PPC32-JIT: fixed perf counter and breakpoints.
+
+13-Jul-2007
+-----------
+  - Integrated patches from FreeBSD (Pavel I Volkov), excepted for the vtty
+    part.
+
+14-17-Jul-2007
+--------------
+  - Rework of VM infrastructure.
+
+17-Jul-2007
+-----------
+  - Added basic plugin subsystem.
+  - CPU: added custom handler support for undefined memory accesses.
+
+21-22-Jul-2007
+--------------
+  - GT96100: working on SDMA and MPSC.
+	
+23-Jul-2007
+-----------
+  - C3745: finally understood how to handle WIC EEPROMs.
+
+24-Jul-2007
+-----------
+  - C3745: added support of WIC-1T & WIC-2T.
+  - GT96100: fixed SDMA handling.
+	
+25-Jul-2007
+-----------
+  - C2691/C3725: added WIC-1T and WIC-2T similarly to C3745.
+  - C1700: fixed mainboard definitions, added proper support of C1710
+    (no WIC port, Ethernet port connected on MPC860 SCC1).
+  - C1700: added 1751 and 1760 definitions.
+
+29-Jul-2007
+-----------
+  - MPC860: fixed MII registers for 1710, 1721 and 1760.
+
+01-Aug-2007
+-----------
+  - C2600/C2691/C3725/C3745: Added NM-CIDS/NM-NAM which can be connected
+    to a PC emulator.
+  - C2600: added a check for NM-CIDS/NM-NAM which require XM models.
+
+18-Aug-2007
+-----------
+  - Added WIC address space definitions for platforms that support them.
+
+19-Aug-2007
+-----------
+  - Added ISL support for am79c970 based cards (NM-1FE-TX and others).
+
+27-Aug-2007
+-----------
+  - GT96100: missing check for NULL pointer in set_nio/unset_nio.
+  - MPC860: same bugfix (SCC and FEC).
+
+31-Aug-2007
+-----------
+  - MIPS/PPC: modified device memory access to allow devices not at a 4k
+    page boundary (like WICs on 2600). 
+  - Added fake WIC serial drivers, just to catch the memory accesses.
+
+06-Sep-2007
+-----------
+  - PPC32: Fixed BCTR instruction on amd64 jit.
+
+08-Sep-2007
+-----------
+  - Added an object store (through hypervisor) for Dynagen.
+	
+11-Sep-2007
+-----------
+  - Proper cleanup of gt_data/mpc_data fields for MPC860 and GT96100 based
+    platforms (start/stop/exit/crash symptom with Dynagen).
+
+12-Sep-2007
+-----------
+  - Fixed udp_recv simple program which was broken.
+  - Added "delete_all" command for hypervisor object store.
+  - Added appropriate code for serial WIC drivers on 1700.
+
+14-Sep-2007
+-----------
+  - Added TCP keepalives on VTTY connections (xabrouck@cisco.com)
+  - Fixed Flash code.
+
+18-Sep-2007
+-----------
+  - Added a virtual ATM SAR (segmentation and reassembly) engine.
+  - Added a virtual ATM bridge device (RFC1483).
+
+21-Sep-2007
+-----------
+  - GT96100: fixed CRC handling in MPSC HDLC channels (2 bytes, not 4!)
+
+30-Sep-2007
+-----------
+  - PPC32-JIT: fixed CR signed evaluation in case of overflow.
+
+04-Oct-2007
+-----------
+  - Added ISL support for integrated ports on 2691/3725/3745.
+	
+07-Oct-2007
+-----------
+  - Fixed non-JIT build for PPC32.
+
+08-Oct-2007
+-----------
+  - MV64460: rewrite of SDMA code to follow GT96100 model.
+
+09-Oct-2007
+-----------
+  - MV64460: added MPSC registers (as for GT96100).
+
+10-Oct-2007
+-----------
+  - MV64460: added SRAM.

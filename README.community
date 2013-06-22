@@ -1,7 +1,20 @@
 === Dynamips-0.2.8-RC3-community ===
 
-This an unofficial version provided without warranty, based on a development version and 
-improved with patches wrote by various people from the community.
+This an unofficial version provided without warranty, based on a
+development version and improved with patches wrote by various people
+from the community.
+
+You can compile two different versions of dynamips with this code.
+Edit the Makefile to set the flags to suit your environment.
+One of the flags, DYNAMIPS_CODE, can be "stable" or "unstable".
+
+Unstable is the code which contains most of the development code, and is
+in particular suitable for use on a 64 bit Mac. Unfortunately this has
+proved to be unstable on other platforms.
+
+Stable contains the same code as Unstable, minus some mips64 bit optimisations
+and tcb code which seems to trigger instability on a number of platforms.
+You should probably use stable unless you have a very good reason.
 
 Patch by Christophe Fillot:
 
@@ -25,7 +38,8 @@ Patch by Christophe Fillot:
  - Bug fixes in socket handling (incorrect setsockopt() for non-RFC2553 systems)
 
 Patch by Gordon Russell:
-
+ - New source code layout to allow stable and unstable to share code
+   in common in a single distribution.
  - Able to set system id at runtime in cli mode using -I <systemid> or
    set_system_id in hypervisor mode. This is for routers
    1700,2600,3600,3725,3745, and 7200 (not npe-400 or npe-g1 or 2).
@@ -45,6 +59,7 @@ Patch by Gordon Russell:
  - Bug fix: xx:xx:xx:xx:xx:xx mac addresses in -m now accepted.
  - Bug fix: JayTee patch included for sizeof error in networking
  - Bug fix: closing telnet to AUX/CONSOLE may produce SIGPIPE which is now trapped when using non hypervisor mode.
+ - Bug fix: ghost file using -G now opened correctly as READONLY.
 
 Other patches:
 
