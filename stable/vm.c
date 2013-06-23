@@ -457,6 +457,7 @@ void vm_free(vm_instance_t *vm)
       vm_chunk_free_all(vm);
 
       /* Free various elements */
+      rommon_var_clear(&vm->rommon_vars);
       free(vm->rommon_vars.filename);
       free(vm->ghost_ram_filename);
       free(vm->sym_filename);

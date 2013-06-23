@@ -37,5 +37,8 @@ int rommon_var_add_str(struct rommon_var_list *rvl,char *str);
 int rommon_var_get(struct rommon_var_list *rvl,char *name,
                    char *buffer,size_t len);
 
+/* Clear all the variables */
+void rommon_var_clear(struct rommon_var_list *rvl);
+
 #endif
 
