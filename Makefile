@@ -54,9 +54,9 @@ install: dynamips.$(DYNAMIPS_CODE)
 	cp dynamips.$(DYNAMIPS_CODE)$(BIN_EXT) dynamips$(BIN_EXT)
 	install dynamips$(BIN_EXT) $(DYNAMIPS_CODE)/nvram_export$(BIN_EXT)   $(DESTDIR)/bin/
 	rm -f dynamips
-	install -m644 dynamips.1        $(DESTDIR)/share/man/man1
-	install -m644 nvram_export.1    $(DESTDIR)/share/man/man1
-	install -m644 hypervisor_mode.7 $(DESTDIR)/share/man/man7
+	install -m644 man/dynamips.1        $(DESTDIR)/share/man/man1
+	install -m644 man/nvram_export.1    $(DESTDIR)/share/man/man1
+	install -m644 man/hypervisor_mode.7 $(DESTDIR)/share/man/man7
 
 
 .PHONY: clean
