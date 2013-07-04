@@ -21,6 +21,7 @@ You should probably use stable unless you have a very good reason.
 
 License: GNU GPLv2
 Current website: http://www.gns3.net/dynamips/
+Repository: https://github.com/GNS3/dynamips-community
 
 Original websites:
 http://www.ipflow.utc.fr/index.php/Cisco_7200_Simulator

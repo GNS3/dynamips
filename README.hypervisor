@@ -115,6 +115,9 @@ Virtual Machine module ("vm")
 * "vm cpu_info <instance_name> <cpu_id>" : Show info about the CPU identified
   by "cpu_id". The boot CPU (which is typically the only CPU) has ID 0.
 
+* "vm cpu_usage <instance_name> <cpu_id>" : Show cpu usage of dynamips in 
+  seconds. (experimental)
+  The instance must exist, "cpu_id" is ignored.
 
 Virtual Cisco 7200 instances module ("c7200")
 ==============================================
