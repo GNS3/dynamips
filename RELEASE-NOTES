@@ -1,35 +1,36 @@
 Release Notes for Cisco router simulator (Dynamips-community)
 =============================================================
 
-Version:  Dynamips-0.2.8-RC7-community
+Version:  v0.2.8-community
 
-Release date:  Saturday, June 15, 2013 (2013-06-15)
+Release date:  Thursday, July 4, 2013 (2013-07-04)
 
-Source code:  https://github.com/GNS3/dynamips-community/tree/v0.2.8-RC7-community
+Source code:  https://github.com/GNS3/dynamips-community/tree/v0.2.8-community
 
 License: GNU GPLv2
 
 
-What's New since Dynamips-0.2.8-RC6-community
-=============================================
 
-Fixed random crashes when the ppc32 cpu is used.
+What's New since v0.2.8-RC7-community
+=====================================
 
-Platforms that use the ppc32 cpu:
-  - Cisco 1700
-  - Cisco 2600
-  - Cisco 7200 with NPE driver npe-g2
+* Fixed crashes in x86_64 builds by decreasing the optimization level to O2.
+  It was also reported that using O2 makes packet delivery in general, and frame relay especially more reliable.
+* Fixed many memory leaks.
+* Updated documentation.
 
-Platforms that use the mips64 cpu:
-  - Cisco 2691
-  - Cisco 3600
-  - Cisco 3725
-  - Cisco 3745
-  - Cisco 7200 with other NPE drivers (not npe-g2)
 
 
 Known Issues
 ============
 
-There are memory leaks. The original Dynamips-0.2.8-RC2 also has them.
-The current aim is to fix them before the final release of GNS3 0.8.4.
+There is lots of missing hardware functionality.
+  - https://github.com/GNS3/dynamips-community/issues/5
+
+Reload from the router console doesn't work.
+  - https://github.com/GNS3/dynamips-community/issues/6
+
+Using a self decompressing image can lead to an invalid IA and stop the cpu.
+  - https://github.com/GNS3/dynamips-community/issues/8
+
+There are still memory leaks.

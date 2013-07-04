@@ -27,8 +27,8 @@ HAS_PCAP?=1
 HAS_POSIX_MEMALIGN?=1
 
 # Current dynamips release
-VERSION_TRAIN=0.2.8
-VERSION_SUB=-RC7-community
+VERSION_TRAIN?=0.2.8
+VERSION_SUB?=-community
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
