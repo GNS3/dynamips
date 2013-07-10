@@ -270,10 +270,10 @@ rom2c$(BIN_EXT): rom2c.c
 	@$(CC) -Wall $(CFLAGS) -o $@ $< $(LIBS)
 
 mips64_microcode_dump.inc: rom2c$(BIN_EXT) mips64_microcode
-	@./rom2c mips64_microcode mips64_microcode_dump.inc 0xbfc00000
+	@./rom2c$(BIN_EXT) mips64_microcode mips64_microcode_dump.inc 0xbfc00000
 
 ppc32_microcode_dump.inc: rom2c$(BIN_EXT) ppc32_microcode
-	@./rom2c ppc32_microcode ppc32_microcode_dump.inc 0xfff00000
+	@./rom2c$(BIN_EXT) ppc32_microcode ppc32_microcode_dump.inc 0xfff00000
 
 # explicit dependencies needed for parallel jobs
 dev_rom.c: mips64_microcode_dump.inc ppc32_microcode_dump.inc
