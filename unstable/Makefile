@@ -9,10 +9,6 @@
 #DYNAMIPS_ARCH?=amd64
 DYNAMIPS_ARCH?=amd64
 
-# Do you want to use lib (for 32 bit compiling) or lib64
-#DYNAMIPS_LIB?=lib
-DYNAMIPS_LIB?=lib64
-
 # Get include files from the current directory and from the common directory
 INCLUDE+=-I. -I../common
 
@@ -76,7 +72,7 @@ ifeq ($(shell uname), Linux)
 #   PCAP_LIB=-lpcap
    OSNAME=Linux
    CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. -ldl -lrt -luuid /usr/$(DYNAMIPS_LIB)/libelf.a $(PTHREAD_LIBS)
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
