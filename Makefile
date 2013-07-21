@@ -5,11 +5,13 @@
 #   - Use "amd64" for a build on x86_64 (64-bits)
 #   - Use "ppc32" for a build on powerpc (32-bits)
 #   - Use "nojit" for unsupported architectures.
+ifeq ($(shell arch),x86_64)
+export DYNAMIPS_ARCH?=amd64
+else
+ifeq ($(shell arch),i686)
 export DYNAMIPS_ARCH?=x86
-
-# Do you want to use lib (for 32 bit compiling) or lib64
-export DYNAMIPS_LIB?=lib
-#export DYNAMIPS_LIB?=lib64
+endif
+endif
 
 # For MAC x64 you can compile the "unstable" version, which should work
 # fine, or use stable if you prefer.
