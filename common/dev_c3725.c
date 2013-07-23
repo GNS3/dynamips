@@ -26,6 +26,7 @@
 #include "dev_c3725_iofpga.h"
 #include "dev_vtty.h"
 #include "registry.h"
+#include "fs_nvram.h"
 
 /* ======================================================================== */
 /* EEPROM definitions                                                       */
@@ -71,115 +72,27 @@ static void c3725_init_defaults(c3725_t *router);
 
 /* Directly extract the configuration from the NVRAM device */
 static ssize_t c3725_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
-{   
-   u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
-   m_uint32_t start,nvlen;
-   m_uint16_t magic1,magic2; 
-   struct vdevice *nvram_dev;
-   off_t nvram_size;
-   int fd;
-
-   if ((nvram_dev = dev_get_by_name(vm,"rom")))
-      dev_sync(nvram_dev);
-
-   fd = vm_mmap_open_file(vm,"rom",&base_ptr,&nvram_size);
-
-   if (fd == -1)
-      return(-1);
-
-   ios_ptr = base_ptr + C3725_NVRAM_OFFSET;
-   end_ptr = base_ptr + nvram_size;
-
-   if ((ios_ptr + 0x30) >= end_ptr) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   magic1  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x06));
-   magic2  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x08));
-
-   if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
-      vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
-               magic1,magic2);
-      return(-1);
-   }
-
-   start = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x10)) + 1;
-   nvlen = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x18));
-
-   if (!(*buffer = malloc(nvlen+1))) {
-      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",nvlen);
-      return(-1);
-   }
-
-   cfg_ptr = ios_ptr + start + 0x08;
-
-   if ((cfg_ptr + nvlen) > end_ptr) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   memcpy(*buffer,cfg_ptr,nvlen-1);
-   (*buffer)[nvlen-1] = 0;
-   return(nvlen-1);
-}
-
-static int c3725_nvram_push_config_part(vm_instance_t *vm,
-                                        u_char *buffer,size_t len,
-                                        u_char *ios_ptr)
 {
-   m_uint32_t cfg_offset,cklen,tmp;
-   m_uint16_t cksum;
-   u_char *cfg_ptr;
+   int ret;
+   size_t len;
 
-   cfg_offset = 0x2c;
-   cfg_ptr    = ios_ptr + cfg_offset;
+   ret = generic_nvram_extract_config(vm, "rom", C3725_NVRAM_OFFSET, C3725_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, buffer, &len, NULL, NULL);
 
-   /* Write IOS tag, uncompressed config... */
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x06) = htons(0xF0A5);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x08) = htons(0xABCD);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0a) = htons(0x0001);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(0x0000);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0e) = htons(0x0c04);
+   if (ret)
+      return(-1);
 
-   /* Store file contents to NVRAM */
-   memcpy(cfg_ptr,buffer,len);
-
-   /* Write config addresses + size */
-   tmp = cfg_offset - 0x08;
-
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x10) = htonl(tmp);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(tmp + len);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(len);
-
-   /* Compute the checksum */
-   cklen = C3725_NVRAM_SIZE - 0x08;
-   cksum = nvram_cksum((m_uint16_t *)(ios_ptr+0x08),cklen);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(cksum);
-   return(0);
+   // XXX possible overflow from cast
+   return((ssize_t)len);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
 int c3725_nvram_push_config(vm_instance_t *vm,u_char *buffer,size_t len)
 {
-   u_char *base_ptr,*ios_ptr;
-   int fd;
-   
-   fd = vm_mmap_create_file(vm,"rom",vm->rom_size*1048576,&base_ptr);
+   int ret;
 
-   if (fd == -1)
-      return(-1);
+   ret = generic_nvram_push_config(vm, "rom", vm->rom_size*1048576, C3725_NVRAM_OFFSET, C3725_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, buffer, len, NULL, 0);
 
-   ios_ptr = base_ptr + C3725_NVRAM_OFFSET;
-
-   /* Normal config */
-   c3725_nvram_push_config_part(vm,buffer,len,ios_ptr);
-   
-   /* Backup config */
-   c3725_nvram_push_config_part(vm,buffer,len,ios_ptr + C3725_NVRAM_SIZE);
-
-   vm_mmap_close_file(fd,base_ptr,vm->rom_size*1048576);
-   return(0);
+   return(ret);
 }
 
 /* Check for empty config */

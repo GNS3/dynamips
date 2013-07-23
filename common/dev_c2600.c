@@ -27,6 +27,7 @@
 #include "dev_c2600_iofpga.h"
 #include "dev_vtty.h"
 #include "registry.h"
+#include "fs_nvram.h"
 
 /* ======================================================================== */
 /* EEPROM definitions                                                       */
@@ -93,202 +94,29 @@ static struct cisco_card_driver *nm_drivers[] = {
 /* Initialize default parameters for a C2600 */
 static void c2600_init_defaults(c2600_t *router);
 
-/* Read a byte from the NVRAM */
-static inline m_uint8_t nvram_read_byte(u_char *base,u_int offset)
-{
-   m_uint8_t *ptr;
-
-   ptr = (m_uint8_t *)base + (offset << 2);
-   return(*ptr);
-}
-
-/* Write a byte to the NVRAM */
-static inline void nvram_write_byte(u_char *base,u_int offset,m_uint8_t val)
-{
-   m_uint8_t *ptr;
-
-   ptr = (m_uint8_t *)base + (offset << 2);
-   *ptr = val;
-}
-
-/* Read a 16-bit value from NVRAM */
-static m_uint16_t nvram_read16(u_char *base,u_int offset)
-{
-   m_uint16_t val;
-   val =  nvram_read_byte(base,offset) << 8;
-   val |= nvram_read_byte(base,offset+1);
-   return(val);
-}
-
-/* Write a 16-bit value to NVRAM */
-static void nvram_write16(u_char *base,u_int offset,m_uint16_t val)
-{
-   nvram_write_byte(base,offset,val >> 8);
-   nvram_write_byte(base,offset+1,val & 0xFF);
-}
-
-/* Read a 32-bit value from NVRAM */
-static m_uint32_t nvram_read32(u_char *base,u_int offset)
-{
-   m_uint32_t val;
-   val =  nvram_read_byte(base,offset)   << 24;
-   val |= nvram_read_byte(base,offset+1) << 16;
-   val |= nvram_read_byte(base,offset+2) << 8;
-   val |= nvram_read_byte(base,offset+3);
-   return(val);
-}
-
-/* Write a 32-bit value to NVRAM */
-static void nvram_write32(u_char *base,u_int offset,m_uint32_t val)
-{
-   nvram_write_byte(base,offset,val >> 24);
-   nvram_write_byte(base,offset+1,val >> 16);
-   nvram_write_byte(base,offset+2,val >> 8);
-   nvram_write_byte(base,offset+3,val & 0xFF);
-}
-
-/* Read a buffer from NVRAM */
-static void nvram_memcpy_from(u_char *base,u_int offset,u_char *data,u_int len)
-{
-   u_int i;
-
-   for(i=0;i<len;i++) {
-      *data = nvram_read_byte(base,offset+i);
-      data++;
-   }
-}
-
-/* Write a buffer from NVRAM */
-static void nvram_memcpy_to(u_char *base,u_int offset,u_char *data,u_int len)
-{
-   u_int i;
-
-   for(i=0;i<len;i++) {
-      nvram_write_byte(base,offset+i,*data);
-      data++;
-   }
-}
-
 /* Directly extract the configuration from the NVRAM device */
 ssize_t c2600_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 {
-   u_char *base_ptr;
-   u_int ios_ptr,cfg_ptr,end_ptr;
-   m_uint32_t start,nvlen;
-   m_uint16_t magic1,magic2;
-   struct vdevice *nvram_dev;
-   off_t nvram_size;
-   int fd;
+   int ret;
+   size_t len;
 
-   if ((nvram_dev = dev_get_by_name(vm,"nvram")))
-      dev_sync(nvram_dev);
+   ret = generic_nvram_extract_config(vm, "nvram", vm->nvram_rom_space*4, 0, 0, FS_NVRAM_FORMAT_SCALE_4, buffer, &len, NULL, NULL);
 
-   fd = vm_mmap_open_file(vm,"nvram",&base_ptr,&nvram_size);
-
-   if (fd == -1)
+   if (ret)
       return(-1);
 
-   ios_ptr = vm->nvram_rom_space;
-   end_ptr = nvram_size;
-
-   if ((ios_ptr + 0x30) >= end_ptr) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   magic1 = nvram_read16(base_ptr,ios_ptr+0x06);
-   magic2 = nvram_read16(base_ptr,ios_ptr+0x08);
-
-   if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
-      vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
-               magic1,magic2);
-      return(-1);
-   }
-
-   start = nvram_read32(base_ptr,ios_ptr+0x10) + 1;
-   nvlen = nvram_read32(base_ptr,ios_ptr+0x18);
-
-   printf("START = 0x%8.8x, LEN = 0x%8.8x\n",start,nvlen);
-   printf("END   = 0x%8.8x\n",nvram_read32(base_ptr,ios_ptr+0x14));
-
-   if (!(*buffer = malloc(nvlen+1))) {
-      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",nvlen);
-      return(-1);
-   }
-
-   cfg_ptr = ios_ptr + start + 0x08;
-
-   if ((cfg_ptr + nvlen) > end_ptr) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   nvram_memcpy_from(base_ptr,cfg_ptr,*buffer,nvlen-1);
-   (*buffer)[nvlen-1] = 0;
-   return(nvlen-1);
-}
-
-/* Compute NVRAM checksum */
-static m_uint16_t c2600_nvram_cksum(u_char *base_ptr,u_int offset,size_t count)
-{
-   m_uint32_t sum = 0;
-
-   while(count > 1) {
-      sum = sum + nvram_read16(base_ptr,offset);
-      offset += 2;
-      count -= sizeof(m_uint16_t);
-   }
-
-   if (count > 0) 
-      sum = sum + ((nvram_read16(base_ptr,offset) & 0xFF) << 8);
-
-   while(sum>>16)
-      sum = (sum & 0xffff) + (sum >> 16);
-
-   return(~sum);
+   // XXX possible overflow from cast
+   return((ssize_t)len);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
 int c2600_nvram_push_config(vm_instance_t *vm,u_char *buffer,size_t len)
 {
-   m_uint32_t cfg_offset,cklen,tmp,ios_ptr,cfg_ptr;
-   m_uint16_t cksum;
-   u_char *base_ptr;
-   int fd;
+   int ret;
 
-   fd = vm_mmap_create_file(vm,"nvram",vm->nvram_size*4096,&base_ptr);
+   ret = generic_nvram_push_config(vm, "nvram", vm->nvram_size*4096, vm->nvram_rom_space*4, 0, 0, FS_NVRAM_FORMAT_SCALE_4, buffer, len, NULL, 0);
 
-   if (fd == -1)
-      return(-1);
-
-   cfg_offset = 0x2c;
-   ios_ptr = vm->nvram_rom_space;
-   cfg_ptr = ios_ptr + cfg_offset;
-
-   /* Write IOS tag, uncompressed config... */
-   nvram_write16(base_ptr,ios_ptr+0x06,0xF0A5);
-   nvram_write16(base_ptr,ios_ptr+0x08,0xABCD);
-   nvram_write16(base_ptr,ios_ptr+0x0a,0x0001);
-   nvram_write16(base_ptr,ios_ptr+0x0c,0x0000);
-   nvram_write16(base_ptr,ios_ptr+0x0e,0x0c04);
-
-   /* Store file contents to NVRAM */
-   nvram_memcpy_to(base_ptr,cfg_ptr,buffer,len);
-
-   /* Write config addresses + size */
-   tmp = cfg_offset - 0x08;
-
-   nvram_write32(base_ptr,ios_ptr+0x10,tmp);
-   nvram_write32(base_ptr,ios_ptr+0x14,tmp + len);
-   nvram_write32(base_ptr,ios_ptr+0x18,len);
-
-   /* Compute the checksum */
-   cklen = (vm->nvram_size*1024) - (vm->nvram_rom_space + 0x08);
-   cksum = c2600_nvram_cksum(base_ptr,ios_ptr+0x08,cklen);
-   nvram_write16(base_ptr,ios_ptr+0x0c,cksum);
-
-   vm_mmap_close_file(fd,base_ptr,vm->nvram_size*4096);
-   return(0);
+   return(ret);
 }
 
 /* Check for empty config */

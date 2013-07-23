@@ -31,6 +31,7 @@
 #include "dev_vtty.h"
 #include "registry.h"
 #include "net.h"
+#include "fs_nvram.h"
 
 /* MSFC1 EEPROM */
 static m_uint16_t eeprom_msfc1_data[128] = {
@@ -198,112 +199,28 @@ static void c6msfc1_init_defaults(c6msfc1_t *router);
 
 /* Directly extract the configuration from the NVRAM device */
 static ssize_t c6msfc1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
-{   
-   u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
-   m_uint32_t start,end,nvlen,clen;
-   m_uint16_t magic1,magic2; 
-   struct vdevice *nvram_dev;
-   m_uint64_t nvram_addr;
-   off_t nvram_size;
-   int fd;
+{
+   int ret;
+   size_t len;
 
-   if ((nvram_dev = dev_get_by_name(vm,"nvram")))
-      dev_sync(nvram_dev);
+   ret = generic_nvram_extract_config(vm, "nvram", vm->nvram_rom_space, 0, C6MSFC1_NVRAM_ADDR + vm->nvram_rom_space, FS_NVRAM_FORMAT_ABSOLUTE_C6, buffer, &len, NULL, NULL);
 
-   fd = vm_mmap_open_file(vm,"nvram",&base_ptr,&nvram_size);
-
-   if (fd == -1)
+   if (ret)
       return(-1);
 
-   nvram_addr = C6MSFC1_NVRAM_ADDR;
-   ios_ptr = base_ptr + vm->nvram_rom_space;
-   end_ptr = base_ptr + nvram_size;
-
-   if ((ios_ptr + 0x30) >= end_ptr) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   magic1  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x06));
-   magic2  = ntohs(*PTR_ADJUST(m_uint16_t *,ios_ptr,0x08));
-
-   if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
-      vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
-               magic1,magic2);
-      return(-1);
-   }
-
-   start = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x10)) + 1;
-   end   = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x14));
-   nvlen = ntohl(*PTR_ADJUST(m_uint32_t *,ios_ptr,0x18));
-   clen  = end - start;
-
-   if ((clen + 1) != nvlen) {
-      vm_error(vm,"invalid configuration size (0x%x)\n",nvlen);
-      return(-1);
-   }
-
-   if (!(*buffer = malloc(clen+1))) {
-      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",clen);
-      return(-1);
-   }
-
-   cfg_ptr = base_ptr + (start - nvram_addr);
-
-   if ((start < nvram_addr) || ((cfg_ptr + clen) > end_ptr)) {
-      vm_error(vm,"NVRAM file too small\n");
-      return(-1);
-   }
-
-   memcpy(*buffer,cfg_ptr,clen);
-   (*buffer)[clen] = 0;
-   return(clen);
+   // XXX possible overflow from cast
+   return((ssize_t)len);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
 static int c6msfc1_nvram_push_config(vm_instance_t *vm,
                                      u_char *buffer,size_t len)
-{  
-   u_char *base_ptr,*ios_ptr,*cfg_ptr;
-   m_uint32_t cfg_addr,cfg_offset;
-   m_uint32_t nvram_addr,cklen;
-   m_uint16_t cksum;
-   int fd;
+{
+   int ret;
 
-   fd = vm_mmap_create_file(vm,"nvram",vm->nvram_size*1024,&base_ptr);
+   ret = generic_nvram_push_config(vm, "nvram", vm->nvram_size*1024, vm->nvram_rom_space, 0, C6MSFC1_NVRAM_ADDR + vm->nvram_rom_space, FS_NVRAM_FORMAT_ABSOLUTE_C6, buffer, len, NULL, 0);
 
-   if (fd == -1)
-      return(-1);
-
-   cfg_offset = 0x2c;
-   ios_ptr = base_ptr + vm->nvram_rom_space;
-   cfg_ptr = ios_ptr  + cfg_offset;
-
-   nvram_addr = C6MSFC1_NVRAM_ADDR;
-   cfg_addr = nvram_addr + vm->nvram_rom_space + cfg_offset;
-
-   /* Write IOS tag, uncompressed config... */
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x06) = htons(0xF0A5);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x08) = htons(0xABCD);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0a) = htons(0x0001);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(0x0000);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0e) = htons(0x0000);
-
-   /* Store file contents to NVRAM */
-   memcpy(cfg_ptr,buffer,len);
-
-   /* Write config addresses + size */
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x10) = htonl(cfg_addr);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(cfg_addr + len);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(len);
-
-   /* Compute the checksum */
-   cklen = (vm->nvram_size*1024) - (vm->nvram_rom_space + 0x08);
-   cksum = nvram_cksum((m_uint16_t *)(ios_ptr+0x08),cklen);
-   *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0c) = htons(cksum);
-
-   vm_mmap_close_file(fd,base_ptr,vm->nvram_size*1024);
-   return(0);
+   return(ret);
 }
 
 /* Get slot/port corresponding to specified network IRQ */

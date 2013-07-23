@@ -21,7 +21,7 @@
 /* Default C3725 parameters */
 #define C3725_DEFAULT_RAM_SIZE     128
 #define C3725_DEFAULT_ROM_SIZE     2
-#define C3725_DEFAULT_NVRAM_SIZE   128
+#define C3725_DEFAULT_NVRAM_SIZE   112
 #define C3725_DEFAULT_CONF_REG     0x2102
 #define C3725_DEFAULT_CLOCK_DIV    8
 #define C3725_DEFAULT_RAM_MMAP     1
@@ -70,10 +70,10 @@
 
 /* Offset of simulated NVRAM in ROM flash */
 #define C3725_NVRAM_OFFSET    0xE0000
-#define C3725_NVRAM_SIZE      0xE000
+#define C3725_NVRAM_SIZE      0x1C000 // with backup
 
 /* Reserved space for ROM in NVRAM */
-#define C3725_NVRAM_ROM_RES_SIZE  2048
+#define C3725_NVRAM_ROM_RES_SIZE  0
 
 /* C3725 ELF Platform ID */
 #define C3725_ELF_MACHINE_ID  0x61

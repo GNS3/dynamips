@@ -21,7 +21,7 @@
 /* Default C2691 parameters */
 #define C2691_DEFAULT_RAM_SIZE     128
 #define C2691_DEFAULT_ROM_SIZE     2
-#define C2691_DEFAULT_NVRAM_SIZE   128
+#define C2691_DEFAULT_NVRAM_SIZE   112
 #define C2691_DEFAULT_CONF_REG     0x2102
 #define C2691_DEFAULT_CLOCK_DIV    8
 #define C2691_DEFAULT_RAM_MMAP     1
@@ -70,10 +70,10 @@
 
 /* Offset of simulated NVRAM in ROM flash */
 #define C2691_NVRAM_OFFSET    0xE0000
-#define C2691_NVRAM_SIZE      0xE000
+#define C2691_NVRAM_SIZE      0x1C000 // with backup
 
 /* Reserved space for ROM in NVRAM */
-#define C2691_NVRAM_ROM_RES_SIZE  2048
+#define C2691_NVRAM_ROM_RES_SIZE  0
 
 /* C2691 ELF Platform ID */
 #define C2691_ELF_MACHINE_ID  0x66

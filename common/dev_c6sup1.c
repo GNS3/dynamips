@@ -197,6 +197,7 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 
    if ((ios_ptr + 0x30) >= end_ptr) {
       vm_error(vm,"NVRAM file too small\n");
+      vm_mmap_close_file(fd,base_ptr,nvram_size);
       return(-1);
    }
 
@@ -206,6 +207,7 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
    if ((magic1 != 0xF0A5) || (magic2 != 0xABCD)) {
       vm_error(vm,"unable to find IOS magic numbers (0x%x,0x%x)!\n",
                magic1,magic2);
+      vm_mmap_close_file(fd,base_ptr,nvram_size);
       return(-1);
    }
 
@@ -216,11 +218,13 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 
    if ((clen + 1) != nvlen) {
       vm_error(vm,"invalid configuration size (0x%x)\n",nvlen);
+      vm_mmap_close_file(fd,base_ptr,nvram_size);
       return(-1);
    }
 
    if (!(*buffer = malloc(clen+1))) {
       vm_error(vm,"unable to allocate config buffer (%u bytes)\n",clen);
+      vm_mmap_close_file(fd,base_ptr,nvram_size);
       return(-1);
    }
 
@@ -228,11 +232,13 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 
    if ((start < nvram_addr) || ((cfg_ptr + clen) > end_ptr)) {
       vm_error(vm,"NVRAM file too small\n");
+      vm_mmap_close_file(fd,base_ptr,nvram_size);
       return(-1);
    }
 
    memcpy(*buffer,cfg_ptr,clen);
    (*buffer)[clen] = 0;
+   vm_mmap_close_file(fd,base_ptr,nvram_size);
    return(clen);
 }
 

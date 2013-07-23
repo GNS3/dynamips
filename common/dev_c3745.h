@@ -22,7 +22,7 @@
 /* Default C3745 parameters */
 #define C3745_DEFAULT_RAM_SIZE     128
 #define C3745_DEFAULT_ROM_SIZE     2
-#define C3745_DEFAULT_NVRAM_SIZE   128
+#define C3745_DEFAULT_NVRAM_SIZE   304
 #define C3745_DEFAULT_CONF_REG     0x2102
 #define C3745_DEFAULT_CLOCK_DIV    8
 #define C3745_DEFAULT_RAM_MMAP     1
@@ -71,10 +71,10 @@
 
 /* Offset of simulated NVRAM in ROM flash */
 #define C3745_NVRAM_OFFSET    0xB0000
-#define C3745_NVRAM_SIZE      0x20000
+#define C3745_NVRAM_SIZE      0x4C000 // with backup
 
 /* Reserved space for ROM in NVRAM */
-#define C3745_NVRAM_ROM_RES_SIZE  2048
+#define C3745_NVRAM_ROM_RES_SIZE  0
 
 /* C3745 ELF Platform ID */
 #define C3745_ELF_MACHINE_ID  0x69
