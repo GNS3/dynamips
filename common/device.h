@@ -272,4 +272,10 @@ int dev_sb1_duart_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len);
 /* remote control device */
 int dev_remote_control_init(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t len);
 
+int generic_nvram_extract_config(vm_instance_t *vm, char *dev_name, size_t nvram_offset, size_t nvram_size, m_uint32_t addr, u_int format,
+                                 u_char **startup_config, size_t *startup_len, u_char **private_config, size_t *private_len);
+
+int generic_nvram_push_config(vm_instance_t *vm, char *dev_name, size_t file_size, size_t nvram_offset, size_t nvram_size, m_uint32_t addr, u_int format,
+                              u_char *startup_config, size_t startup_len, u_char *private_config, size_t private_len);
+
 #endif

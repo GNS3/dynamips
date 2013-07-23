@@ -23,6 +23,7 @@
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
+#include "fs_nvram.h"
 
 #define DEBUG_ACCESS  0
 
@@ -211,4 +212,143 @@ m_uint16_t nvram_cksum_old(vm_instance_t *vm,m_uint64_t addr,size_t count)
       sum = (sum & 0xffff) + (sum >> 16);
 
    return(~sum);
+}
+
+
+/** Generic function for implementations of vm->platform->nvram_extract_config.
+ * If nvram_size is 0, it is set based on the file size.
+ * @param dev_name     Device name
+ * @param nvram_offset Where the filesystem starts
+ * @param nvram_size   Size of the filesystem
+ */
+int generic_nvram_extract_config(vm_instance_t *vm, char *dev_name, size_t nvram_offset, size_t nvram_size, m_uint32_t addr, u_int format,
+                                 u_char **startup_config, size_t *startup_len, u_char **private_config, size_t *private_len)
+{
+   // XXX add const to dev_name
+   u_char *base_ptr;
+   struct vdevice *nvram_dev;
+   off_t file_size;
+   int fd;
+   int ret = 0;
+   fs_nvram_t *fs = NULL;
+
+   if ((nvram_dev = dev_get_by_name(vm, dev_name)))
+      dev_sync(nvram_dev);
+
+   fd = vm_mmap_open_file(vm, dev_name, &base_ptr, &file_size);
+   if (fd == -1)
+      return(-1);
+
+   if (nvram_size == 0 && file_size >= nvram_offset + FS_NVRAM_SECTOR_SIZE)
+      nvram_size = (size_t)file_size - nvram_offset;
+
+   if (file_size < nvram_offset + nvram_size) {
+      vm_error(vm,"generic_nvram_extract_config: NVRAM filesystem doesn't fit inside the %s file!\n", dev_name);
+      goto done;
+   }
+
+   // normal + backup
+   fs = fs_nvram_open(base_ptr + nvram_offset, nvram_size, addr, (format & FS_NVRAM_FORMAT_MASK));
+   if (fs == NULL)
+      goto err_errno;
+
+   ret = fs_nvram_read_config(fs, startup_config, startup_len, private_config, private_len);
+   if (ret)
+      goto err_ret;
+
+done:
+   if (fs)
+      fs_nvram_close(fs);
+
+   vm_mmap_close_file(fd, base_ptr, file_size);
+
+   return(ret);
+err_errno:
+   ret = errno;
+err_ret:
+   vm_error(vm,"generic_nvram_extract_config: %s\n", strerror(ret));
+   ret = -1;
+   goto done;
+}
+
+
+/** Generic function for implementations of vm->platform->nvram_push_config.
+ * If nvram_size is 0, it is set based on the file size.
+ * Preserves startup-config if startup_config is NULL.
+ * Preserves private-config if private_config is NULL.
+ * @param dev_name     Device name
+ * @param file_size    File size
+ * @param nvram_offset Where the filesystem starts
+ * @param nvram_size   Size of the filesystem
+ */
+int generic_nvram_push_config(vm_instance_t *vm, char *dev_name, size_t file_size, size_t nvram_offset, size_t nvram_size, m_uint32_t addr, u_int format,
+                              u_char *startup_config, size_t startup_len, u_char *private_config, size_t private_len)
+{
+   // XXX add const to dev_name
+   u_char *base_ptr;
+   int fd;
+   int ret = 0;
+   fs_nvram_t *fs = NULL;
+   u_char *prev_startup_config = NULL;
+   u_char *prev_private_config = NULL;
+   size_t prev_startup_len;
+   size_t prev_private_len;
+
+   if (nvram_size == 0 && file_size >= nvram_offset + FS_NVRAM_SECTOR_SIZE)
+      nvram_size = file_size - nvram_offset;
+
+   if (file_size < nvram_offset + nvram_size) {
+      vm_error(vm, "generic_nvram_push_config: NVRAM filesystem doesn't fit inside the %s file!\n", dev_name);
+      return(-1);
+   }
+
+   fd = vm_mmap_create_file(vm, dev_name, file_size, &base_ptr);
+   if (fd == -1)
+      return(-1);
+
+   printf("generic_nvram_push_config: nvram_offset=%d nvram_size=%d, addr=%d, format=0x%X\n", (u_int)nvram_offset, (u_int)nvram_size, (u_int)addr, format);
+   fs = fs_nvram_open(base_ptr + nvram_offset, nvram_size, addr, (format & FS_NVRAM_FORMAT_MASK) | FS_NVRAM_FLAG_OPEN_CREATE);
+   if (fs == NULL)
+      goto err_errno;
+   printf("generic_nvram_push_config: fs_nvram_open ok\n");
+
+   ret = fs_nvram_read_config(fs, &prev_startup_config, &prev_startup_len, &prev_private_config, &prev_private_len);
+   if (ret)
+      goto err_ret;
+   printf("generic_nvram_push_config: fs_nvram_read_config ok\n");
+
+   if (startup_config == NULL ) {
+      startup_config = prev_startup_config;
+      startup_len = prev_startup_len;
+   }
+
+   if (private_config == NULL) {
+      private_config = prev_private_config;
+      private_len = prev_private_len;
+   }
+
+   ret = fs_nvram_write_config(fs, startup_config, startup_len, private_config, private_len);
+   if (ret)
+      goto err_ret;
+   printf("generic_nvram_push_config: fs_nvram_write_config ok\n");
+
+done:
+   if (fs)
+      fs_nvram_close(fs);
+
+   if (prev_startup_config)
+      free(prev_startup_config);
+
+   if (prev_private_config)
+      free(prev_private_config);
+
+   vm_mmap_close_file(fd, base_ptr, file_size);
+
+   return(ret);
+err_errno:
+   ret = errno;
+err_ret:
+   vm_error(vm, "generic_nvram_push_config: %s\n", strerror(ret));
+   ret = -1;
+   goto done;
 }
