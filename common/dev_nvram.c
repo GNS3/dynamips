@@ -306,16 +306,13 @@ int generic_nvram_push_config(vm_instance_t *vm, char *dev_name, size_t file_siz
    if (fd == -1)
       return(-1);
 
-   printf("generic_nvram_push_config: nvram_offset=%d nvram_size=%d, addr=%d, format=0x%X\n", (u_int)nvram_offset, (u_int)nvram_size, (u_int)addr, format);
    fs = fs_nvram_open(base_ptr + nvram_offset, nvram_size, addr, (format & FS_NVRAM_FORMAT_MASK) | FS_NVRAM_FLAG_OPEN_CREATE);
    if (fs == NULL)
       goto err_errno;
-   printf("generic_nvram_push_config: fs_nvram_open ok\n");
 
    ret = fs_nvram_read_config(fs, &prev_startup_config, &prev_startup_len, &prev_private_config, &prev_private_len);
    if (ret)
       goto err_ret;
-   printf("generic_nvram_push_config: fs_nvram_read_config ok\n");
 
    if (startup_config == NULL ) {
       startup_config = prev_startup_config;
@@ -330,7 +327,6 @@ int generic_nvram_push_config(vm_instance_t *vm, char *dev_name, size_t file_siz
    ret = fs_nvram_write_config(fs, startup_config, startup_len, private_config, private_len);
    if (ret)
       goto err_ret;
-   printf("generic_nvram_push_config: fs_nvram_write_config ok\n");
 
 done:
    if (fs)
