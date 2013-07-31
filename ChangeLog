@@ -2570,3 +2570,29 @@
    - Manual patches
    - Patch: avoid dangling pointers when the ppc32 cpu is recompiling a tcb
       and an exec page needs to be allocated, causing the tcb to be flushed.
+
+12-Jun-2013 to 15-Jun-2013
+--------------------------
+   - Updated README, changelogs, and makefiles.
+   - Bumped version to v0.2.8-RC7-community.
+
+18-Jun-2013 to 04-Jul-2013
+--------------------------
+   - Fixed crashes in x86_64 builds by decreasing the optimization level to O2.
+     It was also reported that using O2 makes packet delivery in general, and frame relay especially more reliable.
+   - Fixed many memory leaks.
+   - Updated documentation and makefiles (works with parallel jobs).
+   - Bumped version to v0.2.8-community.
+
+10-Jul-2013 to 31-Jul-2013
+--------------------------
+   - Added NVRAM filesystem.
+   - Added generic_nvram_extract_config and generic_nvram_push_config that use the NVRAM filesystem.
+   - Reimplemented the nvram_extract_config/nvram_push_config functions of the platforms c1700/c2600/c2692/c3600/c3725/c3745/c7200/c6msfc1.
+   - Fixed the file handle leak in c6sup1_nvram_extract_config.
+   - Renamed from Dynamips-community to the original Dynamips, updated documentation and makefiles.
+   - Bumped version to v0.2.9.
+
+Fixed issue #11 - nvram:private-config is destroyed when we write nvram:startup-config
+Fixed issue #13 - C3745 has an emulated NVRAM that is not continuous, so we can generate an invalid checksum when the config is written
+Fixed issue #14 - a file descriptor is leaked every time the config is extracted/read

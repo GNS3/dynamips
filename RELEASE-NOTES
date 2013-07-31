@@ -1,36 +1,35 @@
-Release Notes for Cisco router simulator (Dynamips-community)
-=============================================================
+Release Notes for Cisco router simulator (Dynamips)
+===================================================
 
-Version:  v0.2.8-community
+Version:  v0.2.9
 
-Release date:  Thursday, July 4, 2013 (2013-07-04)
+Release date:  Wednesday, July 31, 2013 (2013-07-31)
 
-Source code:  https://github.com/GNS3/dynamips-community/tree/v0.2.8-community
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.9
 
 License: GNU GPLv2
 
 
+What's New since v0.2.8-community
+=================================
 
-What's New since v0.2.8-RC7-community
-=====================================
+Renamed from Dynamips-community to the original Dynamips.
 
-* Fixed crashes in x86_64 builds by decreasing the optimization level to O2.
-  It was also reported that using O2 makes packet delivery in general, and frame relay especially more reliable.
-* Fixed many memory leaks.
-* Updated documentation.
-
+Fixed issue #11 - nvram:private-config is destroyed when we write nvram:startup-config
+Fixed issue #13 - C3745 has an emulated NVRAM that is not continuous, so we can generate an invalid checksum when the config is written
+Fixed issue #14 - a file descriptor is leaked every time the config is extracted/read
 
 
 Known Issues
 ============
 
 There is lots of missing hardware functionality.
-  - https://github.com/GNS3/dynamips-community/issues/5
+  - https://github.com/GNS3/dynamips/issues/5
 
 Reload from the router console doesn't work.
-  - https://github.com/GNS3/dynamips-community/issues/6
+  - https://github.com/GNS3/dynamips/issues/6
 
 Using a self decompressing image can lead to an invalid IA and stop the cpu.
-  - https://github.com/GNS3/dynamips-community/issues/8
+  - https://github.com/GNS3/dynamips/issues/8
 
 There are still memory leaks.
