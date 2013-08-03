@@ -184,6 +184,12 @@ SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 #SOURCES += profiler.c
 #CFLAGS += -p -DPROFILE -DPROFILE_FILE=\"$(PROG).profile\"
 
+#Debugging symbols (overrides optimization level)
+#WITH_DEBUG=2
+ifneq ($(WITH_DEBUG),)
+CFLAGS+= -O$(WITH_DEBUG) -ggdb -fasynchronous-unwind-tables -fvar-tracking
+endif
+
 ifeq ($(DYNAMIPS_ARCH),x86)
 HDR += x86-codegen.h mips64_x86_trans.h ppc32_x86_trans.h
 SOURCES += mips64_x86_trans.c ppc32_x86_trans.c
