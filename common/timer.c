@@ -297,8 +297,6 @@ static void *timer_loop(timer_queue_t *queue)
       TIMERQ_UNLOCK(queue);
    }
 
-   /* Stop thread immediately */
-   pthread_exit(NULL);
    return NULL;
 }
 
