@@ -498,10 +498,10 @@ void timer_flush_queues(void)
          free(timer);
       }
 
-      TIMERQ_UNLOCK(queue);
-
       /* signal changes to the queue thread */
       pthread_cond_signal(&queue->schedule);
+
+      TIMERQ_UNLOCK(queue);
 
       /* wait for thread to terminate */
       pthread_join(thread,NULL);
