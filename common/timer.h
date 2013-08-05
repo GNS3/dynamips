@@ -48,11 +48,11 @@ struct timer_entry {
 
 /* Timer Queue */
 struct timer_queue {
-   timer_entry_t *list;             /* List of timers */
+   timer_entry_t * volatile list;   /* List of timers */
    pthread_mutex_t lock;            /* Mutex for concurrent accesses */
    pthread_cond_t schedule;         /* Scheduling condition */
    pthread_t thread;                /* Thread running timer loop */
-   int running;                     /* Running flag */
+   int volatile running;            /* Running flag */
    int timer_count;                 /* Number of timers */
    int level;                       /* Sum of criticity levels */
    timer_queue_t *next;             /* Next Timer Queue (for pools) */
