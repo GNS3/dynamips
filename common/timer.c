@@ -240,6 +240,12 @@ static void *timer_loop(timer_queue_t *queue)
       /* Prevent asynchronous access problems */
       TIMERQ_LOCK(queue);
 
+      /* We need to check "running" flags to know if we must stop */
+      if (!queue->running) {
+         TIMERQ_UNLOCK(queue);
+         break;
+      }
+
       /* Get first event */
       timer = queue->list;
 
