@@ -458,19 +458,23 @@ timer_queue_t *timer_create_queue(void)
 
    /* Create mutex */
    if (pthread_mutex_init(&queue->lock,NULL))
-      goto error;
+      goto err_mutex;
 
    /* Create condition */
    if (pthread_cond_init(&queue->schedule,NULL))
-      goto error;
+      goto err_cond;
 
    /* Create thread */
    if (pthread_create(&queue->thread,NULL,(void *(*)(void *))timer_loop,queue))
-      goto error;
+      goto err_create;
 
    return queue;
 
- error:
+err_create:
+   pthread_cond_destroy(&queue->schedule);
+err_cond:
+   pthread_mutex_destroy(&queue->lock);
+err_mutex:
    free(queue);
    return NULL;
 }
