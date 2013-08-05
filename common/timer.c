@@ -230,10 +230,6 @@ static void *timer_loop(timer_queue_t *queue)
    timer_entry_t *timer;
    m_tmcnt_t c_time;
 
-   /* We allow thread cancellation at any time */
-   pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
-   pthread_setcancelstate(PTHREAD_CANCEL_ENABLE,NULL);
-
    /* Set signal properties */
    m_signal_block(SIGINT);
    m_signal_block(SIGQUIT);
