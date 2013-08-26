@@ -738,8 +738,8 @@ static int c2600_init_instance(vm_instance_t *vm)
    }
 
    /* Load IOS configuration file */
-   if (vm->ios_config != NULL) {
-      vm_nvram_push_config(vm,vm->ios_config);
+   if (vm->ios_startup_config != NULL) {
+      vm_nvram_push_config(vm,vm->ios_startup_config);
       vm->conf_reg &= ~0x40;
    }
 

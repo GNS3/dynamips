@@ -108,7 +108,7 @@ struct vm_instance {
    u_int exec_area_size;          /* Size of execution area for CPU */
    m_uint32_t ios_entry_point;    /* IOS entry point */
    char *ios_image;               /* IOS image filename */
-   char *ios_config;              /* IOS configuration file */
+   char *ios_startup_config;      /* IOS configuration file for startup-config */
    char *rom_filename;            /* ROM filename */
    char *sym_filename;            /* Symbol filename */
    FILE *lock_fd,*log_fd;         /* Lock/Log file descriptors */

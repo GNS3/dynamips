@@ -1856,8 +1856,8 @@ static int c7200m_init_instance(c7200_t *router)
    vm->clear_irq = c7200m_clear_irq;
 
    /* Load IOS configuration file */
-   if (vm->ios_config != NULL) {
-      vm_nvram_push_config(vm,vm->ios_config);
+   if (vm->ios_startup_config != NULL) {
+      vm_nvram_push_config(vm,vm->ios_startup_config);
       vm->conf_reg &= ~0x40;
    }
 

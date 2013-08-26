@@ -462,7 +462,7 @@ void vm_free(vm_instance_t *vm)
       free(vm->ghost_ram_filename);
       free(vm->sym_filename);
       free(vm->ios_image);
-      free(vm->ios_config);
+      free(vm->ios_startup_config);
       free(vm->rom_filename);
       free(vm->name);
       free(vm);
@@ -919,9 +919,9 @@ int vm_ios_set_image(vm_instance_t *vm,char *ios_image)
 /* Unset a Cisco IOS configuration file */
 void vm_ios_unset_config(vm_instance_t *vm)
 {
-   if (vm->ios_config != NULL) {
-      free(vm->ios_config);
-      vm->ios_config = NULL;
+   if (vm->ios_startup_config != NULL) {
+      free(vm->ios_startup_config);
+      vm->ios_startup_config = NULL;
    }
 }
 
@@ -934,7 +934,7 @@ int vm_ios_set_config(vm_instance_t *vm,char *ios_config)
       return(-1);
 
    vm_ios_unset_config(vm);
-   vm->ios_config = str;
+   vm->ios_startup_config = str;
    return(0);  
 }
 
