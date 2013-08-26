@@ -671,9 +671,9 @@ static int c6msfc1_init_instance(vm_instance_t *vm)
    vm->set_irq = c6msfc1_set_irq;
    vm->clear_irq = c6msfc1_clear_irq;   
    
-   /* Load IOS configuration file */
-   if (vm->ios_startup_config != NULL) {
-      vm_nvram_push_config(vm,vm->ios_startup_config);
+   /* Load IOS configuration files */
+   if (vm->ios_startup_config != NULL || vm->ios_private_config != NULL) {
+      vm_nvram_push_config(vm,vm->ios_startup_config,vm->ios_private_config);
       vm->conf_reg &= ~0x40;
    }
 

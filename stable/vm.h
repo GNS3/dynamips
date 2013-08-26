@@ -109,6 +109,7 @@ struct vm_instance {
    m_uint32_t ios_entry_point;    /* IOS entry point */
    char *ios_image;               /* IOS image filename */
    char *ios_startup_config;      /* IOS configuration file for startup-config */
+   char *ios_private_config;      /* IOS configuration file for private-config */
    char *rom_filename;            /* ROM filename */
    char *sym_filename;            /* Symbol filename */
    FILE *lock_fd,*log_fd;         /* Lock/Log file descriptors */
@@ -362,8 +363,8 @@ int vm_ios_set_config(vm_instance_t *vm,char *ios_config);
 /* Extract IOS configuration from NVRAM and write it to a file */
 int vm_nvram_extract_config(vm_instance_t *vm,char *filename);
 
-/* Read an IOS configuraton from a file and push it to NVRAM */
-int vm_nvram_push_config(vm_instance_t *vm,char *filename);
+/* Read IOS configuraton from the files and push it to NVRAM (NULL to keep existing data) */
+int vm_nvram_push_config(vm_instance_t *vm,const char *startup_filename,const char *private_filename);
 
 /* Save general VM configuration into the specified file */
 void vm_save_config(vm_instance_t *vm,FILE *fd);

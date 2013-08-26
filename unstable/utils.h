@@ -441,7 +441,7 @@ void m_flog_str_array(FILE *fd,int count,char *str[]);
 char *m_fgets(char *buffer,int size,FILE *fd);
 
 /* Read a file and returns it in a buffer */
-ssize_t m_read_file(char *filename,u_char **buffer);
+int m_read_file(const char *filename,u_char **buffer,size_t *length);
 
 /* Allocate aligned memory */
 void *m_memalign(size_t boundary,size_t size);

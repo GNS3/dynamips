@@ -278,39 +278,44 @@ char *m_fgets(char *buffer,int size,FILE *fd)
 }
 
 /* Read a file and returns it in a buffer */
-ssize_t m_read_file(char *filename,u_char **buffer)
+int m_read_file(const char *filename,u_char **buffer,size_t *length)
 {
-   u_char tmp[256],*ptr,*nptr;
-   size_t len,tot_len;
    FILE *fd;
+   long len;
 
-   *buffer = ptr = NULL;
-   tot_len = 0;
-
-   /* Open file for reading */
-   if ((fd = fopen(filename,"r")) == NULL)
+   // open
+   fd = fopen(filename,"rb");
+   if (fd == NULL) {
       return(-1);
+   }
 
-   while((len = fread(tmp,1,sizeof(tmp),fd)) > 0)
-   {
-      /* Reallocate memory */
-      nptr = realloc(ptr,tot_len+len+1);
-      if (nptr == NULL) {
-         if (ptr) free(ptr);
+   // len
+   fseek(fd, 0, SEEK_END);
+   len = ftell(fd);
+   fseek(fd, 0, SEEK_SET);
+   if (len < 0 || ferror(fd)) {
+      fclose(fd);
+      return(-1);
+   }
+
+   if (length) {
+      *length = (size_t)len;
+   }
+
+    // data
+   if (buffer) {
+      *buffer = (u_char *)malloc((size_t)len);
+      if (*buffer == NULL || fread(*buffer, (size_t)len, 1, fd) != 1) {
+         free(*buffer);
+         *buffer = NULL;
          fclose(fd);
          return(-1);
       }
-
-      ptr = nptr;
-
-      /* Ok, memory could be allocated */
-      memcpy(&ptr[tot_len],tmp,len);
-      tot_len += len;
    }
 
+   // close
    fclose(fd);
-   *buffer = ptr;
-   return(tot_len);
+   return(0);
 }
 
 /* Allocate aligned memory */

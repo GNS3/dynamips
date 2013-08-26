@@ -463,6 +463,7 @@ void vm_free(vm_instance_t *vm)
       free(vm->sym_filename);
       free(vm->ios_image);
       free(vm->ios_startup_config);
+      free(vm->ios_private_config);
       free(vm->rom_filename);
       free(vm->name);
       free(vm);
@@ -919,10 +920,11 @@ int vm_ios_set_image(vm_instance_t *vm,char *ios_image)
 /* Unset a Cisco IOS configuration file */
 void vm_ios_unset_config(vm_instance_t *vm)
 {
-   if (vm->ios_startup_config != NULL) {
-      free(vm->ios_startup_config);
-      vm->ios_startup_config = NULL;
-   }
+   free(vm->ios_startup_config);
+   vm->ios_startup_config = NULL;
+
+   free(vm->ios_private_config);
+   vm->ios_private_config = NULL;
 }
 
 /* Set Cisco IOS configuration file to use */
@@ -967,23 +969,32 @@ int vm_nvram_extract_config(vm_instance_t *vm,char *filename)
    return(0);
 }
 
-/* Read an IOS configuraton from a file and push it to NVRAM */
-int vm_nvram_push_config(vm_instance_t *vm,char *filename)
+/* Read IOS configuraton from the files and push it to NVRAM (NULL to keep existing data) */
+int vm_nvram_push_config(vm_instance_t *vm,const char *startup_filename,const char *private_filename)
 {
-   u_char *cfg_buffer;
-   ssize_t len;
-   int res;
-
-   if (!vm->platform->nvram_push_config)
-      return(-1);
+   u_char *startup_config = NULL;
+   u_char *private_config = NULL;
+   size_t startup_len = 0;
+   size_t private_len = 0;
+   int res = -1;
 
    /* Read configuration */
-   if (((len = m_read_file(filename,&cfg_buffer)) <= 0) || !cfg_buffer)
-      return(-1);
+   if (startup_filename) {
+      if (m_read_file(startup_filename, &startup_config, &startup_len))
+         goto cleanup;
+   }
+
+   if (private_filename) {
+      if (m_read_file(private_filename, &private_config, &private_len))
+         goto cleanup;
+   }
 
    /* Push it! */
-   res = vm->platform->nvram_push_config(vm,cfg_buffer,len,NULL,0);
-   free(cfg_buffer);
+   res = vm->platform->nvram_push_config(vm, startup_config, startup_len, private_config, private_len);
+
+cleanup:
+   free(startup_config);
+   free(private_config);
    return(res);
 }
 

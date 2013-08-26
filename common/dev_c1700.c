@@ -667,9 +667,9 @@ static int c1700_init_instance(vm_instance_t *vm)
       return(-1);
    }
 
-   /* Load IOS configuration file */
-   if (vm->ios_startup_config != NULL) {
-      vm_nvram_push_config(vm,vm->ios_startup_config);
+   /* Load IOS configuration files */
+   if (vm->ios_startup_config != NULL || vm->ios_private_config != NULL) {
+      vm_nvram_push_config(vm,vm->ios_startup_config,vm->ios_private_config);
       vm->conf_reg &= ~0x40;
    }
 
