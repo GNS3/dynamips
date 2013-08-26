@@ -108,18 +108,14 @@ static struct cisco_card_driver *nm_drivers[] = {
 static void c3745_init_defaults(c3745_t *router);
 
 /* Directly extract the configuration from the NVRAM device */
-static ssize_t c3745_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
+static int c3745_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {
    int ret;
    size_t len;
 
-   ret = generic_nvram_extract_config(vm, "rom", C3745_NVRAM_OFFSET, C3745_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, buffer, &len, NULL, NULL);
+   ret = generic_nvram_extract_config(vm, "rom", C3745_NVRAM_OFFSET, C3745_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, startup_config, startup_len, private_config, private_len);
 
-   if (ret)
-      return(-1);
-
-   // XXX possible overflow from cast
-   return((ssize_t)len);
+   return(ret);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */

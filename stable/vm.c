@@ -942,14 +942,14 @@ int vm_ios_set_config(vm_instance_t *vm,char *ios_config)
 int vm_nvram_extract_config(vm_instance_t *vm,char *filename)
 {
    u_char *cfg_buffer = NULL;
-   ssize_t cfg_len;
+   size_t cfg_len;
    FILE *fd;
 
    if (!vm->platform->nvram_extract_config)
       return(-1);
 
    /* Extract the IOS configuration */
-   if (((cfg_len = vm->platform->nvram_extract_config(vm,&cfg_buffer)) < 0) || 
+   if ((vm->platform->nvram_extract_config(vm,&cfg_buffer,&cfg_len,NULL,NULL)) || 
        (cfg_buffer == NULL))
       return(-1);
 

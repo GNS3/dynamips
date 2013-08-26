@@ -173,7 +173,7 @@ static struct cisco_card_driver *pa_drivers[] = {
 static void c6sup1_init_defaults(c6sup1_t *router);
 
 /* Directly extract the configuration from the NVRAM device */
-static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
+static int c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {   
    u_char *base_ptr,*ios_ptr,*cfg_ptr,*end_ptr;
    m_uint32_t start,end,nvlen,clen;
@@ -222,12 +222,6 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
       return(-1);
    }
 
-   if (!(*buffer = malloc(clen+1))) {
-      vm_error(vm,"unable to allocate config buffer (%u bytes)\n",clen);
-      vm_mmap_close_file(fd,base_ptr,nvram_size);
-      return(-1);
-   }
-
    cfg_ptr = base_ptr + (start - nvram_addr);
 
    if ((start < nvram_addr) || ((cfg_ptr + clen) > end_ptr)) {
@@ -236,10 +230,30 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
       return(-1);
    }
 
-   memcpy(*buffer,cfg_ptr,clen);
-   (*buffer)[clen] = 0;
+   if (startup_config != NULL) {
+      if (!(*startup_config = malloc(clen+1))) {
+         vm_error(vm,"unable to allocate config buffer (%u bytes)\n",clen);
+         vm_mmap_close_file(fd,base_ptr,nvram_size);
+         return(-1);
+      }
+      memcpy(*startup_config,cfg_ptr,clen);
+      (*startup_config)[clen] = 0;
+   }
+
+   if (startup_len != NULL) {
+      *startup_len = clen;
+   }
+
+   if (private_config != NULL) {
+      *private_config = NULL;
+   }
+
+   if (private_len != NULL) {
+      *private_len = 0;
+   }
+
    vm_mmap_close_file(fd,base_ptr,nvram_size);
-   return(clen);
+   return(0);
 }
 
 /* Directly push the IOS configuration to the NVRAM device */

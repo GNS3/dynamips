@@ -604,7 +604,7 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
    u_char *cfg_buffer,*cfg_base64;
-   ssize_t cfg_len;
+   size_t cfg_len;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -613,7 +613,7 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
       goto err_no_extract_method;
 
    /* Extract the IOS configuration */
-   if (((cfg_len = vm->platform->nvram_extract_config(vm,&cfg_buffer)) < 0) ||
+   if ((vm->platform->nvram_extract_config(vm,&cfg_buffer,&cfg_len,NULL,NULL)) ||
        (cfg_buffer == NULL)) 
       goto err_nvram_extract;
 

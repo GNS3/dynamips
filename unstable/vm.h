@@ -198,7 +198,7 @@ struct vm_platform {
    int (*stop_instance)(vm_instance_t *vm);
    int (*oir_start)(vm_instance_t *vm,u_int slot_id,u_int subslot_id);
    int (*oir_stop)(vm_instance_t *vm,u_int slot_id,u_int subslot_id);
-   ssize_t (*nvram_extract_config)(vm_instance_t *vm,u_char **buffer);
+   int (*nvram_extract_config)(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len);
    int (*nvram_push_config)(vm_instance_t *vm,u_char *startup_config,size_t startup_len,u_char *private_config,size_t private_len);
    u_int (*get_mac_addr_msb)(void);
    void (*save_config)(vm_instance_t *vm,FILE *fd);
