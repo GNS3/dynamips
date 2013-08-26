@@ -1,6 +1,6 @@
 /*
  * Cisco C7200 Simulation Platform.
- * Copyright (c) 2005,2006 Christophe Fillot.  All rights reserved.
+ * Copyright (c) 2013 Flávio J. Saraiva
  *
  * Extract IOS configuration from a NVRAM file (standalone tool)
  */
@@ -9,326 +9,233 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <errno.h>
 
 #include "cpu.h"
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
 #include "dev_c7200.h"
+#include "dev_c3745.h"
+#include "dev_c3725.h"
 #include "dev_c3600.h"
+#include "dev_c2691.h"
 #include "dev_c2600.h"
 #include "dev_c1700.h"
+#include "dev_c6msfc1.h"
+#include "fs_nvram.h"
 
-#define PLATFORM_C7200	0x37323030
-#define PLATFORM_C3600	0x33363030
-#define PLATFORM_C2600	0x43323630
-#define PLATFORM_C1700	0x43313730
 
-/* Export configuration from 7200 NVRAM */
-int dev_nvram_7200_export_config(FILE *nvram_fd,FILE *cfg_fd)
+struct nvram_format {
+   const char *name;
+   const char *rom_res_0x200;
+   size_t offset;
+   size_t size;
+   m_uint32_t addr;
+   u_int format;
+} nvram_formats[] = {
+   {"c1700", "C1700", C1700_NVRAM_ROM_RES_SIZE, 0, 0, FS_NVRAM_FORMAT_DEFAULT},
+   {"c2600", "C2600", C2600_NVRAM_ROM_RES_SIZE*4, 0, 0, FS_NVRAM_FORMAT_SCALE_4},
+   {"c3600", "3600", C3600_NVRAM_ROM_RES_SIZE, 0, 0, FS_NVRAM_FORMAT_DEFAULT},
+   {"c7200", "7200", C7200_NVRAM_ROM_RES_SIZE, 0, C7200_NVRAM_ADDR + C7200_NVRAM_ROM_RES_SIZE, FS_NVRAM_FORMAT_ABSOLUTE},
+   {"c7200-npe-g2", "7200", C7200_NVRAM_ROM_RES_SIZE, 0, C7200_G2_NVRAM_ADDR + C7200_NVRAM_ROM_RES_SIZE, FS_NVRAM_FORMAT_ABSOLUTE},
+   {"c6msfc1", NULL, C6MSFC1_NVRAM_ROM_RES_SIZE, 0, C6MSFC1_NVRAM_ADDR + C6MSFC1_NVRAM_ROM_RES_SIZE, FS_NVRAM_FORMAT_ABSOLUTE_C6},
+   {"c2691", NULL, C2691_NVRAM_OFFSET, C2691_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP},
+   {"c3725", NULL, C3725_NVRAM_OFFSET, C3725_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP}, // XXX same as c2691
+   {"c3745", NULL, C3745_NVRAM_OFFSET, C3745_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP},
+   {"c7200-npe-g1", NULL, C7200_NVRAM_ROM_RES_SIZE, 0, C7200_G1_NVRAM_ADDR + C7200_NVRAM_ROM_RES_SIZE, FS_NVRAM_FORMAT_ABSOLUTE}, // XXX didn't find working image
+   {NULL, NULL, 0, 0, 0, 0}
+};
+
+
+/** Read file data. */
+int read_file(const char *filename, u_char **data, size_t *data_len)
 {
-   m_uint32_t tag,start,end,len,clen,nvlen;
-   char buffer[512];
-   int res = -1;
+   FILE *fd;
+   long len;
 
-   fseek(nvram_fd,C7200_NVRAM_ROM_RES_SIZE+6,SEEK_SET);
-   fread(&tag,sizeof(tag),1,nvram_fd);
-   if (ntohl(tag) != 0xF0A5ABCD) {
-      fprintf(stderr,"NVRAM: Unable to find IOS tag (tag=0x%8.8x)!\n",
-              ntohl(tag));
-      goto done;
-   }
-
-   fseek(nvram_fd,0x06,SEEK_CUR);
-   fread(&start,sizeof(start),1,nvram_fd);
-   fread(&end,sizeof(end),1,nvram_fd);
-   fread(&nvlen,sizeof(nvlen),1,nvram_fd);
-   start = htonl(start) + 1;
-   end   = htonl(end);
-   nvlen = htonl(nvlen);
-
-   if ((start <= C7200_NVRAM_ADDR) || (end <= C7200_NVRAM_ADDR) || 
-       (end <= start)) 
-   {
-      fprintf(stderr,"NVRAM: invalid configuration markers "
-              "(start=0x%x,end=0x%x).\n",start,end);
-      goto done;
-   }
-   
-   clen = len = end - start;
-   if ((clen + 1) != nvlen) {
-      fprintf(stderr,"NVRAM: invalid configuration size (0x%x)\n",nvlen);
-      goto done;
-   }
-
-   start -= C7200_NVRAM_ADDR;
-   fseek(nvram_fd,start,SEEK_SET);
-
-   while(len > 0) {
-      if (len > sizeof(buffer))
-         clen = sizeof(buffer);
-      else
-         clen = len;
-
-      fread(buffer,clen,1,nvram_fd);
-      fwrite(buffer,clen,1,cfg_fd);
-      len -= clen;
-   }
-
-   res = 0;
- done:
-   return res;
-}
-
-/* Export configuration from 3600 NVRAM */
-int dev_nvram_3600_export_config(FILE *nvram_fd,FILE *cfg_fd)
-{
-   m_uint32_t tag,start,end,len,clen,nvlen;
-   char buffer[512];
-   int res = -1;
-
-   fseek(nvram_fd,C3600_NVRAM_ROM_RES_SIZE+6,SEEK_SET);
-   fread(&tag,sizeof(tag),1,nvram_fd);
-   if (ntohl(tag) != 0xF0A5ABCD) {
-      fprintf(stderr,"NVRAM: Unable to find IOS tag (tag=0x%8.8x)!\n",
-              ntohl(tag));
-      goto done;
-   }
-
-   fseek(nvram_fd,0x06,SEEK_CUR);
-   fread(&start,sizeof(start),1,nvram_fd);
-   fread(&end,sizeof(end),1,nvram_fd);
-   fread(&nvlen,sizeof(nvlen),1,nvram_fd);
-   start = htonl(start) + 1 + C3600_NVRAM_ADDR + C3600_NVRAM_ROM_RES_SIZE + 8;
-   end   = htonl(end) + C3600_NVRAM_ADDR + C3600_NVRAM_ROM_RES_SIZE + 8;
-   nvlen = htonl(nvlen);
-
-   if ((start <= C3600_NVRAM_ADDR) || (end <= C3600_NVRAM_ADDR) || 
-       (end <= start)) 
-   {
-      fprintf(stderr,"NVRAM: invalid configuration markers "
-              "(start=0x%x,end=0x%x).\n",start,end);
-      goto done;
-   }
-   
-   clen = len = end - start;
-   if ((clen + 1) != nvlen) {
-      fprintf(stderr,"NVRAM: invalid configuration size (0x%x)\n",nvlen);
-      goto done;
-   }
-
-   start -= C3600_NVRAM_ADDR;
-   fseek(nvram_fd,start,SEEK_SET);
-
-   while(len > 0) {
-      if (len > sizeof(buffer))
-         clen = sizeof(buffer);
-      else
-         clen = len;
-
-      fread(buffer,clen,1,nvram_fd);
-      fwrite(buffer,clen,1,cfg_fd);
-      len -= clen;
-   }
-
-   res = 0;
- done:
-   return res;
-}
-
-/* copied from dev_c2600.c */
-
-static inline m_uint8_t c2600_nvram_read_byte(FILE *nvram_fd,u_int offset)
-{
-   m_uint32_t tag;
-
-   if ( offset != 0 )
-     fseek(nvram_fd, offset << 2, SEEK_SET);
-   fread(&tag,sizeof(tag),1,nvram_fd);
-
-   return (m_uint8_t)(tag&255);
-}
-
-static m_uint32_t c2600_nvram_read32(FILE *nvram_fd,u_int offset)
-{
-   m_uint32_t val;
-
-   if ( offset != 0 )
-     fseek(nvram_fd, offset << 2, SEEK_SET);
-
-   val = c2600_nvram_read_byte(nvram_fd, 0) << 24 |
-         c2600_nvram_read_byte(nvram_fd, 0) << 16 |
-         c2600_nvram_read_byte(nvram_fd, 0) << 8 |
-         c2600_nvram_read_byte(nvram_fd, 0);
-
-   return(val);
-}
-
-/* Export configuration from 2600 NVRAM */
-int dev_nvram_2600_export_config(FILE *nvram_fd,FILE *cfg_fd)
-{
-   m_uint32_t tag,start,len,clen,nvlen;
-   char buffer[512];
-   int res = -1;
-   u_int i;
- 
-   tag = c2600_nvram_read32(nvram_fd, C2600_NVRAM_ROM_RES_SIZE+6);
-
-   if (tag != 0xF0A5ABCD) {
-      fprintf(stderr,"NVRAM: Unable to find IOS tag (tag=0x%8.8x)!\n",
-              ntohl(tag));
-      goto done;
-   }
-
-   start = c2600_nvram_read32(nvram_fd, C2600_NVRAM_ROM_RES_SIZE+0x10);
-   nvlen = c2600_nvram_read32(nvram_fd, C2600_NVRAM_ROM_RES_SIZE+0x18);
-
-   if ((start <= 0) || (start+nvlen <= 0) || 
-       (nvlen <= 0)) 
-   {
-      fprintf(stderr,"NVRAM: invalid configuration markers "
-              "(start=0x%x,nvlen=0x%x).\n",start,nvlen);
-      goto done;
-   }
-   
-   start += C2600_NVRAM_ROM_RES_SIZE + 0x08 + 1;
-   
-   clen = len = nvlen-1;
-
-   fseek(nvram_fd,start<<2,SEEK_SET);
-
-   while(len > 0) {
-      if (len > sizeof(buffer))
-         clen = sizeof(buffer);
-      else
-         clen = len;
-
-	  for ( i = 0; i < clen; i++ )
-	    buffer[i] = c2600_nvram_read_byte ( nvram_fd, 0 );
-      fwrite(buffer,clen,1,cfg_fd);
-      len -= clen;
-   }
-
-   res = 0;
- done:
-   return res;
-}
-
-/* Export configuration from 1700 NVRAM */
-int dev_nvram_1700_export_config(FILE *nvram_fd,FILE *cfg_fd)
-{
-   m_uint32_t tag,start,end,len,clen,nvlen;
-   char buffer[512];
-   int res = -1;
-
-   fseek(nvram_fd,C1700_NVRAM_ROM_RES_SIZE+6,SEEK_SET);
-   fread(&tag,sizeof(tag),1,nvram_fd);
-   if (ntohl(tag) != 0xF0A5ABCD) {
-      fprintf(stderr,"NVRAM: Unable to find IOS tag (tag=0x%8.8x)!\n",
-              ntohl(tag));
-      goto done;
-   }
-
-   fseek(nvram_fd,0x06,SEEK_CUR);
-   fread(&start,sizeof(start),1,nvram_fd);
-   fread(&end,sizeof(end),1,nvram_fd);
-   fread(&nvlen,sizeof(nvlen),1,nvram_fd);
-   start = htonl(start) + 1 + C1700_NVRAM_ADDR + C1700_NVRAM_ROM_RES_SIZE + 8;
-   end   = htonl(end) + C1700_NVRAM_ADDR + C1700_NVRAM_ROM_RES_SIZE + 8;
-   nvlen = htonl(nvlen);
-
-   if ((start <= C1700_NVRAM_ADDR) || (end <= C1700_NVRAM_ADDR) || 
-       (end <= start)) 
-   {
-      fprintf(stderr,"NVRAM: invalid configuration markers "
-              "(start=0x%x,end=0x%x).\n",start,end);
-      goto done;
-   }
-   
-   clen = len = end - start;
-   if ((clen + 1) != nvlen) {
-      fprintf(stderr,"NVRAM: invalid configuration size (0x%x)\n",nvlen);
-      goto done;
-   }
-
-   start -= C1700_NVRAM_ADDR;
-   fseek(nvram_fd,start,SEEK_SET);
-
-   while(len > 0) {
-      if (len > sizeof(buffer))
-         clen = sizeof(buffer);
-      else
-         clen = len;
-
-      fread(buffer,clen,1,nvram_fd);
-      fwrite(buffer,clen,1,cfg_fd);
-      len -= clen;
-   }
-
-   res = 0;
- done:
-   return res;
-}
-
-/* Export configuration from NVRAM */
-int dev_nvram_export_config(char *nvram_filename,char *cfg_filename)
-{
-   m_uint32_t platform;
-   FILE *nvram_fd,*cfg_fd;
-   char platform_string[5];
-   int res = -1;
-
-   if (!(nvram_fd = fopen(nvram_filename,"r"))) {
-      fprintf(stderr,"Unable to open NVRAM file '%s'!\n",nvram_filename);
+   // open
+   fd = fopen(filename,"rb");
+   if (fd == NULL) {
       return(-1);
    }
 
-   if (!(cfg_fd = fopen(cfg_filename,"w"))) {
-      fprintf(stderr,"Unable to create config file '%s'!\n",cfg_filename);
+   // len
+   fseek(fd, 0, SEEK_END);
+   len = ftell(fd);
+   fseek(fd, 0, SEEK_SET);
+   if (len < 0 || ferror(fd)) {
+      fclose(fd);
       return(-1);
    }
 
-   fseek(nvram_fd,0x200,SEEK_SET);
-   fread(&platform,sizeof(platform),1,nvram_fd);
-
-   switch(ntohl(platform)) {
-      case PLATFORM_C7200:
-	 res = dev_nvram_7200_export_config(nvram_fd,cfg_fd);
-	 break;
-      case PLATFORM_C3600:
-	 res = dev_nvram_3600_export_config(nvram_fd,cfg_fd);
-	 break;
-      case PLATFORM_C2600:
-	 res = dev_nvram_2600_export_config(nvram_fd,cfg_fd);
-	 break;
-      case PLATFORM_C1700:
-	 res = dev_nvram_1700_export_config(nvram_fd,cfg_fd);
-	 break;
-      default:
-	 memcpy(platform_string,&platform,4);
-	 platform_string[4] = '\0';
-	 fprintf(stderr,"NVRAM: unknown platform %s (platform=0x%x)!\n",
-	         platform_string,ntohl(platform));
+   if (data_len) {
+      *data_len = (size_t)len;
    }
- 
-   fclose(nvram_fd);
-   fclose(cfg_fd);
-   return(res);
+
+    // data
+   if (data) {
+      *data = (u_char *)malloc((size_t)len);
+      if (fread(*data, (size_t)len, 1, fd) != 1) {
+         free(*data);
+         *data = NULL;
+         fclose(fd);
+         return(-1);
+      }
+   }
+
+   // close
+   fclose(fd);
+   return(0);
+}
+
+
+/** Write file data. */
+int write_file(const char *filename, u_char *data, size_t len)
+{
+   FILE *fp;
+
+   fp = fopen(filename,"wb+");
+   if (fp == NULL) {
+      return(-1);
+   }
+
+   if (fwrite(data, len, 1, fp) != 1) {
+      fclose(fp);
+      return(-1);
+   }
+
+   fclose(fp);
+   return(0);
+}
+
+
+/** Export configuration from NVRAM. */
+int nvram_export_config(const char *nvram_filename, const char *startup_filename, const char *private_filename)
+{
+   u_char *data = NULL;
+   u_char *startup_config = NULL;
+   u_char *private_config = NULL;
+   size_t data_len = 0;
+   size_t startup_len = 0;
+   size_t private_len;
+   fs_nvram_t *fs;
+   size_t len;
+   struct nvram_format *fmt;
+
+   // read nvram
+   printf("Reading %s...\n", nvram_filename);
+   if (read_file(nvram_filename, &data, &data_len)) {
+      perror(nvram_filename);
+      return(-1);
+   }
+
+   // try each format
+   for (fmt = &nvram_formats[0]; ; fmt++) {
+      if (fmt->name == NULL) {
+         fprintf(stderr,"NVRAM not found\n");
+         return(-1);
+      }
+
+      if (fmt->rom_res_0x200) {
+         len = strlen(fmt->rom_res_0x200);
+         if (data_len < 0x200 + len || memcmp(data + 0x200, fmt->rom_res_0x200, len)) {
+            continue; // must match
+         }
+      }
+
+      if (fmt->size > 0) {
+         if (data_len < fmt->offset + fmt->size) {
+            continue; // must fit
+         }
+         len = fmt->size;
+      }
+      else {
+         if (data_len < fmt->offset) {
+            continue; // must fit
+         }
+         len = data_len - fmt->offset;
+      }
+
+      fs = fs_nvram_open(data + fmt->offset, len, fmt->addr, fmt->format);
+      if (fs == NULL) {
+         continue; // filesystem not found
+      }
+
+      if (fs_nvram_verify(fs, FS_NVRAM_VERIFY_ALL) || fs_nvram_read_config(fs, &startup_config, &startup_len, &private_config, &private_len)) {
+         fs_nvram_close(fs);
+         fs = NULL;
+         continue; // filesystem error
+      }
+
+      printf("Found NVRAM format %s\n", fmt->name);
+      fs_nvram_close(fs);
+      fs = NULL;
+      break;
+   }
+
+   // write config
+   if (startup_filename) {
+      printf("Writing startup-config to %s...\n", startup_filename);
+      if (write_file(startup_filename, startup_config, startup_len)) {
+         perror(startup_filename);
+         return(-1);
+      }
+   }
+   if (private_filename) {
+      printf("Writing private-config to %s...\n", private_filename);
+      if (write_file(private_filename, private_config, private_len)) {
+         perror(private_filename);
+         return(-1);
+      }
+   }
+
+   // cleanup
+   if (startup_config) {
+      free(startup_config);
+      startup_config = NULL;
+   }
+   if (private_config) {
+      free(private_config);
+      private_config = NULL;
+   }
+   return(0);
 }
 
 int main(int argc,char *argv[])
 {
-   printf("Cisco 7200/3600 NVRAM configuration export.\n");
-   printf("Copyright (c) 2006 Christophe Fillot.\n\n");
+   const char *nvram_filename;
+   const char *startup_filename;
+   const char *private_filename = NULL;
+   struct nvram_format *fmt;
 
-   if (argc != 3) {
-      fprintf(stderr,"Usage: %s nvram_file config_file\n",argv[0]);
+   printf("Cisco NVRAM configuration export.\n");
+   printf("Copyright (c) 2013 Flávio J. Saraiva.\n\n");
+
+   if (argc < 3 || argc > 4) {
+      fprintf(stderr,"Usage: %s nvram_file config_file [private_file]\n",argv[0]);
+      fprintf(stderr,"\n");
+      fprintf(stderr,"This tools extracts 'startup-config' and 'private-config' from NVRAM.\n");
+      fprintf(stderr,"  nvram_file   - file that contains the NVRAM data\n");
+      fprintf(stderr,"                 (on some platforms, NVRAM is simulated inside the ROM)\n");
+      fprintf(stderr,"  config_file  - file for 'startup-config'\n");
+      fprintf(stderr,"  private_file - file for 'private-config' (optional)\n");
+      fprintf(stderr,"\n");
+      fprintf(stderr,"Supports:");
+      for (fmt = &nvram_formats[0]; fmt->name; fmt++) {
+         fprintf(stderr," %s",fmt->name);
+      }
+      fprintf(stderr,"\n");
       exit(EXIT_FAILURE);
    }
 
-   if (!dev_nvram_export_config(argv[1],argv[2]))
-      printf("Configuration written to %s\n",argv[2]);
+   nvram_filename = argv[1];
+   startup_filename = argv[2];
+   if (argc > 3)
+      private_filename = argv[3];
+   
+   if (nvram_export_config(nvram_filename,startup_filename,private_filename))
+      return(EXIT_FAILURE);
 
+   printf("Done\n");
    return(0);
 }

@@ -288,9 +288,9 @@ asmdefs.h: asmdefs$(BIN_EXT)
 	@echo "Building assembly definitions header file"
 	@./asmdefs
 
-nvram_export$(BIN_EXT): nvram_export.c
+nvram_export$(BIN_EXT): nvram_export.o fs_nvram.o
 	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) $(INCLUDE) -o $@ $<
+	@$(CC) -Wall $(CFLAGS) $(INCLUDE) -o $@ nvram_export.o fs_nvram.o
 
 install: $(PROG) nvram_export
 	@echo "Installing"
