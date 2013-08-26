@@ -809,4 +809,58 @@ size_t fs_nvram_num_sectors(fs_nvram_t *fs)
    return( fs->len / FS_NVRAM_SECTOR_SIZE );
 }
 
-// TODO read/write file sectors
+
+/** Verify the contents of the filesystem.
+ * Returns 0 on success.
+ */
+int fs_nvram_verify(fs_nvram_t *fs, u_int what)
+{
+   size_t offset;
+
+   if (fs == NULL)
+      return(EINVAL); // invalid argument
+
+   if ((what & FS_NVRAM_VERIFY_BACKUP)) {
+      if ((fs->flags & FS_NVRAM_FLAG_WITH_BACKUP)) {
+         for (offset = 0; offset < fs->len; offset++) {
+            m_uint8_t b1 = fs->base[fs_nvram_offset1_with_backup(fs, offset)];
+            m_uint8_t b2 = fs->base[fs_nvram_offset2_with_backup(fs, offset)];
+            if (b1 != b2)
+               return(FS_NVRAM_ERR_BACKUP_MISSMATCH); // data is corrupted? length is wrong?
+         }
+      }
+   }
+
+   if ((what & FS_NVRAM_VERIFY_CONFIG)) {
+      struct fs_nvram_header_startup_config startup_head;
+      struct fs_nvram_header_private_config private_head;
+
+      offset = sizeof(struct fs_nvram_header);
+      fs_nvram_memcpy_from(fs, offset, (u_char *)&startup_head, sizeof(startup_head));
+      be_to_native_header_startup(&startup_head);
+      if (FS_NVRAM_MAGIC_STARTUP_CONFIG == startup_head.magic) {
+         if (startup_head.end != startup_head.start + startup_head.len || startup_head.len > fs->len)
+            return(FS_NVRAM_ERR_INVALID_ADDRESS); // data is corrupted?
+         if (startup_head.start < fs->addr || startup_head.end > fs->addr + fs->len)
+            return(FS_NVRAM_ERR_INVALID_ADDRESS); // fs->addr has the wrong value?
+
+         offset = fs_nvram_offset_of(fs, startup_head.end);
+         offset += fs_nvram_padding_at(fs, offset);
+         if (fs->len < offset + sizeof(private_head))
+            return(FS_NVRAM_ERR_INVALID_ADDRESS); // data is corrupted?
+
+         fs_nvram_memcpy_from(fs, offset, (u_char *)&private_head, sizeof(private_head));
+         be_to_native_header_private(&private_head);
+         if (FS_NVRAM_MAGIC_PRIVATE_CONFIG == private_head.magic) {
+            if (private_head.end != private_head.start + private_head.len || private_head.len > fs->len)
+               return(FS_NVRAM_ERR_INVALID_ADDRESS); // data is corrupted?
+            if (private_head.start < fs->addr || private_head.end > fs->addr + fs->len)
+               return(FS_NVRAM_ERR_INVALID_ADDRESS); // fs->addr has the wrong value?
+            if (private_head.end != private_head.start + private_head.len)
+               return(FS_NVRAM_ERR_INVALID_ADDRESS); // data is corrupted?
+         }
+      }
+   }
+
+   return(0);
+}

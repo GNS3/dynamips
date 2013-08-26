@@ -8,7 +8,7 @@
  */
 
 /*
- * Copyright (c) 2013 Fl·vio J. Saraiva <flaviojs2005@gmail.com>
+ * Copyright (c) 2013 Fl√°vio J. Saraiva <flaviojs2005@gmail.com>
  */
 
 #ifndef FS_NVRAM_H__
@@ -46,6 +46,12 @@
 
 /** Magic not found - custom errno code. */
 #define FS_NVRAM_ERR_NO_MAGIC   ( - FS_NVRAM_MAGIC_FILESYSTEM )
+
+/** Backup data doesn't match. */
+#define FS_NVRAM_ERR_BACKUP_MISSMATCH   ( FS_NVRAM_ERR_NO_MAGIC - 1 )
+
+/** Invalid address found in filesystem. */
+#define FS_NVRAM_ERR_INVALID_ADDRESS   ( FS_NVRAM_ERR_NO_MAGIC - 2 )
 
 /* Size of blocks in a NVRAM filesystem with backup (total size is 0x4C000 in c3745) */
 #define FS_NVRAM_NORMAL_FILESYSTEM_BLOCK1   0x20000
@@ -116,6 +122,22 @@
 
 /** Filesystem format for the c6msfc1 platform. */
 #define FS_NVRAM_FORMAT_ABSOLUTE_C6   ( FS_NVRAM_FLAG_NO_SCALE | FS_NVRAM_FLAG_ALIGN_4_PAD_4 | FS_NVRAM_FLAG_ADDR_ABSOLUTE | FS_NVRAM_FLAGS_UNK1_0C01 )
+
+
+///////////////////////////////////////////////////////////
+// Flags for verify
+
+/** Verify backup data. */
+#define FS_NVRAM_VERIFY_BACKUP   0x01
+
+/** Verify config data. */
+#define FS_NVRAM_VERIFY_CONFIG   0x02
+
+// TODO Verify file data.
+//#define FS_NVRAM_VERIFY_FILES    0x04
+
+/** Verify everything. */
+#define FS_NVRAM_VERIFY_ALL      0x07
 
 
 ///////////////////////////////////////////////////////////
@@ -251,5 +273,7 @@ void fs_nvram_close(fs_nvram_t *fs);
 int fs_nvram_read_config(fs_nvram_t *fs, u_char **startup_config, size_t *startup_len, u_char **private_config, size_t *private_len);
 int fs_nvram_write_config(fs_nvram_t *fs, const u_char *startup_config, size_t startup_len, const u_char *private_config, size_t private_len);
 size_t fs_nvram_num_sectors(fs_nvram_t *fs);
+// TODO read/write file sectors
+int fs_nvram_verify(fs_nvram_t *fs, u_int what);
 
 #endif
