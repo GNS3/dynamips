@@ -982,7 +982,7 @@ int vm_nvram_push_config(vm_instance_t *vm,char *filename)
       return(-1);
 
    /* Push it! */
-   res = vm->platform->nvram_push_config(vm,cfg_buffer,len);
+   res = vm->platform->nvram_push_config(vm,cfg_buffer,len,NULL,0);
    free(cfg_buffer);
    return(res);
 }

@@ -110,11 +110,11 @@ ssize_t c2600_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
-int c2600_nvram_push_config(vm_instance_t *vm,u_char *buffer,size_t len)
+static int c2600_nvram_push_config(vm_instance_t *vm,u_char *startup_config,size_t startup_len,u_char *private_config,size_t private_len)
 {
    int ret;
 
-   ret = generic_nvram_push_config(vm, "nvram", vm->nvram_size*4096, vm->nvram_rom_space*4, 0, 0, FS_NVRAM_FORMAT_SCALE_4, buffer, len, NULL, 0);
+   ret = generic_nvram_push_config(vm, "nvram", vm->nvram_size*4096, vm->nvram_rom_space*4, 0, 0, FS_NVRAM_FORMAT_SCALE_4, startup_config, startup_len, private_config, private_len);
 
    return(ret);
 }

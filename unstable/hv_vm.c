@@ -664,7 +664,7 @@ static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
       goto err_decode_base64;
 
    /* Push configuration */
-   if (vm->platform->nvram_push_config(vm,cfg_buffer,len) < 0)
+   if (vm->platform->nvram_push_config(vm,cfg_buffer,len,NULL,0) < 0)
       goto err_nvram_push;
 
    free(cfg_buffer);

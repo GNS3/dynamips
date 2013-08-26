@@ -243,8 +243,7 @@ static ssize_t c6sup1_nvram_extract_config(vm_instance_t *vm,u_char **buffer)
 }
 
 /* Directly push the IOS configuration to the NVRAM device */
-static int c6sup1_nvram_push_config(vm_instance_t *vm,
-                                    u_char *buffer,size_t len)
+static int c6sup1_nvram_push_config(vm_instance_t *vm,u_char *startup_config,size_t startup_len,u_char *private_config,size_t private_len)
 {  
    u_char *base_ptr,*ios_ptr,*cfg_ptr;
    m_uint32_t cfg_addr,cfg_offset;
@@ -272,12 +271,12 @@ static int c6sup1_nvram_push_config(vm_instance_t *vm,
    *PTR_ADJUST(m_uint16_t *,ios_ptr,0x0e) = htons(0x0000);
 
    /* Store file contents to NVRAM */
-   memcpy(cfg_ptr,buffer,len);
+   memcpy(cfg_ptr,startup_config,startup_len);
 
    /* Write config addresses + size */
    *PTR_ADJUST(m_uint32_t *,ios_ptr,0x10) = htonl(cfg_addr);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(cfg_addr + len);
-   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x14) = htonl(cfg_addr + startup_len);
+   *PTR_ADJUST(m_uint32_t *,ios_ptr,0x18) = htonl(startup_len);
 
    /* Compute the checksum */
    cklen = (vm->nvram_size*1024) - (vm->nvram_rom_space + 0x08);
