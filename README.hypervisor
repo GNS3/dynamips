@@ -67,8 +67,11 @@ Virtual Machine module ("vm")
 * "vm set_ios <instance_name> <ios_file>" : Set the IOS image file to
   use. There is no default.
 
-* "vm set_config <instance_name> <config_reg>" : Set the config register
-  value.
+* "vm set_config <instance_name> <startup_file> [<private_file>]" : 
+  Set the config files that are pushed to startup-config and 
+  private-config in NVRAM when the instance is started.
+  To keep existing data, use an empty string ('') for the filename.
+  The optional <private_file> is an empty string by default.
 
 * "vm set_ram <instance_name> <ram_size>" : Set the RAM size, specified
   in Mbytes.

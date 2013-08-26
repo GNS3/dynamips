@@ -207,11 +207,19 @@ static int cmd_set_ios(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_set_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
+   const char *startup_filename = argv[1];
+   const char *private_filename = ((argc > 2) ? argv[2] : "");
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   if (vm_ios_set_config(vm,argv[1]) == -1) {
+   if (0 == strlen(startup_filename))
+      startup_filename = NULL; // keep existing data
+
+   if (0 == strlen(private_filename))
+      private_filename = NULL; // keep existing data
+
+   if (vm_ios_set_config(vm,startup_filename,private_filename) == -1) {
       vm_release(vm);
       hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
                             "unable to store IOS config for router '%s'",
@@ -1110,7 +1118,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_tsg", 2, 2, cmd_set_tsg, NULL },
    { "set_debug_level", 2, 2, cmd_set_debug_level, NULL },
    { "set_ios", 2, 2, cmd_set_ios, NULL },
-   { "set_config", 2, 2, cmd_set_config, NULL },
+   { "set_config", 2, 3, cmd_set_config, NULL },
    { "set_ram", 2, 2, cmd_set_ram, NULL },
    { "set_nvram", 2, 2, cmd_set_nvram, NULL },
    { "set_ram_mmap", 2, 2, cmd_set_ram_mmap, NULL },

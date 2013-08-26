@@ -357,8 +357,8 @@ int vm_ios_set_image(vm_instance_t *vm,char *ios_image);
 /* Unset a Cisco IOS configuration file */
 void vm_ios_unset_config(vm_instance_t *vm);
 
-/* Set Cisco IOS configuration file to use */
-int vm_ios_set_config(vm_instance_t *vm,char *ios_config);
+/* Set Cisco IOS configuration files to use (NULL to keep existing data) */
+int vm_ios_set_config(vm_instance_t *vm,const char *startup_filename,const char *private_filename);
 
 /* Extract IOS configuration from NVRAM and write it to a file */
 int vm_nvram_extract_config(vm_instance_t *vm,char *filename);

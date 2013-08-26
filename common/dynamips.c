@@ -480,16 +480,16 @@ static int parse_std_cmd_line(int argc,char *argv[])
             vtty_set_ctrlhandler(0); /* Ignore ctrl ] */
             printf("Block ctrl+] access to monitor console.\n");
             break;
-			
+
          /* Config Register */
          case 'c':
             vm->conf_reg_setup = strtol(optarg, NULL, 0);
             printf("Config. Register set to 0x%x.\n",vm->conf_reg_setup);
             break;
 
-         /* IOS configuration file */
+         /* IOS startup configuration file */
          case 'C':
-            vm_ios_set_config(vm,optarg);
+            vm_ios_set_config(vm,optarg,vm->ios_private_config);
             break;
 
          /* Use physical memory to emulate RAM (no-mapped file) */

@@ -927,17 +927,32 @@ void vm_ios_unset_config(vm_instance_t *vm)
    vm->ios_private_config = NULL;
 }
 
-/* Set Cisco IOS configuration file to use */
-int vm_ios_set_config(vm_instance_t *vm,char *ios_config)
+/* Set Cisco IOS configuration files to use (NULL to keep existing data) */
+int vm_ios_set_config(vm_instance_t *vm,const char *startup_filename,const char *private_filename)
 {
-   char *str;
+   char *startup_file = NULL;
+   char *private_file = NULL;
 
-   if (!(str = strdup(ios_config)))
-      return(-1);
+   if (startup_filename) {
+      startup_file = strdup(startup_filename);
+      if (startup_file == NULL)
+         goto err_memory;
+   }
+
+   if (private_filename) {
+      private_file = strdup(private_filename);
+      if (private_file == NULL)
+         goto err_memory;
+   }
 
    vm_ios_unset_config(vm);
-   vm->ios_startup_config = str;
-   return(0);  
+   vm->ios_startup_config = startup_file;
+   vm->ios_private_config = private_file;
+   return(0);
+err_memory:
+   free(startup_file);
+   free(private_file);
+   return(-1);
 }
 
 /* Extract IOS configuration from NVRAM and write it to a file */
