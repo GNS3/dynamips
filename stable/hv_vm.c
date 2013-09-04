@@ -586,12 +586,16 @@ static int cmd_set_aux_tcp_port(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
-/* Read an IOS configuration file from a given router */
+/* Read IOS configuration files from a given router */
 static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   u_char *cfg_buffer,*cfg_base64;
-   size_t cfg_len;
+   u_char *startup_config = NULL;
+   u_char *private_config = NULL;
+   size_t startup_len;
+   size_t private_len;
+   u_char *startup_base64 = NULL;
+   u_char *private_base64 = NULL;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -600,28 +604,33 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
       goto err_no_extract_method;
 
    /* Extract the IOS configuration */
-   if ((vm->platform->nvram_extract_config(vm,&cfg_buffer,&cfg_len,NULL,NULL)) ||
-       (cfg_buffer == NULL))
+   if ((vm->platform->nvram_extract_config(vm,&startup_config,&startup_len,&private_config,&private_len)))
       goto err_nvram_extract;
 
-   /*
-    * Convert config to base64. base64 is about 1/3 larger than input,
-    * let's be on the safe side with twice longer.
+   /* 
+    * Convert config to base64. base64 generates 4 bytes for each group of 3 bytes.
     */
-   if (!(cfg_base64 = malloc(cfg_len * 2)))
+   if (!(startup_base64 = malloc(1 + (startup_len + 2) / 3 * 4)) ||
+       !(private_base64 = malloc(1 + (private_len + 2) / 3 * 4)))
       goto err_alloc_base64;
 
-   base64_encode(cfg_base64,cfg_buffer,cfg_len);
+   base64_encode(startup_base64,startup_config,startup_len);
+   base64_encode(private_base64,private_config,private_len);
 
    vm_release(vm);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"conf '%s' %s",argv[0],cfg_base64);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"conf '%s' '%s' '%s'",argv[0],startup_base64,private_base64);
 
-   free(cfg_buffer);
-   free(cfg_base64);
+   free(private_base64);
+   free(startup_base64);
+   free(private_config);
+   free(startup_config);
    return(0);
 
  err_alloc_base64:
-   free(cfg_buffer);
+   free(private_base64);
+   free(startup_base64);
+   free(private_config);
+   free(startup_config);
  err_nvram_extract:
  err_no_extract_method:
    vm_release(vm);
