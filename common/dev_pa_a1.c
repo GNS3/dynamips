@@ -588,7 +588,8 @@ static m_uint32_t ti1570_init_tx_atm_cell(struct pa_a1_data *d,
       atm_hdr |= ATM_PTI_EOP;
    }
 
-   *(m_uint32_t *)d->txfifo_cell = htonl(atm_hdr);
+   atm_hdr = htonl(atm_hdr);
+   memcpy(&d->txfifo_cell[0],&atm_hdr,sizeof(atm_hdr));
 
    /* compute HEC field */
    atm_insert_hec(d->txfifo_cell);
