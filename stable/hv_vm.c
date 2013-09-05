@@ -639,12 +639,14 @@ static int cmd_extract_config(hypervisor_conn_t *conn,int argc,char *argv[])
    return(-1);
 }
 
-/* Push an IOS configuration file */
+/* Push IOS configuration to a given router */
 static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   u_char *cfg_buffer;
-   ssize_t len;
+   u_char *startup_config = NULL;
+   u_char *private_config = NULL;
+   int startup_len = 0;
+   int private_len = 0;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -652,18 +654,37 @@ static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
    if (!vm->platform->nvram_push_config)
       goto err_no_push_method;
 
-   /* Convert base64 input to standard text */
-   if (!(cfg_buffer = malloc(3 * strlen(argv[1]))))
-      goto err_alloc_base64;
+   /*
+    * Convert base64 input to standard text. base64 uses 4 bytes for each group of 3 bytes.
+    */
+   if (strcmp(argv[1],"(keep)") != 0) {
+      startup_len = (strlen(argv[1]) + 3) / 4 * 3;
+      if (!(startup_config = malloc(1 + startup_len)))
+         goto err_alloc_base64;
 
-   if ((len = base64_decode(cfg_buffer,(u_char *)argv[1],0)) < 0)
-      goto err_decode_base64;
+      if ((startup_len = base64_decode(startup_config,(u_char *)argv[1],startup_len)) < 0)
+         goto err_decode_base64;
+
+      startup_config[startup_len] = '\0';
+   }
+
+   if (argc > 2 && strcmp(argv[2],"(keep)") != 0) {
+      private_len = (strlen(argv[2]) + 3) / 4 * 3;
+      if (!(private_config = malloc(1 + private_len)))
+         goto err_alloc_base64;
+
+      if ((private_len = base64_decode(private_config,(u_char *)argv[2],private_len)) < 0)
+         goto err_decode_base64;
+
+      private_config[private_len] = '\0';
+   }
 
    /* Push configuration */
-   if (vm->platform->nvram_push_config(vm,cfg_buffer,len,NULL,0) < 0)
+   if (vm->platform->nvram_push_config(vm,startup_config,(size_t)startup_len,private_config,(size_t)private_len) < 0)
       goto err_nvram_push;
 
-   free(cfg_buffer);
+   free(private_config);
+   free(startup_config);
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,
                          "IOS config file pushed tm VM '%s'",
@@ -672,8 +693,9 @@ static int cmd_push_config(hypervisor_conn_t *conn,int argc,char *argv[])
 
  err_nvram_push:
  err_decode_base64:
-   free(cfg_buffer);
  err_alloc_base64:
+   free(private_config);
+   free(startup_config);
  err_no_push_method:
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_ERR_CREATE,1,

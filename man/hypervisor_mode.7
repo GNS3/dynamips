@@ -96,6 +96,12 @@ Get the contents of the config files startup\-config and private\-config from
 NVRAM. The data of each file is encoded in a Base64 string, surrounded by 
 single quotes.
 .TP
+.B vm push_config <instance_name> <startup_cfg> [<private_cfg>]
+Push configuration to the config files startup\-config and private\-config 
+in NVRAM.
+The data is a Base64 encoded string, or '(keep)' to keep existing data.
+The optional <private_cfg> is '(keep)' by default.
+.TP
 .B vm set_ram <instance_name> <ram_size>
 Set the RAM size, specified  in Mbytes.
 .TP
