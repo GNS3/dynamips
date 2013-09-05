@@ -116,8 +116,11 @@ Set the configuration register (default: 0x2102)
 .B \-m <mac_addr>
 Set the MAC address of the chassis (default: automatically generated)
 .TP
-.B \-C <cfg_file>
-Import an IOS configuration file into NVRAM
+.B \-C, \-\-startup\-config <file>
+Import IOS configuration file into NVRAM
+.TP
+.B \-\-private\-config <file>
+Import IOS configuration file into NVRAM
 .TP
 .B \-X
 Do not use a file to simulate RAM (faster)

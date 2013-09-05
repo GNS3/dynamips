@@ -76,7 +76,8 @@ Command Line Options overview
   -c <conf_reg>      : Set the configuration register
   -m <mac_addr>      : Set the MAC address of the chassis
                        (default: automatically generated)
-  -C <cfg_file>      : Import an IOS configuration file into NVRAM
+  -C, --startup-config <file> : Import IOS configuration file into NVRAM
+  --private-config <file> : Import IOS configuration file into NVRAM
   -X                 : Do not use a file to simulate RAM (faster)
   -R <rom_file>      : Load an alternate ROM (default: embedded)
   -k <clock_div>     : Set the clock divisor (default: 4)

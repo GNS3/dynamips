@@ -204,8 +204,8 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "(default: 0x%04x)\n"
           "  -m <mac_addr>      : Set the MAC address of the chassis\n"
           "                       (default: automatically generated)\n"
-          "  -C <cfg_file>      : Import an IOS configuration file "
-          "into NVRAM\n"
+          "  -C, --startup-config <file> : Import IOS configuration file into NVRAM\n"
+          "  --private-config <file> : Import IOS configuration file into NVRAM\n"
           "  -X                 : Do not use a file to simulate RAM (faster)\n"
           "  -G <ghost_file>    : Use a ghost file to simulate RAM\n"
           "  -g <ghost_file>    : Generate a ghost RAM file\n"
@@ -371,6 +371,8 @@ static struct option cmd_line_lopts[] = {
    { "noctrl"     , 0, NULL, OPT_NOCTRL },
    { "notelnetmsg", 0, NULL, OPT_NOTELMSG },
    { "filepid"    , 1, NULL, OPT_FILEPID },
+   { "startup-config", 1, NULL, OPT_STARTUP_CONFIG_FILE },
+   { "private-config", 1, NULL, OPT_PRIVATE_CONFIG_FILE },
    { NULL         , 0, NULL, 0 },
 };
 
@@ -489,7 +491,13 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
          /* IOS startup configuration file */
          case 'C':
+         case OPT_STARTUP_CONFIG_FILE:
             vm_ios_set_config(vm,optarg,vm->ios_private_config);
+            break;
+
+         /* IOS private configuration file */
+         case OPT_PRIVATE_CONFIG_FILE:
+            vm_ios_set_config(vm,vm->ios_startup_config,optarg);
             break;
 
          /* Use physical memory to emulate RAM (no-mapped file) */

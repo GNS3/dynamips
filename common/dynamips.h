@@ -74,6 +74,8 @@ extern char *binding_addr;
 #define OPT_NOCTRL      0x120
 #define OPT_NOTELMSG    0x121
 #define OPT_FILEPID     0x122
+#define OPT_STARTUP_CONFIG_FILE  0x140
+#define OPT_PRIVATE_CONFIG_FILE  0x141
 
 /* Delete all objects */
 void dynamips_reset(void);
