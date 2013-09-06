@@ -422,23 +422,26 @@ dev_c6sup1_mpfpga_shutdown(vm_instance_t *vm,struct c6sup1_mpfpga_data *d)
 void c6sup1_init_eeprom_groups(c6sup1_t *router)
 {
    struct nmc93cX6_group *grp;
+   struct cisco_eeprom *buf;
 
    router->bp_eeprom_group = eeprom_bp_group;
    router->sup_eeprom_group = eeprom_sup_group;
    router->slot_eeprom_group = eeprom_slot_group;
 
    /* XXX */
+   buf = &router->bp_eeprom[0];
    grp = &router->bp_eeprom_group;
-   grp->eeprom[0] = cisco_eeprom_find_c6k("C6K-CHASSIS-6509");
-   grp->eeprom[2] = cisco_eeprom_find_c6k("C6K-POWER-1000W");
-   grp->eeprom[3] = cisco_eeprom_find_c6k("C6K-POWER-1000W");
-   grp->eeprom[6] = cisco_eeprom_find_c6k("C6K-VTT");
-   grp->eeprom[7] = cisco_eeprom_find_c6k("C6K-VTT");
-   grp->eeprom[8] = cisco_eeprom_find_c6k("C6K-VTT");
+   grp->eeprom[0] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-CHASSIS-6509"));
+   grp->eeprom[2] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-POWER-1000W"));
+   grp->eeprom[3] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-POWER-1000W"));
+   grp->eeprom[6] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-VTT"));
+   grp->eeprom[7] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-VTT"));
+   grp->eeprom[8] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-VTT"));
 
+   buf = &router->sup_eeprom[0];
    grp = &router->sup_eeprom_group;
-   grp->eeprom[0] = cisco_eeprom_find_c6k("C6K-SUP-SUP1A-2GE");
-   grp->eeprom[1] = cisco_eeprom_find_c6k("C6K-EARL-PFC1");
+   grp->eeprom[0] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-SUP-SUP1A-2GE"));
+   grp->eeprom[1] = buf;  cisco_eeprom_copy(buf++, cisco_eeprom_find_c6k("C6K-EARL-PFC1"));
 
    cisco_eeprom_copy(&router->slot_eeprom[0],
                      cisco_eeprom_find_c6k("C6K-SUP-SUP1A-2GE"));

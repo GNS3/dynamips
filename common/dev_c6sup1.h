@@ -104,6 +104,12 @@ struct c6sup1_router {
    /* Midplane FPGA */
    struct c6sup1_mpfpga_data *mpfpga_data;
 
+   /* Backplane EEPROM data */
+   struct cisco_eeprom bp_eeprom[NMC93CX6_MAX_EEPROM_PER_GROUP];
+
+   /* Supervisor EEPROM data */
+   struct cisco_eeprom sup_eeprom[NMC93CX6_MAX_EEPROM_PER_GROUP];
+
    /* Slots EEPROM data */
    struct cisco_eeprom slot_eeprom[C6SUP1_MAX_SLOTS];
 

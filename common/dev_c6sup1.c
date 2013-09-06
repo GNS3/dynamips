@@ -367,6 +367,16 @@ static int c6sup1_delete_instance(vm_instance_t *vm)
    /* Free specific HW resources */
    c6sup1_free_hw_ressources(router);
 
+   /* Free EEPROMs */
+   for (i = 0; i < NMC93CX6_MAX_EEPROM_PER_GROUP; i++)
+      cisco_eeprom_free(&router->bp_eeprom[i]);
+
+   for (i = 0; i < NMC93CX6_MAX_EEPROM_PER_GROUP; i++)
+      cisco_eeprom_free(&router->sup_eeprom[i]);
+
+   for (i = 0; i < C6SUP1_MAX_SLOTS; i++)
+      cisco_eeprom_free(&router->slot_eeprom[i]);
+
    /* Free all resources used by VM */
    vm_free(vm);
 
