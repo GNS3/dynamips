@@ -438,7 +438,8 @@ static int m32_tx_acquire(struct m32_data *d,m_uint32_t txd_addr,
 {
    m_uint32_t params;
 
-   if (!(params = physmem_copy_u32_from_vm(d->vm,txd_addr)) & M32_TXDESC_HOLD)
+   params = physmem_copy_u32_from_vm(d->vm,txd_addr);
+   if (!(params & M32_TXDESC_HOLD))
       return(FALSE);
 
    txd->params = params;
@@ -453,7 +454,8 @@ static int m32_tx_acquire_next(struct m32_data *d,m_uint32_t *txd_addr)
    m_uint32_t params;
 
    /* HOLD bit must be reset */
-   if ((params = physmem_copy_u32_from_vm(d->vm,*txd_addr)) & M32_TXDESC_HOLD)
+   params = physmem_copy_u32_from_vm(d->vm,*txd_addr);
+   if ((params & M32_TXDESC_HOLD))
       return(FALSE);
 
    *txd_addr = physmem_copy_u32_from_vm(d->vm,(*txd_addr)+8);
