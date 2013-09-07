@@ -292,10 +292,10 @@ nvram_export$(BIN_EXT): nvram_export.o fs_nvram.o
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) $(INCLUDE) -o $@ nvram_export.o fs_nvram.o
 
-install: $(PROG) nvram_export
+install: $(PROG) nvram_export$(BIN_EXT)
 	@echo "Installing"
 	install -d $(DESTDIR)/bin $(DESTDIR)/man/man1 $(DESTDIR)/man/man7 $(DESTDIR)/etc
-	install dynamips nvram_export   $(DESTDIR)/bin
+	install $(PROG) nvram_export$(BIN_EXT)   $(DESTDIR)/bin
 	install -m644 dynamips.1        $(DESTDIR)/man/man1
 	install -m644 nvram_export.1    $(DESTDIR)/man/man1
 	install -m644 hypervisor_mode.7 $(DESTDIR)/man/man7
@@ -305,7 +305,7 @@ install: $(PROG) nvram_export
 .PHONY: clean
 clean:
 	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc asmdefs$(BIN_EXT) \
-	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG) nvram_export \
+	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG) nvram_export$(BIN_EXT) nvram_export.o \
 	mips64_microcode_dump.inc ppc32_microcode_dump.inc
 	$(RM) -f *~
 

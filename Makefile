@@ -39,7 +39,7 @@ export DESTDIR?=/usr
 export BIN_EXT?=
 
 
-.PHONY: all dynamips.stable dynamips.unstable
+.PHONY: all dynamips.stable dynamips.unstable both install
 all: dynamips.$(DYNAMIPS_CODE)
 
 dynamips.stable:
@@ -49,6 +49,9 @@ dynamips.stable:
 dynamips.unstable:
 	$(MAKE) -C unstable
 	mv unstable/dynamips$(BIN_EXT) dynamips.unstable$(BIN_EXT)
+
+# target to facilitate test compilations
+both: dynamips.stable dynamips.unstable
 
 install: dynamips.$(DYNAMIPS_CODE)
 	@echo "Installing"
