@@ -3326,7 +3326,7 @@ static fastcall int ppc32_exec_SUBFC_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
 }
 
 /* SUBFCO - Subtract From with Overflow */
-static fastcall int ppc32_exec_SUBFCO(cpu_ppc_t *cpu,ppc_insn_t insn)
+__unused static fastcall int ppc32_exec_SUBFCO(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int rd = bits(insn,21,25);
    int ra = bits(insn,16,20);
@@ -3344,7 +3344,7 @@ static fastcall int ppc32_exec_SUBFCO(cpu_ppc_t *cpu,ppc_insn_t insn)
 }
 
 /* SUBFCO. */
-static fastcall int ppc32_exec_SUBFCO_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
+__unused static fastcall int ppc32_exec_SUBFCO_dot(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int rd = bits(insn,21,25);
    int ra = bits(insn,16,20);

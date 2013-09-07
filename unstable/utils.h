@@ -89,6 +89,16 @@
 #define fastcall
 #endif
 
+#ifndef __unused
+/* Function that is never used */
+#define __unused  __attribute__((unused))
+#endif
+
+#ifndef __maybe_unused
+/* Function that is referenced from excluded code (commented out or depends on preprocessor) */
+#define __maybe_unused  __attribute__((unused))
+#endif
+
 #if __GNUC__ > 2
 #define forced_inline inline __attribute__((always_inline))
 #define no_inline __attribute__ ((noinline))

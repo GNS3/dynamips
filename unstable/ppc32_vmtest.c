@@ -151,7 +151,7 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
 }
 
 /* Boot the RAW image */
-static int ppc32_vmtest_boot_raw(vm_instance_t *vm)
+__unused static int ppc32_vmtest_boot_raw(vm_instance_t *vm)
 {   
    cpu_ppc_t *cpu;
 

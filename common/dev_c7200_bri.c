@@ -326,7 +326,7 @@ static int m32_post_interrupt(struct m32_data *d,m_uint32_t iq_value)
 }
 
 /* Fetch a timeslot assignment */
-static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
+__unused static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
 {
    m_uint32_t offset;
 
@@ -348,7 +348,7 @@ static int m32_fetch_all_ts(struct m32_data *d)
 }
 
 /* Show timeslots assignments (debugging) */
-static void m32_show_ts_assign(struct m32_data *d)
+__maybe_unused static void m32_show_ts_assign(struct m32_data *d)
 {
    m_uint32_t ts;
    u_int i;

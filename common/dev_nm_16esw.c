@@ -675,7 +675,7 @@ static void bcm5600_reg_dump(struct nm_16esw_data *d,int show_null)
 }
 
 /* Fill a string buffer with all ports of the specified bitmap */
-static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
+__maybe_unused static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
                                      char *buffer,m_uint32_t bitmap)
 {
    char *ptr = buffer;
@@ -874,7 +874,7 @@ static int bcm5600_table_write_entry(struct nm_16esw_data *d)
 }
 
 /* Dump a table (for debugging) */
-static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
+__unused static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
 {
    struct bcm5600_table *table;
    m_uint32_t *entry;

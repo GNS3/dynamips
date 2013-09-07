@@ -112,7 +112,7 @@ void vm_object_free_list(vm_instance_t *vm)
 }
 
 /* Rebuild the object list pointers */
-static void vm_object_rebuild_list(vm_instance_t *vm)
+__unused static void vm_object_rebuild_list(vm_instance_t *vm)
 {
    vm_obj_t **obj;
 
