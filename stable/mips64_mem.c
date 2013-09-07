@@ -388,9 +388,11 @@ mips64_mts32_slow_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
  err_undef:
    mips64_access_special(cpu,vaddr,MTS_ACC_U,op_code,op_type,op_size,data);
    return NULL;
+#if 0
  err_address:
    mips64_access_special(cpu,vaddr,MTS_ACC_AE,op_code,op_type,op_size,data);
    return NULL;
+#endif
  err_tlb:
    mips64_access_special(cpu,vaddr,MTS_ACC_T,op_code,op_type,op_size,data);
    return NULL;
