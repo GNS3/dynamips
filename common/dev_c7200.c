@@ -248,7 +248,6 @@ static void c7200_init_defaults(c7200_t *router);
 static int c7200_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {
    int ret;
-   size_t len;
 
    ret = generic_nvram_extract_config(vm, "nvram", vm->nvram_rom_space, 0, VM_C7200(vm)->npe_driver->nvram_addr + vm->nvram_rom_space, FS_NVRAM_FORMAT_ABSOLUTE, startup_config, startup_len, private_config, private_len);
 

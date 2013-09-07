@@ -99,6 +99,11 @@
 #define __maybe_unused  __attribute__((unused))
 #endif
 
+#ifndef UNUSED
+/* Variable that is never used (name is changed to get an error on use) */
+#define UNUSED(x)  UNUSED_ ## x __attribute__((unused))
+#endif
+
 #if __GNUC__ > 2
 #define forced_inline inline __attribute__((always_inline))
 #define no_inline __attribute__ ((noinline))

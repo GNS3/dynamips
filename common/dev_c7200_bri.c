@@ -585,8 +585,6 @@ static void *m32_gen_access(struct m32_data *d,cpu_gen_t *cpu,
                             m_uint32_t offset,u_int op_size,u_int op_type,
                             m_uint64_t *data)
 {
-   u_int p;
-
    switch(offset) {
       /* Action Specification */
       case 0x0:

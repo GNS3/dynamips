@@ -82,7 +82,6 @@ static void c1700_init_defaults(c1700_t *router);
 static int c1700_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {
    int ret;
-   size_t len;
 
    ret = generic_nvram_extract_config(vm, "nvram", vm->nvram_rom_space, 0, 0, FS_NVRAM_FORMAT_DEFAULT, startup_config, startup_len, private_config, private_len);
 

@@ -3605,14 +3605,14 @@ static fastcall int ppc32_exec_ICCCI(cpu_ppc_t *cpu,ppc_insn_t insn)
 /* MFDCR - Move From Device Control Register (PowerPC 405) */
 static fastcall int ppc32_exec_MFDCR(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
-   int rt = bits(insn,21,25);
+   int UNUSED(rt) = bits(insn,21,25);
    return(0);
 }
 
 /* MTDCR - Move To Device Control Register (PowerPC 405) */
 static fastcall int ppc32_exec_MTDCR(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
-   int rt = bits(insn,21,25);
+   int UNUSED(rt) = bits(insn,21,25);
    return(0);
 }
 

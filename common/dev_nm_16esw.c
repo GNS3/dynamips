@@ -1785,11 +1785,12 @@ static int bcm5600_trunk_egress_port(struct nm_16esw_data *d,
                                      struct bcm5600_pkt *p,
                                      u_int trunk_id)
 {   
-   n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
+   __maybe_unused n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
+   __maybe_unused u_int i, hash;
    struct bcm5600_tg_info *tgi;
    m_uint32_t *ttr_entry;
-   u_int i,nr_links;
-   u_int hash,port_id;
+   u_int nr_links;
+   u_int port_id;
 
    ttr_entry = bcm5600_table_get_entry(d,d->t_ttr,trunk_id);
    assert(ttr_entry != NULL);

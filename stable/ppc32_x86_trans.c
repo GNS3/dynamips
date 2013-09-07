@@ -503,7 +503,8 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
                                   memop_fast_access op_handler)
 {
    m_uint32_t val = sign_extend(offset,16);
-   u_char *test1,*test2,*p_exit,*p_fast_exit;
+   u_char *test1,*test2,*p_exit;
+   __maybe_unused u_char *p_fast_exit;
    jit_op_t *iop;
 
    /* 

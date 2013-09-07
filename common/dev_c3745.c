@@ -111,7 +111,6 @@ static void c3745_init_defaults(c3745_t *router);
 static int c3745_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {
    int ret;
-   size_t len;
 
    ret = generic_nvram_extract_config(vm, "rom", C3745_NVRAM_OFFSET, C3745_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, startup_config, startup_len, private_config, private_len);
 

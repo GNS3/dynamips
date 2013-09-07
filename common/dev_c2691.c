@@ -74,7 +74,6 @@ static void c2691_init_defaults(c2691_t *router);
 static int c2691_nvram_extract_config(vm_instance_t *vm,u_char **startup_config,size_t *startup_len,u_char **private_config,size_t *private_len)
 {
    int ret;
-   size_t len;
 
    ret = generic_nvram_extract_config(vm, "rom", C2691_NVRAM_OFFSET, C2691_NVRAM_SIZE, 0, FS_NVRAM_FORMAT_WITH_BACKUP, startup_config, startup_len, private_config, private_len);
 
