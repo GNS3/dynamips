@@ -563,7 +563,7 @@ static int mpc860_idma_fetch_bd(struct mpc860_data *d,m_uint16_t bd_addr,
 static int mpc860_idma_start_channel(struct mpc860_data *d,u_int id)
 {
    struct mpc860_idma_bd bd;
-   m_uint16_t dma_base,ibase,bd_offset;
+   m_uint16_t dma_base,bd_offset;
 
    switch(id) {
       case 0:
@@ -577,7 +577,7 @@ static int mpc860_idma_start_channel(struct mpc860_data *d,u_int id)
    }
 
    /* Get the IBASE register (offset 0) */
-   ibase = bd_offset = dpram_r16(d,dma_base+0x00);
+   bd_offset = dpram_r16(d,dma_base+0x00);
 
    while(1) {
       /* Fetch a descriptor */
@@ -652,13 +652,10 @@ static void mpc860_spi_init_rx_tx_params(struct mpc860_data *d)
 static int mpc860_spi_fetch_bd(struct mpc860_data *d,m_uint16_t bd_addr,
                                struct mpc860_spi_bd *bd)
 {
-   void *ptr;
-
    if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr > MPC860_DPRAM_END))
       return(-1);
 
    bd->offset = bd_addr - MPC860_DPRAM_OFFSET;
-   ptr = &d->dpram[bd->offset];
 
    /* Fetch control word */
    bd->ctrl = dpram_r16(d,bd->offset+0x00);
@@ -863,13 +860,10 @@ static int mpc860_scc_update_irq(struct mpc860_data *d,u_int scc_chan)
 static int mpc860_scc_fetch_bd(struct mpc860_data *d,m_uint16_t bd_addr,
                                struct mpc860_scc_bd *bd)
 {
-   void *ptr;
-
    if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr > MPC860_DPRAM_END))
       return(-1);
 
    bd->offset = bd_addr - MPC860_DPRAM_OFFSET;
-   ptr = &d->dpram[bd->offset];
 
    /* Fetch control word */
    bd->ctrl = dpram_r16(d,bd->offset+0x00);

@@ -321,8 +321,8 @@ static char *get_page_size_str(char *buffer,size_t len,m_uint32_t page_mask)
 static inline void mips64_cp0_tlb_callback(cpu_mips_t *cpu,tlb_entry_t *entry,
                                            int action)
 {
-   m_uint64_t vaddr,paddr0,paddr1;
-   m_uint32_t psize;
+   __maybe_unused m_uint64_t vaddr,paddr0,paddr1;
+   __maybe_unused m_uint32_t psize;
 
    vaddr = entry->hi & mips64_cp0_get_vpn2_mask(cpu);
    psize = get_page_size(entry->mask);

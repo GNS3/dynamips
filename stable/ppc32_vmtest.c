@@ -82,7 +82,7 @@ static void ppc32_vmtest_clear_irq(vm_instance_t *vm,u_int irq)
 /* Initialize the PPC32 VM test Platform */
 static int ppc32_vmtest_init_platform(vm_instance_t *vm)
 {
-   cpu_ppc_t *cpu0; 
+   __maybe_unused cpu_ppc_t *cpu0; 
    cpu_gen_t *gen0;
 
    /* Create Console and AUX ports */

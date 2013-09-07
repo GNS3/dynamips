@@ -165,7 +165,7 @@ int ppc32_get_idling_pc(cpu_gen_t *cpu)
    cpu_ppc_t *pcpu = CPU_PPC32(cpu);
    struct ppc32_idle_pc_hash **pc_hash,*p;
    struct cpu_idle_pc *res;
-   u_int h_index,res_count;
+   u_int h_index;
    m_uint32_t cur_ia;
    int i;
 
@@ -208,7 +208,7 @@ int ppc32_get_idling_pc(cpu_gen_t *cpu)
    }
 
    /* Select PCs */
-   for(i=0,res_count=0;i<IDLE_HASH_SIZE;i++) {
+   for(i=0;i<IDLE_HASH_SIZE;i++) {
       for(p=pc_hash[i];p;p=p->next)
          if ((p->count >= 20) && (p->count <= 80)) {
             res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
@@ -543,7 +543,7 @@ int ppc32_load_elf_image(cpu_ppc_t *cpu,char *filename,int skip_load,
    Elf_Scn *scn;
    Elf *img_elf;
    size_t len,clen;
-   char *name;
+   __maybe_unused char *name;
    int i,fd;
    FILE *bfd;
 

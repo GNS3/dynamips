@@ -242,9 +242,9 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
 
            d->line_control_reg = (uint)*data;
            uint bits = 5;
-           char *stop = "1";
-           char *parity = "no ";
-           char *parityeven = "odd";
+           __maybe_unused char *stop = "1";
+           __maybe_unused char *parity = "no ";
+           __maybe_unused char *parityeven = "odd";
            if (*data & LCR_WRL0) bits+=1;
            if (*data & LCR_WRL1) bits+=2;
          
@@ -265,7 +265,7 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
            if (*data & LCR_DIVLATCH) {
              d->div_latch = 1;
            } else {
-             uint baud;
+             __maybe_unused uint baud;
              d->div_latch = 0;
              //  1200 divisor was 192
              //  9600 divisor was  24
@@ -282,7 +282,11 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
       case 0x04:
       case 0x0C:
          if (op_type != MTS_READ) {
-           char *f1 = ""; char *f2 = ""; char *f3 = ""; char *f4 = ""; char *f5 = "";
+           __maybe_unused char *f1 = "";
+           __maybe_unused char *f2 = "";
+           __maybe_unused char *f3 = "";
+           __maybe_unused char *f4 = "";
+           __maybe_unused char *f5 = "";
            if (*data & MCR_DTR) f1 = "DTR ";
            if (*data & MCR_RTS) f2 = "RTS ";
            if (*data & MCR_OUT1) f3 = "OUT1 ";

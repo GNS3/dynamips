@@ -646,7 +646,7 @@ void *pa_4b_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                    u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct pa_4b_data *d = dev->priv_data;
-   static m_uint32_t test1,test2,test3;
+   __maybe_unused static m_uint32_t test1,test2,test3;
 
    if (op_type == MTS_READ)
       *data = 0xFFFFFFFF;

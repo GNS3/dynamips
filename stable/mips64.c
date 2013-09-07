@@ -202,7 +202,7 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
    cpu_mips_t *mcpu = CPU_MIPS64(cpu);
    struct mips64_idle_pc_hash **pc_hash,*p;
    struct cpu_idle_pc *res;
-   u_int h_index,res_count;
+   u_int h_index;
    m_uint64_t cur_pc;
    int i;
 
@@ -245,7 +245,7 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
    }
 
    /* Select PCs */
-   for(i=0,res_count=0;i<IDLE_HASH_SIZE;i++) {
+   for(i=0;i<IDLE_HASH_SIZE;i++) {
       for(p=pc_hash[i];p;p=p->next)
          if ((p->count >= 20) && (p->count <= 80)) {
             res = &cpu->idle_pc_prop[cpu->idle_pc_prop_count++];
@@ -917,7 +917,7 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
    Elf_Scn *scn;
    Elf *img_elf;
    size_t len,clen;
-   char *name;
+   __maybe_unused char *name;
    int i,fd;
    FILE *bfd;
 

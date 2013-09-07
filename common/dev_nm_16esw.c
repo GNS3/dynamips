@@ -1312,7 +1312,8 @@ static void bcm5600_handle_write_mem_cmd(struct nm_16esw_data *d)
 /* Handle a "general" command */
 static void bcm5600_handle_gen_cmd(struct nm_16esw_data *d)
 {
-   m_uint32_t op,src,dst,len;
+   m_uint32_t op;
+   __maybe_unused m_uint32_t src,dst,len;
 
    /* Extract the opcode */
    op  = (d->dw[0] & BCM5600_CMD_OP_MASK) >> BCM5600_CMD_OP_SHIFT;

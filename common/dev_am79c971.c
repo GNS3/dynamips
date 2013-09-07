@@ -731,9 +731,7 @@ static int am79c971_receive_pkt(struct am79c971_data *d,
 static int am79c971_handle_rxring(netio_desc_t *nio,
                                   u_char *pkt,ssize_t pkt_len,
                                   struct am79c971_data *d)
-{      
-   n_eth_hdr_t *hdr;
-
+{
    /* 
     * Don't start receive if the RX ring address has not been set
     * and if RX ON is not set.
@@ -752,8 +750,6 @@ static int am79c971_handle_rxring(netio_desc_t *nio,
     * Receive only multicast/broadcast trafic + unicast traffic 
     * for this virtual machine.
     */
-   hdr = (n_eth_hdr_t *)pkt;
-
    if (am79c971_handle_mac_addr(d,pkt))
       am79c971_receive_pkt(d,pkt,pkt_len);
 
