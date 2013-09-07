@@ -1,23 +1,26 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.9
+Version:  v0.2.10
 
-Release date:  Wednesday, July 31, 2013 (2013-07-31)
+Release date:  Saturday, September 7, 2013 (2013-09-07)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.9
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.10
 
 License: GNU GPLv2
 
 
-What's New since v0.2.8-community
-=================================
+What's New since v0.2.9
+=======================
 
-Renamed from Dynamips-community to the original Dynamips.
+The NVRAM configuration file private-config is fully supported.
+The standalone tool nvram_export supports all known formats.
+Updated documentation.
+All compilation warning are fixed.
 
-Fixed issue #11 - nvram:private-config is destroyed when we write nvram:startup-config
-Fixed issue #13 - C3745 has an emulated NVRAM that is not continuous, so we can generate an invalid checksum when the config is written
-Fixed issue #14 - a file descriptor is leaked every time the config is extracted/read
+Implemented enhancement #15 - extend hypervisor commands push_config, extract_config, and set_config
+Implemented enhancement #16 - reimplement nvram_export
+Fixed issue #17 - Dynamips hangs on startup if no (or unknown) parameters are given v0.2.8 and 0.2.9
 
 
 Known Issues

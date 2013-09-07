@@ -2491,6 +2491,10 @@
 -----------
   - MV64460: added SRAM.
 
++-----------------------.
+| Release:  v0.2.8-RC2   |
++-----------------------'
+
 30-Mar-2011 (dynamips-community fork)
 ----------------------------------
   - Online Insertion and Removal (OIR) support for c3745 (NM-4T only) and c3660.
@@ -2538,6 +2542,10 @@
      c7200 NPE-100 to NPE-300:
      (see http://www.sadikhov.com/forum/index.php?showtopic=157426&st=20 for details).
 
++---------------------------------.
+| Release:  v0.2.8-RC3-community   |
++---------------------------------'
+
 12-Nov-2011
 -----------
   - FreeBSD patches
@@ -2546,6 +2554,13 @@
 26-Jun-2012
 -----------
   - Fixes hypervisor problem of only using default port with a bind address.
+
++---------------------------------.
+| Release:  v0.2.8-RC4-community   |
++---------------------------------'
+
+26-Jun-2012
+-----------
   - Support for RFC2553 + binding on specific addresses for console/aux connections.
   - True AF independent code (RFC2553). Accepts IPv6 and IPv4 clients in the same console session.
   - Update CFLAGS and LIBS for Cygwin.
@@ -2553,6 +2568,10 @@
 18-Oct-2012
 -----------
   - show_cpu_usage command for the vm, used by GNS3 for auto idlepc calculation.
+
++---------------------------------.
+| Release:  v0.2.8-RC5-community   |
++---------------------------------'
 
 30-Jan-2013
 -----------
@@ -2565,6 +2584,10 @@
   - Fixed QinQ.
   - Simplified TTYPE message.
 
++---------------------------------.
+| Release:  v0.2.8-RC6-community   |
++---------------------------------'
+
 11-Jun-2013
 -----------
    - Manual patches
@@ -2576,6 +2599,10 @@
    - Updated README, changelogs, and makefiles.
    - Bumped version to v0.2.8-RC7-community.
 
++---------------------------------.
+| Release:  v0.2.8-RC7-community   |
++---------------------------------'
+
 18-Jun-2013 to 04-Jul-2013
 --------------------------
    - Fixed crashes in x86_64 builds by decreasing the optimization level to O2.
@@ -2583,6 +2610,10 @@
    - Fixed many memory leaks.
    - Updated documentation and makefiles (works with parallel jobs).
    - Bumped version to v0.2.8-community.
+
++-----------------------------.
+| Release:  v0.2.8-community   |
++-----------------------------'
 
 10-Jul-2013 to 31-Jul-2013
 --------------------------
@@ -2596,3 +2627,69 @@
 Fixed issue #11 - nvram:private-config is destroyed when we write nvram:startup-config
 Fixed issue #13 - C3745 has an emulated NVRAM that is not continuous, so we can generate an invalid checksum when the config is written
 Fixed issue #14 - a file descriptor is leaked every time the config is extracted/read
+
++-------------------.
+| Release:  v0.2.9   |
++-------------------'
+
+05-Aug-2013 to 07-Sep-2013
+--------------------------
+   - Add an option to produce debug symbols and override the optimization level to the makefiles.
+   - Fix leak of a mutex and a condition if thread creation fails in timer_create_queue.
+   - Remove unnecessary call to pthread_exit, the main thread is waiting with pthread_join.
+   - Add volatile qualifier to variables 'list' and 'running' of timer_queue_t. They are modified and read in different threads.
+   - Remove the asynchronous cancellation of the timer threads. It is not safe and pthread_cancel is never called.
+   - Signal the timer queue condition before releasing the mutex, as it should be used.
+   - Check the running flag before waiting for the condition in timer_loop. This avoids "The Lost Wake-Up Problem" when the program terminates before the timer thread is waiting.
+   - Add fs_nvram_verify.
+   - Reimplement nvram_export.
+   - Rename vm_instance_t.ios_config to ios_startup_config.
+   - Expand vm_platform_t.nvram_push_config to receive both startup-config and private-config.
+   - Expand vm_platform_t.nvram_extract_config to get both startup-config and private-config.
+   - Add vm_instance_t.ios_private_config.
+   - Rework m_read_file to read the whole file at once.
+   - Rework vm_nvram_push_config to handle both config files (NULL to keep existing data).
+   - Extend hypervisor command 'set_config':
+     - new optional argument for the file with private data.
+     - new behaviour: an empty string "" means no config file.
+   - Rework vm_ios_set_config to handle both config files (NULL to keep existing data).
+   - Update documentation.
+   - Extend hypervisor command 'extract_config':
+     - return both startup-config and private-config data.
+     - empty data is sent as an empty string ''.
+   - Update documentation.
+   - Extend hypervisor command 'push_config':
+     - new optional argument for the private data.
+     - new behavior: the string '(keep)' means no data is provided and it should preserve existing data.
+   - Update documentation.
+   - Add command line options --private-config and --startup-config.
+   - Update documentation.
+   - Fix warning "dereferencing type-punned pointer will break strict-aliasing rules".
+   - Fix m32_tx_acquire not checking the HOLD bit properly.
+     Note: the datasheet isn't available anymore, so the intended behavior was inferred from surrounding code; it was assumed that the hold bit is managed elsewhere
+   - Fix warning "suggest parentheses around operand of ‘!’ or change ‘&’ to ‘&&’ or ‘!’ to ‘~’".
+   - Fix warnings "assignment discards ‘const’ qualifier from pointer target type" by copying the backplane/supervisor eeproms.
+   - Fix memory leaks of c6sup1_t.slot_eeprom data.
+   - Fix warnings "‘<function name>’ defined but not used".
+     __unused for function that are not referenced
+     __maybe_unused for functions that are referenced in excluded code
+   - Fix warnings "label ‘<name>’ defined but not used".
+   - Fix warnings "unused variable ‘<name>’".
+     UNUSED() for variables that are not used
+     __maybe_used for variables that are used in excluded code
+   - Fix warnings "variable ‘<name>’ set but not used".
+     delete unneeded variables that don't help understand the surrounding code
+     __maybe_unused for the other variables
+   - Adjust Makefiles:
+     - clean nvram_export.o
+     - add missing $(BIN_EXT)
+     - add target 'both' to facilitate test compilations
+   - Bump version to v0.2.10.
+
+Implemented enhancement #15 - extend hypervisor commands push_config, extract_config, and set_config
+Implemented enhancement #16 - reimplement nvram_export
+Fixed issue #17 - Dynamips hangs on startup if no (or unknown) parameters are given v0.2.8 and 0.2.9
+
++--------------------.
+| Release:  v0.2.10   |
++--------------------'
