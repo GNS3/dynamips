@@ -98,9 +98,7 @@ static int exec_page_create_area(tsg_t *tsg)
       
    /* Allocate an executable area through MMAP */
    area_size = tsg->exec_area_alloc_size * 1048756;
-   tsg->exec_area = mmap(NULL,area_size,
-                         PROT_EXEC|PROT_READ|PROT_WRITE,
-                         MAP_SHARED|MAP_ANONYMOUS,-1,(off_t)0);
+   tsg->exec_area = memzone_map_exec_area(area_size);
   
    if (!tsg->exec_area) {
       perror("exec_page_create_area: mmap");

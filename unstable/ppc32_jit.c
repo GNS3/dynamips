@@ -94,9 +94,7 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
 
    /* Create executable page area */
    cpu->exec_page_area_size = area_size * 1048576;
-   cpu->exec_page_area = mmap(NULL,cpu->exec_page_area_size,
-                              PROT_EXEC|PROT_READ|PROT_WRITE,
-                              MAP_SHARED|MAP_ANONYMOUS,-1,(off_t)0);
+   cpu->exec_page_area = memzone_map_exec_area(cpu->exec_page_area_size);
 
    if (!cpu->exec_page_area) {
       fprintf(stderr,
