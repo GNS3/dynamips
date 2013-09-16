@@ -179,7 +179,7 @@ void ppc32_jit_shutdown(cpu_ppc_t *cpu)
 
    /* Unmap the executable page area */
    if (cpu->exec_page_area)
-      munmap(cpu->exec_page_area,cpu->exec_page_area_size);
+      memzone_unmap(cpu->exec_page_area,cpu->exec_page_area_size);
 
    /* Free the exec page array */
    free(cpu->exec_page_array);

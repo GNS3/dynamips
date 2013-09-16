@@ -441,6 +441,9 @@ int m_signal_unblock(int sig);
 /* Set non-blocking mode on a file descriptor */
 int m_fd_set_non_block(int fd);
 
+/* Unmap a memory zone */
+int memzone_unmap(void *addr, size_t len);
+
 /* Map a memory zone as an executable area */
 u_char *memzone_map_exec_area(size_t len);
 

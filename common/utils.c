@@ -367,6 +367,12 @@ int m_fd_set_non_block(int fd)
    return(fcntl(fd,F_SETFL, flags | O_NONBLOCK));
 }
 
+/* Unmap a memory zone */
+int memzone_unmap(void *addr, size_t len)
+{
+   return(munmap(addr, len));
+}
+
 /* Return a memory zone or NULL on error */
 static void *mmap_or_null(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {

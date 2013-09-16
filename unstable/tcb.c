@@ -127,7 +127,7 @@ static int exec_page_create_area(tsg_t *tsg)
    return(0);
    
  err_array:
-   munmap(tsg->exec_area,area_size);
+   memzone_unmap(tsg->exec_area,area_size);
  err_mmap:
    return(-1);
 }

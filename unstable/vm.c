@@ -717,7 +717,7 @@ static void vm_ghost_image_free(vm_ghost_image_t *img)
          close(img->fd);
 
          if (img->area_ptr != NULL)
-            munmap(img->area_ptr,img->file_size);
+            memzone_unmap(img->area_ptr,img->file_size);
       }
 
       free(img->filename);
@@ -878,7 +878,7 @@ int vm_mmap_create_file(vm_instance_t *vm,char *name,size_t len,u_char **ptr)
 int vm_mmap_close_file(int fd,u_char *ptr,size_t len)
 {
    if (ptr != NULL)
-      munmap(ptr,len);
+      memzone_unmap(ptr,len);
    
    if (fd != -1)
       close(fd);

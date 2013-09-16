@@ -148,7 +148,7 @@ void dev_remove(vm_instance_t *vm,struct vdevice *dev)
          vm_log(vm,"MMAP","unmapping of device '%s', "
                 "fd=%d, host_addr=0x%llx, len=0x%x\n",
                 dev->name,dev->fd,(m_uint64_t)dev->host_addr,dev->phys_len);
-         munmap((void *)dev->host_addr,dev->phys_len);
+         memzone_unmap((void *)dev->host_addr,dev->phys_len);
       }
       
       if (dev->flags & VDEVICE_FLAG_SYNC)
