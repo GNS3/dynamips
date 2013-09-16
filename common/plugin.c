@@ -12,7 +12,6 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <assert.h>

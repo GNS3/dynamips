@@ -8,7 +8,6 @@
 
 #include <stdarg.h>
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <sys/time.h>
 #include <time.h>
 #include <netinet/in.h>
