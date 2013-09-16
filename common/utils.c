@@ -367,6 +367,18 @@ int m_fd_set_non_block(int fd)
    return(fcntl(fd,F_SETFL, flags | O_NONBLOCK));
 }
 
+/* Sync a memory zone */
+int memzone_sync(void *addr, size_t len)
+{
+   return(msync(addr, len, MS_SYNC));
+}
+
+/* Sync all mappings of a memory zone */
+int memzone_sync_all(void *addr, size_t len)
+{
+   return(msync(addr, len, MS_SYNC | MS_INVALIDATE));
+}
+
 /* Unmap a memory zone */
 int memzone_unmap(void *addr, size_t len)
 {

@@ -141,8 +141,7 @@ void dev_remove(vm_instance_t *vm,struct vdevice *dev)
       /* Unmap memory mapped file */
       if (dev->host_addr) {
          if (dev->flags & VDEVICE_FLAG_SYNC) {
-            msync((void *)dev->host_addr,dev->phys_len,
-                  MS_SYNC|MS_INVALIDATE);
+            memzone_sync_all((void *)dev->host_addr,dev->phys_len);
          }
          
          vm_log(vm,"MMAP","unmapping of device '%s', "
@@ -208,7 +207,7 @@ int dev_sync(struct vdevice *dev)
    if (!dev || !dev->host_addr)
       return(-1);
 
-   return(msync((void *)dev->host_addr,dev->phys_len,MS_SYNC));
+   return(memzone_sync((void *)dev->host_addr,dev->phys_len));
 }
 
 /* Remap a device at specified physical address */
