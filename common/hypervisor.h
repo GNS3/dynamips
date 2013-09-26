@@ -34,6 +34,7 @@
 #define HSC_ERR_STOP        210  /* unable to stop object */
 #define HSC_ERR_FILE        211  /* file error */
 #define HSC_ERR_BAD_OBJ     212  /* Bad object */
+#define HSC_ERR_RENAME      213  /* unable to rename object */
 
 typedef struct hypervisor_conn hypervisor_conn_t;
 typedef struct hypervisor_cmd hypervisor_cmd_t;
