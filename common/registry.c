@@ -118,15 +118,21 @@ static void registry_insert_entry(registry_entry_t *entry)
    bucket->htype_next = entry;
 }
 
-/* Remove a registry entry */
-void registry_remove_entry(registry_entry_t *entry)
+/* Detach a registry entry */
+static void registry_detach_entry(registry_entry_t *entry)
 {
    entry->hname_prev->hname_next = entry->hname_next;
    entry->hname_next->hname_prev = entry->hname_prev;
 
    entry->htype_prev->htype_next = entry->htype_next;
    entry->htype_next->htype_prev = entry->htype_prev;
-   
+}
+
+/* Remove a registry entry */
+static void registry_remove_entry(registry_entry_t *entry)
+{
+   registry_detach_entry(entry);
+
    mp_free(entry);
 }
 
@@ -208,6 +214,33 @@ int registry_delete(char *name,int object_type)
    }
 
    registry_remove_entry(entry);
+   REGISTRY_UNLOCK();
+   return(0);
+}
+
+/* Rename an entry in the registry */
+int registry_rename(char *name,char *newname,int object_type)
+{
+   registry_entry_t *entry;
+
+   if (!name || !newname) return(-1);
+
+   REGISTRY_LOCK();
+
+   if (!(entry = registry_find_entry(name,object_type))) {
+      REGISTRY_UNLOCK();
+      return(-1);
+   }
+
+   if (registry_find_entry(newname,object_type)) {
+      REGISTRY_UNLOCK();
+      return(-1);
+   }
+
+   registry_detach_entry(entry);
+   entry->name = newname;
+   registry_insert_entry(entry);
+
    REGISTRY_UNLOCK();
    return(0);
 }
