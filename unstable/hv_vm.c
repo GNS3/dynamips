@@ -1171,7 +1171,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "set_con_tcp_port", 2, 2, cmd_set_con_tcp_port, NULL },
    { "set_aux_tcp_port", 2, 2, cmd_set_aux_tcp_port, NULL },
    { "extract_config", 1, 1, cmd_extract_config, NULL },
-   { "push_config", 2, 2, cmd_push_config, NULL },
+   { "push_config", 2, 3, cmd_push_config, NULL },
    { "cpu_info", 2, 2, cmd_show_cpu_info, NULL },
    { "cpu_usage", 2, 2, cmd_show_cpu_usage, NULL },
    { "suspend", 1, 1, cmd_suspend, NULL },
