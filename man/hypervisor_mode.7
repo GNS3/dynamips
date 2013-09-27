@@ -1,4 +1,4 @@
-.TH HYPERVISOR_MODE 7 "Sep 27, 2013"
+.TH HYPERVISOR_MODE 7 "Sep 28, 2013"
 .SH NAME
 hypervisor_mode \- allows you to run simultaneously
 many virtual router instances, and to simulate ATM, Ethernet
@@ -13,7 +13,7 @@ dynagen/dynagui that will pass commands transparently. The second method
 is highly recommended.
 .br
 The command syntax is simple: <module> <function> [arguments...]
-For example: "c7200 start R1" starts virtual instance named "R1".
+For example: "vm start R1" starts virtual instance named "R1".
 .br
 .TP
 .B The modules that are currently defined are given below:
@@ -98,7 +98,33 @@ Dump statistics about JIT code sharing to the console.
 .RS
 .TP
 .B vm list
-List all VM instances (c7200, c3600).
+List all VM instances.
+(c7200, c3745, c3725, c3600, c2691, c2600, c1700)
+.TP
+.B vm list_con_ports
+List all VM console TCP port.
+(since version 0.2.6\-RC5)
+.TP
+.B vm create <instance_name> <instance_id>
+Create a new router instance.
+The ID must be unique and is used to name files on disk.
+(since version 0.2.8\-RC1)
+.TP
+.B vm delete <instance_name>
+Delete the specified instance.
+(since version 0.2.8\-RC1)
+.TP
+.B vm start <instance_name>
+Start the instance. At least the IOS image must be set.
+(since version 0.2.8\-RC1)
+.TP
+.B vm stop <instance_name>
+Stop the instance. The settings are kept.
+(since version 0.2.8\-RC1)
+.TP
+.B vm set_tsg <instance_name> <group_id>
+Set translation sharing group.
+(since version 0.2.8\-RC3\-community, unstable)
 .TP
 .B vm set_debug_level <instance_name> <level>
 Set the debug level (which is a number) for a VM. By default, no specific debug
@@ -112,17 +138,20 @@ Set the config files that are pushed to startup\-config and
 private\-config in NVRAM when the instance is started.
 To keep existing data, use an empty string ('') for the filename.
 The optional <private_file> is an empty string by default.
+(supports <private_file> since version 0.2.10)
 .TP
 .B vm extract_config <instance_name>
 Get the contents of the config files startup\-config and private\-config from 
 NVRAM. The data of each file is encoded in a Base64 string, surrounded by 
 single quotes.
+(returns private\-config since version 0.2.10)
 .TP
 .B vm push_config <instance_name> <startup_cfg> [<private_cfg>]
 Push configuration to the config files startup\-config and private\-config 
 in NVRAM.
 The data is a Base64 encoded string, or '(keep)' to keep existing data.
 The optional <private_cfg> is '(keep)' by default.
+(supports <private_cfg> since version 0.2.11)
 .TP
 .B vm set_ram <instance_name> <ram_size>
 Set the RAM size, specified  in Mbytes.
@@ -133,6 +162,10 @@ Set the NVRAM size, specified in Kbytes.
 .B vm set_ram_mmap <instance_name> <0|1>
 Enable/Disable use of a mapped file to simulate router memory. By default, a
 mapped file is used. This is a bit slower, but requires less memory.
+.TP
+.B vm set_sparse_mem <instance_name> <0|1>
+Enable/disable use of sparse memory.
+(since version 0.2.7\-RC1)
 .TP
 .B vm suspend <instance_name>
 Suspend execution of the instance.
@@ -145,9 +178,44 @@ Set the clock divisor value. The higher is the value, the faster is the clock
 in the virtual machine. The default is 4, but it is often required to adjust
 it.
 .TP
+.B vm set_blk_direct_jump <instance_name> <0|1>
+Enable/disable use of block direct jump.
+(compatibility option, since version 0.2.7\-RC2)
+.TP
 .B vm set_idle_pc <instance_name> <pc_value>
 Set the idle Pointer Counter (PC). You must determine it through the method
 explained in the main README file.
+.TP
+.B vm set_idle_pc_online <instace_name> <cpu_id> <pc_value>
+Set the idle PC value when the CPU is online.
+(since version 0.2.6\-RC2)
+.TP
+.B vm get_idle_pc_prop <instance_name> <cpu_id>
+Get the idle PC proposals.
+Takes 1000 measurements and records up to 10 idle PC proposals.
+There is a 10ms wait between each measurement.
+(since version 0.2.6\-RC2)
+.TP
+.B vm show_idle_pc_prop <instance_name> <cpu_id>
+Dump the idle PC proposals. (since version 0.2.6\-RC2)
+.TP
+.B vm set_idle_max <instance_name> <cpu_id> <idle_max>
+Set CPU idle max value. (since version 0.2.6\-RC2)
+.TP
+.B vm set_idle_sleep_time <instance_name> <cpu_id> <idle_sleep_time>
+Set CPU idle sleep time value. (since version 0.2.6\-RC2)
+.TP
+.B vm show_timer_drift <instance_name> <cpu_id>
+Show info about potential timer drift.
+(since version 0.2.6\-RC3)
+.TP
+.B vm set_ghost_file <instance_name> <ghost_ram_filename>
+Set ghost RAM file. (since version 0.2.6\-RC3, 
+needs an extra bogus argument before version 0.2.6\-RC4)
+.TP
+.B vm set_ghost_status <instance_name> <ghost_status>"
+Set ghost RAM status. (since version 0.2.6\-RC3, 
+needs an extra bogus argument before version 0.2.6\-RC4)
 .TP
 .B vm set_exec_area <instance_name> <area_size>
 Set the exec area size. The exec area is a pool of host memory used to store
@@ -179,6 +247,43 @@ typically the only CPU) has ID 0.
 Show cpu usage of dynamips in seconds. (experimental)
 .br
 The instance must exist, "cpu_id" is ignored.
+(since version 0.2.8\-RC5\-community)
+.TP
+.B vm send_con_msg <instance_name> <str>
+Send a message on the console. (since version 0.2.6\-RC3)
+.TP
+.B vm send_aux_msg <instance_name> <str>
+Send a message on the AUX port. (since version 0.2.6\-RC3)
+.TP
+.B vm slot_bindings <instance_name>
+Show slot bindings. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_nio_bindings <instance_name> <slot_id>
+Show NIO bindings for the specified slot. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_add_binding <instance_name> <slot_id> <port_id> <dev_type>
+Add a slot binding. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_remove_binding <instance_name> <slot_id> <port_id>
+Remove a slot binding . (since version 0.2.8\-RC1)
+.TP
+.B vm slot_add_nio_binding <instance_name> <slot_id> <port_id> <nio_name>
+Add a NIO binding for a slot/port. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_remove_nio_binding <instance_name> <slot_id> <port_id>
+Remove a NIO binding for a slot/port. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_enable_nio <instance_name> <slot_id> <port_id>
+Enable NIO of the specified slot/port. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_disable_nio <instance_name> <slot_id> <port_id>
+Disable NIO of the specified slot/port. (since version 0.2.8\-RC1)
+.TP
+.B vm slot_oir_start <instance_name> <slot_id> <subslot_id>
+OIR to start a slot/subslot. (since version 0.2.8\-RC3\-community)
+.TP
+.Bvm slot_oir_stop <isntance_name> <slot_id> <subslot_id>
+OIR to stop a slot/subslot. (since version 0.2.8\-RC3\-community)
 .RE
 .TP
 .B Virtual Machine debugging ("vm_debug")
