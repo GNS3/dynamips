@@ -43,6 +43,9 @@ NIO bridges (shared media)
 .B atmsw     
 ATM switches
 .TP
+.B atm_bridge
+ATM bridges
+.TP
 .B frsw      
 Frame\(hyRelay switches
 .TP
@@ -460,6 +463,27 @@ Create a new Virtual Channel connection (unidirectional).
 .TP
 .B atmsw delete_vcc <switch_name> <input_nio> <input_vpi> <input_vci> <output_nio> <output_vpi> <output_vci>
 Delete a Virtual Channel connection (unidirectional).
+.RE
+.TP
+.B Virtual ATM bridge ("atm_bridge")
+.RS
+.TP
+Available since version 0.2.8\-RC2.
+.TP
+.B atm_bridge list
+List all ATM bridges.
+.TP
+.B atm_bridge create <bridge_name>
+Create a new ATM bridge.
+.TP
+.B atm_bridge delete <bridge_name>
+Delete an ATM bridge.
+.TP
+.B atm_bridge configure <bridge_name> <eth_nio> <atm_nio> <vpi> <vci>
+Configure an ATM bridge.
+.TP
+.B atm_bridge unconfigure <bridge_name>
+Unconfigure an ATM bridge.
 .RE
 .TP
 .B Virtual Frame\(hyRelay switch ("frsw")

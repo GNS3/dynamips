@@ -30,6 +30,7 @@ The modules that are currently defined are given below:
   * nio          : Network Input/Output (NIO) descriptors
   * nio_bridge   : NIO bridges (shared media)
   * atmsw        : ATM switches
+  * atm_bridge   : ATM bridges
   * frsw         : Frame-Relay switches
   * ethsw        : Ethernet switches
   * object_store : Object store
@@ -403,6 +404,23 @@ Virtual ATM switch ("atmsw")
 * "atmsw delete_vcc <switch_name> <input_nio> <input_vpi> <input_vci>
   <output_nio> <output_vpi> <output_vci>" : 
   Delete a Virtual Channel connection (unidirectional).
+
+
+Virtual ATM bridge ("atm_bridge")
+==================================
+
+Available since version 0.2.8-RC2.
+
+* "atm_bridge list" : List all ATM bridges.
+
+* "atm_bridge create <bridge_name>" : Create a new ATM bridge.
+
+* "atm_bridge delete <bridge_name>" : Delete an ATM bridge.
+
+* "atm_bridge configure <bridge_name> <eth_nio> <atm_nio> <vpi> <vci>" : 
+  Configure an ATM bridge.
+
+* "atm_bridge unconfigure <bridge_name>" : Unconfigure an ATM bridge.
 
 
 Virtual Frame-Relay switch ("frsw")
