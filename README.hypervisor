@@ -369,6 +369,10 @@ Virtual Ethernet switch ("ethsw")
   Set the specified port as a 802.1Q trunk port, with native 
   VLAN <native_vlan>.
 
+* "ethsw set_qinq_port <switch_name> <nio_name> <outer_vlan>" :
+  Set the specified port as a trunk (QinQ) port.
+  (since version 0.2.3-RC3-community)
+
 * "ethsw clear_mac_addr_table <switch_name>" : Clear the MAC address table.
 
 * "ethsw show_mac_addr_table <switch_name>" : Show the MAC address table
