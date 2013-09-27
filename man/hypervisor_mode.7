@@ -1,4 +1,4 @@
-.TH HYPERVISOR_MODE 7 "Sep 10, 2006"
+.TH HYPERVISOR_MODE 7 "Sep 27, 2013"
 .SH NAME
 hypervisor_mode \- allows you to run simultaneously
 many virtual router instances, and to simulate ATM, Ethernet
@@ -45,6 +45,9 @@ Frame\(hyRelay switches
 .TP
 .B ethsw     
 Ethernet switches
+.TP
+.B object_store
+Object store
 .RE
 .TP
 .B Hypervisor management module
@@ -422,6 +425,27 @@ Create a new Virtual Circuit connection (unidirectional).
 .TP
 .B frsw delete_vc <switch_name> <input_nio> <input_dlci> <output_nio> <output_dlci>
 Delete a Virtual Circuit connection (unidirectional).
+.RE
+.TP
+.B Object store ("object_store")
+.RS
+.TP
+Available since version 0.2.8\-RC2.
+.TP
+.B object_store write <object_name> <data>
+Write an object, data provided in base64 encoding.
+.TP
+.B object_store read <object_name>
+Read an object and return data in base64 encoding.
+.TP
+.B object_store delete <object_name>
+Delete an object from the store.
+.TP
+.B object_store delete_all
+Delete all objects from the store
+.TP
+.B object_store list
+Object list.
 .RE
 .SH REPORTING BUGS
 .br

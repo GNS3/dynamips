@@ -22,15 +22,16 @@ For example: "c7200 start R1" starts virtual instance named "R1".
 
 The modules that are currently defined are given below:
 
-  * hypervisor : General hypervisor management
-  * vm         : General virtual machine (VM) management
-  * c7200      : Virtual instances of Cisco 7200
-  * c3600      : Virtual instances of Cisco 3600
-  * nio        : Network Input/Output (NIO) descriptors
-  * nio_bridge : NIO bridges (shared media)
-  * atmsw      : ATM switches
-  * frsw       : Frame-Relay switches
-  * ethsw      : Ethernet switches
+  * hypervisor   : General hypervisor management
+  * vm           : General virtual machine (VM) management
+  * c7200        : Virtual instances of Cisco 7200
+  * c3600        : Virtual instances of Cisco 3600
+  * nio          : Network Input/Output (NIO) descriptors
+  * nio_bridge   : NIO bridges (shared media)
+  * atmsw        : ATM switches
+  * frsw         : Frame-Relay switches
+  * ethsw        : Ethernet switches
+  * object_store : Object store
 
 
 Hypervisor management module ("hypervisor")
@@ -373,3 +374,23 @@ Virtual Frame-Relay switch ("frsw")
   <output_nio> <output_dlci>" : 
   Delete a Virtual Circuit connection (unidirectional).
 
+
+Object store ("object_store")
+====================================
+
+Available since version 0.2.8-RC2.
+
+* "object_store write <object_name> <data>" : 
+  Write an object, data provided in base64 encoding.
+
+* "object_store read <object_name>" : 
+  Read an object and return data in base64 encoding.
+
+* "object_store delete <object_name>" : 
+  Delete an object from the store.
+
+* "object_store delete_all" : 
+  Delete all objects from the store
+
+* "object_store list" : 
+  Object list.
