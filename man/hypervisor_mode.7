@@ -50,8 +50,11 @@ Ethernet switches
 Object store
 .RE
 .TP
-.B Hypervisor management module
+.B Hypervisor management module ("hypervisor")
 .RS
+.TP
+.B hypervisor version
+Display the version of dynamips.
 .TP
 .B hypervisor module_list
 Display the module list.
@@ -66,13 +69,23 @@ Close the current session.
 Destroy all objects and stop hypervisor.
 .TP
 .B hypervisor reset
-Destroy all objects (used to get an empty configuration)
+Destroy all objects. (used to get an empty configuration)
 .TP
 .B hypervisor working_dir <directory>
 Set the directory to use to store files.
 .TP
 .B hypervisor save_config <filename>
 Save the configuration of all objects into the specified file.
+.TP
+.B hypervisor parser_test [<a1> [... <a10>]]
+Display up to 10 arguments. (since version 0.2.6\-RC1)
+.TP
+.B hypervisor uuid
+Display the local uuid. (since version 0.2.8\-RC3)
+.TP
+.B hypervisor tsg_stats
+Dump statistics about JIT code sharing to the console.
+(since version 0.2.8\-RC3, unstable)
 .RE
 .TP
 .B Virtual Machine module ("vm")

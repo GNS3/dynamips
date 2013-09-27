@@ -37,6 +37,8 @@ The modules that are currently defined are given below:
 Hypervisor management module ("hypervisor")
 ============================================
 
+* "hypervisor version" : Display the version of dynamips.
+
 * "hypervisor module_list" : Display the module list.
 
 * "hypervisor cmd_list <module>" : Display commands recognized by the
@@ -46,7 +48,7 @@ Hypervisor management module ("hypervisor")
 
 * "hypervisor stop"  : Destroy all objects and stop hypervisor.
 
-* "hypervisor reset" : Destroy all objects (used to get an empty 
+* "hypervisor reset" : Destroy all objects. (used to get an empty 
   configuration)
 
 * "hypervisor working_dir <directory>" : Set the directory to use to store
@@ -55,6 +57,13 @@ Hypervisor management module ("hypervisor")
 * "hypervisor save_config <filename>" : Save the configuration of all objects
   into the specified file.
 
+* "hypervisor parser_test [<a1> [... <a10>]]" : Display up to 10 arguments.
+  (since version 0.2.6-RC1)
+
+* "hypervisor uuid" : Display the local uuid. (since version 0.2.8-RC3)
+
+* "hypervisor tsg_stats" : Dump statistics about JIT code sharing to 
+  the console. (since version 0.2.8-RC3, unstable)
 
 Virtual Machine module ("vm")
 =============================
