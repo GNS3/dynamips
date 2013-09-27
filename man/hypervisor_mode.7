@@ -25,6 +25,9 @@ General hypervisor management
 .B vm        
 General virtual machine (VM) management
 .TP
+.B vm_debug
+Virtual Machine debugging
+.TP
 .B c7200     
 Virtual instances of Cisco 7200
 .TP
@@ -173,6 +176,39 @@ typically the only CPU) has ID 0.
 Show cpu usage of dynamips in seconds. (experimental)
 .br
 The instance must exist, "cpu_id" is ignored.
+.RE
+.TP
+.B Virtual Machine debugging ("vm_debug")
+.RS
+.TP
+Available since version 0.2.6\-RC1.
+.TP
+.B vm_debug show_cpu_regs <instance_name> <cpu_id>
+Dump CPU registers to the console.
+.TP
+.B vm_debug show_cpu_mmu <instance_name> <cpu_id>
+Dump CPU MMU info to the console. (since version 0.2.7\-RC1)
+.TP
+.B vm_debug set_cpu_reg <instance_name> <cpu_id> <reg_id> <value>
+Set the value of a CPU register.
+.TP
+.B vm_debug add_cpu_breakpoint <instance_name> <cpu_id> <address>
+Add a breakpoint.
+.TP
+.B vm_debug remove_cpu_breakpoint <instance_name> <cpu_id> <address>
+Remove a breakpoint.
+.TP
+.B vm_debug pmem_w32 <instance_name> <cpu_id> <address> <value>
+Write a 32\-bit memory word to physical memory.
+.TP
+.B vm_debug pmem_r32 <instance_name> <cpu_id> <address>
+Read a 32\-bit memory word from physical memory.
+.TP
+.B vm_debug pmem_w16 <instance_name> <cpu_id> <address> <value>
+Write a 16\-bit memory word to physical memory.
+.TP
+.B vm_debug pmem_r16 <instance_name> <cpu_id> <address>
+Read a 16\-bit memory word from physical memory.
 .RE
 .TP
 .B Virtual Cisco 7200 instances module ("c7200")

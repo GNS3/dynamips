@@ -24,6 +24,7 @@ The modules that are currently defined are given below:
 
   * hypervisor   : General hypervisor management
   * vm           : General virtual machine (VM) management
+  * vm_debug     : Virtual Machine debugging
   * c7200        : Virtual instances of Cisco 7200
   * c3600        : Virtual instances of Cisco 3600
   * nio          : Network Input/Output (NIO) descriptors
@@ -141,6 +142,40 @@ Virtual Machine module ("vm")
 * "vm cpu_usage <instance_name> <cpu_id>" : Show cpu usage of dynamips in 
   seconds. (experimental)
   The instance must exist, "cpu_id" is ignored.
+
+
+Virtual Machine debugging ("vm_debug")
+=======================================
+
+Available since version 0.2.6-RC1.
+
+* "vm_debug show_cpu_regs <instance_name> <cpu_id>" : 
+  Dump CPU registers to the console.
+
+* "vm_debug show_cpu_mmu <instance_name> <cpu_id>" : 
+  Dump CPU MMU info to the console. (since version 0.2.7-RC1)
+
+* "vm_debug set_cpu_reg <instance_name> <cpu_id> <reg_id> <value>" : 
+  Set the value of a CPU register.
+
+* "vm_debug add_cpu_breakpoint <instance_name> <cpu_id> <address>" : 
+  Add a breakpoint.
+
+* "vm_debug remove_cpu_breakpoint <instance_name> <cpu_id> <address>" : 
+  Remove a breakpoint.
+
+* "vm_debug pmem_w32 <instance_name> <cpu_id> <address> <value>" : 
+  Write a 32-bit memory word to physical memory.
+
+* "vm_debug pmem_r32 <instance_name> <cpu_id> <address>" : 
+  Read a 32-bit memory word from physical memory.
+
+* "vm_debug pmem_w16 <instance_name> <cpu_id> <address> <value>" : 
+  Write a 16-bit memory word to physical memory.
+
+* "vm_debug pmem_r16 <instance_name> <cpu_id> <address>" : 
+  Read a 16-bit memory word from physical memory.
+
 
 Virtual Cisco 7200 instances module ("c7200")
 ==============================================
