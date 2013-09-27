@@ -355,6 +355,22 @@ List all exiting NIOs.
 .B nio create_udp <nio_name> <local_port> <remote_host> <remote_port>
 Create an UDP NIO with the specified parameters.
 .TP
+.B nio create_udp_auto <nio_name> <local_addr> <local_port_start> <local_port_end>
+Create an auto UDP NIO.
+(since version 0.2.8\-RC3\-community)
+.TP
+.B nio connect_udp_auto <nio_name> <remote_host> <remote_port>
+Connect an UDP Auto NIO to a remote host/port.
+(since version 0.2.8\-RC3\-community)
+.TP
+.B nio create_mcast <nio_name> <mcast_group> <mcast_port>
+Create a Multicast NIO.
+(since version 0.2.8\-RC3\-community)
+.TP
+.B nio set_mcast_ttl <nio_name> <ttl>
+Set TTL for a Multicast NIO.
+(since version 0.2.8\-RC3\-community)
+.TP
 .B nio create_unix <nio_name> <local_file> <remote_file>
 Create an UNIX NIO with the specified parameters.
 .TP
@@ -368,11 +384,20 @@ require root access.
 .TP
 .B nio create_gen_eth <nio_name> <eth_device>
 Create a generic ethernet NIO, using PCAP (0.9.4 and greater). It requires root
-access.
+access. Available if compiled with GEN_ETH.
 .TP
 .B nio create_linux_eth <nio_name> <eth_device>
 Create a Linux ethernet NIO. It requires root access and is supported only on
-Linux platforms.
+Linux platforms. Available if compiled with LINUX_ETH.
+.TP
+.B nio create_null <nio_name>
+Create a Null NIO.
+.TP
+.B nio create_fifo <nio_name>
+Create a Null NIO.
+.TP
+.B nio crossconnect_fifo <nio_name> <nio_name>
+Establish a cross-connect between 2 FIFO NIO.
 .TP
 .B nio delete <nio_name>
 Delete the specified NIO. The NIO can be deleted only when it is not anymore in
@@ -382,6 +407,47 @@ use by another object.
 Enable/Disable debugging for the specified NIO. When debugging is enabled,
 received and emitted packets are displayed at screen. It is mainly used to
 debug interface drivers.
+.TP
+.B nio bind_filter <nio_name> <direction> <filter_name>
+Bind a packet filter.
+Direction is 0 for receiving, 1 for sending, 2 for both.
+Filter
+.B "freq_drop"
+drops packets. Filter
+.B "capture"
+captures packets and is only available if compiled with GEN_ETH.
+.TP
+.B nio unbind_filter <nio_name> <direction>
+Unbind a packet filter.
+.TP
+.B nio setup_filter <nio_name> <direction> [<a3> [...<a10>]]
+Setup a packet filter for a given NIO.
+The arguments are passed on to the setup function of the filter.
+ Filter 
+.B "freq_drop" 
+has 1 argument 
+.B "<frequency>"
+\[char46] It will drop everything with a \-1 frequency, drop every 
+Nth packet with a positive frequency, or drop nothing.
+ Filter 
+.B "capture" 
+has 2 arguments 
+.B "<link_type_name> <output_file>"
+\[char46] It will capture packets to the target output file. The 
+link type name is a case\(hyinsensitive DLT_ name from the pcap library 
+constants with the DLT_ part removed.
+.TP
+.B nio get_stats <nio_name>
+Get statistics of a NIO.
+(since version 0.2.8\-RC3\-community)
+.TP
+.B nio reset_stats <nio_name>
+Reset statistics of a NIO.
+(since version 0.2.8\-RC3\-community)
+.TP
+.B nio set_bandwidth <nio_name> <bandwidth>
+Set bandwidth constraint.
+(since version 0.2.8\-RC3\-community)
 .RE
 .TP
 .B NIO bridge mdoule ("nio_bridge")

@@ -307,6 +307,21 @@ Network Input/Output (NIO) module ("nio")
 * "nio create_udp <nio_name> <local_port> <remote_host> <remote_port>" :
   Create an UDP NIO with the specified parameters.
 
+* "nio create_udp_auto <nio_name> <local_addr> <local_port_start> <local_port_end>" :
+  Create an auto UDP NIO.
+  (since version 0.2.8-RC3-community)
+
+* "nio connect_udp_auto <nio_name> <remote_host> <remote_port>" : 
+  Connect an UDP Auto NIO to a remote host/port.
+  (since version 0.2.8-RC3-community)
+
+* "nio create_mcast <nio_name> <mcast_group> <mcast_port>" : 
+  Create a Multicast NIO.
+  (since version 0.2.8-RC3-community)
+
+* "nio set_mcast_ttl <nio_name> <ttl>" : Set TTL for a Multicast NIO.
+  (since version 0.2.8-RC3-community)
+
 * "nio create_unix <nio_name> <local_file> <remote_file>" : 
   Create an UNIX NIO with the specified parameters.
 
@@ -319,9 +334,18 @@ Network Input/Output (NIO) module ("nio")
 
 * "nio create_gen_eth <nio_name> <eth_device>" : Create a generic ethernet
   NIO, using PCAP (0.9.4 and greater). It requires root access.
+  Available if compiled with GEN_ETH.
 
 * "nio create_linux_eth <nio_name> <eth_device>" : Create a Linux ethernet
   NIO. It requires root access and is supported only on Linux platforms.
+  Available if compiled with LINUX_ETH.
+
+* "nio create_null <nio_name>" : Create a Null NIO.
+
+* "nio create_fifo <nio_name>" : Create a FIFO NIO.
+
+* "nio crossconnect_fifo <nio_name> <nio_name>" :
+  Establish a cross-connect between 2 FIFO NIO.
 
 * "nio delete <nio_name>" : Delete the specified NIO. The NIO can be deleted
   only when it is not anymore in use by another object.
@@ -329,6 +353,34 @@ Network Input/Output (NIO) module ("nio")
 * "nio set_debug <nio_name> <debug>" : Enable/Disable debugging for the
   specified NIO. When debugging is enabled, received and emitted packets are
   displayed at screen. It is mainly used to debug interface drivers.
+
+* "nio bind_filter <nio_name> <direction> <filter_name>" :
+  Bind a packet filter.
+  Direction is 0 for receiving, 1 for sending, 2 for both.
+  Filter "freq_drop" drops packets. Filter "capture" captures 
+  packets and is only available if compiled with GEN_ETH.
+
+* "nio unbind_filter <nio_name> <direction>" : Unbind a packet filter.
+
+* "nio setup_filter <nio_name> <direction> [<a3> [...<a10>]]" : 
+  Setup a packet filter for a given NIO. The arguments are passed on 
+  to the setup function of the filter.
+   Filter "freq_drop" has 1 argument "<frequency>". It will drop 
+  everything with a -1 frequency, drop every Nth packet with a 
+  positive frequency, or drop nothing.
+   Filter "capture" has 2 arguments "<link_type_name> <output_file>". 
+  It will capture packets to the target output file. The link type 
+  name is a case-insensitive DLT_ name from the pcap library 
+  constants with the DLT_ part removed.
+
+* "nio get_stats <nio_name>" : Get statistics of a NIO.
+  (since version 0.2.8-RC3-community)
+
+* "nio reset_stats <nio_name>" : Reset statistics of a NIO.
+  (since version 0.2.8-RC3-community)
+
+* "nio set_bandwidth <nio_name> <bandwidth>" : Set bandwidth constraint.
+  (since version 0.2.8-RC3-community)
 
 
 NIO bridge mdoule ("nio_bridge")
