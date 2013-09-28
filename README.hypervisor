@@ -31,6 +31,7 @@ The modules that are currently defined are given below:
   * c3600        : Virtual instances of Cisco 3600
   * c2691        : Virtual instances of Cisco 2691
   * c2600        : Virtual instances of Cisco 2600
+  * c1700        : Virtual instances of Cisco 1700
   * nio          : Network Input/Output (NIO) descriptors
   * nio_bridge   : NIO bridges (shared media)
   * atmsw        : ATM switches
@@ -411,6 +412,29 @@ Available since version 0.2.7-RC1.
   Set the system id. (since version 0.2.8-RC3-community)
 
 * "c2600 show_hardware <instance_name>" : Display virtual hardware info 
+  about the instance.
+
+
+Virtual Cisco 1700 instances module ("c1700")
+==============================================
+
+Available since version 0.2.8-RC1.
+
+* "c1700 list" : List all existing Cisco 1700 instances.
+
+* "c1700 set_chassis <instance_name> <chassis_name>" : Set the chassis model.
+  Possible values: 1710, 1720, 1721, 1750, 1751, 1760. The default is "1720".
+
+* "c1700 set_iomem <instance_name> <size>" : Set the I/O mem size.
+
+* "c1700 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. By default, the address is automatically generated
+  with this pattern : d0<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c1700 set_system_id <instance_name> <system_id>" : 
+  Set the system id. (since version 0.2.8-RC3-community)
+
+* "c1700 show_hardware <instance_name>" : Display virtual hardware info 
   about the instance.
 
 
