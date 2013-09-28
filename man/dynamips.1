@@ -1,7 +1,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH DYNAGEN 1 "Sep 07, 2006"
+.TH DYNAMIPS 1 "Sep 28, 2013"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -15,27 +15,27 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-dynamips \- Cisco router 7200/3600 simulator
+dynamips \- Cisco router simulator
 .SH SYNOPSIS
 .B dynamips
 .RI [ options ] 
 .I ios_image
 .br
 .SH DESCRIPTION
-emulates Cisco 7200 and 3600 Routers on a traditional PC. You can use
-\fBdynamips\fP to create labs. It uses real Cisco IOS Images (which are not
-part of this package). Of course, this emulator cannot replace a real router.
+Emulates Cisco routers on a traditional PC. You can use \fBdynamips\fP 
+to create labs. It uses real Cisco IOS Images, which are not included 
+in this package. Of course, this emulator cannot replace a real router.
 It is simply a complementary tool to real labs for administrators of Cisco
 networks or people wanting to pass their CCNA/CCNP/CCIE exams.
 .br
-The emulator currently supports Cisco 7200 and Cisco 3600 series.
+The emulator currently supports Cisco 7200, Cisco 3745, Cisco 3725, 
+Cisco 3600, Cisco 2691, Cisco 2600, and Cisco 1700 series.
+.br
 By default, a Cisco 7206VXR with NPE\-200 (256 Mb of DRAM) is emulated.
 .br
-To emulate a Cisco 3600, use the "\-P 3600" command line option.
-.br
-For the 3600, a 3640 with 128 Mb is emulated by default. You can change this
-with the "\-t" option and by specifying "3620" or "3660".  Don't forget to set
-the chassis type depending on your IOS image, a c3660 image will not run on
+To emulate another platform, like the Cisco 3600 series, use the "\-P" command line option.
+You can change the chassis type with "\-t". Don't forget to set it 
+depending on your IOS image, a c3660 image will not run on
 c3640 hardware and vice\-versa.
 .PP
 .\" TeX users may be more comfortable with the \fB<whatever>\fP and
@@ -533,9 +533,7 @@ and vice\(hyversa.
 
 .SH BUGS
 .TP
-The "npe\(hyg1" Port Adapter is not working.
-.TP
-PCMCIA card emulation is not supported yet with Cisco 3600.
+See RELEASE\-NOTES.
 .SH REPORTING BUGS
 .br
 Please send bug reports to 
@@ -565,9 +563,7 @@ Please send bug reports to
 .UR http://hacki.at/7200emu/index.php
 .UE
 .SH AUTHOR
-\fBdynamips\fP was written by Fabien Devaux, Christophe Fillot (cf@utc.fr)
-and MtvE. This manual page was written by Erik Wenzel <erik@debian.org>
-for the Debian GNU/Linux system (but may be used by others). This manual 
-page was updated by Flávio J. Saraiva 
-<flaviojs2005@gmail.com>.
+\fBdynamips\fP is being maintained by Flávio J. Saraiva 
+<flaviojs2005@gmail.com>. This manual page was initially written by 
+Erik Wenzel <erik@debian.org> for the Debian GNU/Linux system.
 

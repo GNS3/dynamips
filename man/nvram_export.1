@@ -1,13 +1,30 @@
-.TH nvram_export 1 "Sep 07, 2006"
+.TH NVRAM_EXPORT 1 "Sep 28, 2013"
+.\" Please adjust this date whenever revising the manpage.
 .SH NAME
-nvram_export \- Cisco 7200 NVRAM configuration export
+nvram_export \- Cisco NVRAM configuration export
 .SH SYNOPSIS
 .B nvram_export
 .I nvram_file
 .I config_file
+[
+.I private_file
+]
 .br
 .SH DESCRIPTION
-export configuration from dynamips nvram file.
+Exports configuration files \fBstartup\-config\fP and \fBprivate\-config\fP 
+from a dynamips NVRAM file to the target files.
+.PP
+.SH OPTIONS
+.TP
+.B nvram_file
+File that contains the NVRAM data.
+On some platforms, NVRAM is simulated inside the ROM.
+.TP
+.B config_file
+File for 'startup\-config'.
+.TP
+.B private_file
+File for 'private\-config'.
 .SH REPORTING BUGS
 .br
 Please send bug reports to 
@@ -36,9 +53,7 @@ Please send bug reports to
 .UR http://hacki.at/7200emu/index.php
 .UE
 .SH AUTHOR
-\fBdynamips\fP was written by Fabien Devaux, Christophe Fillot (cf@utc.fr)
-and MtvE. This manual page was written by Erik Wenzel <erik@debian.org>
-for the Debian GNU/Linux system (but may be used by others). This manual 
-page was updated by Flávio J. Saraiva 
-<flaviojs2005@gmail.com>.
+\fBdynamips\fP is being maintained by Flávio J. Saraiva 
+<flaviojs2005@gmail.com>. This manual page was initially written by 
+Erik Wenzel <erik@debian.org> for the Debian GNU/Linux system.
 

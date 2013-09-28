@@ -1,12 +1,13 @@
 Dynamips
-=====================================
+========
+
 Authors of this document: Fabien Devaux, Christophe Fillot, MtvE, 
 Gordon Russell, Jeremy Grossmann and Flávio J. Saraiva.
 
 This is a continuation of Dynamips, based on the last development version and 
 improved with patches wrote by various people from the community. This fork was
-named Dynamips-community up to the final 0.2.8 and renamed to the original 
-Dynamips on the 0.2.9 release.
+named Dynamips-community up to the 0.2.8-community release and renamed to the 
+original Dynamips on the 0.2.9 release.
 
 You can compile two different versions of dynamips with this code.
 Edit the Makefile to set the flags to suit your environment.
@@ -21,12 +22,15 @@ and tcb code which seems to trigger instability on a number of platforms.
 You should probably use stable unless you have a very good reason.
 
 License: GNU GPLv2
-Current website: http://www.gns3.net/dynamips/
+Website: http://www.gns3.net/dynamips/
+Forum: http://forum.gns3.net/
 Repository: https://github.com/GNS3/dynamips
+Bugtracker: https://github.com/GNS3/dynamips/issues
 
 Original websites:
 http://www.ipflow.utc.fr/index.php/Cisco_7200_Simulator
 http://www.ipflow.utc.fr/blog/
+
 
 Help for Cisco router simulator (Dynamips)
 ==========================================

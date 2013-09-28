@@ -24,7 +24,7 @@ The modules that are currently defined are given below:
 
   * hypervisor   : General hypervisor management
   * vm           : General virtual machine (VM) management
-  * vm_debug     : Virtual Machine debugging
+  * vm_debug     : General virtual machine (VM) debugging
   * c7200        : Virtual instances of Cisco 7200
   * c3745        : Virtual instances of Cisco 3745
   * c3725        : Virtual instances of Cisco 3725
@@ -248,7 +248,7 @@ Virtual Machine module ("vm")
   OIR to stop a slot/subslot. (since version 0.2.8-RC3-community)
 
 
-Virtual Machine debugging ("vm_debug")
+Virtual Machine debugging module ("vm_debug")
 =======================================
 
 Available since version 0.2.6-RC1.
@@ -522,7 +522,7 @@ Network Input/Output (NIO) module ("nio")
   (since version 0.2.8-RC3-community)
 
 
-NIO bridge mdoule ("nio_bridge")
+NIO bridge module ("nio_bridge")
 =================================
 
 * "nio_bridge list" : List all NIO bridges.
@@ -539,7 +539,7 @@ NIO bridge mdoule ("nio_bridge")
   NIO as member of the NIO bridge.
 
 
-Virtual Ethernet switch ("ethsw")
+Virtual Ethernet switch module ("ethsw")
 ==================================
 
 * "ethsw list" : List all Ethernet switches.
@@ -571,7 +571,7 @@ Virtual Ethernet switch ("ethsw")
   (output format: Ethernet address, VLAN, NIO)
 
 
-Virtual ATM switch ("atmsw")
+Virtual ATM switch module ("atmsw")
 =============================
 
 * "atmsw list" : List all ATM switches.
@@ -597,7 +597,7 @@ Virtual ATM switch ("atmsw")
   Delete a Virtual Channel connection (unidirectional).
 
 
-Virtual ATM bridge ("atm_bridge")
+Virtual ATM bridge module ("atm_bridge")
 ==================================
 
 Available since version 0.2.8-RC2.
@@ -614,7 +614,7 @@ Available since version 0.2.8-RC2.
 * "atm_bridge unconfigure <bridge_name>" : Unconfigure an ATM bridge.
 
 
-Virtual Frame-Relay switch ("frsw")
+Virtual Frame-Relay switch module ("frsw")
 ====================================
 
 * "frsw list" : List all Frame-Relay switches.
@@ -632,7 +632,7 @@ Virtual Frame-Relay switch ("frsw")
   Delete a Virtual Circuit connection (unidirectional).
 
 
-Object store ("object_store")
+Object store module ("object_store")
 ====================================
 
 Available since version 0.2.8-RC2.

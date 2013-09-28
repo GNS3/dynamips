@@ -1,5 +1,5 @@
 /*
- * Cisco 7200/3600/2691 simulation platform.
+ * Cisco router simulation platform.
  */
 
 15-Aug-2005, the project is starting.
@@ -2667,17 +2667,17 @@ Fixed issue #14 - a file descriptor is leaked every time the config is extracted
    - Fix warning "dereferencing type-punned pointer will break strict-aliasing rules".
    - Fix m32_tx_acquire not checking the HOLD bit properly.
      Note: the datasheet isn't available anymore, so the intended behavior was inferred from surrounding code; it was assumed that the hold bit is managed elsewhere
-   - Fix warning "suggest parentheses around operand of ‘!’ or change ‘&’ to ‘&&’ or ‘!’ to ‘~’".
-   - Fix warnings "assignment discards ‘const’ qualifier from pointer target type" by copying the backplane/supervisor eeproms.
+   - Fix warning "suggest parentheses around operand of â€˜!â€™ or change â€˜&â€™ to â€˜&&â€™ or â€˜!â€™ to â€˜~â€™".
+   - Fix warnings "assignment discards â€˜constâ€™ qualifier from pointer target type" by copying the backplane/supervisor eeproms.
    - Fix memory leaks of c6sup1_t.slot_eeprom data.
-   - Fix warnings "‘<function name>’ defined but not used".
+   - Fix warnings "â€˜<function name>â€™ defined but not used".
      __unused for function that are not referenced
      __maybe_unused for functions that are referenced in excluded code
-   - Fix warnings "label ‘<name>’ defined but not used".
-   - Fix warnings "unused variable ‘<name>’".
+   - Fix warnings "label â€˜<name>â€™ defined but not used".
+   - Fix warnings "unused variable â€˜<name>â€™".
      UNUSED() for variables that are not used
      __maybe_used for variables that are used in excluded code
-   - Fix warnings "variable ‘<name>’ set but not used".
+   - Fix warnings "variable â€˜<name>â€™ set but not used".
      delete unneeded variables that don't help understand the surrounding code
      __maybe_unused for the other variables
    - Adjust Makefiles:

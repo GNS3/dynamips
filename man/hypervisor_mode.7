@@ -1,12 +1,12 @@
 .TH HYPERVISOR_MODE 7 "Sep 28, 2013"
+.\" Please adjust this date whenever revising the manpage.
 .SH NAME
 hypervisor_mode \- allows you to run simultaneously
 many virtual router instances, and to simulate ATM, Ethernet
 or Frame\(hyRelay networks.
 .SH SYNOPSIS
 .B dynamips \-H
-\fItcp_port\fP
-
+.I [ip_address:]tcp_port
 .SH DESCRIPTION
 You can connect directly to the TCP control port with telnet, or use
 dynagen/dynagui that will pass commands transparently. The second method
@@ -26,7 +26,7 @@ General hypervisor management
 General virtual machine (VM) management
 .TP
 .B vm_debug
-Virtual Machine debugging
+General virtual machine (VM) debugging
 .TP
 .B c7200     
 Virtual instances of Cisco 7200
@@ -301,7 +301,7 @@ OIR to start a slot/subslot. (since version 0.2.8\-RC3\-community)
 OIR to stop a slot/subslot. (since version 0.2.8\-RC3\-community)
 .RE
 .TP
-.B Virtual Machine debugging ("vm_debug")
+.B Virtual Machine debugging module ("vm_debug")
 .RS
 .TP
 Available since version 0.2.6\-RC1.
@@ -612,7 +612,7 @@ Set bandwidth constraint.
 (since version 0.2.8\-RC3\-community)
 .RE
 .TP
-.B NIO bridge mdoule ("nio_bridge")
+.B NIO bridge module ("nio_bridge")
 .RS
 .TP
 .B nio_bridge list
@@ -632,7 +632,7 @@ Add a NIO as new port in a NIO bridge. The NIO must be created through the
 Remove the specified NIO as member of the NIO bridge.
 .RE
 .TP
-.B Virtual Ethernet switch ("ethsw")
+.B Virtual Ethernet switch module ("ethsw")
 .RS
 .TP
 .B ethsw list
@@ -668,7 +668,7 @@ Clear the MAC address table.
 Show the MAC address table (output format: Ethernet address, VLAN, NIO)
 .RE
 .TP
-.B Virtual ATM switch ("atmsw")
+.B Virtual ATM switch module ("atmsw")
 .RS
 .TP
 .B atmsw list
@@ -693,7 +693,7 @@ Create a new Virtual Channel connection (unidirectional).
 Delete a Virtual Channel connection (unidirectional).
 .RE
 .TP
-.B Virtual ATM bridge ("atm_bridge")
+.B Virtual ATM bridge module ("atm_bridge")
 .RS
 .TP
 Available since version 0.2.8\-RC2.
@@ -714,7 +714,7 @@ Configure an ATM bridge.
 Unconfigure an ATM bridge.
 .RE
 .TP
-.B Virtual Frame\(hyRelay switch ("frsw")
+.B Virtual Frame\(hyRelay switch module ("frsw")
 .RS
 .TP
 .B frsw list
@@ -732,7 +732,7 @@ Create a new Virtual Circuit connection (unidirectional).
 Delete a Virtual Circuit connection (unidirectional).
 .RE
 .TP
-.B Object store ("object_store")
+.B Object store module ("object_store")
 .RS
 .TP
 Available since version 0.2.8\-RC2.
@@ -780,9 +780,7 @@ Please send bug reports to
 .UR http://hacki.at/7200emu/index.php
 .UE
 .SH AUTHOR
-\fBdynamips\fP was written by Fabien Devaux, Christophe Fillot (cf@utc.fr)
-and MtvE. This manual page was written by Erik Wenzel <erik@debian.org>
-for the Debian GNU/Linux system (but may be used by others). This manual 
-page was updated by Flávio J. Saraiva 
-<flaviojs2005@gmail.com>.
+\fBdynamips\fP is being maintained by Flávio J. Saraiva 
+<flaviojs2005@gmail.com>. This manual page was initially written by 
+Erik Wenzel <erik@debian.org> for the Debian GNU/Linux system.
 
