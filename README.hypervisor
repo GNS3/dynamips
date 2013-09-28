@@ -81,8 +81,9 @@ Virtual Machine module ("vm")
 * "vm list_con_ports" : List all VM console TCP port.
   (since version 0.2.6-RC5)
 
-* "vm create <instance_name> <instance_id>" : Create a new router 
-  instance. The ID must be unique and is used to name files on disk.
+* "vm create <instance_name> <instance_id> <platform>" : 
+  Create a new router instance.
+  The ID must be unique and is used to name files on disk.
   (since version 0.2.8-RC1)
 
 * "vm delete <instance_name>" : Delete the specified instance.
