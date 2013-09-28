@@ -31,6 +31,9 @@ Virtual Machine debugging
 .B c7200     
 Virtual instances of Cisco 7200
 .TP
+.B c3745
+Virtual instances of Cisco 3745
+.TP
 .B c3600     
 Virtual instances of Cisco 3600
 .TP
@@ -351,6 +354,27 @@ This can be used to simulate environmental problems like power loss.
 (since version 0.2.8\-RC3\-community)
 .TP
 .B c7200 show_hardware <instance_name>
+Display virtual hardware info about the instance.
+.RE
+.TP
+.B Virtual Cisco 3745 instances module ("c3745")
+.RS
+.TP
+.B c3745 list
+List all existing Cisco 3745 instances.
+.TP
+.B c3745 set_iomem <instance_name> <size>
+Set the I/O mem size.
+.TP
+.B c3745 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. By default, the address is
+automatically generated with this pattern : c4<instance_id>.<process_pid>.0000
+(Cisco format).
+.TP
+.B c3745 set_system_id <instance_name> <system_id>
+Set the system id. (since version 0.2.8\-RC3\-community)
+.TP
+.B c3745 show_hardware <instance_name>
 Display virtual hardware info about the instance.
 .RE
 .TP
