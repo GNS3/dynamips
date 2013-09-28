@@ -536,6 +536,9 @@ NIO bridge module ("nio_bridge")
 * "nio_bridge create <bridge_name>" : Create a NIO bridge. A NIO bridge
   acts as a shared media (a kind of hub).
 
+* "nio_bridge rename <bridge_name> <new_name>" : Rename a NIO bridge.
+  (since version 0.2.11)
+
 * "nio_bridge delete <bridge_name>" : Delete a NIO bridge.
 
 * "nio_bridge add_nio <bridge_name> <nio_name>" : Add a NIO as new port
