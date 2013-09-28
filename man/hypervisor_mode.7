@@ -565,6 +565,10 @@ Create a Null NIO.
 .B nio crossconnect_fifo <nio_name> <nio_name>
 Establish a cross-connect between 2 FIFO NIO.
 .TP
+.B nio rename <nio_name> <new_name>
+Rename a NIO.
+(since version 0.2.11)
+.TP
 .B nio delete <nio_name>
 Delete the specified NIO. The NIO can be deleted only when it is not anymore in
 use by another object.

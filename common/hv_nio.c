@@ -327,6 +327,48 @@ static int cmd_crossconnect_fifo(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Rename a NIO */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   netio_desc_t *nio;
+   char *newname;
+
+   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_NIO)) {
+      netio_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = strdup(argv[1]))) {
+      netio_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_NIO)) {
+      free(newname);
+      netio_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   free(nio->name);
+   nio->name = newname;
+
+   netio_release(argv[1]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete a NIO */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -507,6 +549,7 @@ static hypervisor_cmd_t nio_cmd_array[] = {
    { "create_null", 1, 1, cmd_create_null, NULL },
    { "create_fifo", 1, 1, cmd_create_fifo, NULL },
    { "crossconnect_fifo", 2, 2, cmd_crossconnect_fifo, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "set_debug", 2, 2, cmd_set_debug, NULL },
    { "bind_filter", 3, 3, cmd_bind_filter, NULL },
