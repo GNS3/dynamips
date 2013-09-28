@@ -360,56 +360,20 @@ Display virtual hardware info about the instance.
 .B c3600 list
 List all existing Cisco 3600 instances.
 .TP
-.B c3600 create <instance_name> <instance_id>
-Create a new router instance. The ID must be unique and is used to name files
-on disk.
-.TP
-.B c3600 delete <instance_name>
-Delete the specified instance.
-.TP
-.B c3600 start <instance_name>
-Start the instance.  At least the IOS image must be set.
-.TP
-.B c3600 stop <instance_name>
-Stop the instance. The settings are kept.
-.TP
 .B c3600 set_chassis <instance_name> <chassis_name>
 Set the chassis model.  Possible values: 3620, 3640, 3660. The default is
 "3640".
+.TP
+.B c3600 set_iomem <instance_name> <size>
+Set the I/O mem size.
 .TP
 .B c3600 set_mac_addr <instance_name> <mac_addr>
 Set the base MAC address of the router. By default, the address is
 automatically generated with this pattern : cc<instance_id>.<process_pid>.0000
 (Cisco format).
 .TP
-.B c3600 add_nm_binding <instance_name> <slot> <pa_type>
-Add a Network Module binding for the specified slot.  For example: "c3600
-add_nm_binding R1 1 NM\(hy1FE\(hyTX" adds a NM\(hy1FE\(hyTX card into slot 1.
-.TP
-.B c3600 remove_pa_binding <instance_name> <slot>
-Remove a Network Module binding (if it exists) for the specified slot.
-.TP
-.B c3600 nm_bindings <instance_name>
-Display all NM bindings for the router instance.
-.TP
-.B c3600 add_nio_binding <instance_name> <slot> <port> <nio_name>
-Add a NIO binding for the interface designated by "slot/port".  For example:
-"c3600 add_nio_binding R1 1 0 nio1" (with NM\(hy1FE\(hyTX bound to slot 1) binds the
-NIO called "nio1" to the interface FastEthernet1/0.
-.TP
-.B c3600 remove_nio_binding <instance_name> <slot> <port>
-Removes the NIO binding for the interface designated by "slot/port".
-.TP
-.B c3600 nm_nio_bindings <instance_name> <slot>
-Display NIO bindings for all ports of the specified slot.
-.TP
-.B c3600 nm_enable_nio <instance_name> <slot> <port>
-Enable NIO for the interface "slot/port" (used when NIO has to be changed while
-the virtual router is online).
-.TP
-.B c3600 nm_disable_nio <instance_name> <slot> <port>
-Disable NIO for the interface "slot/port" (used when NIO has to be changed
-while the virtual router is online).
+.B c3600 set_system_id <instance_name> <system_id>
+Set the system id. (since version 0.2.8\-RC3\-community)
 .TP
 .B c3600 show_hardware <instance_name>
 Display virtual hardware info about the instance.
