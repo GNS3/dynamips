@@ -40,6 +40,9 @@ Virtual instances of Cisco 3725
 .B c3600     
 Virtual instances of Cisco 3600
 .TP
+.B c2691
+Virtual instances of Cisco 2691
+.TP
 .B nio       
 Network Input/Output (NIO) descriptors
 .TP
@@ -424,6 +427,24 @@ automatically generated with this pattern : cc<instance_id>.<process_pid>.0000
 Set the system id. (since version 0.2.8\-RC3\-community)
 .TP
 .B c3600 show_hardware <instance_name>
+Display virtual hardware info about the instance.
+.RE
+.TP
+.B Virtual Cisco 2691 instances module ("c2691")
+.RS
+.TP
+.B c2691 list
+List all existing Cisco 2691 instances.
+.TP
+.B c2691 set_iomem <instance_name> <size>
+Set the I/O mem size.
+.TP
+.B c2691 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. By default, the address is
+automatically generated with this pattern : c0<instance_id>.<process_pid>.0000
+(Cisco format).
+.TP
+.B c2691 show_hardware <instance_name>
 Display virtual hardware info about the instance.
 .RE
 .TP

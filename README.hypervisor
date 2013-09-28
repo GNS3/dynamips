@@ -29,6 +29,7 @@ The modules that are currently defined are given below:
   * c3745        : Virtual instances of Cisco 3745
   * c3725        : Virtual instances of Cisco 3725
   * c3600        : Virtual instances of Cisco 3600
+  * c2691        : Virtual instances of Cisco 2691
   * nio          : Network Input/Output (NIO) descriptors
   * nio_bridge   : NIO bridges (shared media)
   * atmsw        : ATM switches
@@ -368,6 +369,23 @@ Virtual Cisco 3600 instances module ("c3600")
   Set the system id. (since version 0.2.8-RC3-community)
 
 * "c3600 show_hardware <instance_name>" : Display virtual hardware info 
+  about the instance.
+
+
+Virtual Cisco 2691 instances module ("c2691")
+==============================================
+
+Available since version 0.2.6-RC3.
+
+* "c2691 list" : List all existing Cisco 2691 instances.
+
+* "c2691 set_iomem <instance_name> <size>" : Set the I/O mem size.
+
+* "c2691 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. By default, the address is automatically generated
+  with this pattern : c0<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c2691 show_hardware <instance_name>" : Display virtual hardware info 
   about the instance.
 
 
