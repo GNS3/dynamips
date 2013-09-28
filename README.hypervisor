@@ -281,16 +281,6 @@ Virtual Cisco 7200 instances module ("c7200")
 
 * "c7200 list" : List all existing Cisco 7200 instances.
 
-* "c7200 create <instance_name> <instance_id>" : Create a new router 
-  instance. The ID must be unique and is used to name files on disk.
-
-* "c7200 delete <instance_name>" : Delete the specified instance.
-
-* "c7200 start <instance_name>" : Start the instance. 
-  At least the IOS image must be set.
-
-* "c7200 stop <instance_name>" : Stop the instance. The settings are kept.
-
 * "c7200 set_npe <instance_name> <npe_name>" : Set the NPE model.
   For example: npe-100, npe-400, ... The default is "npe-200".
 
@@ -301,41 +291,18 @@ Virtual Cisco 7200 instances module ("c7200")
   address of the router. By default, the address is automatically generated
   with this pattern : ca<instance_id>.<process_pid>.0000 (Cisco format).
 
-* "c7200 add_pa_binding <instance_name> <slot> <pa_type>" : Add a
-  Port Adapter binding for the specified slot.
-  For example: "c7200 add_pa_binding R1 1 PA-A1" adds a PA-A1 card into
-  slot 1.
+* "c7200 set_system_id <instance_name> <system_id>" : 
+  Set the system id. (since version 0.2.8-RC3-community)
 
-* "c7200 remove_pa_binding <instance_name> <slot>" : Remove a Port Adapter
-  binding (if it exists) for the specified slot.
+* "c7200 set_temp_sensor <instance_name> <sensor_id> <temperature>" : 
+  Set temperature for a DS1620 sensor.
+  This can be used to simulate environmental problems like overheat.
+  (since version 0.2.8-RC3-community)
 
-* "c7200 pa_bindings <instance_name>" : Display all PA bindings for the
-  router instance.
-
-* "c7200 add_nio_binding <instance_name> <slot> <port> <nio_name>":
-  Add a NIO binding for the interface designated by "slot/port".
-  For example: "c7200 add_nio_binding R1 1 0 nio1" (with PA-A1 bound
-  to slot 1) binds the NIO called "nio1" to the interface ATM1/0.
-
-* "c7200 remove_nio_binding <instance_name> <slot> <port>":
-  Removes the NIO binding for the interface designated by "slot/port".
-
-* "c7200 pa_nio_bindings <instance_name> <slot>": Display NIO bindings
-  for all ports of the specified slot.
-
-* "c7200 pa_enable_nio <instance_name> <slot> <port>" : Enable NIO for
-  the interface "slot/port" (used when NIO has to be changed while the
-  virtual router is online).
-
-* "c7200 pa_disable_nio <instance_name> <slot> <port>" : Disable NIO for
-  the interface "slot/port" (used when NIO has to be changed while the
-  virtual router is online).
-
-* "c7200 pa_init_online <instance_name> <slot>" : Initialize a Port
-  Adapter while the router is online (this triggers an OIR event).
-
-* "c7200 pa_stop_online <instance_name> <slot>" : Stop a Port
-  Adapter while the router is online (this triggers an OIR event).
+* "c7200 set_power_supply <instance_name> <power_supply_id> <0|1>" : 
+  Set power supply status.
+  This can be used to simulate environmental problems like power loss.
+  (since version 0.2.8-RC3-community)
 
 * "c7200 show_hardware <instance_name>" : Display virtual hardware info 
   about the instance.
