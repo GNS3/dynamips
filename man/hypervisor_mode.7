@@ -43,6 +43,9 @@ Virtual instances of Cisco 3600
 .B c2691
 Virtual instances of Cisco 2691
 .TP
+.B c2600
+Virtual instances of Cisco 2600
+.TP
 .B nio       
 Network Input/Output (NIO) descriptors
 .TP
@@ -445,6 +448,33 @@ automatically generated with this pattern : c0<instance_id>.<process_pid>.0000
 (Cisco format).
 .TP
 .B c2691 show_hardware <instance_name>
+Display virtual hardware info about the instance.
+.RE
+.TP
+.B Virtual Cisco 2600 instances module ("c2600")
+.RS
+.TP
+Available since version 0.2.7\-RC1.
+.TP
+.B c2600 list
+List all existing Cisco 2600 instances.
+.TP
+.B c2600 set_chassis <instance_name> <chassis_name>
+Set the chassis model. Possible values: 2610, 2611, 2620, 2621, 
+2610XM, 2611XM, 2620XM, 2621XM, 2650XM, 2651XM. The default is "2610".
+.TP
+.B c2600 set_iomem <instance_name> <size>
+Set the I/O mem size.
+.TP
+.B c2600 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. By default, the address is
+automatically generated with this pattern : c8<instance_id>.<process_pid>.0000
+(Cisco format).
+.TP
+.B c2600 set_system_id <instance_name> <system_id>
+Set the system id. (since version 0.2.8\-RC3\-community)
+.TP
+.B c2600 show_hardware <instance_name>
 Display virtual hardware info about the instance.
 .RE
 .TP
