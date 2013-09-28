@@ -630,6 +630,9 @@ Virtual Frame-Relay switch module ("frsw")
 
 * "frsw create <switch_name>" : Create a new Frame-Relay switch.
 
+* "frsw rename <switch_name> <new_name>" : Rename a Frame-Relay switch.
+  (since version 0.2.11)
+
 * "frsw delete <switch_name>" : Delete the specified Frame-Relay switch.
 
 * "frsw create_vc <switch_name> <input_nio> <input_dlci> 
