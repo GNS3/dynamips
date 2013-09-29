@@ -587,6 +587,9 @@ Virtual ATM switch module ("atmsw")
 
 * "atmsw create <switch_name>" : Create a new ATM switch.
 
+* "atmsw rename <switch_name> <new_name>" : Rename an ATM switch.
+  (since version 0.2.11)
+
 * "atmsw delete <switch_name>" : Delete the specified ATM switch.
 
 * "atmsw create_vpc <switch_name> <input_nio> <input_vpi> 
