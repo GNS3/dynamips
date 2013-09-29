@@ -618,6 +618,9 @@ Available since version 0.2.8-RC2.
 
 * "atm_bridge create <bridge_name>" : Create a new ATM bridge.
 
+* "atm_bridge rename <bridge_name> <new_name>" : Rename an ATM bridge.
+  (since version 0.2.11)
+
 * "atm_bridge delete <bridge_name>" : Delete an ATM bridge.
 
 * "atm_bridge configure <bridge_name> <eth_nio> <atm_nio> <vpi> <vci>" : 

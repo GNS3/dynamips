@@ -47,6 +47,48 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Rename an ATM bridge */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   atm_bridge_t *t;
+   char *newname;
+
+   if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ATM_BRIDGE)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_ATM_BRIDGE)) {
+      atm_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ATM bridge '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = strdup(argv[1]))) {
+      atm_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ATM bridge '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_ATM_BRIDGE)) {
+      free(newname);
+      atm_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ATM bridge '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   free(t->name);
+   t->name = newname;
+
+   atm_bridge_release(argv[1]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"ATM bridge '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete an ATM bridge */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -133,6 +175,7 @@ static int cmd_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* ATM Bridge commands */
 static hypervisor_cmd_t atmbr_cmd_array[] = {
    { "create", 1, 1, cmd_create, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "configure", 5, 5, cmd_configure, NULL },
    { "unconfigure", 1, 1, cmd_unconfigure, NULL },
