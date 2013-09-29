@@ -5,6 +5,8 @@ The hypervisor mode of dynamips allows you to run simultaneously
 many virtual router instances, and to simulate ATM, Ethernet
 or Frame-Relay networks. 
 
+Available since version 0.2.5.
+
 Running dynamips in hypervisor mode
 ===================================
 
