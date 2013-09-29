@@ -2495,8 +2495,84 @@
 | Release:  v0.2.8-RC2   |
 +-----------------------'
 
+29-Oct-2007
+-----------
+  - C3745: some work on OIR, but unfortunately only NM-4T works at the moment.
+
+30-Oct-2007
+-----------
+  - C3660: added OIR support.
+
+27-Nov-2007
+-----------
+  - C7200: added support for jacket card (C7200-JC-PA) and support for PA
+    in slot 7.
+
+29-Nov-2007
+-----------
+  - Fixed AAL5 CRC.
+
+15-Jan-2008
+-----------
+  - Added Multicast NIO
+
+19-Jan-2008
+-----------
+  - Added "nio set_mcast_ttl" hypervisor command to change TTL for multicast
+    NIOs.
+
+25-Jan-2008
+-----------
+  - Added 64-bit support for MacOS X 10.5 - Leopard (stack alignment).
+
+31-Mar-2008
+-----------
+  - PPC32: Fixed DIVW instruction (incorrect cast: unsigned instead of signed).
+    This was causing problems with OSPF (and probably other protocols) on 2600
+    platforms.
+
+01-Apr-2008
+-----------
+  - Some minor info added (OS name) to ease debugging.
+
+24-Apr-2008
+-----------
+  - Added NIO traffic statistics (packets/bytes in/out).
+
+25-Apr-2008
+-----------
+  - Added QinQ support in integrated ethernet switch (untested).
+
+07-May-2008
+-----------
+  - More coherent naming for JIT variables ("blocks" -> "tcb").
+  - Fix QinQ input vector in Ethernet switch (thanks to Pavel Skovajsa).
+
+16-May-2008
+-----------
+  - Merged PPC-host JIT patch from Zhe Fang. 
+
+Jun-2008
+--------
+  - Worked on a JIT code sharing system (only MIPS ported at this time)
+
+03-Jul-2008
+-----------
+  - MIPS64: fixed a lot of mistakes in handling of TLB entries.
+
+27-Nov-2008
+-----------
+  - Added "udp auto" NIO to avoid fixed port allocation which can easily fail.
+  - Bug fixes in socket handling (incorrect setsockopt() for non-RFC2553 
+    systems)
+
++------------------------------------------------------.
+| Last known development version:  v0.2.8-20090305-18   \
+| Some of the changes only exist in unstable.           /
++------------------------------------------------------'
+
 30-Mar-2011 (dynamips-community fork)
-----------------------------------
+-------------------------------------
   - Online Insertion and Removal (OIR) support for c3745 (NM-4T only) and c3660.
   - c7200: support for jacket card (C7200-JC-PA) and support for PA in slot 7.
   - ATM: AAL5 CRC bug fix.
@@ -2615,8 +2691,8 @@
 | Release:  v0.2.8-community   |
 +-----------------------------'
 
-10-Jul-2013 to 31-Jul-2013
---------------------------
+10-Jul-2013 to 31-Jul-2013 (renamed to dynamips)
+------------------------------------------------
    - Added NVRAM filesystem.
    - Added generic_nvram_extract_config and generic_nvram_push_config that use the NVRAM filesystem.
    - Reimplemented the nvram_extract_config/nvram_push_config functions of the platforms c1700/c2600/c2692/c3600/c3725/c3745/c7200/c6msfc1.
