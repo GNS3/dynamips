@@ -63,14 +63,14 @@ typedef int (*registry_exec)(void *data,void *opt_arg);
 /* Initialize registry */
 int registry_init(void);
 
-/* Remove a registry entry */
-void registry_remove_entry(registry_entry_t *entry);
-
 /* Add a new entry to the registry */
 int registry_add(char *name,int object_type,void *data);
 
 /* Delete an entry from the registry */
 int registry_delete(char *name,int object_type);
+
+/* Rename an entry in the registry */
+int registry_rename(char *name,char *newname,int object_type);
 
 /* Find an entry (increment reference count) */
 void *registry_find(char *name,int object_type);

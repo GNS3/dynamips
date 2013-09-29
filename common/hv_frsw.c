@@ -47,6 +47,48 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Rename a Frame-Relay switch */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   frsw_table_t *t;
+   char *newname;
+
+   if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_FRSW)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_FRSW)) {
+      frsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename FRSW '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = mp_strdup(&t->mp,argv[1]))) {
+      frsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename FRSW '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_FRSW)) {
+      mp_free(newname);
+      frsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename FRSW '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   mp_free(t->name);
+   t->name = newname;
+
+   frsw_release(argv[1]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"FRSW '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete a Frame-Relay switch */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -131,6 +173,7 @@ static int cmd_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* FRSW commands */
 static hypervisor_cmd_t frsw_cmd_array[] = {
    { "create", 1, 1, cmd_create, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "create_vc", 5, 5, cmd_create_vc, NULL },
    { "delete_vc", 5, 5, cmd_delete_vc, NULL },

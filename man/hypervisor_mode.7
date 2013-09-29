@@ -1,4 +1,4 @@
-.TH HYPERVISOR_MODE 7 "Sep 28, 2013"
+.TH HYPERVISOR_MODE 7 "Sep 29, 2013"
 .\" Please adjust this date whenever revising the manpage.
 .SH NAME
 hypervisor_mode \- allows you to run simultaneously
@@ -125,6 +125,10 @@ List all VM console TCP port.
 Create a new router instance.
 The ID must be unique and is used to name files on disk.
 (since version 0.2.8\-RC1)
+.TP
+.B vm rename <instance_name> <new_name>
+Rename a router instance.
+(since version 0.2.11)
 .TP
 .B vm delete <instance_name>
 Delete the specified instance.
@@ -562,6 +566,10 @@ Create a Null NIO.
 .B nio crossconnect_fifo <nio_name> <nio_name>
 Establish a cross-connect between 2 FIFO NIO.
 .TP
+.B nio rename <nio_name> <new_name>
+Rename a NIO.
+(since version 0.2.11)
+.TP
 .B nio delete <nio_name>
 Delete the specified NIO. The NIO can be deleted only when it is not anymore in
 use by another object.
@@ -622,6 +630,10 @@ List all NIO bridges.
 .B nio_bridge create <bridge_name>
 Create a NIO bridge. A NIO bridge acts as a shared media (a kind of hub).
 .TP
+.B nio_bridge rename <bridge_name> <new_name>
+Rename a NIO bridge.
+(since version 0.2.11)
+.TP
 .B nio_bridge delete <bridge_name>
 Delete a NIO bridge.
 .TP
@@ -641,6 +653,10 @@ List all Ethernet switches.
 .TP
 .B ethsw create <switch_name>
 Create a new Ethernet switch.
+.TP
+.B ethsw rename <switch_name> <new_name>
+Rename an Ethernet switch.
+(since version 0.2.11)
 .TP
 .B ethsw delete <switch_name>
 Delete the specified Ethernet switch.
@@ -678,6 +694,10 @@ List all ATM switches.
 .B atmsw create <switch_name>
 Create a new ATM switch.
 .TP
+.B atmsw rename <switch_name> <new_name>
+Rename an ATM switch.
+(since version 0.2.11)
+.TP
 .B atmsw delete <switch_name>
 Delete the specified ATM switch.
 .TP
@@ -705,6 +725,10 @@ List all ATM bridges.
 .B atm_bridge create <bridge_name>
 Create a new ATM bridge.
 .TP
+.B atm_bridge rename <bridge_name> <new_name>
+Rename an ATM bridge.
+(since version 0.2.11)
+.TP
 .B atm_bridge delete <bridge_name>
 Delete an ATM bridge.
 .TP
@@ -723,6 +747,10 @@ List all Frame\(hyRelay switches.
 .TP
 .B frsw create <switch_name>
 Create a new Frame\(hyRelay switch.
+.TP
+.B frsw rename <switch_name> <new_name>
+Rename a Frame-Relay switch.
+(since version 0.2.11)
 .TP
 .B frsw delete <switch_name>
 Delete the specified Frame\(hyRelay switch.
@@ -743,6 +771,10 @@ Write an object, data provided in base64 encoding.
 .TP
 .B object_store read <object_name>
 Read an object and return data in base64 encoding.
+.TP
+.B object_store rename <object_name> <new_name>
+Rename an object.
+(since version 0.2.11)
 .TP
 .B object_store delete <object_name>
 Delete an object from the store.

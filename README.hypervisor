@@ -88,6 +88,9 @@ Virtual Machine module ("vm")
   The ID must be unique and is used to name files on disk.
   (since version 0.2.8-RC1)
 
+* "vm rename <instance_name> <new_name>" : Rename a router instance.
+  (since version 0.2.11)
+
 * "vm delete <instance_name>" : Delete the specified instance.
   (since version 0.2.8-RC1)
 
@@ -489,6 +492,9 @@ Network Input/Output (NIO) module ("nio")
 * "nio crossconnect_fifo <nio_name> <nio_name>" :
   Establish a cross-connect between 2 FIFO NIO.
 
+* "nio rename <nio_name> <new_name>" : Rename a NIO.
+  (since version 0.2.11)
+
 * "nio delete <nio_name>" : Delete the specified NIO. The NIO can be deleted
   only when it is not anymore in use by another object.
 
@@ -533,6 +539,9 @@ NIO bridge module ("nio_bridge")
 * "nio_bridge create <bridge_name>" : Create a NIO bridge. A NIO bridge
   acts as a shared media (a kind of hub).
 
+* "nio_bridge rename <bridge_name> <new_name>" : Rename a NIO bridge.
+  (since version 0.2.11)
+
 * "nio_bridge delete <bridge_name>" : Delete a NIO bridge.
 
 * "nio_bridge add_nio <bridge_name> <nio_name>" : Add a NIO as new port
@@ -548,6 +557,9 @@ Virtual Ethernet switch module ("ethsw")
 * "ethsw list" : List all Ethernet switches.
 
 * "ethsw create <switch_name>" : Create a new Ethernet switch.
+
+* "ethsw rename <switch_name> <new_name>" : Rename an Ethernet switch.
+  (since version 0.2.11)
 
 * "ethsw delete <switch_name>" : Delete the specified Ethernet switch.
 
@@ -581,6 +593,9 @@ Virtual ATM switch module ("atmsw")
 
 * "atmsw create <switch_name>" : Create a new ATM switch.
 
+* "atmsw rename <switch_name> <new_name>" : Rename an ATM switch.
+  (since version 0.2.11)
+
 * "atmsw delete <switch_name>" : Delete the specified ATM switch.
 
 * "atmsw create_vpc <switch_name> <input_nio> <input_vpi> 
@@ -609,6 +624,9 @@ Available since version 0.2.8-RC2.
 
 * "atm_bridge create <bridge_name>" : Create a new ATM bridge.
 
+* "atm_bridge rename <bridge_name> <new_name>" : Rename an ATM bridge.
+  (since version 0.2.11)
+
 * "atm_bridge delete <bridge_name>" : Delete an ATM bridge.
 
 * "atm_bridge configure <bridge_name> <eth_nio> <atm_nio> <vpi> <vci>" : 
@@ -623,6 +641,9 @@ Virtual Frame-Relay switch module ("frsw")
 * "frsw list" : List all Frame-Relay switches.
 
 * "frsw create <switch_name>" : Create a new Frame-Relay switch.
+
+* "frsw rename <switch_name> <new_name>" : Rename a Frame-Relay switch.
+  (since version 0.2.11)
 
 * "frsw delete <switch_name>" : Delete the specified Frame-Relay switch.
 
@@ -645,6 +666,9 @@ Available since version 0.2.8-RC2.
 
 * "object_store read <object_name>" : 
   Read an object and return data in base64 encoding.
+
+* "object_store rename <object_name> <new_name>" : Rename an object.
+  (since version 0.2.11)
 
 * "object_store delete <object_name>" : 
   Delete an object from the store.

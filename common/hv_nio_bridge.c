@@ -47,6 +47,48 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Rename a NIO bridge */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   netio_bridge_t *t;
+   char *newname;
+
+   if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO_BRIDGE)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_NIO_BRIDGE)) {
+      netio_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO bridge '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = strdup(argv[1]))) {
+      netio_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO bridge '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_NIO_BRIDGE)) {
+      free(newname);
+      netio_bridge_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename NIO bridge '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   free(t->name);
+   t->name = newname;
+
+   netio_bridge_release(argv[1]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO bridge '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete an NIO bridge */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -134,6 +176,7 @@ static int cmd_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* NIO bridge commands */
 static hypervisor_cmd_t nio_bridge_cmd_array[] = {
    { "create", 1, 1, cmd_create, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "add_nio", 2, 2, cmd_add_nio, NULL },
    { "remove_nio", 2, 2, cmd_remove_nio, NULL },
