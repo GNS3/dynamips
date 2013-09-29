@@ -664,6 +664,9 @@ Available since version 0.2.8-RC2.
 * "object_store read <object_name>" : 
   Read an object and return data in base64 encoding.
 
+* "object_store rename <object_name> <new_name>" : Rename an object.
+  (since version 0.2.11)
+
 * "object_store delete <object_name>" : 
   Delete an object from the store.
 

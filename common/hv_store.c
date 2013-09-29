@@ -145,6 +145,48 @@ static int cmd_read(hypervisor_conn_t *conn,int argc,char *argv[])
    return(-1);
 }
 
+/* Rename an object */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   struct store_object *so;
+   char *newname;
+
+   if (!(so = hypervisor_find_object(conn,argv[0],OBJ_TYPE_STORE)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_STORE)) {
+      registry_unref(so->name,OBJ_TYPE_STORE);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename object '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = strdup(argv[1]))) {
+      registry_unref(so->name,OBJ_TYPE_STORE);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename object '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_STORE)) {
+      free(newname);
+      registry_unref(so->name,OBJ_TYPE_STORE);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename object '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   free(so->name);
+   so->name = newname;
+
+   registry_unref(so->name,OBJ_TYPE_STORE);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"object '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete an object from the store */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -189,6 +231,7 @@ static int cmd_obj_list(hypervisor_conn_t *conn,int argc,char *argv[])
 static hypervisor_cmd_t store_cmd_array[] = {
    { "write", 2, 2, cmd_write, NULL },
    { "read", 1, 1, cmd_read, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "delete_all", 0, 0, cmd_delete_all, NULL },
    { "list", 0, 0, cmd_obj_list, NULL },

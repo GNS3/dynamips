@@ -1,4 +1,4 @@
-.TH HYPERVISOR_MODE 7 "Sep 28, 2013"
+.TH HYPERVISOR_MODE 7 "Sep 29, 2013"
 .\" Please adjust this date whenever revising the manpage.
 .SH NAME
 hypervisor_mode \- allows you to run simultaneously
@@ -770,6 +770,10 @@ Write an object, data provided in base64 encoding.
 .TP
 .B object_store read <object_name>
 Read an object and return data in base64 encoding.
+.TP
+.B object_store rename <object_name> <new_name>
+Rename an object.
+(since version 0.2.11)
 .TP
 .B object_store delete <object_name>
 Delete an object from the store.
