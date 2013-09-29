@@ -555,6 +555,9 @@ Virtual Ethernet switch module ("ethsw")
 
 * "ethsw create <switch_name>" : Create a new Ethernet switch.
 
+* "ethsw rename <switch_name> <new_name>" : Rename an Ethernet switch.
+  (since version 0.2.11)
+
 * "ethsw delete <switch_name>" : Delete the specified Ethernet switch.
 
 * "ethsw add_nio <switch_name> <nio_name>" : Add a NIO as new port in an

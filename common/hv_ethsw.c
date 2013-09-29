@@ -47,6 +47,48 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Rename an Ethernet switch */
+static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   ethsw_table_t *t;
+   char *newname;
+
+   if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
+      return(-1);
+
+   if (registry_exists(argv[1],OBJ_TYPE_ETHSW)) {
+      ethsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ETHSW '%s', '%s' already exists",
+                            argv[0],argv[1]);
+      return(-1);
+   }
+
+   if(!(newname = strdup(argv[1]))) {
+      ethsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ETHSW '%s', out of memory",
+                            argv[0]);
+      return(-1);
+   }
+
+   if (registry_rename(argv[0],newname,OBJ_TYPE_ETHSW)) {
+      free(newname);
+      ethsw_release(argv[0]);
+      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
+                            "unable to rename ETHSW '%s'",
+                            argv[0]);
+      return(-1);
+   }
+
+   free(t->name);
+   t->name = newname;
+
+   ethsw_release(argv[1]);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"ETHSW '%s' renamed to '%s'",argv[0],argv[1]);
+   return(0);
+}
+
 /* Delete an Ethernet switch */
 static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -254,6 +296,7 @@ static int cmd_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* ETHSW commands */
 static hypervisor_cmd_t ethsw_cmd_array[] = {
    { "create", 1, 1, cmd_create, NULL },
+   { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
    { "add_nio", 2, 2, cmd_add_nio, NULL },
    { "remove_nio", 2, 2, cmd_remove_nio, NULL },
