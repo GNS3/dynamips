@@ -286,12 +286,14 @@ static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
    }
 
    if (telnet_message_ok == 1) {
-     fd_printf(fd,0,
-               "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n"
-               "Press ENTER to get the prompt.\r\n", 
-               vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
-               vtty->name);
-     vtty_flush(vtty);
+      fd_printf(fd,0,
+                "Connected to Dynamips VM \"%s\" (ID %u, type %s) - %s\r\n"
+                "Press ENTER to get the prompt.\r\n", 
+                vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
+                vtty->name);
+      if (vtty->vm->status != VM_STATUS_RUNNING)
+         fd_printf(fd,0,"!!! WARNING - VM is not running, will be unresponsive (status=%d) !!!\r\n",vtty->vm->status);
+      vtty_flush(vtty);
    }
    return(0);
 }
