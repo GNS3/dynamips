@@ -188,6 +188,22 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Get the status of a VM instance */
+static int cmd_get_status(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   int status;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   status = vm->status;
+
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"%d",status);
+   return(0);
+}
+
 /* Set translation sharing group */
 static int cmd_set_tsg(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -1188,6 +1204,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "delete", 1, 1, cmd_delete, NULL },
    { "start", 1, 1, cmd_start, NULL },
    { "stop", 1, 1, cmd_stop, NULL },
+   { "get_status", 1, 1, cmd_get_status, NULL },
    { "set_tsg", 2, 2, cmd_set_tsg, NULL },
    { "set_debug_level", 2, 2, cmd_set_debug_level, NULL },
    { "set_ios", 2, 2, cmd_set_ios, NULL },

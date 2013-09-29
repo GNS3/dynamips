@@ -101,6 +101,10 @@ Virtual Machine module ("vm")
 * "vm stop <instance_name>" : Stop the instance. The settings are kept.
   (since version 0.2.8-RC1)
 
+* "vm get_status <instance_name>" : Get the status of a VM instance.
+  Return values: 0=inactive, 1=shutting down, 2=running, 3=suspended.
+  (since version 0.2.11)
+
 * "vm set_tsg <instance_name> <group_id>" : Set translation sharing group.
   (since version 0.2.8-RC3-community, unstable)
 
