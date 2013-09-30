@@ -258,6 +258,7 @@ error:
 static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
 {
    int fd,*fd_slot;
+   u_int i;
    
    if (fd_pool_get_free_slot(&vtty->fd_pool,&fd_slot) < 0) {
       vm_error(vtty->vm,"unable to create a new VTTY TCP connection\n");
@@ -291,8 +292,22 @@ static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
                 "Press ENTER to get the prompt.\r\n", 
                 vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
                 vtty->name);
+      /* replay old text */
+      for (i = vtty->replay_ptr; i < VTTY_BUFFER_SIZE; i++) {
+         if (vtty->replay_buffer[i] != 0) {
+            send(fd,&vtty->replay_buffer[i],VTTY_BUFFER_SIZE-i,0);
+            break;
+         }
+      }
+      for (i = 0; i < vtty->replay_ptr; i++) {
+         if (vtty->replay_buffer[i] != 0) {
+            send(fd,&vtty->replay_buffer[i],vtty->replay_ptr-i,0);
+            break;
+         }
+      }
+      /* warn if not running */
       if (vtty->vm->status != VM_STATUS_RUNNING)
-         fd_printf(fd,0,"!!! WARNING - VM is not running, will be unresponsive (status=%d) !!!\r\n",vtty->vm->status);
+         fd_printf(fd,0,"\r\n!!! WARNING - VM is not running, will be unresponsive (status=%d) !!!\r\n",vtty->vm->status);
       vtty_flush(vtty);
    }
    return(0);
@@ -1098,6 +1113,13 @@ void vtty_put_char(vtty_t *vtty, char ch)
          vm_error(vtty->vm,"vtty_put_char: bad vtty type %d\n",vtty->type);
          exit(1);
    }
+
+   /* store char for replay */
+   vtty->replay_buffer[vtty->replay_ptr] = ch;
+
+   ++vtty->replay_ptr;
+   if (vtty->replay_ptr == VTTY_BUFFER_SIZE)
+      vtty->replay_ptr = 0;
 }
 
 /* Put a buffer to vtty */

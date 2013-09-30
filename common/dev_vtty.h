@@ -85,6 +85,10 @@ struct virtual_tty {
    
    /* Read notification */
    void (*read_notifier)(vtty_t *);
+
+   /* Old text for replay */
+   u_char replay_buffer[VTTY_BUFFER_SIZE];
+   u_int replay_ptr;
 };
 
 #define VTTY_LOCK(tty) pthread_mutex_lock(&(tty)->lock);
