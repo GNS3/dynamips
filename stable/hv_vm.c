@@ -84,7 +84,6 @@ static int cmd_create(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    vm_instance_t *vm;
-   char *newname;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
@@ -97,25 +96,12 @@ static int cmd_rename(hypervisor_conn_t *conn,int argc,char *argv[])
       return(-1);
    }
 
-   if(!(newname = strdup(argv[1]))) {
-      vm_release(vm);
-      hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
-                            "unable to rename VM instance '%s', out of memory",
-                            argv[0]);
-      return(-1);
-   }
-
-   if (registry_rename(argv[0],newname,OBJ_TYPE_VM)) {
-      free(newname);
-      vm_release(vm);
+   if (vm_rename_instance(vm,argv[1])) {
       hypervisor_send_reply(conn,HSC_ERR_RENAME,1,
                             "unable to rename VM instance '%s'",
                             argv[0]);
       return(-1);
    }
-
-   free(vm->name);
-   vm->name = newname;
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' renamed to '%s'",argv[0],argv[1]);

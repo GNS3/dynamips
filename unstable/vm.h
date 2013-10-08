@@ -278,6 +278,9 @@ int vm_close_log(vm_instance_t *vm);
 /* Create the log file */
 int vm_create_log(vm_instance_t *vm);
 
+/* Reopen the log file */
+int vm_reopen_log(vm_instance_t *vm);
+
 /* Error message */
 void vm_error(vm_instance_t *vm,char *format,...);
 
@@ -386,6 +389,9 @@ vm_instance_t *vm_create_instance(char *name,int instance_id,char *type);
 
 /* Delete a VM instance */
 int vm_delete_instance(char *name);
+
+/* Rename a VM instance */
+int vm_rename_instance(vm_instance_t *vm, char *name);
 
 /* Initialize a VM instance */
 int vm_init_instance(vm_instance_t *vm);

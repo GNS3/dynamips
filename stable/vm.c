@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <assert.h>
+#include <glob.h>
 
 #include "registry.h"
 #include "device.h"
@@ -295,6 +296,27 @@ int vm_create_log(vm_instance_t *vm)
 
       if (!(vm->log_fd = fopen(vm->log_file,"w"))) {
          fprintf(stderr,"VM %s: unable to create log file '%s'\n",
+                 vm->name,vm->log_file);
+         free(vm->log_file);
+         vm->log_file = NULL;
+         return(-1);
+      }
+   }
+
+   return(0);
+}
+
+/* Reopen the log file */
+int vm_reopen_log(vm_instance_t *vm)
+{
+   if (vm->log_file_enabled) {
+      vm_close_log(vm);
+
+      if (!(vm->log_file = vm_build_filename(vm,"log.txt")))
+         return(-1);
+
+      if (!(vm->log_fd = fopen(vm->log_file,"a"))) {
+         fprintf(stderr,"VM %s: unable to reopen log file '%s'\n",
                  vm->name,vm->log_file);
          free(vm->log_file);
          vm->log_file = NULL;
@@ -1141,6 +1163,101 @@ int vm_delete_instance(char *name)
 {
    return(registry_delete_if_unused(name,OBJ_TYPE_VM,
                                     vm_reg_delete_instance,NULL));
+}
+
+/* Rename a VM instance */
+int vm_rename_instance(vm_instance_t *vm, char *name)
+{
+   char *old_name;
+   char *old_lock_file = NULL;
+   FILE *old_lock_fd = NULL;
+   glob_t globbuf;
+   size_t i;
+   char *pattern = NULL;
+   char *filename;
+   int do_rename = 0;
+
+   if (name == NULL || vm == NULL)
+      goto err_invalid; /* invalid argument */
+
+   if (vm->status != VM_STATUS_HALTED)
+      goto err_not_stopped; /* VM is not stopped */
+
+   if (strcmp(vm->name, name) == 0)
+      return(0); /* same name, done */
+
+   if (registry_exists(name,OBJ_TYPE_VM))
+      goto err_exists; /* name already exists */
+
+   old_name = vm->name;
+   vm->name = NULL;
+
+   if(!(vm->name = strdup(name)))
+      goto err_strdup; /* out of memory */
+
+   /* get new lock */
+   do_rename = ( vm_file_naming_type != 1 );
+   if (do_rename) {
+      old_lock_file = vm->lock_file;
+      old_lock_fd = vm->lock_fd;
+      vm->lock_file = NULL;
+      vm->lock_fd = NULL;
+
+      if (vm_get_lock(vm) == -1)
+         goto err_lock;
+   }
+
+   if (registry_rename(old_name,name,OBJ_TYPE_VM))
+      goto err_registry; /* failed to rename */
+
+   vm_log(vm,"VM","renamed from '%s' to '%s'",old_name,vm->name);
+
+   /* rename files (best effort) */
+   if (do_rename) {
+      fclose(old_lock_fd);
+      unlink(old_lock_file);
+      free(old_lock_file);
+
+      vm_close_log(vm);
+
+      if ((pattern = dyn_sprintf("%s_%s_*",vm_get_type(vm),old_name)) == NULL)
+         goto skip_rename;
+
+      if (glob(pattern, GLOB_NOSORT, NULL, &globbuf) != 0)
+         goto skip_rename;
+
+      for (i = 0; i < globbuf.gl_pathc; i++) {
+         if ((filename = dyn_sprintf("%s_%s_%s",vm_get_type(vm),vm->name,globbuf.gl_pathv[i] + strlen(pattern) - 1)) == NULL)
+            break; /* out of memory */
+
+         rename(globbuf.gl_pathv[i], filename);
+         free(filename);
+      }
+      globfree(&globbuf);
+ skip_rename:
+      free(pattern);
+
+      vm_reopen_log(vm);
+   }
+
+   free(old_name);
+   return(0); // done
+
+ err_registry:
+ err_lock:
+ err_strdup:
+   free(vm->name);
+   vm->name = old_name;
+
+   if (do_rename) {
+      vm_release_lock(vm,TRUE);
+      vm->lock_file = old_lock_file;
+      vm->lock_fd = old_lock_fd;
+   }
+ err_exists:
+ err_not_stopped:
+ err_invalid:
+   return(-1);
 }
 
 /* Initialize a VM instance */
