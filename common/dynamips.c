@@ -525,7 +525,8 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
          /* Alternate ROM */
          case 'R':
-            vm->rom_filename = optarg;
+            free(vm->rom_filename);
+            vm->rom_filename = strdup(optarg);
             break;
 
          case OPT_NOTELMSG:
