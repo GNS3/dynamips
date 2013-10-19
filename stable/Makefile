@@ -1,11 +1,6 @@
 # Makefile for Dynamips 0.2.8
 # Copyright (c) 2005-2006 Christophe Fillot.
 
-# Replace x86 by amd64 for a build on x86_64.
-# Use "nojit" for architectures that are not x86 or x86_64.
-DYNAMIPS_ARCH?=x86
-#DYNAMIPS_ARCH?=amd64
-
 ifeq ($(DYNAMIPS_ARCH),ppc32)
 DYNAMIPS_ARCH=x86
 endif
@@ -13,29 +8,11 @@ endif
 # Get include files from the current directory and from the common directory
 INCLUDE+=-I. -I../common
 
-# Change this to 0 if your system doesn't support RFC 2553 extensions
-HAS_RFC2553?=1
-
-# Change this to 1 if your system has libpcap-0.9.4 or better 
-# (WinPcap is used for Cygwin)
-HAS_PCAP?=1
-
-# Change this to 1 if your system has posix_memalign
-HAS_POSIX_MEMALIGN?=1
-
-# Current dynamips release
-VERSION_TRAIN?=0.2.11
-VERSION_SUB?=-dev
-
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
 
 # If make cannot find a file, try the common directory
 VPATH = ../common
-
-# Executable binary extension
-DESTDIR?=/usr
-BIN_EXT?=
 
 CC?=gcc
 LD=ld
@@ -56,7 +33,6 @@ CFLAGS+= $(INCLUDE) -Wall -O2 -fomit-frame-pointer \
 	-DHAS_RFC2553=$(HAS_RFC2553) \
 	-DHAS_POSIX_MEMALIGN=$(HAS_POSIX_MEMALIGN)
 
-#PCAP_LIB=/usr/local/lib/libpcap.a
 PCAP_LIB?=-lpcap
 
 ifeq ($(shell uname), FreeBSD)
@@ -69,7 +45,6 @@ ifeq ($(shell uname), FreeBSD)
 else
 ifeq ($(shell uname), Linux)
    PTHREAD_LIBS?=-lpthread
-#   PCAP_LIB=-lpcap
    OSNAME=Linux
    CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
    LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS)
