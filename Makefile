@@ -1,4 +1,4 @@
-# Makefile for Dynamips 0.2.8
+# Makefile for Dynamips
 
 # Host CPU selection
 #   - Use "x86" for a build on x86 (32-bits)
@@ -10,6 +10,8 @@ export DYNAMIPS_ARCH?=amd64
 else
 ifeq ($(shell arch),i686)
 export DYNAMIPS_ARCH?=x86
+else
+export DYNAMIPS_ARCH?=nojit
 endif
 endif
 
@@ -34,39 +36,42 @@ export HAS_POSIX_MEMALIGN?=1
 export VERSION_TRAIN=0.2.11
 export VERSION_SUB=-dev
 
-# Executable binary extension
-export DESTDIR?=/usr
+# Executable binary extension and prefix directory
+export PREFIX?=/usr
 export BIN_EXT?=
 
 
-.PHONY: all dynamips.stable dynamips.unstable both install
+.PHONY: all dynamips.stable dynamips.unstable both install clean
 all: dynamips.$(DYNAMIPS_CODE)
 
 dynamips.stable:
 	$(MAKE) -C stable
 	mv stable/dynamips$(BIN_EXT) dynamips.stable$(BIN_EXT)
+	mv stable/nvram_export$(BIN_EXT) nvram_export.stable$(BIN_EXT) 
 
 dynamips.unstable:
 	$(MAKE) -C unstable
 	mv unstable/dynamips$(BIN_EXT) dynamips.unstable$(BIN_EXT)
+	mv unstable/nvram_export$(BIN_EXT) nvram_export.unstable$(BIN_EXT) 
 
 # target to facilitate test compilations
 both: dynamips.stable dynamips.unstable
 
-install: dynamips.$(DYNAMIPS_CODE)
+install: dynamips.$(DYNAMIPS_CODE)$(BIN_EXT) nvram_export.$(DYNAMIPS_CODE)$(BIN_EXT)
 	@echo "Installing"
-	install -d $(DESTDIR)/bin $(DESTDIR)/share/man/man1 $(DESTDIR)/share/man/man7
+	
 	cp dynamips.$(DYNAMIPS_CODE)$(BIN_EXT) dynamips$(BIN_EXT)
-	install dynamips$(BIN_EXT) $(DYNAMIPS_CODE)/nvram_export$(BIN_EXT)   $(DESTDIR)/bin/
-	rm -f dynamips
-	install -m644 man/dynamips.1        $(DESTDIR)/share/man/man1
-	install -m644 man/nvram_export.1    $(DESTDIR)/share/man/man1
-	install -m644 man/hypervisor_mode.7 $(DESTDIR)/share/man/man7
+	cp nvram_export.$(DYNAMIPS_CODE)$(BIN_EXT) nvram_export$(BIN_EXT)
+	
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/man/man1 $(DESTDIR)$(PREFIX)/share/man/man7
+	install dynamips$(BIN_EXT) nvram_export$(BIN_EXT) $(DESTDIR)$(PREFIX)/bin/
+	install -m644 man/dynamips.1        $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m644 man/nvram_export.1    $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m644 man/hypervisor_mode.7 $(DESTDIR)$(PREFIX)/share/man/man7
 
-
-.PHONY: clean
 clean:
 	$(MAKE) -C stable clean
 	$(MAKE) -C unstable clean
 	$(RM) -f dynamips$(BIN_EXT) dynamips.stable$(BIN_EXT) dynamips.unstable$(BIN_EXT)
+	$(RM) -f nvram_export$(BIN_EXT) nvram_export.stable$(BIN_EXT) nvram_export.unstable$(BIN_EXT)
 
