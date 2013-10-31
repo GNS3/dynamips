@@ -1,9 +1,13 @@
-# Makefile for Dynamips 0.2.8
+# Stable Makefile for Dynamips
 # Copyright (c) 2005-2006 Christophe Fillot.
+# Copyright (c) 2013 Daniel Lintott.
 
-ifeq ($(DYNAMIPS_ARCH),ppc32)
-DYNAMIPS_ARCH=x86
-endif
+# This following code causes a FTBFS on powerpc, due to powerpc not supporting JIT
+# See https://launchpadlibrarian.net/155101404/buildlog_ubuntu-trusty-powerpc.dynamips_0.2.10-1.1_FAILEDTOBUILD.txt.gz
+# and http://7200emu.hacki.at/viewtopic.php?t=4211
+#ifeq ($(DYNAMIPS_ARCH),ppc32)
+#DYNAMIPS_ARCH=x86
+#endif
 
 # Get include files from the current directory and from the common directory
 INCLUDE+=-I. -I../common
@@ -15,11 +19,9 @@ VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
 VPATH = ../common
 
 CC?=gcc
-LD=ld
 RM=rm
 TAR=tar
 CP=cp
-LEX=flex
 MIPS64_ARCH_INC_FILE=\"mips64_$(DYNAMIPS_ARCH)_trans.h\"
 PPC32_ARCH_INC_FILE=\"ppc32_$(DYNAMIPS_ARCH)_trans.h\"
 OSNAME=unknown
@@ -40,14 +42,21 @@ ifeq ($(shell uname), FreeBSD)
    LOCALBASE?=/usr/local
    OSNAME=FreeBSD
    CFLAGS+=-I$(LOCALBASE)/include -I$(LOCALBASE)/include/libelf \
-	$(PTHREAD_CFLAGS) -D_FILE_OFFSET_BITS=64
+	-D_FILE_OFFSET_BITS=64
    LIBS=-L$(LOCALBASE)/lib -L. -lelf $(PTHREAD_LIBS) $(LDFLAGS)
 else
 ifeq ($(shell uname), Linux)
    PTHREAD_LIBS?=-lpthread
    OSNAME=Linux
-   CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS)
+   CFLAGS+=-I/usr/include -I. -D_FILE_OFFSET_BITS=64
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS) $(LDFLAGS)
+   DESTDIR=/usr
+else
+ifeq ($(shell uname), GNU/kFreeBSD)
+   PTHREAD_LIBS?=-lpthread
+   OSNAME=GNU/kFreeBSD
+   CFLAGS+=-I/usr/include -I. -D_FILE_OFFSET_BITS=64
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS) $(LDFLAGS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
@@ -75,6 +84,7 @@ ifeq ($(shell uname -o), Cygwin)
 else
    CFLAGS+=-I/usr/include/libelf -D_FILE_OFFSET_BITS=64
    LIBS=-L. -ldl /usr/lib/libelf.a -lpthread
+endif
 endif
 endif
 endif
@@ -200,11 +210,10 @@ endif
 
 C_OBJS=$(SOURCES:.c=.o)
 A_OBJS=$(ASMSRC:.S=.o)
-LEX_C=$(LEX_SOURCES:.l=.c)
 
 SUPPL=mips_mts.c Makefile ChangeLog COPYING README README.hypervisor TODO \
 	dynamips.1 nvram_export.1 hypervisor_mode.7 \
-	mips64_microcode ppc32_microcode debian/
+	mips64_microcode ppc32_microcode
 
 FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	x86-codegen.h amd64-codegen.h \
@@ -219,10 +228,10 @@ FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	nvram_export.c udp_send.c udp_recv.c
 
 .PHONY: all
-all: $(PROG) nvram_export
+all: $(PROG) nvram_export$(BIN_EXT)
 
 $(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
-	$(LEX_C) $(C_OBJS) $(A_OBJS)
+	$(C_OBJS) $(A_OBJS)
 	@echo "Linking $@"
 	@$(CC) $(CFLAGS) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
 
@@ -257,17 +266,7 @@ asmdefs.h: asmdefs$(BIN_EXT)
 
 nvram_export$(BIN_EXT): nvram_export.o fs_nvram.o
 	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) $(INCLUDE) -o $@ nvram_export.o fs_nvram.o
-
-install: $(PROG) nvram_export$(BIN_EXT)
-	@echo "Installing"
-	install -d $(DESTDIR)/bin $(DESTDIR)/man/man1 $(DESTDIR)/man/man7 $(DESTDIR)/etc
-	install $(PROG) nvram_export$(BIN_EXT)   $(DESTDIR)/bin
-	install -m644 dynamips.1        $(DESTDIR)/man/man1
-	install -m644 nvram_export.1    $(DESTDIR)/man/man1
-	install -m644 hypervisor_mode.7 $(DESTDIR)/man/man7
-# install -m644 example         $(DESTDIR)/etc/dynamips
-
+	@$(CC) -Wall $(CFLAGS) $(INCLUDE) $(LDFLAGS) -o $@ nvram_export.o fs_nvram.o
 
 .PHONY: clean
 clean:
@@ -276,19 +275,7 @@ clean:
 	mips64_microcode_dump.inc ppc32_microcode_dump.inc
 	$(RM) -f *~
 
-.PHONY: package
-package:
-	@mkdir -p distrib/$(PACKAGE)
-	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE)
-	@cd distrib ; $(TAR) czf $(ARCHIVE) $(PACKAGE)
-
-.PHONY: packdev
-packdev:
-	@mkdir -p distrib/$(PACKAGE_DEV)
-	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE_DEV)
-	@cd distrib ; $(TAR) czf $(ARCHIVE_DEV) $(PACKAGE_DEV)
-
-.SUFFIXES: .c .h .S .l .y .o
+.SUFFIXES: .c .S .o
 
 .S.o:
 	@echo "Assembling $<"
@@ -296,7 +283,4 @@ packdev:
 
 .c.o:
 	@echo "Compiling $<"
-	@$(CC) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
-
-.l.c:
-	$(LEX) -o$*.c $<
+	@$(CC) $(CPPFLAGS) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
