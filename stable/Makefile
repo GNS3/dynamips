@@ -50,7 +50,6 @@ ifeq ($(shell uname), Linux)
    OSNAME=Linux
    CFLAGS+=-I/usr/include -I. -D_FILE_OFFSET_BITS=64
    LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS) $(LDFLAGS)
-   DESTDIR=/usr
 else
 ifeq ($(shell uname), GNU/kFreeBSD)
    PTHREAD_LIBS?=-lpthread
@@ -94,11 +93,6 @@ endif
 CFLAGS+=-DOSNAME=$(OSNAME)
 
 PROG=dynamips$(BIN_EXT)
-PACKAGE=$(PROG)-$(VERSION)
-ARCHIVE=$(PACKAGE).tar.gz
-
-PACKAGE_DEV=$(PROG)-$(VERSION_DEV)
-ARCHIVE_DEV=$(PACKAGE_DEV).tar.gz
 
 # Header and source files
 HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
@@ -284,3 +278,4 @@ clean:
 .c.o:
 	@echo "Compiling $<"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
+
