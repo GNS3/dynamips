@@ -1,30 +1,9 @@
-# Makefile for Dynamips 0.2.8
+# Unstable Makefile for Dynamips
 # Copyright (c) 2005-2006 Christophe Fillot.
-
-# Host CPU selection
-#   - Use "x86" for a build on x86 (32-bits)
-#   - Use "amd64" for a build on x86_64 (64-bits)
-#   - Use "ppc32" for a build on powerpc (32-bits)
-#   - Use "nojit" for unsupported architectures.
-#DYNAMIPS_ARCH?=amd64
-DYNAMIPS_ARCH?=amd64
+# Copyright (c) 2013 Daniel Lintott.
 
 # Get include files from the current directory and from the common directory
 INCLUDE+=-I. -I../common
-
-# Change this to 0 if your system doesn't support RFC2553 extensions
-HAS_RFC2553?=1
-
-# Change this to 1 if your system has libpcap-0.9.4 or better 
-# (WinPcap is used for Cygwin)
-HAS_PCAP?=1
-
-# Change this to 1 if your system has posix_memalign
-HAS_POSIX_MEMALIGN?=1
-
-# Current dynamips release
-VERSION_TRAIN?=0.2.11
-VERSION_SUB?=-dev
 
 VERSION=$(VERSION_TRAIN)$(VERSION_SUB)
 VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
@@ -32,16 +11,10 @@ VERSION_DEV=$(VERSION_TRAIN)-$(shell date +%Y%m%d-%H)
 # If make cannot find a file, try the common directory
 VPATH = ../common
 
-# Executable binary extension
-DESTDIR?=/usr
-BIN_EXT?=
-
 CC?=gcc
-LD=ld
 RM=rm
 TAR=tar
 CP=cp
-LEX=flex
 MIPS64_ARCH_INC_FILE=\"mips64_$(DYNAMIPS_ARCH)_trans.h\"
 PPC32_ARCH_INC_FILE=\"ppc32_$(DYNAMIPS_ARCH)_trans.h\"
 OSNAME=unknown
@@ -56,7 +29,6 @@ CFLAGS+= $(INCLUDE) -m32 -Wall -O2 -fomit-frame-pointer \
 	-DHAS_POSIX_MEMALIGN=$(HAS_POSIX_MEMALIGN) \
 	-DUSE_UNSTABLE
 
-#PCAP_LIB=/usr/local/lib/libpcap.a
 PCAP_LIB?=-lpcap
 
 ifeq ($(shell uname), FreeBSD)
@@ -64,25 +36,26 @@ ifeq ($(shell uname), FreeBSD)
    LOCALBASE?=/usr/local
    OSNAME=FreeBSD
    CFLAGS+=-I$(LOCALBASE)/include -I$(LOCALBASE)/include/libelf \
-	$(PTHREAD_CFLAGS) -D_FILE_OFFSET_BITS=64
+	-D_FILE_OFFSET_BITS=64
    LIBS=-L$(LOCALBASE)/lib -L. -lelf $(PTHREAD_LIBS) $(LDFLAGS)
 else
 ifeq ($(shell uname), Linux)
    PTHREAD_LIBS?=-lpthread
-#   PCAP_LIB=-lpcap
    OSNAME=Linux
-   CFLAGS+=-I/usr/include -I. $(PTHREAD_CFLAGS)
-   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS)
+   CFLAGS+=-I/usr/include -I. -D_FILE_OFFSET_BITS=64
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS) $(LDFLAGS)
+else
+ifeq ($(shell uname), GNU/kFreeBSD)
+   PTHREAD_LIBS?=-lpthread
+   OSNAME=GNU/kFreeBSD
+   CFLAGS+=-I/usr/include -I. -D_FILE_OFFSET_BITS=64
+   LIBS=-L/usr/lib -L. -ldl -lrt -luuid -lelf $(PTHREAD_LIBS) $(LDFLAGS)
    DESTDIR=/usr
 else
 ifeq ($(shell uname -s), Darwin)
    OSNAME=Darwin
    CFLAGS+=-I/usr/local/include -I/opt/local/include/libelf -mdynamic-no-pic -D_FILE_OFFSET_BITS=64
-   LIBS=/opt/local/lib/libelf.a
-
-# To use for prod:
-#   LIBS=-L/usr/local/lib -L. -ldl -lelf -lpthread
-#   LIBS=-L/usr/local/ppc/lib -L. -ldl -lelf -pthread
+   LIBS=-L/usr/local/lib -L/opt/local/lib -L. -ldl -lelf -lpthread
 else
 ifeq ($(shell uname -s), SunOS)
    OSNAME=SunOS
@@ -106,15 +79,11 @@ endif
 endif
 endif
 endif
+endif
 
 CFLAGS+=-DOSNAME=$(OSNAME)
 
 PROG=dynamips$(BIN_EXT)
-PACKAGE=$(PROG)-$(VERSION)
-ARCHIVE=$(PACKAGE).tar.gz
-
-PACKAGE_DEV=$(PROG)-$(VERSION_DEV)
-ARCHIVE_DEV=$(PACKAGE_DEV).tar.gz
 
 # Header and source files
 HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
@@ -231,12 +200,10 @@ LIBS += $(PCAP_LIB)
 endif
 
 C_OBJS=$(SOURCES:.c=.o)
-A_OBJS=$(ASMSRC:.S=.o)
-LEX_C=$(LEX_SOURCES:.l=.c)
 
 SUPPL=mips_mts.c Makefile ChangeLog COPYING README README.hypervisor TODO \
 	dynamips.1 nvram_export.1 hypervisor_mode.7 \
-	mips64_microcode ppc32_microcode debian/
+	mips64_microcode ppc32_microcode
 
 FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	x86-codegen.h amd64-codegen.h ppc-codegen.h \
@@ -252,12 +219,12 @@ FILE_LIST := $(HDR) $(SOURCES) $(SUPPL) \
 	nvram_export.c udp_send.c udp_recv.c
 
 .PHONY: all
-all: $(PROG) nvram_export
+all: $(PROG) nvram_export$(BIN_EXT)
 
 $(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
-	$(LEX_C) $(C_OBJS) $(A_OBJS)
+	$(C_OBJS) $(A_OBJS)
 	@echo "Linking $@"
-	@$(CC) $(CFLAGS) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
+	@$(CC) $(CFLAGS) -o $@ $(C_OBJS) $(LIBS)
 
 udp_send$(BIN_EXT): udp_send.c net.c crc.c
 	@echo "Linking $@"
@@ -280,56 +247,20 @@ ppc32_microcode_dump.inc: rom2c$(BIN_EXT) ppc32_microcode
 # explicit dependencies needed for parallel jobs
 dev_rom.c: mips64_microcode_dump.inc ppc32_microcode_dump.inc
 
-asmdefs$(BIN_EXT): asmdefs.c mips64.h
-	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) -o $@ asmdefs.c
-
-asmdefs.h: asmdefs$(BIN_EXT)
-	@echo "Building assembly definitions header file"
-	@./asmdefs
-
 nvram_export$(BIN_EXT): nvram_export.o fs_nvram.o
 	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) $(INCLUDE) -o $@ nvram_export.o fs_nvram.o
-
-install: $(PROG) nvram_export$(BIN_EXT)
-	@echo "Installing"
-	install -d $(DESTDIR)/bin $(DESTDIR)/man/man1 $(DESTDIR)/man/man7 $(DESTDIR)/etc
-	install $(PROG) nvram_export$(BIN_EXT)   $(DESTDIR)/bin
-	install -m644 dynamips.1        $(DESTDIR)/man/man1
-	install -m644 nvram_export.1    $(DESTDIR)/man/man1
-	install -m644 hypervisor_mode.7 $(DESTDIR)/man/man7
-# install -m644 example         $(DESTDIR)/etc/dynamips
-
+	@$(CC) -Wall $(CFLAGS) $(INCLUDE) $(LDFLAGS) -o $@ nvram_export.o fs_nvram.o
 
 .PHONY: clean
 clean:
-	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc asmdefs$(BIN_EXT) \
-	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG) nvram_export$(BIN_EXT) nvram_export.o \
+	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc \
+	$(C_OBJS) $(PROG) nvram_export$(BIN_EXT) nvram_export.o \
 	mips64_microcode_dump.inc ppc32_microcode_dump.inc
 	$(RM) -f *~
 
-.PHONY: package
-package:
-	@mkdir -p distrib/$(PACKAGE)
-	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE)
-	@cd distrib ; $(TAR) czf $(ARCHIVE) $(PACKAGE)
-
-.PHONY: packdev
-packdev:
-	@mkdir -p distrib/$(PACKAGE_DEV)
-	@$(CP) -r $(FILE_LIST) distrib/$(PACKAGE_DEV)
-	@cd distrib ; $(TAR) czf $(ARCHIVE_DEV) $(PACKAGE_DEV)
-
-.SUFFIXES: .c .h .S .l .y .o
-
-.S.o:
-	@echo "Assembling $<"
-	@$(CC) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
+.SUFFIXES: .c .o
 
 .c.o:
 	@echo "Compiling $<"
-	@$(CC) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
+	@$(CC) $(CPPFLAGS) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
 
-.l.c:
-	$(LEX) -o$*.c $<
