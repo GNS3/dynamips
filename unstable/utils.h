@@ -54,6 +54,8 @@
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__ia64__)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
+#elif defined(__arm__) || defined (__aarch64__)
+#define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #endif
 
 #ifndef ARCH_BYTE_ORDER
