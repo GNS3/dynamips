@@ -200,7 +200,6 @@ LIBS += $(PCAP_LIB)
 endif
 
 C_OBJS=$(SOURCES:.c=.o)
-A_OBJS=$(ASMSRC:.S=.o)
 
 SUPPL=mips_mts.c Makefile ChangeLog COPYING README README.hypervisor TODO \
 	dynamips.1 nvram_export.1 hypervisor_mode.7 \
@@ -225,7 +224,7 @@ all: $(PROG) nvram_export$(BIN_EXT)
 $(PROG): mips64_microcode_dump.inc ppc32_microcode_dump.inc \
 	$(C_OBJS) $(A_OBJS)
 	@echo "Linking $@"
-	@$(CC) $(CFLAGS) -o $@ $(C_OBJS) $(A_OBJS) $(LIBS)
+	@$(CC) $(CFLAGS) -o $@ $(C_OBJS) $(LIBS)
 
 udp_send$(BIN_EXT): udp_send.c net.c crc.c
 	@echo "Linking $@"
@@ -248,30 +247,18 @@ ppc32_microcode_dump.inc: rom2c$(BIN_EXT) ppc32_microcode
 # explicit dependencies needed for parallel jobs
 dev_rom.c: mips64_microcode_dump.inc ppc32_microcode_dump.inc
 
-asmdefs$(BIN_EXT): asmdefs.c mips64.h
-	@echo "Linking $@"
-	@$(CC) -Wall $(CFLAGS) -o $@ asmdefs.c
-
-asmdefs.h: asmdefs$(BIN_EXT)
-	@echo "Building assembly definitions header file"
-	@./asmdefs
-
 nvram_export$(BIN_EXT): nvram_export.o fs_nvram.o
 	@echo "Linking $@"
 	@$(CC) -Wall $(CFLAGS) $(INCLUDE) $(LDFLAGS) -o $@ nvram_export.o fs_nvram.o
 
 .PHONY: clean
 clean:
-	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc asmdefs$(BIN_EXT) \
-	asmdefs.h $(C_OBJS) $(A_OBJS) $(PROG) nvram_export$(BIN_EXT) nvram_export.o \
+	$(RM) -f rom2c$(BIN_EXT) microcode_dump.inc \
+	$(C_OBJS) $(PROG) nvram_export$(BIN_EXT) nvram_export.o \
 	mips64_microcode_dump.inc ppc32_microcode_dump.inc
 	$(RM) -f *~
 
-.SUFFIXES: .c .S .o
-
-.S.o:
-	@echo "Assembling $<"
-	@$(CC) $(CFLAGS) $(INCLUDE) -c -o $*.o $<
+.SUFFIXES: .c .o
 
 .c.o:
 	@echo "Compiling $<"

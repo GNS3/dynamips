@@ -3,7 +3,6 @@
 # Host CPU selection
 #   - Use "x86" for a build on x86 (32-bits)
 #   - Use "amd64" for a build on x86_64 (64-bits)
-#   - Use "ppc32" for a build on powerpc (32-bits)
 #   - Use "nojit" for unsupported architectures.
 ifeq ($(shell arch),x86_64)
 export DYNAMIPS_ARCH?=amd64
