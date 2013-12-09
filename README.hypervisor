@@ -297,7 +297,7 @@ Virtual Cisco 7200 instances module ("c7200")
 * "c7200 list" : List all existing Cisco 7200 instances.
 
 * "c7200 set_npe <instance_name> <npe_name>" : Set the NPE model.
-  For example: npe-100, npe-400, ... The default is "npe-200".
+  For example: npe-100, npe-400, ... The default is "npe-400".
 
 * "c7200 set_midplane <instance_name> <midplane_name>" : Set the midplane
   model, it can be either "std" or "vxr". The default is "vxr".

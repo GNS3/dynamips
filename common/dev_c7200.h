@@ -35,7 +35,7 @@
 #include "vm.h"
 
 /* Default C7200 parameters */
-#define C7200_DEFAULT_NPE_TYPE     "npe-200"
+#define C7200_DEFAULT_NPE_TYPE     "npe-400"
 #define C7200_DEFAULT_MIDPLANE     "vxr"
 #define C7200_DEFAULT_RAM_SIZE     256
 #define C7200_DEFAULT_ROM_SIZE     4
