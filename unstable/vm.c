@@ -1207,7 +1207,7 @@ int vm_rename_instance(vm_instance_t *vm, char *name)
          goto err_lock;
    }
 
-   if (registry_rename(old_name,name,OBJ_TYPE_VM))
+   if (registry_rename(old_name,vm->name,OBJ_TYPE_VM))
       goto err_registry; /* failed to rename */
 
    vm_log(vm,"VM","renamed from '%s' to '%s'",old_name,vm->name);
