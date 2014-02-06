@@ -94,6 +94,9 @@ Virtual Machine module ("vm")
 * "vm delete <instance_name>" : Delete the specified instance.
   (since version 0.2.8-RC1)
 
+* "vm clean_delete <instance_name>" : Delete the specified instance and all 
+  the related files (best effort). (since version 0.2.11)
+
 * "vm start <instance_name>" : Start the instance. 
   At least the IOS image must be set.
   (since version 0.2.8-RC1)

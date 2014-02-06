@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <glob.h>
 
 #include "cpu.h"
 #include "vm.h"
@@ -122,6 +123,41 @@ static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
                             "unable to delete VM '%s'",argv[0]);
    }
 
+   return(res);
+}
+
+/* Delete a VM instance and related files */
+static int cmd_clean_delete(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   int res, i;
+   glob_t globbuf;
+   char *pattern;
+   vm_instance_t *vm;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   pattern = vm_build_filename(vm, "*");
+   vm_release(vm);
+   res = vm_delete_instance(argv[0]);
+
+   if (res == 1) {
+      /* delete related files (best effort) */
+      if (pattern != NULL && glob(pattern, GLOB_NOSORT, NULL, &globbuf) == 0) {
+         for (i = 0; i < globbuf.gl_pathc; i++) {
+            remove(globbuf.gl_pathv[i]);
+         }
+
+         globfree(&globbuf);
+      }
+
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"VM '%s' and related files deleted",argv[0]);
+   } else {
+      hypervisor_send_reply(conn,HSC_ERR_DELETE,1,
+                            "unable to delete VM '%s'",argv[0]);
+   }
+
+   free(pattern);
    return(res);
 }
 
@@ -1167,6 +1203,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "create", 3, 3, cmd_create, NULL },
    { "rename", 2, 2, cmd_rename, NULL },
    { "delete", 1, 1, cmd_delete, NULL },
+   { "clean_delete", 1, 1, cmd_clean_delete, NULL, },
    { "start", 1, 1, cmd_start, NULL },
    { "stop", 1, 1, cmd_stop, NULL },
    { "get_status", 1, 1, cmd_get_status, NULL },
