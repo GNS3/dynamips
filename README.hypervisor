@@ -397,6 +397,9 @@ Available since version 0.2.6-RC3.
   address of the router. By default, the address is automatically generated
   with this pattern : c0<instance_id>.<process_pid>.0000 (Cisco format).
 
+* "c2691 set_system_id <instance_name> <system_id>" : 
+  Set the system id. (since version 0.2.11)
+
 * "c2691 show_hardware <instance_name>" : Display virtual hardware info 
   about the instance.
 

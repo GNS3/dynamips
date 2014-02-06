@@ -240,6 +240,27 @@ static int c2691_burn_mac_addr(c2691_t *router,n_eth_addr_t *addr)
    return(0);
 }
 
+/* Set the system id or processor board id in the eeprom */
+int c2691_set_system_id(c2691_t *router,char *id)
+{
+  /* 11 characters is enough. Array is 20 long */
+  strncpy(router->board_id,id,13);
+  /* Make sure it is null terminated */
+  router->board_id[13] = 0x00;
+  c2691_refresh_systemid(router);
+  return 0;
+}
+
+int c2691_refresh_systemid(c2691_t *router)
+{
+  if (router->board_id[0] == 0x00) return(0);
+  m_uint8_t buf[11];
+
+  parse_board_id(buf,router->board_id,11);
+  cisco_eeprom_set_region(&router->mb_eeprom ,62,buf,11);
+  return (0);
+}
+
 /* Set chassis MAC address */
 int c2691_chassis_set_mac_addr(c2691_t *router,char *mac_addr)
 {
