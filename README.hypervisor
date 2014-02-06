@@ -302,9 +302,13 @@ Virtual Cisco 7200 instances module ("c7200")
 * "c7200 set_midplane <instance_name> <midplane_name>" : Set the midplane
   model, it can be either "std" or "vxr". The default is "vxr".
 
-* "c7200 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c7200 get_mac_addr <instance_name>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : ca<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c7200 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. ca01.1234.0000) or the standard format (e.g. ca:01:12:34:00:00).
 
 * "c7200 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)
@@ -332,9 +336,13 @@ Available since version 0.2.6-RC3.
 
 * "c3745 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c3745 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c3745 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : c4<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c3745 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. c401.1234.0000) or the standard format (e.g. c4:01:12:34:00:00).
 
 * "c3745 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)
@@ -352,9 +360,13 @@ Available since version 0.2.6-RC3.
 
 * "c3725 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c3725 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c3725 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : c2<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c3725 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. c201.1234.0000) or the standard format (e.g. c2:01:12:34:00:00).
 
 * "c3725 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)
@@ -373,9 +385,13 @@ Virtual Cisco 3600 instances module ("c3600")
 
 * "c3600 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c3600 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c3600 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : cc<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c3600 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. cc01.1234.0000) or the standard format (e.g. cc:01:12:34:00:00).
 
 * "c3600 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)
@@ -393,9 +409,13 @@ Available since version 0.2.6-RC3.
 
 * "c2691 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c2691 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c2691 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : c0<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c2691 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. c001.1234.0000) or the standard format (e.g. c0:01:12:34:00:00).
 
 * "c2691 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.11)
@@ -417,9 +437,13 @@ Available since version 0.2.7-RC1.
 
 * "c2600 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c2600 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c2600 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : c8<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c2600 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. c801.1234.0000) or the standard format (e.g. c8:01:12:34:00:00).
 
 * "c2600 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)
@@ -440,9 +464,13 @@ Available since version 0.2.8-RC1.
 
 * "c1700 set_iomem <instance_name> <size>" : Set the I/O mem size.
 
-* "c1700 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+* "c1700 get_mac_addr <instance_name> <mac_addr>" : Get the base MAC
   address of the router. By default, the address is automatically generated
   with this pattern : d0<instance_id>.<process_pid>.0000 (Cisco format).
+
+* "c1700 set_mac_addr <instance_name> <mac_addr>" : Set the base MAC
+  address of the router. The MAC address patern can be the Cisco format
+  (e.g. d001.1234.0000) or the standard format (e.g. d0:01:12:34:00:00).
 
 * "c1700 set_system_id <instance_name> <system_id>" : 
   Set the system id. (since version 0.2.8-RC3-community)

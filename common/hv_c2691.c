@@ -76,6 +76,29 @@ static int cmd_set_system_id(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Get the base MAC address for the chassis */
+static int cmd_get_mac_addr(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   c2691_t *router;
+
+   if (!(vm = hypervisor_find_vm(conn,argv[0])))
+      return(-1);
+
+   router = VM_C2691(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,
+                         "%2.2x%2.2x.%2.2x%2.2x.%2.2x%2.2x",
+                         router->mac_addr.eth_addr_byte[0],
+                         router->mac_addr.eth_addr_byte[1],
+                         router->mac_addr.eth_addr_byte[2],
+                         router->mac_addr.eth_addr_byte[3],
+                         router->mac_addr.eth_addr_byte[4],
+                         router->mac_addr.eth_addr_byte[5]);
+
+   vm_release(vm);
+   return(0);
+}
+
 /* Set the base MAC address for the chassis */
 static int cmd_set_mac_addr(hypervisor_conn_t *conn,int argc,char *argv[])
 {
@@ -136,6 +159,7 @@ static int cmd_c2691_list(hypervisor_conn_t *conn,int argc,char *argv[])
 /* C2691 commands */
 static hypervisor_cmd_t c2691_cmd_array[] = {
    { "set_iomem", 2, 2, cmd_set_iomem, NULL },
+   { "get_mac_addr", 1, 1, cmd_get_mac_addr, NULL },
    { "set_mac_addr", 2, 2, cmd_set_mac_addr, NULL },
    { "set_system_id", 2, 2, cmd_set_system_id, NULL },
    { "show_hardware", 1, 1, cmd_show_hardware, NULL },
