@@ -352,15 +352,19 @@ List all existing Cisco 7200 instances.
 .TP
 .B c7200 set_npe <instance_name> <npe_name>
 Set the NPE model.  For example: npe\(hy100, npe\(hy400, ... The default is
-"npe\(hy200".
+"npe\(hy400".
 .TP
 .B c7200 set_midplane <instance_name> <midplane_name>
 Set the midplane model, it can be either "std" or "vxr". The default is "vxr".
 .TP
-.B c7200 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c7200 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : ca<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c7200 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. ca01.1234.0000) or the standard format (e.g. ca:01:12:34:00:00).
 .TP
 .B c7200 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
@@ -388,10 +392,14 @@ List all existing Cisco 3745 instances.
 .B c3745 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c3745 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c3745 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : c4<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c3745 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. c401.1234.0000) or the standard format (e.g. c4:01:12:34:00:00).
 .TP
 .B c3745 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
@@ -409,10 +417,14 @@ List all existing Cisco 3725 instances.
 .B c3725 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c3725 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c3725 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : c2<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c3725 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. c201.1234.0000) or the standard format (e.g. c2:01:12:34:00:00).
 .TP
 .B c3725 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
@@ -434,10 +446,14 @@ Set the chassis model.  Possible values: 3620, 3640, 3660. The default is
 .B c3600 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c3600 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c3600 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : cc<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c3600 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. cc01.1234.0000) or the standard format (e.g. cc:01:12:34:00:00).
 .TP
 .B c3600 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
@@ -455,10 +471,17 @@ List all existing Cisco 2691 instances.
 .B c2691 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c2691 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c2691 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : c0<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c2691 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. c001.1234.0000) or the standard format (e.g. c0:01:12:34:00:00).
+.TP
+.B c2691 set_system_id <instance_name> <system_id>
+Set the system id. (since version 0.2.11)
 .TP
 .B c2691 show_hardware <instance_name>
 Display virtual hardware info about the instance.
@@ -479,10 +502,14 @@ Set the chassis model. Possible values: 2610, 2611, 2620, 2621,
 .B c2600 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c2600 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c2600 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : c8<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c2600 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. c801.1234.0000) or the standard format (e.g. c8:01:12:34:00:00).
 .TP
 .B c2600 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
@@ -506,10 +533,14 @@ Set the chassis model. Possible values: 1710, 1720, 1721, 1750,
 .B c1700 set_iomem <instance_name> <size>
 Set the I/O mem size.
 .TP
-.B c1700 set_mac_addr <instance_name> <mac_addr>
-Set the base MAC address of the router. By default, the address is
+.B c1700 get_mac_addr <instance_name>
+Get the base MAC address of the router. By default, the address is
 automatically generated with this pattern : d0<instance_id>.<process_pid>.0000
-(Cisco format).
+(Cisco format). (since version 0.2.11)
+.TP
+.B c1700 set_mac_addr <instance_name> <mac_addr>
+Set the base MAC address of the router. The MAC address patern can be the Cisco 
+format (e.g. d001.1234.0000) or the standard format (e.g. d0:01:12:34:00:00).
 .TP
 .B c1700 set_system_id <instance_name> <system_id>
 Set the system id. (since version 0.2.8\-RC3\-community)
