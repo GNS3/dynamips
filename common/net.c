@@ -718,6 +718,10 @@ int udp_listen_range(char *ip_addr,int port_start,int port_end,int *port)
 }
 
 #if HAS_RFC2553
+#if !defined(IPV6_JOIN_GROUP) && defined(IPV6_ADD_MEMBERSHIP)
+// cygwin doesn't have IPV6_JOIN_GROUP anymore (is copy of IPV6_ADD_MEMBERSHIP)
+#define IPV6_JOIN_GROUP IPV6_ADD_MEMBERSHIP
+#endif
 /* Open a multicast socket */
 int udp_mcast_socket(char *mcast_group,int mcast_port,
                      struct sockaddr *sa,int *sa_len)
