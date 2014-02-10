@@ -2769,3 +2769,72 @@ Fixed issue #17 - Dynamips hangs on startup if no (or unknown) parameters are gi
 +--------------------.
 | Release:  v0.2.10   |
 +--------------------'
+
+16-Sep-2013 to 10-Feb-2014
+--------------------------
+   - Make memzone_map_* functions return NULL on failure.
+   - Add memzone_map_exec_area.
+   - Add memzone_unmap.
+   - Add memzone_sync and memzone_sync_all.
+   - Remove unnecessary includes to sys/mman.h.
+   - Add documentation on the hypervisor module "object_store".
+   - Update documentation on the hypervisor module "hypervisor".
+   - Add documentation on the hypervisor module "vm_debug".
+   - Update documentation on the hypervisor module "ethsw".
+   - Add documentation on the hypervisor module "atm_bridge".
+   - Update documentation on the hypervisor module "nio".
+   - Fix hypervisor command push_config not receiving 3 arguments.
+   - Update documentation on the hypervisor module "vm".
+   - Update documentation on the hypervisor module "c7200".
+   - Update documentation on the hypervisor module "c3600".
+   - Add documentation on the hypervisor module "c3745".
+   - Add documentation on the hypervisor module "c3725".
+   - Add documentation on the hypervisor module "c2691".
+   - Add documentation on the hypervisor module "c2600".
+   - Add documentation on the hypervisor module "c1700".
+   - Update documentation.
+   - Add registry_rename.
+   - Add hypervisor command "vm rename <instance_name> <new_name>".
+   - Fix documentation of hypervisor command vm create.
+   - Add hypervisor command "nio rename <nio_name> <new_name>".
+   - Add hypervisor command "nio_bridge rename <bridge_name> <new_name>".
+   - Add hypervisor command "frsw rename <switch_name> <new_name>".
+   - Add hypervisor command "atmsw rename <switch_name> <new_name>".
+   - Document when hypervisor mode became available.
+   - Add hypervisor command "atm_bridge rename <bridge_name> <new_name>".
+   - Add hypervisor command "atm_bridge rename <bridge_name> <new_name>".
+   - Add hypervisor command "ethsw rename <switch_name> <new_name>".
+   - Add hypervisor command "object_store rename <object_name> <new_name>".
+   - Add hypervisor command "vm get_status <instance_name>".
+   - Warn the VM isn't running when connecting to the console/aux port.
+   - Update changelog.
+   - Replay old text when you connect to the console/aux port.
+   - Fix hypervisor command 'vm rename' not renaming it's files.
+   - Fix crash in vm_free with an alternate ROM filename.
+   - Makefiles:
+     - Remove un-needed code
+     - Stable makefile updates
+     - Top level makefile updates
+     - Unstable makefile updates
+     - Remove powerpc comment
+     - Remove references to asmdefs
+   - Define arm architecture (thanks to Ubuntu for the patch)
+   - Change default NPE for c7200 platform from npe-200 to npe-400.
+   - Fixed wrong variable being passed to registry_rename in vm_rename_instance.
+   - Possibility to set the system id for c2691 routers.
+   - Hypervisor commands to get the base MAC address of routers.
+   - Add in the README.hypervisor that the get_mac_addr hypervisor commands are available since version 0.2.11
+   - Add hypervisor command 'vm clean_delete <instance>'.
+   - Add missing changes to the hypervisor_mode.7 man page.
+   - Make sure IPV6_JOIN_GROUP is defined in cygwin.
+   - Bump version to v0.2.11.
+
+Fixed issue #20 - segmentation fault when accessing a device that failed to memory map it's file
+Implemented enhancement #21 - Renaming devices
+Closed issue #22 - Hypervisor documentation is out of date
+Implemented enhancement #36 - hypervisor command to clean the files of a vm
+Fixed issue #27 - Rename issues.
+
++--------------------.
+| Release:  v0.2.11   |
++--------------------'

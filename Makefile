@@ -33,7 +33,7 @@ export HAS_POSIX_MEMALIGN?=1
 
 # Current dynamips release
 export VERSION_TRAIN=0.2.11
-export VERSION_SUB=-dev
+export VERSION_SUB=
 
 # Executable binary extension and prefix directory
 export PREFIX?=/usr
