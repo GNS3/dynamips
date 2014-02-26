@@ -329,7 +329,7 @@ enum {
 #define GT_RXDESC_ES           0x00008000    /* Error Summary */
 #define GT_RXDESC_IGMP         0x00004000    /* IGMP packet detected */
 #define GT_RXDESC_HE           0x00002000    /* Hash Table Expired */
-#define GT_RXDESC_M            0x00001000    /* Missed Frame */
+#define GT_RXDESC_M            0x00001000    /* Dst MAC Miss in Hash Table */
 #define GT_RXDESC_FT           0x00000800    /* Frame Type (802.3/Ethernet) */
 #define GT_RXDESC_SF           0x00000100    /* Short Frame Error */
 #define GT_RXDESC_MFL          0x00000080    /* Maximum Frame Length Error */
@@ -2416,11 +2416,21 @@ static int gt_eth_hash_lookup(struct gt_data *d,struct eth_port *port,
  *
  * Return values:
  *   - 0: Discard packet ;
- *   - 1: Receive packet ;
- *   - 2: Receive packet and set "M" bit in RX descriptor.
+ *   - 1: Receive packet but set "M" bit in RX descriptor;
+ *   - 2: Receive packet.
  *
  * The documentation is not clear about the M bit in RX descriptor.
  * It is described as "Miss" or "Match" depending on the section.
+ * However, it turns out that IOS treats the bit as "Miss" bit.
+ * If the bit is set, the destination MAC address has not been found
+ * in the hash table, and the frame may be subject to software MAC
+ * address filter associated by IOS with the interface. If the bit
+ * is clear, the destination MAC address has been found in the hash
+ * table and the frame will be accepted by IOS unconditionally.
+ * The M bit is required to correctly handle unicast frames destined
+ * to other MAC addresses when the interface works in promiscuous mode.
+ * IOS puts an interface into promiscuous mode when multicast routing
+ * or bridging has been configured on it.
  */
 static inline int gt_eth_handle_rx_daddr(struct gt_data *d,
                                          struct eth_port *port,
@@ -2536,7 +2546,7 @@ static int gt_eth_handle_rxqueue(struct gt_data *d,u_int port_id,u_int queue,
    if (hash_res == GT_HTLOOKUP_HOP_EXCEEDED)
       rxd0.cmd_stat |= GT_RXDESC_HE;
 
-   if (addr_action == 2)
+   if (addr_action == 1)
       rxd0.cmd_stat |= GT_RXDESC_M;
 
    if (ntohs(hdr->type) <= N_ETH_MTU)   /* 802.3 frame */
