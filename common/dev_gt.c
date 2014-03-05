@@ -2155,8 +2155,8 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
                                       int queue)
 {   
    u_char pkt[GT_MAX_PKT_SIZE],*pkt_ptr;
-   struct sdma_desc txd0,ctxd,*ptxd;
-   m_uint32_t tx_start,tx_current;
+   struct sdma_desc ctxd;
+   m_uint32_t tx_current;
    m_uint32_t len,tot_len;
    int abort = FALSE;
 
@@ -2168,17 +2168,29 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
       return(FALSE);
 
    /* Copy the current txring descriptor */
-   tx_start = tx_current = port->tx_current[queue];
+   tx_current = port->tx_current[queue];
 
-   if (!tx_start)
+   if (!tx_current)
       return(FALSE);
 
-   ptxd = &txd0;
-   gt_sdma_desc_read(d,tx_start,ptxd);
+   gt_sdma_desc_read(d,tx_current,&ctxd);
 
    /* If we don't own the first descriptor, we cannot transmit */
-   if (!(txd0.cmd_stat & GT_TXDESC_OWN))
+   if (!(ctxd.cmd_stat & GT_TXDESC_OWN)) {
+      if (queue == 0) {
+         port->icr |= GT_ICR_TXENDL;
+         port->sdcmr |= GT_SDCMR_STDL;
+         port->sdcmr &= ~GT_SDCMR_TXDL;
+         
+      } else {
+         port->icr |= GT_ICR_TXENDH;
+         port->sdcmr |= GT_SDCMR_STDH;
+         port->sdcmr &= ~GT_SDCMR_TXDH;
+      }
+
+      gt_eth_update_int_status(d,port);
       return(FALSE);
+   }
 
    /* Empty packet for now */
    pkt_ptr = pkt;
@@ -2187,43 +2199,41 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
    for(;;) {
 #if DEBUG_ETH_TX
       GT_LOG(d,"gt_eth_handle_txqueue: loop: "
-             "cmd_stat=0x%x, buf_size=0x%x, next_ptr=0x%x, buf_ptr=0x%x\n",
-             ptxd->cmd_stat,ptxd->buf_size,ptxd->next_ptr,ptxd->buf_ptr);
+             "tx_current=0x%08x, cmd_stat=0x%08x, buf_size=0x%08x, next_ptr=0x%08x, buf_ptr=0x%08x\n",
+             tx_current, ctxd.cmd_stat, ctxd.buf_size, ctxd.next_ptr, ctxd.buf_ptr);
 #endif
 
-      if (!(ptxd->cmd_stat & GT_TXDESC_OWN)) {
+      if (!(ctxd.cmd_stat & GT_TXDESC_OWN)) {
          GT_LOG(d,"gt_eth_handle_txqueue: descriptor not owned!\n");
          abort = TRUE;
          break;
       }
 
       /* Copy packet data to the buffer */
-      len = (ptxd->buf_size & GT_TXDESC_BC_MASK) >> GT_TXDESC_BC_SHIFT;
+      len = (ctxd.buf_size & GT_TXDESC_BC_MASK) >> GT_TXDESC_BC_SHIFT;
 
-      physmem_copy_from_vm(d->vm,pkt_ptr,ptxd->buf_ptr,len);
+      physmem_copy_from_vm(d->vm,pkt_ptr,ctxd.buf_ptr,len);
       pkt_ptr += len;
       tot_len += len;
 
-      /* Clear the OWN bit if this is not the first descriptor */
-      if (!(ptxd->cmd_stat & GT_TXDESC_F)) {
-         ptxd->cmd_stat &= ~GT_TXDESC_OWN;
-         physmem_copy_u32_to_vm(d->vm,tx_current,ptxd->cmd_stat);
+      /* Clear the OWN bit if this is not the last descriptor */
+      if (!(ctxd.cmd_stat & GT_TXDESC_L)) {
+         ctxd.cmd_stat &= ~GT_TXDESC_OWN;
+         physmem_copy_u32_to_vm(d->vm,tx_current+4,ctxd.cmd_stat);
       }
 
-      tx_current = ptxd->next_ptr;
-
       /* Last descriptor or no more desc available ? */
-      if (ptxd->cmd_stat & GT_TXDESC_L)
+      if (ctxd.cmd_stat & GT_TXDESC_L)
          break;
 
-      if (!tx_current) {
+      if (!(ctxd.next_ptr)) {
          abort = TRUE;
          break;
       }
 
       /* Fetch the next descriptor */
+      tx_current = ctxd.next_ptr;
       gt_sdma_desc_read(d,tx_current,&ctxd);
-      ptxd = &ctxd;
    }
 
    if ((tot_len != 0) && !abort) {
@@ -2242,11 +2252,11 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
       port->tx_frames++;
    }
 
-   /* Clear the OWN flag of the first descriptor */
-   txd0.cmd_stat &= ~GT_TXDESC_OWN;
-   physmem_copy_u32_to_vm(d->vm,tx_start+4,txd0.cmd_stat);
+   /* Clear the OWN flag of the last descriptor */
+   ctxd.cmd_stat &= ~GT_TXDESC_OWN;
+   physmem_copy_u32_to_vm(d->vm,tx_current+4,ctxd.cmd_stat);
 
-   port->tx_current[queue] = tx_current;
+   port->tx_current[queue] = tx_current = ctxd.next_ptr;
    
    /* Notify host about transmitted packet */
    if (queue == 0)
