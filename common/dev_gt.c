@@ -2207,7 +2207,9 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
 #endif
 
       if (!(ctxd.cmd_stat & GT_TXDESC_OWN)) {
+#if DEBUG_ETH_TX
          GT_LOG(d,"gt_eth_handle_txqueue: descriptor not owned!\n");
+#endif
          abort = TRUE;
          break;
       }
