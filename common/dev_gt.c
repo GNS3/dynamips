@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 
 #include "utils.h"
 #include "net.h"
@@ -167,6 +168,8 @@ struct sdma_desc {
 #define GT_SDMA_CMD_EI   0x00800000    /* Enable Interrupt */
 #define GT_SDMA_CMD_F    0x00020000    /* First buffer */
 #define GT_SDMA_CMD_L    0x00010000    /* Last buffer */
+
+#define GT_SDMA_CMD_OFFSET   offsetof(struct sdma_desc,cmd_stat) /* Offset of the Command/Status word */
 
 /* === MultiProtocol Serial Controller (MPSC) ============================= */
 
@@ -1013,7 +1016,7 @@ static int gt_sdma_tx_start(struct gt_data *d,struct sdma_channel *chan)
       /* Clear the OWN bit if this is not the first descriptor */
       if (!(ptxd->cmd_stat & GT_TXDESC_F)) {
          ptxd->cmd_stat &= ~GT_TXDESC_OWN;
-         physmem_copy_u32_to_vm(d->vm,tx_current+4,ptxd->cmd_stat);
+         physmem_copy_u32_to_vm(d->vm,tx_current+GT_SDMA_CMD_OFFSET,ptxd->cmd_stat);
       }
 
       tx_current = ptxd->next_ptr;
@@ -1046,7 +1049,7 @@ static int gt_sdma_tx_start(struct gt_data *d,struct sdma_channel *chan)
 
    /* Clear the OWN flag of the first descriptor */
    txd0.cmd_stat &= ~GT_TXDESC_OWN;
-   physmem_copy_u32_to_vm(d->vm,tx_start+4,txd0.cmd_stat);
+   physmem_copy_u32_to_vm(d->vm,tx_start+GT_SDMA_CMD_OFFSET,txd0.cmd_stat);
 
    chan->sctdp = tx_current;
 
@@ -2219,7 +2222,7 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
       /* Clear the OWN bit if this is not the last descriptor */
       if (!(ctxd.cmd_stat & GT_TXDESC_L)) {
          ctxd.cmd_stat &= ~GT_TXDESC_OWN;
-         physmem_copy_u32_to_vm(d->vm,tx_current+4,ctxd.cmd_stat);
+         physmem_copy_u32_to_vm(d->vm,tx_current+GT_SDMA_CMD_OFFSET,ctxd.cmd_stat);
       }
 
       /* Last descriptor or no more desc available ? */
@@ -2254,7 +2257,7 @@ static int gt_eth_handle_port_txqueue(struct gt_data *d,struct eth_port *port,
 
    /* Clear the OWN flag of the last descriptor */
    ctxd.cmd_stat &= ~GT_TXDESC_OWN;
-   physmem_copy_u32_to_vm(d->vm,tx_current+4,ctxd.cmd_stat);
+   physmem_copy_u32_to_vm(d->vm,tx_current+GT_SDMA_CMD_OFFSET,ctxd.cmd_stat);
 
    port->tx_current[queue] = tx_current = ctxd.next_ptr;
    
