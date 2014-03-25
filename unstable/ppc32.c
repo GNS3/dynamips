@@ -45,7 +45,7 @@ int ppc32_init(cpu_ppc_t *cpu)
    jit_op_init_cpu(cpu->gen);
 
    /* Initialize idle timer */
-   cpu->gen->idle_max = 1500;
+   cpu->gen->idle_max = 500;
    cpu->gen->idle_sleep_time = 30000;
 
    /* Timer IRQ parameters (default frequency: 250 Hz <=> 4ms period) */
