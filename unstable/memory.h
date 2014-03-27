@@ -122,6 +122,10 @@ void physmem_dma_transfer(vm_instance_t *vm,m_uint64_t src,m_uint64_t dst,
 /* strlen in VM physical memory */
 size_t physmem_strlen(vm_instance_t *vm,m_uint64_t paddr);
 
+/* find sequence of bytes in VM cacheable physical memory interval [first,last] */
+int physmem_cfind(vm_instance_t *vm,m_uint8_t *bytes,size_t len,
+                 m_uint64_t first,m_uint64_t last, m_uint64_t *paddr);
+
 /* Physical memory dump (32-bit words) */
 void physmem_dump_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t u32_count);
 

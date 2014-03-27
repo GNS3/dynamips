@@ -181,6 +181,46 @@ char *m_strquote(char *buffer,size_t buf_len,char *str)
    return buffer;
 }
 
+/* 
+ * Decode from hex.
+ *
+ * hex to raw bytes, returning count of bytes.
+ * maxlen limits output buffer size.
+ */
+int hex_decode(unsigned char *out,const unsigned char *in,int maxlen)
+{
+#define BAD -1
+   static const char hexval[] = {
+      BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD,
+      BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD,
+      BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD,
+        0,  1,  2,  3,   4,  5,  6,  7,   8,  9,BAD,BAD, BAD,BAD,BAD,BAD,
+      BAD, 10, 11, 12,  13, 14, 15,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD,
+      BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD,
+      BAD, 10, 11, 12,  13, 14, 15,BAD, BAD,BAD,BAD,BAD, BAD,BAD,BAD,BAD
+   };
+   int len = 0;
+   int empty = TRUE;
+
+   for(;len < maxlen;) {
+      if (*in > sizeof(hexval) || hexval[*in] == BAD)
+         break;
+
+      if (empty) {
+         *out = (unsigned char)hexval[*in] << 4;
+      }
+      else {
+         *out |= (unsigned char)hexval[*in];
+         ++out;
+         ++len;
+      }
+      ++in;
+      empty = !empty;
+   }
+
+   return(len);
+}
+
 /* Ugly function that dumps a structure in hexa and ascii. */
 void mem_dump(FILE *f_output,u_char *pkt,u_int len)
 {

@@ -309,6 +309,66 @@ size_t physmem_strlen(vm_instance_t *vm,m_uint64_t paddr)
    return(len);
 }
 
+/* find sequence of bytes in VM cacheable physical memory interval [first,last] */
+int physmem_cfind(vm_instance_t *vm,m_uint8_t *bytes,size_t len,
+                 m_uint64_t first,m_uint64_t last, m_uint64_t *paddr)
+{
+   struct vdevice *dev;
+   m_uint8_t *buffer;
+   size_t i, buflen;
+   m_uint64_t last_dev_addr;
+
+   if (len <= 0 || first > last || len + 1 > last - first)
+        return(-1); // nothing to find
+
+   buffer = malloc(len);
+   i = 0;
+   buflen = 0;
+   for(dev = vm->dev_list; dev; dev = dev->next) { // each device
+      if (dev == NULL || dev->phys_addr > last)
+         break; // no more devices
+      if (!(dev->flags & VDEVICE_FLAG_CACHING))
+         continue; // not cacheable
+
+      // reset buffer if previous device is not continuous in memory
+      if (first + buflen != dev->phys_addr) {
+         i = 0;
+         buflen = 0;
+      }
+      last_dev_addr = dev->phys_addr + dev->phys_len - 1;
+      if (last_dev_addr > last)
+         last_dev_addr = last;
+
+      // fill buffer
+      for (; buflen < len && first + buflen <= last_dev_addr; ++buflen) {
+         buffer[buflen] = physmem_copy_u8_from_vm(vm, first + buflen);
+      }
+      if (buflen < len)
+         continue; // not enough data
+
+      // test each possible match
+      while (first + len <= last_dev_addr) {
+         if (i >= len)
+            i = 0;
+         if ((i == 0 || memcmp(buffer, bytes+len-i, i) == 0) &&
+              memcmp(buffer+i, bytes, len-i) == 0) {
+            // match found
+            if (paddr)
+               *paddr = first;
+            free(buffer);
+            return(0);
+         }
+
+         buffer[i] = physmem_copy_u8_from_vm(vm, first + len);
+         ++i;
+         ++first;
+      }
+   }
+
+   free(buffer);
+   return(-1); // not found
+}
+
 /* Physical memory dump (32-bit words) */
 void physmem_dump_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint32_t u32_count)
 {

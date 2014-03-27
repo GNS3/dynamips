@@ -412,6 +412,9 @@ int m_strtok(char *str,char delim,char **array,int max_count);
 /* Quote a string */
 char *m_strquote(char *buffer,size_t buf_len,char *str);
 
+/* Decode from hex. */
+int hex_decode(unsigned char *out,const unsigned char *in,int maxlen);
+
 /* Ugly function that dumps a structure in hexa and ascii. */
 void mem_dump(FILE *f_output,u_char *pkt,u_int len);
 

@@ -221,6 +221,48 @@ static int cmd_pmem_r16(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
+/* Finds a sequence of bytes in cacheable physical memory */
+static int cmd_pmem_cfind(hypervisor_conn_t *conn,int argc,char *argv[])
+{
+   vm_instance_t *vm;
+   m_uint64_t start, end, addr;
+   m_uint8_t *bytes;
+   size_t len;
+
+   if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
+      return(-1);
+
+   len = strlen(argv[2]);
+   if (len == 0 || len % 2 == 1) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_INV_PARAM,1,"Invalid byte sequence (invalid length=%u)", (unsigned int)len);
+      return(-1);
+   }
+
+   len = len / 2;
+   bytes = malloc(sizeof(m_uint8_t)*len);
+   if (len != hex_decode(bytes, (unsigned char*)argv[2], len)) {
+      free(bytes);
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_INV_PARAM,1,"Invalid byte sequence (non-hexadecimal character)");
+      return(-1);
+   }
+
+   start = (argc > 3)? strtoull(argv[3],NULL,0): 0;
+   end = (argc > 4)? strtoull(argv[4],NULL,0): 0xFFFFFFFFFFFFFFFFULL;
+   if (physmem_cfind(vm, bytes, len, start, end, &addr)) {
+      free(bytes);
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_NOT_FOUND,1,"Not found");
+      return(-1);
+   }
+
+   free(bytes);
+   vm_release(vm);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"0x%4.4x",addr);
+   return(0);
+}
+
 /* VM debug commands */
 static hypervisor_cmd_t vm_cmd_array[] = {
    { "show_cpu_regs", 2, 2, cmd_show_cpu_regs, NULL },
@@ -232,6 +274,7 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "pmem_r32", 3, 3, cmd_pmem_r32, NULL },
    { "pmem_w16", 4, 4, cmd_pmem_w16, NULL },
    { "pmem_r16", 3, 3, cmd_pmem_r16, NULL },
+   { "pmem_cfind", 3, 5, cmd_pmem_cfind, NULL },
    { NULL, -1, -1, NULL, NULL },
 };
 

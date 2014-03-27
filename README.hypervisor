@@ -293,6 +293,13 @@ Available since version 0.2.6-RC1.
 * "vm_debug pmem_r16 <instance_name> <cpu_id> <address>" : 
   Read a 16-bit memory word from physical memory.
 
+* "vm_debug pmem_cfind <instance_name> <cpu_id> <bytes> [<first> [<last>]]" :
+  Find a sequence of bytes in physical memory interval [first,last].
+  The byte sequence is composed of hexadecimal characters and must have a length
+  multiple of 2. The interval defaults to the complete memory space.
+  Only the memory of cacheable devices (ram, rom, disks, ...) is searched.
+  (since version 0.2.12)
+
 
 Virtual Cisco 7200 instances module ("c7200")
 ==============================================
