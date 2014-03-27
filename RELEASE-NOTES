@@ -1,48 +1,33 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.11
+Version:  v0.2.12
 
-Release date:  Monday, February 10, 2014 (2014-02-10)
+Release date:  Thursday, March 27, 2014 (2014-03-27)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.11
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.12
 
 License: GNU GPLv2
 
 
-What's New since v0.2.10
+What's New since v0.2.11
 ========================
 
-Full update of hypervisor documentation. Most of the outdated info 
-was still from 0.2.5, the initial version of the hypervisor.
-Change default NPE for c7200 platform from npe-200 to npe-400.
-New hypervisor commands:
-- vm           rename <instance_name> <new_name>
-- nio          rename <nio_name> <new_name>
-- nio_bridge   rename <bridge_name> <new_name>
-- frsw         rename <switch_name> <new_name>
-- atmsw        rename <switch_name> <new_name>
-- atm_bridge   rename <bridge_name> <new_name>
-- ethsw        rename <switch_name> <new_name>
-- object_store rename <object_name> <new_name>
-- vm get_status <instance_name>
-- c2691 set_system_id <instance_name> <system_id>
-- c7200 get_mac_addr <instance_name>
-- c3745 get_mac_addr <instance_name>
-- c3725 get_mac_addr <instance_name>
-- c3600 get_mac_addr <instance_name>
-- c2691 get_mac_addr <instance_name>
-- c2600 get_mac_addr <instance_name>
-- c1700 get_mac_addr <instance_name>
-- vm clean_delete <instance_name>
-Changes to the makefiles.
-Other minor changes and fixes.
+Fixed all known multicast issues. Patches by Peter Palúch.
+New hypervisor command:
+- vm_debug pmem_cfind <instance_name> <cpu_id> <bytes> [<first> [<last>]]
 
-Fixed issue #20 - segmentation fault when accessing a device that failed to memory map it's file
-Implemented enhancement #21 - Renaming devices
-Closed issue #22 - Hypervisor documentation is out of date
-Implemented enhancement #36 - hypervisor command to clean the files of a vm
-Fixed issue #27 - Rename issues.
+Fixed issue #29 - packet loss with multicast traffic
+Closed issue #31 - create hypervisor command to find a pattern in the router memory
+
+
+What's Also New since v0.2.10
+=============================
+
+(forgot these in the previous release notes)
+
+Old text is replayed when you connect to the console/aux port.
+Warn the VM isn't running when connecting to the console/aux port.
 
 
 Known Issues

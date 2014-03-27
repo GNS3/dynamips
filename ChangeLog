@@ -2838,3 +2838,30 @@ Fixed issue #27 - Rename issues.
 +--------------------.
 | Release:  v0.2.11   |
 +--------------------'
+
+10-Feb-2014 to 27-Mar-2014
+--------------------------
+   - Missing space in hypervisor_mode.7 manpage (line 310)
+   - gt96k: more debug info
+   - Fix packet looping on platforms with Gt96k FE.
+     - The specs were not clear on whether the M-bit was a "Miss" or "Match".
+     - It was being treated as a "Match" bit but it turns out IOS treats it as a "Miss" bit.
+     @see http://forum.gns3.net/post26316.html#p26316
+   - Gt96k patch correcting the reporting of processed transmit descriptors back to IOS.
+     - Fixes missing interrupt when gt96k doesn't own the first trasmit descriptor.
+     - Fixes incorrect clearing of the Own bit. (last must wait for transmission, the rest are cleared when processed)
+     - Fixes offset when writing back the cmd word of the non-last descriptors. (missing from 0.2.6-RC3)
+     - Affects c2691, c3725 and c3745.
+     @see http://forum.gns3.net/post26454.html#p26454
+   - Clarify the meaning of the +4 offsets with GT_SDMA_CMD_OFFSET.
+   - Silence forgotten debug message.
+   - Change default idlemax value from 1500 to 500.
+   - Add hypervisor command 'vm_debug pmem_cfind'.
+   - Bump version to v0.2.12.
+
+Fixed issue #29 - packet loss with multicast traffic
+Closed issue #31 - create hypervisor command to find a pattern in the router memory
+
++--------------------.
+| Release:  v0.2.12   |
++--------------------'
