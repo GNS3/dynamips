@@ -32,8 +32,8 @@ export HAS_PCAP?=1
 export HAS_POSIX_MEMALIGN?=1
 
 # Current dynamips release
-export VERSION_TRAIN=0.2.12
-export VERSION_SUB=
+export VERSION_TRAIN=0.2.13
+export VERSION_SUB=-dev
 
 # Executable binary extension and prefix directory
 export PREFIX?=/usr
