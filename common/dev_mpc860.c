@@ -1634,6 +1634,13 @@ static void mpc860_exec_cpcr(struct mpc860_data *d,m_uint32_t cpcr)
 {
    u_int channel,opcode,fop;
 
+#if DEBUG_UNKNOWN
+   if ((cpcr & 0x1)) {
+      /* TODO CP reset command (RST) */
+      MPC_LOG(d,"CPCR: CP reset command not implemented: cpcr=0x%4.4x\n",cpcr);
+   }
+#endif
+
    channel = (cpcr >> 4) & 0x0F;
    opcode  = (cpcr >> 8) & 0x0F;
 
