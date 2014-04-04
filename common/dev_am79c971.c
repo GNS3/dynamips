@@ -430,7 +430,7 @@ static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
          }
          break;
 
-      case 88:
+      case 88:  /* CSR88: Chip ID Register Lower (VER=0, PARTID=0x2623, MANFID=1, ONE=1) */
          if (op_type == MTS_READ) {
             switch(d->type) {
                case AM79C971_TYPE_100BASE_TX:
@@ -480,6 +480,10 @@ static void am79c971_bdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
          if (op_type == MTS_READ)
             *data = 1;
          break;
+
+      /* BCR32: MII Control and Status Register
+      case 32:
+      */
 
       case 34:  /* BCR34: MII Management Data Register */
          mii_phy = (d->bcr[33] >> 5) & 0x1F;
@@ -535,7 +539,10 @@ void *dev_am79c971_access(cpu_gen_t *cpu,struct vdevice *dev,
    AM79C971_LOCK(d);
 
    switch(offset) {
-      case 0x14:  /* RAP (Register Address Pointer) */
+      /* RAP (Register Address Pointer) (DWIO=0)
+      case 0x12:
+      */
+      case 0x14:  /* RAP (Register Address Pointer) (DWIO=1) */
          if (op_type == MTS_WRITE) {
             d->rap = *data & 0xFF;
          } else {
@@ -547,7 +554,10 @@ void *dev_am79c971_access(cpu_gen_t *cpu,struct vdevice *dev,
          am79c971_rdp_access(cpu,d,op_type,data);
          break;
 
-      case 0x1c:  /* BDP (BCR Data Port) */
+      /* BDP (BCR Data Port) (DWIO=0)
+      case 0x16:
+      */
+      case 0x1c:  /* BDP (BCR Data Port) (DWIO=1) */
          am79c971_bdp_access(cpu,d,op_type,data);
          break;
    }
@@ -938,10 +948,38 @@ static m_uint32_t pci_am79c971_read(cpu_gen_t *cpu,struct pci_device *dev,
    switch (reg) {
       case 0x00:
          return((AM79C971_PCI_PRODUCT_ID << 16) | AM79C971_PCI_VENDOR_ID);
+
+      /* Status, Command
+      case 0x04:
+      */
+
+      /* Base-Class, Sub-Class, Programming IF, Revision ID (read-only, should be 0x02000021?) */
       case 0x08:
          return(0x02000002);
+
+      /* Reserved, Header Type, Latency Timer, Reserved
+      case 0x0C:
+      */
+
+      /* I/O Base Address
+      case 0x10:
+      */
+
       case PCI_REG_BAR1:
          return(d->dev->phys_addr);
+
+      /* Subsystem ID Subsystem Vendor ID
+      case 0x2C:
+      */
+
+      /* Expansion ROM Base Address
+      case 0x30:
+      */
+
+      /* MAX_LAT, MIN_GNT, Interrupt Pin, Interrupt Line
+      case 0x3C:
+      */
+
       default:
          return(0);
    }

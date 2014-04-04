@@ -3,6 +3,8 @@
  * Copyright (c) 2006 Christophe Fillot.  All rights reserved.
  *
  * 23-Oct-2006: only basic code at this time.
+ *
+ * Considering the access pattern, this might be emulating SST39VF1681/SST39VF1682.
  */
 
 #include <stdio.h>

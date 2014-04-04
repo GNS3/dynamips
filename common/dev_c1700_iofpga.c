@@ -172,15 +172,40 @@ dev_c1700_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
 #endif
 
    switch(offset) {
-      /* Unknown */
+      /* 
+       * Bits 0-2: motherboard model (change with caution, different log patterns)
+       *  0=MPC860T
+       *  1=MPC860T
+       *  2=MPC860
+       *  3=MPC860P
+       *  4=MPC862P
+       *  5=MPC855T
+       *  6=MPC860P
+       *  7=(see iofpga[5]&0xf)
+       * Bits 3-7: ???
+       */
       case 0x04:
          break;
 
+      /* (iopfga[4]&0x7 == 7)
+       * Bits 0-3: extended motherboard model
+       *  0-1=MPC860P
+       *  2-15=MPC860
+       * Bits 4-7: ??? related to clock speed?
+      case 0x05:
+      */
+
+      /* (iopfga[4]&0x7 == 7 and iofpga[5]&0xF == 1)
+       * Bits 0-7: ???
+      case 0x0A:
+      */
+
       /* 
+       * Bit 0: ???
        * Bit 1: card present in slot 0 / WIC 0.
        * Bit 2: card present in slot 0 / WIC 1.
        * Bit 3: compression/VPN module ? (mention of "slot 3")
-       * Other bits unknown.
+       * Bits 4-7: ???
        */
       case 0x10:
          if (op_type == MTS_READ) {
@@ -196,7 +221,21 @@ dev_c1700_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
          }
          break;
 
-      /* WIC card selection for EEPROM reading */
+      /* 
+       * Bit 0: ??? NVRAM write protection?
+       * Bit 1: ???
+       * Bit 2: ??? related to syscalls?
+       * Bits 3-7: ???
+      case 0x14:
+      */
+
+      /* WIC card selection for EEPROM reading
+       * Bits 0-2: ???
+       * Bit 3: wic_port 0x10
+       * Bit 4: ???
+       * Bit 5: wic_port 0x20
+       * Bits 6-7: ???
+       */
       case 0x18:
          if (op_type == MTS_READ)
             *data = d->wic_select;
@@ -204,6 +243,11 @@ dev_c1700_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
             d->wic_select = *data;
          }
          break;
+
+      /* 
+       * Bit 0-7: ???
+      case 0x20:
+      */
 
       /* Unknown, read on 1760 */
       case 0x4c:

@@ -234,6 +234,7 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
            }
          }
          break;
+      /* Line Control Register (LCR) */
       case 0x03:
       case 0x0B:
          if (op_type == MTS_READ) {
@@ -279,6 +280,7 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
            }
          }
          break;
+      /* MODEM Control Register (MCR) */
       case 0x04:
       case 0x0C:
          if (op_type != MTS_READ) {
@@ -308,6 +310,16 @@ void *dev_ns16552_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
             *data = odata;
          }
          break;
+
+      /* MODEM Status Register (MSR)?
+      case 0x06:
+      case 0x0E:
+      */
+
+      /* Scratch Register (SCR)?
+      case 0x07:
+      case 0x0F:
+      */
 
 #if DEBUG_UNKNOWN
       default:
