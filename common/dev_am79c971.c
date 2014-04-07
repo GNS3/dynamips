@@ -434,7 +434,10 @@ static void am79c971_rdp_access(cpu_gen_t *cpu,struct am79c971_data *d,
          if (op_type == MTS_READ) {
             switch(d->type) {
                case AM79C971_TYPE_100BASE_TX:
-                  *data = 0x2623003;
+                  *data = 0x02623003;
+                  break;
+               case AM79C971_TYPE_10BASE_T:
+                  *data = 0x02621003; // Am79C970A, "AMD Presidio", "AmdP2"
                   break;
                default:
                   *data = 0;
