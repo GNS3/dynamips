@@ -107,7 +107,7 @@ HDR=mempool.h registry.h rbtree.h hash.h utils.h parser.h plugin.h \
 	dev_c1700.h dev_c1700_iofpga.h \
 	dev_c6msfc1.h dev_c6msfc1_mpfpga.h \
 	dev_c6sup1.h dev_c6sup1_mpfpga.h \
-	rommon_var.h get_cpu_time.h fs_nvram.h
+	rommon_var.h get_cpu_time.h fs_nvram.h dev_lxt970a.h
 
 SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 	gen_uuid.c plugin.c ptask.c timer.c crc.c base64.c \
@@ -148,7 +148,7 @@ SOURCES=mempool.c registry.c rbtree.c hash.c sbox.c utils.c parser.c \
 	hv_vm.c hv_vm_debug.c hv_store.c \
 	hv_c7200.c hv_c3600.c hv_c2691.c hv_c3725.c hv_c3745.c \
 	hv_c2600.c hv_c1700.c \
-	rommon_var.c get_cpu_time.c fs_nvram.c
+	rommon_var.c get_cpu_time.c fs_nvram.c dev_lxt970a.c
 
 # Profiling
 #SOURCES += profiler.c

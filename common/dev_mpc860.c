@@ -17,6 +17,7 @@
 #include "memory.h"
 #include "device.h"
 #include "net_io.h"
+#include "dev_lxt970a.h"
 #include "dev_mpc860.h"
 
 /* Debugging flags */
@@ -290,11 +291,11 @@ struct mpc860_scc_bd {
 #define MPC860_IEVENT_EBERR    0x00400000   /* Ethernet Bus Error */
 
 /* MII data register */
-#define MPC860_MII_OP_MASK     0x30000000   /* Opcode (10:read,11:write) */
+#define MPC860_MII_OP_MASK     0x30000000   /* Opcode (10b:read,11b:write) */
 #define MPC860_MII_OP_SHIFT    28
 #define MPC860_MII_PHY_MASK    0x0F800000   /* PHY device */
 #define MPC860_MII_PHY_SHIFT   23
-#define MPC860_MII_REG_MASK    0x007C0000   /* PHY device */
+#define MPC860_MII_REG_MASK    0x007C0000   /* PHY register */
 #define MPC860_MII_REG_SHIFT   18
 
 /* Size of an FEC buffer descriptor */
@@ -405,6 +406,7 @@ struct mpc860_data {
    /* FEC MII registers */
    m_uint32_t fec_mii_data;
    m_uint16_t fec_mii_regs[32];
+   m_uint8_t fec_mii_last_read_reg;
 
    /* Dual-Port RAM */
    m_uint8_t dpram[MPC860_DPRAM_SIZE];
@@ -1202,6 +1204,12 @@ static int dev_mpc860_scc_access(struct mpc860_data *d,m_uint32_t offset,
 /* FEC (Fast Ethernet Controller)                                           */
 /* ======================================================================== */
 
+/* link status */
+static int mpc860_fec_link_is_up(struct mpc860_data *d)
+{
+   return(d->fec_nio && !(d->fec_mii_regs[LX970A_CR] & LX970A_CR_POWERDOWN));
+}
+
 /* Trigger interrupt for FEC */
 static void mpc860_fec_update_irq_status(struct mpc860_data *d)
 {
@@ -1251,7 +1259,7 @@ static int mpc860_fec_handle_tx_ring_single(struct mpc860_data *d)
 
    if (!d->fec_xdes_current)
       return(FALSE);
-     
+
    /* Try to acquire the first descriptor */
    ptxd = &txd0;
    mpc860_fec_fetch_bd(d,d->fec_xdes_current,ptxd);
@@ -1299,7 +1307,7 @@ static int mpc860_fec_handle_tx_ring_single(struct mpc860_data *d)
    if (tot_len != 0) {
 #if DEBUG_FEC
       MPC_LOG(d,"FEC: sending packet of %u bytes\n",tot_len);
-      mem_dump(log_file,tx_pkt,tot_len);
+      mem_dump(d->vm->log_fd,tx_pkt,tot_len);
 #endif
       /* send packet on wire */
       netio_send(d->fec_nio,tx_pkt,tot_len);
@@ -1312,6 +1320,15 @@ static int mpc860_fec_handle_tx_ring_single(struct mpc860_data *d)
    /* Trigger FEC IRQ */
    d->fec_ievent |= MPC860_IEVENT_TFINT | MPC860_IEVENT_TXB;
    mpc860_fec_update_irq_status(d);
+
+   /* link down, report no heartbeat and lost carrier */
+   if (!mpc860_fec_link_is_up(d)) {
+      ptxd->ctrl |= MPC860_FEC_TXBD_CTRL_HB | MPC860_FEC_TXBD_CTRL_CSL;
+      physmem_copy_u16_to_vm(d->vm,ptxd->bd_addr+0x00,ptxd->ctrl);
+      d->fec_ievent |= MPC860_IEVENT_HBERR;
+      mpc860_fec_update_irq_status(d);
+   }
+
    return(TRUE);
 }
 
@@ -1406,6 +1423,82 @@ static int mpc860_fec_handle_rx_pkt(netio_desc_t *nio,
    return(TRUE);
 }
 
+/* MII update registers */
+static void mpc860_fec_mii_update_regs(struct mpc860_data *d)
+{
+   m_uint16_t *regs = d->fec_mii_regs;
+   if (mpc860_fec_link_is_up(d)) {
+      /* link up, LX970A_SR_LINKSTATUS is latch down */
+      regs[LX970A_CSR] |= LX970A_CSR_LINK;
+      if (!(regs[LX970A_CR] & LX970A_CR_ANENABLE)) {
+         /* manual selection */
+         if ((regs[LX970A_CR] & LX970A_CR_SPEEDSELECT)) {
+            /* 100Mbps */
+            regs[LX970A_CSR] |= LX970A_CSR_SPEED;
+         } else {
+            /* 10 Mbps */
+            regs[LX970A_CSR] &= ~LX970A_CSR_SPEED;
+         }
+         if ((regs[LX970A_CR] & LX970A_CR_DUPLEXMODE)) {
+            /* full duplex */
+            regs[LX970A_CSR] |= LX970A_CSR_DUPLEXMODE;
+         } else {
+            /* half duplex */
+            regs[LX970A_CSR] &= ~LX970A_CSR_DUPLEXMODE;
+         }
+      } else {
+         /* auto-negotiation, assume partner is standard 10/100 eth */
+          regs[LX970A_ANLPAR] = (LX970A_ANLPAR_ACKNOWLEDGE |
+                                 LX970A_ANLPAR_100TX_FD | LX970A_ANLPAR_100TX_HD |
+                                 LX970A_ANLPAR_10T_FD | LX970A_ANLPAR_10T_HD);
+         if ((regs[LX970A_ANAR] & LX970A_ANAR_100TX_FD)) {
+            /* 100Mbps full duplex */
+            regs[LX970A_CSR] |= (LX970A_CSR_DUPLEXMODE | LX970A_CSR_SPEED);
+         } else if ((regs[LX970A_ANAR] & LX970A_ANAR_100TX_HD)) {
+            /* 100Mbps half duplex */
+            regs[LX970A_CSR] = ((regs[LX970A_CSR] & ~LX970A_CSR_DUPLEXMODE) | LX970A_CSR_SPEED);
+         } else if ((regs[LX970A_ANAR] & LX970A_ANAR_10T_FD)) {
+            /* 10Mbps full duplex */
+            regs[LX970A_CSR] = (LX970A_CSR_DUPLEXMODE | (regs[LX970A_CSR] & ~LX970A_CSR_SPEED));
+         } else {
+            /* 10Mbps half duplex */
+            regs[LX970A_ANAR] |= LX970A_ANAR_10T_HD;
+            regs[LX970A_CSR] &= ~(LX970A_CSR_DUPLEXMODE | LX970A_CSR_SPEED);
+         }
+         d->fec_mii_regs[LX970A_CR] &= ~(LX970A_CR_ANRESTART);
+         d->fec_mii_regs[LX970A_SR] |= LX970A_SR_ANCOMPLETE;
+         d->fec_mii_regs[LX970A_CSR] |= LX970A_CSR_ANCOMPLETE;
+      }
+   } else {
+      /* link down or administratively down */
+      d->fec_mii_regs[LX970A_SR] &= ~(LX970A_SR_ANCOMPLETE|LX970A_SR_LINKSTATUS);
+      d->fec_mii_regs[LX970A_CSR] &= ~(LX970A_CSR_LINK|LX970A_CSR_DUPLEXMODE|LX970A_CSR_SPEED|LX970A_CSR_ANCOMPLETE);
+   }
+}
+
+/* MII register defaults */
+static void mpc860_fec_mii_defaults(struct mpc860_data *d)
+{
+   /* default is 100Mb/s full duplex and auto-negotiation */
+   memset(d->fec_mii_regs, 0, sizeof(d->fec_mii_regs));
+   d->fec_mii_regs[LX970A_CR] = LX970A_CR_DEFAULT;
+   d->fec_mii_regs[LX970A_SR] = LX970A_SR_DEFAULT;
+   d->fec_mii_regs[LX970A_PIR1] = LX970A_PIR1_DEFAULT;
+   d->fec_mii_regs[LX970A_PIR2] = LX970A_PIR2_DEFAULT;
+   d->fec_mii_regs[LX970A_ANAR] = LX970A_ANAR_DEFAULT;
+   d->fec_mii_regs[LX970A_ANE] = LX970A_ANE_DEFAULT;
+   d->fec_mii_regs[LX970A_MR] = LX970A_MR_DEFAULT;
+   d->fec_mii_regs[LX970A_IER] = LX970A_IER_DEFAULT;
+   d->fec_mii_regs[LX970A_ISR] = LX970A_ISR_DEFAULT;
+   d->fec_mii_regs[LX970A_CFGR] = LX970A_CFGR_DEFAULT;
+   d->fec_mii_regs[LX970A_CSR] = LX970A_CSR_DEFAULT;
+
+   /* chip is powered up and stable */
+   d->fec_mii_regs[LX970A_ISR] = LX970A_ISR_XTALOK;
+
+   mpc860_fec_mii_update_regs(d);
+}
+
 /* MII register read access */
 static void mpc860_fec_mii_read_access(struct mpc860_data *d,
                                        u_int phy,u_int reg)
@@ -1414,50 +1507,31 @@ static void mpc860_fec_mii_read_access(struct mpc860_data *d,
 
    res = d->fec_mii_regs[reg];
 
-   switch(reg) {
-      case 0x00:
-         res = 0x1100;
+   /* update bits */
+   switch (reg) {
+      case LX970A_SR:
+         /* Latch Low */
+         if (mpc860_fec_link_is_up(d)) {
+            d->fec_mii_regs[reg] &= LX970A_SR_LINKSTATUS;
+         }
          break;
-      case 0x01:
-         if (d->fec_nio)
-            res = 0x7829;
-         else
-            res = 0;
-         break;
-      case 0x02:
-         res = 0x7810;
-         break;
-      case 0x03:
-         res = 0x0003;
-         break;
-      case 0x04:
-         res = 0x1E1;
-         break;
-      case 0x05:
-         res = 0x41E1;
-         break;
-      case 0x06:
-         res = 0x0004;
-         break;
-      case 0x10:
-         res = 0x0084;
-         break;
-      case 0x11:
-         res = 0x4780;
-         break;
-      case 0x12:
-         res = 0x4000;
-         break;
-      case 0x13:
-         res = 0x0094;
-         break;
-      case 0x14:
-         res = 0x28c8;
-         break;
+      case LX970A_ISR_MINT:
+         if (d->fec_mii_last_read_reg == LX970A_SR) {
+            d->fec_mii_regs[reg] &= ~LX970A_ISR_MINT;
+         }
       default:
-         res = 0;
+         /* XXX Latch High:
+         LX970A_SR_REMOTEFAULT, LX970A_SR_JABBERDETECT
+         LX970A_ANE_PDETECTFAULT, LX970A_ANE_PR,
+         LX970A_CSR_ANC, LX970A_CSR_PAGERECEIVED */
+         break;
    }
 
+#if DEBUG_FEC
+   MPC_LOG(d,"FEC: Reading 0x%4.4x (0x%4.4x) from MII phy %d reg %d\n",res,d->fec_mii_regs[reg],phy,reg);
+#endif
+
+   d->fec_mii_last_read_reg = reg;
    d->fec_mii_data &= 0xFFFF0000;
    d->fec_mii_data |= res;
 }
@@ -1466,11 +1540,53 @@ static void mpc860_fec_mii_read_access(struct mpc860_data *d,
 static void mpc860_fec_mii_write_access(struct mpc860_data *d,
                                         u_int phy,u_int reg)
 {
+   m_uint16_t data, ro_mask, rw_mask;
+   int update_regs = FALSE;
+
+   data = d->fec_mii_data & 0xFFFF;
+
 #if DEBUG_FEC
-   MPC_LOG(d,"FEC: Writing 0x%8.8x to MII reg %d\n",
-           d->fec_mii_data & 0xFFFF,reg);
+   MPC_LOG(d,"FEC: Writing 0x%4.4x to MII phy %d reg %d at ia=0x%4.4x,lr=0x%4.4x\n",data,phy,reg,CPU_PPC32(d->vm->boot_cpu)->ia,CPU_PPC32(d->vm->boot_cpu)->lr);
 #endif
-   d->fec_mii_regs[reg] = d->fec_mii_data & 0xFFFF;
+
+   switch (reg) {
+      case LX970A_CR:
+         /* reset, self clearing */
+         if ((data & LX970A_CR_RESET)) {
+            mpc860_fec_mii_defaults(d);
+            return;
+         }
+         ro_mask = LX970A_CR_RO_MASK;
+         rw_mask = LX970A_CR_RW_MASK;
+         update_regs = TRUE;
+         break;
+      case LX970A_ANAR:
+         ro_mask = LX970A_ANAR_RO_MASK;
+         rw_mask = LX970A_ANAR_RW_MASK;
+         break;
+      case LX970A_MR:
+         ro_mask = LX970A_MR_RO_MASK;
+         rw_mask = LX970A_MR_RW_MASK;
+         break;
+      case LX970A_IER:
+         ro_mask = LX970A_IER_RO_MASK;
+         rw_mask = LX970A_IER_RW_MASK;
+         break;
+      case LX970A_CFGR:
+         ro_mask = LX970A_CFGR_RO_MASK;
+         rw_mask = LX970A_CFGR_RW_MASK;
+         break;
+      default:
+         /* read-only register */
+         ro_mask = 0xFFFF;
+         rw_mask = 0x0000;
+         break;
+   }
+
+   d->fec_mii_regs[reg] = (d->fec_mii_regs[reg] & ro_mask) | (data & rw_mask);
+   if (update_regs) {
+      mpc860_fec_mii_update_regs(d);
+   }
 }
 
 /* MII register access */
@@ -1608,6 +1724,7 @@ int mpc860_fec_set_nio(struct mpc860_data *d,netio_desc_t *nio)
 
    d->fec_nio = nio;
    netio_rxl_add(nio,(netio_rx_handler_t)mpc860_fec_handle_rx_pkt,d,NULL);
+   mpc860_fec_mii_update_regs(d);
    return(0);
 }
 
@@ -1620,6 +1737,7 @@ int mpc860_fec_unset_nio(struct mpc860_data *d)
    if (d->fec_nio != NULL) {
       netio_rxl_remove(d->fec_nio);
       d->fec_nio = NULL;
+      mpc860_fec_mii_update_regs(d);
    }
 
    return(0);
@@ -1983,9 +2101,12 @@ int dev_mpc860_init(vm_instance_t *vm,char *name,
    d->dev.phys_addr = paddr;
    d->dev.phys_len  = len;
    d->dev.handler   = dev_mpc860_access;
-   
+
    /* Set the default SPI base address */
    dpram_w16(d,MPC860_SPI_BASE_ADDR,MPC860_SPI_BASE);
+
+   /* Set MII register defaults */
+   mpc860_fec_mii_defaults(d);
 
    /* Map this device to the VM */
    vm_bind_device(vm,&d->dev);
