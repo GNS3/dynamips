@@ -33,11 +33,11 @@ message ( STATUS "LIBELF_DEFINITIONS=${LIBELF_DEFINITIONS}" )
 include_directories ( ${LIBELF_INCLUDE_DIRS} )
 
 # libuuid
-find_package ( LibUUID REQUIRED )
-message ( STATUS "LIBUUID_FOUND=${LIBUUID_FOUND}" )
-message ( STATUS "LIBUUID_INCLUDE_DIRS=${LIBUUID_INCLUDE_DIRS}" )
-message ( STATUS "LIBUUID_LIBRARIES=${LIBUUID_LIBRARIES}" )
-include_directories ( ${LIBUUID_INCLUDE_DIRS} )
+find_package ( UUID REQUIRED )
+message ( STATUS "UUID_FOUND=${UUID_FOUND}" )
+message ( STATUS "UUID_INCLUDE_DIR=${UUID_INCLUDE_DIR}" )
+message ( STATUS "UUID_LIBRARY=${UUID_LIBRARY}" )
+include_directories ( ${UUID_INCLUDE_DIR} )
 
 # pthreads
 set ( CMAKE_THREAD_PREFER_PTHREAD 1 )

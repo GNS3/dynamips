@@ -71,7 +71,7 @@ function ( install_man_pages )
       string ( REGEX REPLACE "^.*\\." "" _page "${_file}" )
       if ( NOT "${_page}" MATCHES "[0-9]+" )
          message ( FATAL_ERROR "not a man page: ${_file}" )
-      endif ( NOT _page MATCHES "[0-9]+" )
+      endif ()
       install (
          FILES "${_file}"
          DESTINATION "${CMAKE_INSTALL_MANDIR}/man${_page}"
