@@ -2,21 +2,24 @@
 # - libelf: rom2c, dynamips
 # - libpcap: dynamips
 # - libuuid: dynamips
-# - libdl: dynamips
-# - librt: dynamips
+# - libdl, librt, libsocket
+
+# standard checks
+include ( CheckFunctionExists )
+include ( CheckLibraryExists )
+include ( CheckCSourceCompiles )
 
 message ( STATUS "dependencies - BEGIN" )
 
-include(CheckFunctionExists)
-include(CheckLibraryExists)
-
 # gnu compiler
 if ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
-   message ( STATUS "CMAKE_COMPILER_IS_GNUCC=${CMAKE_COMPILER_IS_GNUCC}" )
-   message ( STATUS "CMAKE_C_COMPILER=${CMAKE_C_COMPILER}" )
-   message ( STATUS "CMAKE_C_COMPILER_ABI=${CMAKE_C_COMPILER_ABI}" )
-   message ( STATUS "CMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID}" )
-   message ( STATUS "CMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}" )
+   print_variables (
+      CMAKE_COMPILER_IS_GNUCC
+      CMAKE_C_COMPILER
+      CMAKE_C_COMPILER_ABI
+      CMAKE_C_COMPILER_ID
+      CMAKE_C_COMPILER_VERSION
+      )
    message ( FATAL_ERROR
       "Not a GNU C compiler. "
       "The source and build system assumes gcc so it might not compile. "
@@ -26,17 +29,31 @@ endif ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
 
 # libelf
 find_package ( LibElf REQUIRED )
-message ( STATUS "LIBELF_FOUND=${LIBELF_FOUND}" )
-message ( STATUS "LIBELF_INCLUDE_DIRS=${LIBELF_INCLUDE_DIRS}" )
-message ( STATUS "LIBELF_LIBRARIES=${LIBELF_LIBRARIES}" )
-message ( STATUS "LIBELF_DEFINITIONS=${LIBELF_DEFINITIONS}" )
+# XXX some old libelf's aren't large file aware
+set ( _code "
+#define _FILE_OFFSET_BITS 64
+#define _LARGEFILE_SOURCE
+#define _LARGEFILE_SOURCE64
+#include <libelf.h>
+int main() { return 0; }
+" )
+check_c_source_compiles ( "${_code}" LIBELF_LARGEFILE )
+print_variables (
+   LIBELF_FOUND
+   LIBELF_INCLUDE_DIRS
+   LIBELF_LIBRARIES
+   LIBELF_DEFINITIONS
+   LIBELF_LARGEFILE
+   )
 include_directories ( ${LIBELF_INCLUDE_DIRS} )
 
 # libuuid
 find_package ( UUID REQUIRED )
-message ( STATUS "UUID_FOUND=${UUID_FOUND}" )
-message ( STATUS "UUID_INCLUDE_DIR=${UUID_INCLUDE_DIR}" )
-message ( STATUS "UUID_LIBRARY=${UUID_LIBRARY}" )
+print_variables (
+   UUID_FOUND
+   UUID_INCLUDE_DIR
+   UUID_LIBRARY
+   )
 include_directories ( ${UUID_INCLUDE_DIR} )
 
 # pthreads
@@ -45,11 +62,13 @@ find_package ( Threads REQUIRED )
 if ( CMAKE_USE_PTHREADS_INIT )
    # ok
 else ( CMAKE_USE_PTHREADS_INIT )
-   message ( STATUS "CMAKE_THREAD_LIBS_INIT=${CMAKE_THREAD_LIBS_INIT}" )
-   message ( STATUS "CMAKE_USE_SPROC_INIT=${CMAKE_USE_SPROC_INIT}" )
-   message ( STATUS "CMAKE_USE_WIN32_THREADS_INIT=${CMAKE_USE_WIN32_THREADS_INIT}" )
-   message ( STATUS "CMAKE_USE_PTHREADS_INIT=${CMAKE_USE_PTHREADS_INIT}" )
-   message ( STATUS "CMAKE_HP_PTHREADS_INIT=${CMAKE_HP_PTHREADS_INIT}" )
+   print_variables (
+      CMAKE_THREAD_LIBS_INIT
+      CMAKE_USE_SPROC_INIT
+      CMAKE_USE_WIN32_THREADS_INIT
+      CMAKE_USE_PTHREADS_INIT
+      CMAKE_HP_PTHREADS_INIT
+      )
    message ( FATAL_ERROR
       "Not using pthreads. "
       "The source assumes pthreads is available. "
@@ -92,7 +111,7 @@ if ( NOT HAVE_GETHOSTBYNAME_NO_LIB )
    check_library_exists ( nsl gethostbyname "netdb.h" HAVE_CONNECT_IN_NSL )
    if ( HAVE_CONNECT_IN_SOCKET )
       set ( USE_LIBNSL 1 )
-      message ( STATUS "USE_LIBNSL=${USE_LIBNSL}" )
+      print_variables ( USE_LIBNSL )
    else ()
       message ( FATAL_ERROR "function gethostbyname is REQUIRED" )
    endif ()
@@ -100,6 +119,6 @@ endif ( NOT HAVE_GETHOSTBYNAME_NO_LIB )
 
 # posix_memalign
 check_function_exists ( posix_memalign HAVE_POSIX_MEMALIGN )
-message ( STATUS "HAVE_POSIX_MEMALIGN=${HAVE_POSIX_MEMALIGN}" )
+print_variables ( HAVE_POSIX_MEMALIGN )
 
 message ( STATUS "dependencies - END" )

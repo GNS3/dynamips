@@ -2,10 +2,17 @@
 
 message ( STATUS "configure - BEGIN" )
 
+if ( LIBELF_LARGEFILE )
+   option ( ENABLE_LARGEFILE "compile with large file support" ON )
+endif ( LIBELF_LARGEFILE )
+if ( ENABLE_LARGEFILE )
+   add_definitions (
+      "-D_FILE_OFFSET_BITS=64"
+      "-D_LARGEFILE_SOURCE"
+      "-D_LARGEFILE64_SOURCE"
+      )
+endif ( ENABLE_LARGEFILE )
 add_definitions (
-   "-D_FILE_OFFSET_BITS=64"
-   "-D_LARGEFILE_SOURCE"
-   "-D_LARGEFILE64_SOURCE"
    "-DHAS_POSIX_MEMALIGN=${HAVE_POSIX_MEMALIGN}"
    )
 set ( DYNAMIPS_FLAGS -Wall -O2 -fomit-frame-pointer )
@@ -26,7 +33,7 @@ endif ( APPLE )
 if ( "${CMAKE_SYSTEM_NAME}" STREQUAL "SunOS" )
    # TODO is libresolv needed?
    set ( DYNAMIPS_LIBRARIES "-lresolv" ${DYNAMIPS_LIBRARIES} )
-   set ( DYNAMIPS_FLAGS ${DYNAMIPS_FLAGS} -DSUNOS -DINADDR_NONE=0xFFFFFFFF )
+   add_definitions ( "-DSUNOS" "-DINADDR_NONE=0xFFFFFFFF" )
 endif ()
 if ( CYGWIN )
    set ( DYNAMIPS_FLAGS ${DYNAMIPS_FLAGS} -DCYGWIN )
