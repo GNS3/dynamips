@@ -94,7 +94,6 @@ set ( _headers #standalone
    #"libelf.h" #find_package
    #"linux/if.h" #linux_eth.c (LINUX_ETH)
    #"linux/if_packet.h" #linux_eth.c (LINUX_ETH)
-   "malloc.h" #utils.c
    "netdb.h"
    #"netinet/if_ether.h" #linux_eth.c (LINUX_ETH)
    #"netinet/tcp.h" #dev_vtty.c
