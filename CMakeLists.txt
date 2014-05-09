@@ -13,7 +13,7 @@ set ( DYNAMIPS_VERSION_TRAIN 0.2.13 )
 set ( DYNAMIPS_VERSION_SUB -dev )
 
 set ( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake" )
-include ( functions )
+include ( utils )
 include ( dependencies )
 include ( configure )
 
