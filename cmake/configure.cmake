@@ -31,8 +31,6 @@ if ( APPLE )
    set ( DYNAMIPS_FLAGS ${DYNAMIPS_FLAGS} -mdynamic-no-pic )
 endif ( APPLE )
 if ( "${CMAKE_SYSTEM_NAME}" STREQUAL "SunOS" )
-   # TODO is libresolv needed?
-   set ( DYNAMIPS_LIBRARIES "-lresolv" ${DYNAMIPS_LIBRARIES} )
    add_definitions ( "-DSUNOS" "-DINADDR_NONE=0xFFFFFFFF" )
 endif ()
 if ( CYGWIN )

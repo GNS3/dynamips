@@ -53,6 +53,7 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(LibElf DEFAULT_MSG
     LIBELF_LIBRARIES
     LIBELF_INCLUDE_DIRS)
 
+if ( 0 ) #not needed in dynamips
 SET(CMAKE_REQUIRED_LIBRARIES elf)
 INCLUDE(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("#include <libelf.h>
@@ -62,5 +63,6 @@ int main() {
   elf_getshdrstrndx(e, &sz);
   return 0;
 }" ELF_GETSHDRSTRNDX)
+endif ()
 
 mark_as_advanced(LIBELF_INCLUDE_DIRS LIBELF_LIBRARIES ELF_GETSHDRSTRNDX)
