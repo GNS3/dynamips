@@ -298,36 +298,6 @@ static void insn_emit_breakpoint(cpu_mips_t *cpu,mips64_jit_tcb_t *b)
 }
 #endif /* BREAKPOINT_ENABLE */
 
-/* Get host pointer for the physical address */
-static inline void *physmem_get_hptr(vm_instance_t *vm,m_uint64_t paddr,
-                                     u_int op_size,u_int op_type,
-                                     m_uint64_t *data)
-{
-   struct vdevice *dev;
-   m_uint32_t offset;
-   void *ptr;
-   int cow;
-
-   if (!(dev = dev_lookup(vm,paddr,FALSE)))
-      return NULL;
-
-   if (dev->flags & VDEVICE_FLAG_SPARSE) {
-      ptr = (void *)dev_sparse_get_host_addr(vm,dev,paddr,op_type,&cow);
-      if (!ptr) return NULL;
-
-      return(ptr + (paddr & VM_PAGE_IMASK));
-   }
-
-   if ((dev->host_addr != 0) && !(dev->flags & VDEVICE_FLAG_NO_MTS_MMAP))
-      return((void *)dev->host_addr + (paddr - dev->phys_addr));
-
-   if (op_size == 0)
-      return NULL;
-
-   offset = paddr - dev->phys_addr;
-   return(dev->handler(vm->boot_cpu,dev,offset,op_size,op_type,data));
-}
-
 /* Check if an instruction is in a delay slot or not */
 int mips64_jit_is_delay_slot(mips64_jit_tcb_t *b,m_uint64_t pc)
 {   

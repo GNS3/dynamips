@@ -423,7 +423,7 @@ static inline m_uint8_t dpram_r8(struct mpc860_data *d,m_uint16_t offset)
    return(d->dpram[offset]);
 }
 
-static inline void dpram_w8(struct mpc860_data *d,m_uint16_t offset,
+__unused static inline void dpram_w8(struct mpc860_data *d,m_uint16_t offset,
                             m_uint8_t val)
 {   
    d->dpram[offset] = val;
@@ -456,7 +456,7 @@ static inline m_uint32_t dpram_r32(struct mpc860_data *d,m_uint16_t offset)
    return(val);
 }
 
-static inline void dpram_w32(struct mpc860_data *d,m_uint16_t offset,
+__unused static inline void dpram_w32(struct mpc860_data *d,m_uint16_t offset,
                              m_uint32_t val)
 {
    d->dpram[offset]   = val >> 24;

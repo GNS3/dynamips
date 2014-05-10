@@ -125,7 +125,7 @@ static inline void timer_add_to_queue(timer_queue_t *queue,
 }
 
 /* Add a timer in a queue atomically */
-static inline void timer_add_to_queue_atomic(timer_queue_t *queue,
+__unused static inline void timer_add_to_queue_atomic(timer_queue_t *queue,
                                              timer_entry_t *timer)
 {
    TIMERQ_LOCK(queue);
