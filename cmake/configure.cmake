@@ -13,6 +13,7 @@ if ( ENABLE_LARGEFILE )
       )
 endif ( ENABLE_LARGEFILE )
 add_definitions (
+   "-DHAS_RFC2553=${HAVE_RFC2553}"
    "-DHAS_POSIX_MEMALIGN=${HAVE_POSIX_MEMALIGN}"
    )
 set ( DYNAMIPS_FLAGS -Wall -O2 -fomit-frame-pointer )

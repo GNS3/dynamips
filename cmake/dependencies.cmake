@@ -165,10 +165,26 @@ endif ( NOT HAVE_GETHOSTBYNAME_NO_LIB )
 
 # posix_memalign
 check_function_exists ( posix_memalign HAVE_POSIX_MEMALIGN )
+if ( NOT HAVE_POSIX_MEMALIGN )
+   set ( HAVE_POSIX_MEMALIGN 0 )
+endif ()
 print_variables ( HAVE_POSIX_MEMALIGN )
 
-# IPv6
-check_function_exists ( getnameinfo HAVE_GETNAMEINFO )
-# TODO AF_INET6, PF_INET6, struct sockaddr_in6, struct sockaddr_storage?
+# RFC 2553 (Basic Socket Interface Extensions for IPv6)
+set ( _headers "sys/socket.h" "arpa/inet.h" "net/if.h" "netdb.h" "netinet/in.h" )
+check_include_files ( "${_headers}" RFC2553_HEADERS )
+check_function_exists ( getaddrinfo HAVE_GETADDRINFO )
+check_function_exists ( freeaddrinfo HAVE_FREEADDRINFO )
+check_function_exists ( gai_strerror HAVE_GAI_STRERROR )
+check_function_exists ( inet_pton HAVE_INET_PTON )
+check_function_exists ( inet_ntop HAVE_INET_NTOP )
+# TODO AF_INET6, PF_INET6, AI_PASSIVE, IPPROTO_IPV6, IPV6_JOIN_GROUP, IPV6_MULTICAST_HOPS, INET6_ADDRSTRLEN
+# TODO struct sockaddr_storage, struct sockaddr_in6, struct ipv6_mreq
+if ( RFC2553_HEADERS AND HAVE_GETADDRINFO AND HAVE_FREEADDRINFO AND HAVE_GAI_STRERROR AND HAVE_INET_PTON AND HAVE_INET_NTOP )
+   set ( HAVE_RFC2553 1 )
+else ()
+   set ( HAVE_RFC2553 0 )
+endif ()
+print_variables ( HAVE_RFC2553 )
 
 message ( STATUS "dependencies - END" )
