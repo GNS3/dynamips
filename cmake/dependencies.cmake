@@ -1,8 +1,16 @@
 # dynamips - check dependencies
-# - libelf: rom2c, dynamips
-# - libpcap: dynamips
-# - libuuid: dynamips
-# - libdl, librt, libsocket
+#  - libdl           : maybe required
+#  - librt           : maybe required
+#  - libsocket       : maybe required
+#  - libelf          : required
+#  - libuuid         : required
+#  - pthreads        : required
+#  - libpcap/winpcap : optional
+# accumulators:
+#  - DYNAMIPS_FLAGS
+#  - DYNAMIPS_DEFINITIONS
+#  - DYNAMIPS_INCLUDES
+#  - DYNAMIPS_LIBRARIES
 
 message ( STATUS "dependencies - BEGIN" )
 
@@ -22,11 +30,106 @@ if ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
       )
 endif ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
 
+set ( DYNAMIPS_FLAGS -Wall -O2 -fomit-frame-pointer )
+set ( DYNAMIPS_DEFINITIONS )
+set ( DYNAMIPS_INCLUDES )
+set ( DYNAMIPS_LIBRARIES ${CMAKE_DL_LIBS} )
+macro ( set_cmake_required )
+   set ( CMAKE_REQUIRED_FLAGS       ${DYNAMIPS_FLAGS} )
+   set ( CMAKE_REQUIRED_DEFINITIONS ${DYNAMIPS_DEFINITIONS} )
+   set ( CMAKE_REQUIRED_INCLUDES    ${DYNAMIPS_INCLUDES} )
+   set ( CMAKE_REQUIRED_LIBRARIES   ${DYNAMIPS_LIBRARIES} )
+endmacro ( set_cmake_required )
+
+# Target architecture:
+#  - Use "amd64" to build for x86_64 (64-bit)
+#  - Use "x86" to build for x86 (32-bit)
+#  - Use "nojit" to build for other architectures (no recompilation)
+# Based on https://github.com/petroules/solar-cmake/blob/master/TargetArch.cmake
+set ( _code "
+#if defined(__x86_64) || defined(__x86_64__) || defined(__amd64) || defined(_M_X64)
+int main (void) { return 0; }
+#else
+#error cmake_FAIL
+#endif
+" )
+set_cmake_required ()
+list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m64 )
+check_c_source_compiles ( "${_code}" ARCH_AMD64 )
+set ( _code "
+#if defined(__i386) || defined(__i386__) || defined(_M_IX86)
+int main (void) { return 0; }
+#else
+#error cmake_FAIL
+#endif
+" )
+set_cmake_required ()
+list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m32 )
+check_c_source_compiles ( "${_code}" ARCH_X86 )
+if ( ARCH_AMD64 )
+   set ( _default "amd64" )
+elseif ( ARCH_X86 )
+   set ( _default "x86" )
+else ()
+   set ( _default "nojit" )
+endif ()
+set ( DYNAMIPS_ARCH "${_default}" CACHE STRING "Target architecture (amd64;x86;nojit)" )
+set_property ( CACHE DYNAMIPS_ARCH PROPERTY STRINGS "amd64" "x86" "nojit" )
+if ( "amd64" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_AMD64 )
+   list ( INSERT DYNAMIPS_FLAGS 0 -m64 )
+elseif ( "x86" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_X86 )
+   list ( INSERT DYNAMIPS_FLAGS 0 -m32 )
+elseif ( NOT "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
+   print_variables ( ARCH_AMD64 ARCH_X86 DYNAMIPS_ARCH )
+   message ( FATAL_ERROR "cannot build target arch DYNAMIPS_ARCH=${DYNAMIPS_ARCH}" )
+endif ()
+print_variables ( ARCH_AMD64 ARCH_X86 DYNAMIPS_ARCH )
+
+# Compiler flags
+foreach ( _flag
+   -mdynamic-no-pic # Mac OS X
+   )
+   standard_variable_name ( _var "FLAG_${_flag}" )
+   set_cmake_required ()
+   check_c_compiler_flag ( ${_flag} ${_var} )
+   if ( ${_var} )
+      list ( APPEND DYNAMIPS_FLAGS ${_flag} )
+   endif ()
+endforeach ()
+
+# librt (clock_gettime)
+set_cmake_required ()
+check_library_exists ( rt clock_gettime "time.h" USE_LIBRT )
+if ( USE_LIBRT )
+   list ( APPEND DYNAMIPS_LIBRARIES rt )
+   print_variables ( USE_LIBRT )
+endif ()
+
+# libsocket (connect)
+set_cmake_required ()
+check_library_exists ( socket connect "sys/socket.h" USE_LIBSOCKET )
+if ( USE_LIBSOCKET )
+   list ( APPEND DYNAMIPS_LIBRARIES socket )
+   print_variables ( USE_LIBSOCKET )
+endif ()
+
+# libnsl (gethostbyname)
+set_cmake_required ()
+check_library_exists ( nsl gethostbyname "netdb.h" USE_LIBNSL )
+if ( USE_LIBNSL )
+   list ( APPEND DYNAMIPS_LIBRARIES nsl )
+   print_variables ( USE_LIBNSL )
+endif ()
+
 # libelf
+set_cmake_required ()
 find_package ( LibElf REQUIRED )
-# XXX some old libelf's aren't large file aware
-set ( CMAKE_REQUIRED_INCLUDES ${LIBELF_INCLUDE_DIRS} )
-set ( CMAKE_REQUIRED_LIBRARIES ${LIBELF_LIBRARIES} )
+list ( APPEND DYNAMIPS_DEFINITIONS ${LIBELF_DEFINITIONS} )
+list ( APPEND DYNAMIPS_INCLUDES ${LIBELF_INCLUDE_DIRS} )
+list ( APPEND DYNAMIPS_LIBRARIES ${LIBELF_LIBRARIES} )
+print_variables ( LIBELF_FOUND LIBELF_INCLUDE_DIRS LIBELF_LIBRARIES 
+   LIBELF_DEFINITIONS )
+# XXX some old libelf's aren't large file aware with ILP32
 set ( _code "
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE_SOURCE
@@ -34,54 +137,53 @@ set ( _code "
 #include <libelf.h>
 int main() { return 0; }
 " )
+set_cmake_required ()
 check_c_source_compiles ( "${_code}" LIBELF_LARGEFILE )
-print_variables (
-   LIBELF_FOUND
-   LIBELF_INCLUDE_DIRS
-   LIBELF_LIBRARIES
-   LIBELF_DEFINITIONS
-   LIBELF_LARGEFILE
-   )
-include_directories ( ${LIBELF_INCLUDE_DIRS} )
+print_variables ( LIBELF_LARGEFILE )
 
 # libuuid
+set_cmake_required ()
 find_package ( UUID REQUIRED )
-print_variables (
-   UUID_FOUND
-   UUID_INCLUDE_DIR
-   UUID_LIBRARY
-   )
-include_directories ( ${UUID_INCLUDE_DIR} )
+list ( APPEND DYNAMIPS_INCLUDES ${UUID_INCLUDE_DIR} )
+list ( APPEND DYNAMIPS_LIBRARIES ${UUID_LIBRARY} )
+print_variables ( UUID_FOUND UUID_INCLUDE_DIR UUID_LIBRARY )
 
 # pthreads
 set ( CMAKE_THREAD_PREFER_PTHREAD 1 )
+set_cmake_required ()
 find_package ( Threads REQUIRED )
 if ( CMAKE_USE_PTHREADS_INIT )
+   print_variables ( CMAKE_THREAD_LIBS_INIT CMAKE_USE_PTHREADS_INIT )
    # ok
-else ( CMAKE_USE_PTHREADS_INIT )
-   print_variables (
-      CMAKE_THREAD_LIBS_INIT
-      CMAKE_USE_SPROC_INIT
-      CMAKE_USE_WIN32_THREADS_INIT
-      CMAKE_USE_PTHREADS_INIT
-      CMAKE_HP_PTHREADS_INIT
-      )
+else ()
+   print_variables ( CMAKE_THREAD_LIBS_INIT CMAKE_USE_SPROC_INIT 
+      CMAKE_USE_WIN32_THREADS_INIT CMAKE_USE_PTHREADS_INIT 
+      CMAKE_HP_PTHREADS_INIT )
    message ( FATAL_ERROR
       "Not using pthreads. "
       "The source assumes pthreads is available. "
       )
-endif ( CMAKE_USE_PTHREADS_INIT )
+endif ()
 
 # libpcap/winpcap (optional)
 find_package ( PCAP )
-if ( PCAP_FOUND )
-   include_directories ( ${PCAP_INCLUDE_DIRS} )
-endif ( PCAP_FOUND )
+print_variables ( PCAP_FOUND PCAP_INCLUDE_DIRS PCAP_LIBRARIES )
+set ( HAVE_PCAP ${PCAP_FOUND} )
+if ( HAVE_PCAP AND CYGWIN )
+   # cygwin requires pcap_open
+   set_cmake_required ()
+   list ( APPEND CMAKE_REQUIRED_DEFINITIONS "-DHAVE_REMOTE" )
+   list ( APPEND CMAKE_REQUIRED_INCLUDES ${PCAP_INCLUDE_DIRS} )
+   list ( APPEND CMAKE_REQUIRED_LIBRARIES ${PCAP_LIBRARIES} )
+   check_function_exists ( pcap_open HAVE_PCAP_OPEN )
+   set ( HAVE_PCAP ${HAVE_PCAP_OPEN} )
+endif ()
+print_variables ( HAVE_PCAP )
 
-# general headers
+# headers
 # TODO minimize headers in the source
-set ( MISSING_HEADERS )
-set ( _headers #standalone
+set ( _missing )
+foreach ( _header #standalone
    "arpa/inet.h"
    "arpa/telnet.h" #dev_vtty.c
    "assert.h"
@@ -121,70 +223,58 @@ set ( _headers #standalone
    "unistd.h"
    #"uuid/uuid.h" #find_package
    )
-check_headers_exist ( MISSING_HEADERS ${_headers} )
+   standard_variable_name ( _var "HAVE_${_header}" )
+   set_cmake_required ()
+   check_include_file ( "${_header}" ${_var} )
+   if ( NOT "${${_var}}" )
+      print_variables ( ${_var} )
+      list ( APPEND _missing ${_header} )
+   endif ()
+endforeach ()
 if ( HAVE_SYS_TYPES_H )
-   set ( _headers #depend on sys/types.h
+   foreach ( _header #requires sys/types.h
       "netinet/tcp.h"
       )
-   check_dependent_headers_exist ( MISSING_HEADERS "sys/types.h" ${_headers} )
+      standard_variable_name ( _var "HAVE_${_header}" )
+      set_cmake_required ()
+      check_include_files ( "sys/types.h;${_header}" ${_var} )
+      if ( NOT "${${_var}}" )
+         print_variables ( ${_var} )
+         list ( APPEND _missing ${_header} )
+      endif ()
+   endforeach ()
 endif ( HAVE_SYS_TYPES_H )
-if ( MISSING_HEADERS )
-   message ( FATAL_ERROR "missing headers: ${MISSING_HEADERS}" )
-endif ( MISSING_HEADERS )
-
-# librt (clock_gettime)
-check_library_exists ( rt clock_gettime "time.h" HAVE_CLOCK_GETTIME_IN_RT )
-if ( HAVE_CLOCK_GETTIME_IN_RT )
-   set ( USE_LIBRT 1 )
-   print_variables ( USE_LIBRT )
-endif ()
-
-# libsocket (connect)
-check_function_exists ( connect HAVE_CONNECT_NO_LIB )
-if ( NOT HAVE_CONNECT_NO_LIB )
-   check_library_exists ( socket connect "sys/socket.h" HAVE_CONNECT_IN_SOCKET )
-   if ( HAVE_CONNECT_IN_SOCKET )
-      set ( USE_LIBSOCKET 1 )
-      print_variables ( USE_LIBSOCKET )
-   else ()
-      message ( FATAL_ERROR "function connect is REQUIRED" )
-   endif ()
-endif ( NOT HAVE_CONNECT_NO_LIB )
-
-# libnsl (gethostbyname)
-check_function_exists ( gethostbyname HAVE_GETHOSTBYNAME_NO_LIB )
-if ( NOT HAVE_GETHOSTBYNAME_NO_LIB )
-   check_library_exists ( nsl gethostbyname "netdb.h" HAVE_CONNECT_IN_NSL )
-   if ( HAVE_CONNECT_IN_SOCKET )
-      set ( USE_LIBNSL 1 )
-      print_variables ( USE_LIBNSL )
-   else ()
-      message ( FATAL_ERROR "function gethostbyname is REQUIRED" )
-   endif ()
-endif ( NOT HAVE_GETHOSTBYNAME_NO_LIB )
+if ( _missing )
+   message ( FATAL_ERROR "missing headers: ${_missing}" )
+endif ( _missing )
 
 # posix_memalign
 check_function_exists ( posix_memalign HAVE_POSIX_MEMALIGN )
-if ( NOT HAVE_POSIX_MEMALIGN )
-   set ( HAVE_POSIX_MEMALIGN 0 )
+if ( HAVE_POSIX_MEMALIGN )
+   list ( APPEND DYNAMIPS_DEFINITIONS "-DHAS_POSIX_MEMALIGN=1" )
+else ()
+   list ( APPEND DYNAMIPS_DEFINITIONS "-DHAS_POSIX_MEMALIGN=0" )
 endif ()
 print_variables ( HAVE_POSIX_MEMALIGN )
 
-# RFC 2553 (Basic Socket Interface Extensions for IPv6)
-set ( _headers "sys/socket.h" "arpa/inet.h" "net/if.h" "netdb.h" "netinet/in.h" )
-check_include_files ( "${_headers}" RFC2553_HEADERS )
+# IPv6 (RFC 2553)
+set ( _headers "sys/socket.h" "arpa/inet.h" "net/if.h" "netdb.h"
+   "netinet/in.h" )
+check_include_files ( "${_headers}" IPV6_HEADERS )
 check_function_exists ( getaddrinfo HAVE_GETADDRINFO )
 check_function_exists ( freeaddrinfo HAVE_FREEADDRINFO )
 check_function_exists ( gai_strerror HAVE_GAI_STRERROR )
 check_function_exists ( inet_pton HAVE_INET_PTON )
 check_function_exists ( inet_ntop HAVE_INET_NTOP )
-# TODO AF_INET6, PF_INET6, AI_PASSIVE, IPPROTO_IPV6, IPV6_JOIN_GROUP, IPV6_MULTICAST_HOPS, INET6_ADDRSTRLEN
-# TODO struct sockaddr_storage, struct sockaddr_in6, struct ipv6_mreq
-if ( RFC2553_HEADERS AND HAVE_GETADDRINFO AND HAVE_FREEADDRINFO AND HAVE_GAI_STRERROR AND HAVE_INET_PTON AND HAVE_INET_NTOP )
-   set ( HAVE_RFC2553 1 )
+# TODO AF_INET6, PF_INET6, AI_PASSIVE, IPPROTO_IPV6, IPV6_JOIN_GROUP, 
+#      IPV6_MULTICAST_HOPS, INET6_ADDRSTRLEN, struct sockaddr_storage, 
+#      struct sockaddr_in6, struct ipv6_mreq
+if ( IPV6_HEADERS AND HAVE_GETADDRINFO AND HAVE_FREEADDRINFO 
+   AND HAVE_GAI_STRERROR AND HAVE_INET_PTON AND HAVE_INET_NTOP )
+   set ( HAVE_IPV6 1 )
 else ()
-   set ( HAVE_RFC2553 0 )
+   set ( HAVE_IPV6 0 )
 endif ()
-print_variables ( HAVE_RFC2553 )
+print_variables ( HAVE_IPV6 )
 
 message ( STATUS "dependencies - END" )

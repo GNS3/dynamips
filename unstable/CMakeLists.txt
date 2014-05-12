@@ -1,4 +1,4 @@
-# unstable
+# dynamips - unstable code
 
 set ( COMMON "${CMAKE_SOURCE_DIR}/common" )
 set ( LOCAL "${CMAKE_CURRENT_SOURCE_DIR}" )
@@ -187,57 +187,46 @@ set ( _files
    "${COMMON}/fs_nvram.c"
    "${COMMON}/dev_lxt970a.c"
    )
-set ( _depends ppc32_microcode_dump_unstable mips64_microcode_dump_unstable )
-set ( _flags ${DYNAMIPS_FLAGS} )
-set ( _libraries ${DYNAMIPS_LIBRARIES} )
 if ( ENABLE_LINUX_ETH )
    set ( _files ${_files} "${COMMON}/linux_eth.c" )
-   set ( _flags ${_flags} -DLINUX_ETH )
 endif ( ENABLE_LINUX_ETH )
 if ( ENABLE_GEN_ETH )
    set ( _files ${_files} "${COMMON}/gen_eth.c" )
-   set ( _flags ${_flags} -DGEN_ETH )
-   set ( _libraries ${_libraries} ${PCAP_LIBRARIES} )
 endif ( ENABLE_GEN_ETH )
-
-# dynamips_x86_unstable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "x86" )
-add_executable ( dynamips_x86_unstable
-   ${_files}
-   "${LOCAL}/mips64_x86_trans.c"
-   "${LOCAL}/ppc32_x86_trans.c"
-   )
-add_dependencies ( dynamips_x86_unstable ${_depends} )
-target_add_compile_flags ( dynamips_x86_unstable ${_flags} -m32 )
-target_link_libraries ( dynamips_x86_unstable ${_libraries} )
-install_executables ( dynamips_x86_unstable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "x86" )
+set ( _dependencies ppc32_microcode_dump_unstable mips64_microcode_dump_unstable )
 
 # dynamips_amd64_unstable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "amd64" )
+if ( "amd64" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_amd64_unstable
    ${_files}
    "${LOCAL}/mips64_amd64_trans.c"
    "${LOCAL}/ppc32_amd64_trans.c"
    )
-add_dependencies ( dynamips_amd64_unstable ${_depends} )
-target_add_compile_flags ( dynamips_amd64_unstable ${_flags} -m64 )
-if ( APPLE )
-   target_add_compile_flags ( dynamips_amd64_unstable -DMAC64HACK )
-endif ( APPLE )
-target_link_libraries ( dynamips_amd64_unstable ${_libraries} )
+add_dependencies ( dynamips_amd64_unstable ${_dependencies} )
+target_link_libraries ( dynamips_amd64_unstable ${DYNAMIPS_LIBRARIES} )
 install_executables ( dynamips_amd64_unstable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "amd64" )
+endif ()
+
+# dynamips_x86_unstable
+if ( "x86" STREQUAL "${DYNAMIPS_ARCH}" )
+add_executable ( dynamips_x86_unstable
+   ${_files}
+   "${LOCAL}/mips64_x86_trans.c"
+   "${LOCAL}/ppc32_x86_trans.c"
+   )
+add_dependencies ( dynamips_x86_unstable ${_dependencies} )
+target_link_libraries ( dynamips_x86_unstable ${DYNAMIPS_LIBRARIES} )
+install_executables ( dynamips_x86_unstable )
+endif ()
 
 # dynamips_nojit_unstable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "nojit" )
+if ( "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_nojit_unstable
    ${_files}
    "${COMMON}/mips64_nojit_trans.c"
    "${COMMON}/ppc32_nojit_trans.c"
    )
-add_dependencies ( dynamips_nojit_unstable ${_depends} )
-target_add_compile_flags ( dynamips_nojit_unstable ${_flags} )
-target_link_libraries ( dynamips_nojit_unstable ${_libraries} )
+add_dependencies ( dynamips_nojit_unstable ${_dependencies} )
+target_link_libraries ( dynamips_nojit_unstable ${DYNAMIPS_LIBRARIES} )
 install_executables ( dynamips_nojit_unstable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "nojit" )
+endif ()

@@ -1,37 +1,39 @@
-# stable
+# dynamips - stable code + tools
 
-set ( _executables )
 set ( COMMON "${CMAKE_SOURCE_DIR}/common" )
 set ( LOCAL "${CMAKE_CURRENT_SOURCE_DIR}" )
 include_directories ( "${CMAKE_CURRENT_SOURCE_DIR}" "${COMMON}" "${CMAKE_CURRENT_BINARY_DIR}" )
 
 # udp_send
 if ( BUILD_UDP_SEND )
-add_executable ( udp_send EXCLUDE_FROM_ALL
+add_executable ( udp_send
    "${COMMON}/crc.c"
    "${COMMON}/net.c"
    "${COMMON}/udp_send.c"
    "${COMMON}/utils.c"
    )
-install_executables ( udp_send )
+target_link_libraries ( udp_send ${DYNAMIPS_LIBRARIES} )
+install_executable ( udp_send )
 endif ( BUILD_UDP_SEND )
 
 # udp_recv
 if ( BUILD_UDP_RECV )
-add_executable ( udp_recv EXCLUDE_FROM_ALL
+add_executable ( udp_recv
    "${COMMON}/crc.c"
    "${COMMON}/net.c"
    "${COMMON}/udp_recv.c"
    "${COMMON}/utils.c"
    )
-install_executables ( udp_recv )
+target_link_libraries ( udp_recv ${DYNAMIPS_LIBRARIES} )
+install_executable ( udp_recv )
 endif ( BUILD_UDP_RECV )
 
 # rom2c
+# XXX must be built for the host, not target, to support cross-compiling
 add_executable ( rom2c EXCLUDE_FROM_ALL
    "${COMMON}/rom2c.c"
    )
-target_link_libraries ( rom2c ${LIBELF_LIBRARIES} )
+target_link_libraries ( rom2c ${DYNAMIPS_LIBRARIES} )
 set ( ROM2C_EXECUTABLE "${CMAKE_CURRENT_BINARY_DIR}/rom2c${CMAKE_EXECUTABLE_SUFFIX}" CACHE INTERNAL "rom2c executable" )
 
 # mips64_microcode_dump.inc
@@ -64,7 +66,8 @@ add_executable ( nvram_export
    "${COMMON}/fs_nvram.c"
    "${COMMON}/nvram_export.c"
    )
-install_executables ( nvram_export )
+target_link_libraries ( nvram_export ${DYNAMIPS_LIBRARIES} )
+install_executable ( nvram_export )
 endif ( BUILD_NVRAM_EXPORT )
 
 #-----------------------#
@@ -225,57 +228,46 @@ set ( _files
    "${COMMON}/fs_nvram.c"
    "${COMMON}/dev_lxt970a.c"
    )
-set ( _depends ppc32_microcode_dump_stable mips64_microcode_dump_stable )
-set ( _flags ${DYNAMIPS_FLAGS} )
-set ( _libraries ${DYNAMIPS_LIBRARIES} )
 if ( ENABLE_LINUX_ETH )
    set ( _files ${_files} "${COMMON}/linux_eth.c" )
-   set ( _flags ${_flags} -DLINUX_ETH )
 endif ( ENABLE_LINUX_ETH )
 if ( ENABLE_GEN_ETH )
    set ( _files ${_files} "${COMMON}/gen_eth.c" )
-   set ( _flags ${_flags} -DGEN_ETH )
-   set ( _libraries ${_libraries} ${PCAP_LIBRARIES} )
 endif ( ENABLE_GEN_ETH )
-
-# dynamips_x86_stable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "x86" )
-add_executable ( dynamips_x86_stable
-   ${_files}
-   "${LOCAL}/mips64_x86_trans.c"
-   "${LOCAL}/ppc32_x86_trans.c"
-   )
-add_dependencies ( dynamips_x86_stable ${_depends} )
-target_add_compile_flags ( dynamips_x86_stable ${_flags} -m32 )
-target_link_libraries ( dynamips_x86_stable ${_libraries} )
-install_executables ( dynamips_x86_stable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "x86" )
+set ( _dependencies ppc32_microcode_dump_stable mips64_microcode_dump_stable )
 
 # dynamips_amd64_stable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "amd64" )
+if ( "amd64" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_amd64_stable
    ${_files}
    "${LOCAL}/mips64_amd64_trans.c"
    "${LOCAL}/ppc32_amd64_trans.c"
    )
-add_dependencies ( dynamips_amd64_stable ${_depends} )
-target_add_compile_flags ( dynamips_amd64_stable ${_flags} -m64 )
-if ( APPLE )
-   target_add_compile_flags ( dynamips_amd64_stable -DMAC64HACK )
-endif ( APPLE )
-target_link_libraries ( dynamips_amd64_stable ${_libraries} )
-install_executables ( dynamips_amd64_stable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "amd64" )
+add_dependencies ( dynamips_amd64_stable ${_dependencies} )
+target_link_libraries ( dynamips_amd64_stable ${DYNAMIPS_LIBRARIES} )
+install_executable ( dynamips_amd64_stable )
+endif ()
+
+# dynamips_x86_stable
+if ( "x86" STREQUAL "${DYNAMIPS_ARCH}" )
+add_executable ( dynamips_x86_stable
+   ${_files}
+   "${LOCAL}/mips64_x86_trans.c"
+   "${LOCAL}/ppc32_x86_trans.c"
+   )
+add_dependencies ( dynamips_x86_stable ${_dependencies} )
+target_link_libraries ( dynamips_x86_stable ${DYNAMIPS_LIBRARIES} )
+install_executable ( dynamips_x86_stable )
+endif ()
 
 # dynamips_nojit_stable
-if ( "${DYNAMIPS_ARCH}" STREQUAL "nojit" )
+if ( "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_nojit_stable
    ${_files}
    "${COMMON}/mips64_nojit_trans.c"
    "${COMMON}/ppc32_nojit_trans.c"
    )
-add_dependencies ( dynamips_nojit_stable ${_depends} )
-target_add_compile_flags ( dynamips_nojit_stable ${_flags} )
-target_link_libraries ( dynamips_nojit_stable ${_libraries} )
-install_executables ( dynamips_nojit_stable )
-endif ( "${DYNAMIPS_ARCH}" STREQUAL "nojit" )
+add_dependencies ( dynamips_nojit_stable ${_dependencies} )
+target_link_libraries ( dynamips_nojit_stable ${DYNAMIPS_LIBRARIES} )
+install_executable ( dynamips_nojit_stable )
+endif ()
