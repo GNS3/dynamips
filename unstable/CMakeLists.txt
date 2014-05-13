@@ -204,7 +204,8 @@ add_executable ( dynamips_amd64_unstable
    )
 add_dependencies ( dynamips_amd64_unstable ${_dependencies} )
 target_link_libraries ( dynamips_amd64_unstable ${DYNAMIPS_LIBRARIES} )
-install_executables ( dynamips_amd64_unstable )
+maybe_rename_to_dynamips ( dynamips_amd64_unstable )
+install_executable ( dynamips_amd64_unstable )
 endif ()
 
 # dynamips_x86_unstable
@@ -216,7 +217,8 @@ add_executable ( dynamips_x86_unstable
    )
 add_dependencies ( dynamips_x86_unstable ${_dependencies} )
 target_link_libraries ( dynamips_x86_unstable ${DYNAMIPS_LIBRARIES} )
-install_executables ( dynamips_x86_unstable )
+maybe_rename_to_dynamips ( dynamips_x86_unstable )
+install_executable ( dynamips_x86_unstable )
 endif ()
 
 # dynamips_nojit_unstable
@@ -228,5 +230,6 @@ add_executable ( dynamips_nojit_unstable
    )
 add_dependencies ( dynamips_nojit_unstable ${_dependencies} )
 target_link_libraries ( dynamips_nojit_unstable ${DYNAMIPS_LIBRARIES} )
-install_executables ( dynamips_nojit_unstable )
+maybe_rename_to_dynamips ( dynamips_nojit_unstable )
+install_executable ( dynamips_nojit_unstable )
 endif ()

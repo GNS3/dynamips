@@ -11,6 +11,7 @@
 #  - DYNAMIPS_DEFINITIONS
 #  - DYNAMIPS_INCLUDES
 #  - DYNAMIPS_LIBRARIES
+# XXX assumes utils.cmake was included
 
 message ( STATUS "dependencies - BEGIN" )
 

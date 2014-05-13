@@ -1,5 +1,9 @@
 # dynamips - build system
-# Invoke with -DDYNAMIPS_CODE=all to build stable and unstable.
+# Control variables:
+#  - DYNAMIPS_RENAME : rename executable to dynamips (auto;stable;unstable;<empty>)
+#  - DYNAMIPS_CODE   : set default code (stable;unstable;both)
+#  - DYNAMIPS_ARCH   : build target architecture (amd64;x86;nojit)
+#  - ANY_COMPILER    : skip compiler check (assumes gcc)
 
 set ( CMAKE_LEGACY_CYGWIN_WIN32 0 ) # Remove when CMake >= 2.8.4 is required
 cmake_minimum_required ( VERSION 2.8 )
