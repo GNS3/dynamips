@@ -27,7 +27,7 @@ message ( STATUS "DYNAMIPS_VERSION=${DYNAMIPS_VERSION}" )
 #  - Use "amd64" to build for x86_64 (64-bit)
 #  - Use "nojit" to build for other architectures (no recompilation)
 set ( JIT_ARCH "\"${DYNAMIPS_ARCH}\"" )
-set ( JIT_CPU "${DYNAMIPS_ARCH}" )
+set ( JIT_CPU "CPU_${DYNAMIPS_ARCH}" )
 set ( MIPS64_ARCH_INC_FILE "\"mips64_${DYNAMIPS_ARCH}_trans.h\"" )
 set ( PPC32_ARCH_INC_FILE "\"ppc32_${DYNAMIPS_ARCH}_trans.h\"" )
 list ( APPEND DYNAMIPS_DEFINITIONS "-DJIT_ARCH=${JIT_ARCH}" "-DJIT_CPU=${JIT_CPU}"
@@ -69,7 +69,7 @@ print_variables ( DYNAMIPS_CODE BUILD_DYNAMIPS_STABLE BUILD_DYNAMIPS_UNSTABLE )
 
 # Rename target (auto;stable;unstable;<empty>)
 # XXX should auto or not renaming be the default?
-set ( DYNAMIPS_RENAME "auto" CACHE STRING "which executable is renamed to dynamips during install (auto;stable;unstable)" )
+set ( DYNAMIPS_RENAME "auto" CACHE STRING "which executable is renamed to dynamips (auto;stable;unstable;<empty>)" )
 set_property ( CACHE DYNAMIPS_RENAME PROPERTY STRINGS "auto" "stable" "unstable" )
 set ( DYNAMIPS_RENAME_TARGET )
 if ( "auto" STREQUAL DYNAMIPS_RENAME )

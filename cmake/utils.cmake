@@ -59,7 +59,6 @@ endmacro ( check_dependent_headers_exist _missingvar _dependencies )
 # rename target DYNAMIPS_RENAME_TARGET to dynamips
 macro ( maybe_rename_to_dynamips _target )
    if ( "${_target}" STREQUAL "${DYNAMIPS_RENAME_TARGET}" )
-      message ( "RENAME ${_target} -> dynamips" )
       set_target_properties ( ${_target} PROPERTIES OUTPUT_NAME "dynamips" )
    endif()
 endmacro ( maybe_rename_to_dynamips _target )
