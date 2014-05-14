@@ -1,0 +1,13 @@
+language: c
+compiler:
+  - gcc
+  - clang	
+# Change this to your needs
+before_install: sudo apt-get update -qq
+install: sudo apt-get install -qq libpcap0.8-dev libelf-dev uuid-dev
+before_script:
+  - mkdir build
+  - cd build
+script: 
+  - cmake -DANY_COMPILER=1 ..
+  - make
