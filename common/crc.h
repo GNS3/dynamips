@@ -8,8 +8,7 @@
 #ifndef __CRC_H__
 #define __CRC_H__
 
-#include <sys/types.h>
-#include "utils.h"
+#include "common.h"
 
 extern m_uint16_t crc12_array[],crc16_array[];
 extern m_uint32_t crc32_array[];

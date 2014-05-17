@@ -5,18 +5,7 @@
  * CRC functions.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <assert.h>
-
-#include "utils.h"
-#include "crc.h"
+#include "common.h"
 
 #define CRC12_POLY  0x0f01
 #define CRC16_POLY  0xa001
