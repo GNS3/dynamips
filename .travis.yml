@@ -4,18 +4,18 @@ compiler:
   - clang
 env:
   - DYNAMIPS_ARCH=amd64 ARCH=amd64
-  - DYNAMIPS_ARCH=x86   ARCH=i386
+#  - DYNAMIPS_ARCH=x86   ARCH=i386
   - DYNAMIPS_ARCH=nojit ARCH=amd64
 # Change this to your needs
 before_install: sudo apt-get update -qq
 install:
-  - sudo apt-get install -q binutils:$ARCH
-  - sudo apt-get install -q cpp:$ARCH
-  - sudo apt-get install -q gcc:$ARCH
-  - sudo apt-get install -q g++:$ARCH
-  - sudo apt-get install -q libelf-dev:$ARCH
-  - sudo apt-get install -q uuid-dev:$ARCH
-  - sudo apt-get install -q libpcap0.8-dev:$ARCH
+  - sudo apt-get install -qq binutils:$ARCH
+  - sudo apt-get install -qq cpp:$ARCH
+  - sudo apt-get install -qq gcc:$ARCH
+  - sudo apt-get install -qq g++:$ARCH
+  - sudo apt-get install -qq libelf-dev:$ARCH
+  - sudo apt-get install -qq uuid-dev:$ARCH
+  - sudo apt-get install -qq libpcap0.8-dev:$ARCH
 before_script:
   - mkdir build
   - cd build
