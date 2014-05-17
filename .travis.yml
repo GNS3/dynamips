@@ -9,8 +9,13 @@ env:
 # Change this to your needs
 before_install: sudo apt-get update -qq
 install:
-  - sudo apt-get install -qq binutils:$ARCH
-  - sudo apt-get install -qq gcc:$ARCH g++:$ARCH libelf-dev:$ARCH uuid-dev:$ARCH libpcap0.8-dev:$ARCH
+  - sudo apt-get install -q binutils:$ARCH
+  - sudo apt-get install -q gcc:$ARCH
+  - sudo apt-get install -q g++:$ARCH
+  - sudo apt-get install -q g++:$ARCH
+  - sudo apt-get install -q libelf-dev:$ARCH
+  - sudo apt-get install -q uuid-dev:$ARCH
+  - sudo apt-get install -q libpcap0.8-dev:$ARCH
 before_script:
   - mkdir build
   - cd build
