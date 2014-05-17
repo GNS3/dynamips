@@ -10,8 +10,8 @@ env:
 before_install: sudo apt-get update -qq
 install:
   - sudo apt-get install -q binutils:$ARCH
+  - sudo apt-get install -q cpp:$ARCH
   - sudo apt-get install -q gcc:$ARCH
-  - sudo apt-get install -q g++:$ARCH
   - sudo apt-get install -q g++:$ARCH
   - sudo apt-get install -q libelf-dev:$ARCH
   - sudo apt-get install -q uuid-dev:$ARCH
