@@ -3,14 +3,14 @@ compiler:
   - gcc
   - clang
 env:
-  - DYNAMIPS_ARCH=amd64
-  - DYNAMIPS_ARCH=x86
-  - DYNAMIPS_ARCH=nojit
+  - DYNAMIPS_ARCH=amd64 ARCH=amd64
+  - DYNAMIPS_ARCH=x86   ARCH=i386
+  - DYNAMIPS_ARCH=nojit ARCH=amd64
 # Change this to your needs
 before_install: sudo apt-get update -qq
 install:
-  - test "$DYNAMIPS_ARCH" != "x86" && sudo apt-get install -qq binutils && sudo apt-get install -qq gcc g++ libelf-dev uuid-dev libpcap0.8-dev
-  - test "$DYNAMIPS_ARCH" = "x86" && sudo apt-get install -qq binutils:i386 && sudo apt-get install -qq gcc:i386 g++:i386 libelf-dev:i386 uuid-dev:i386 libpcap0.8-dev:i386
+  - sudo apt-get install -qq binutils:$ARCH
+  - sudo apt-get install -qq gcc:$ARCH g++:$ARCH libelf-dev:$ARCH uuid-dev:$ARCH libpcap0.8-dev:$ARCH
 before_script:
   - mkdir build
   - cd build
