@@ -91,6 +91,15 @@ elseif ( NOT "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
    message ( FATAL_ERROR "cannot build target arch DYNAMIPS_ARCH=${DYNAMIPS_ARCH}" )
 endif ()
 print_variables ( ARCH_AMD64 ARCH_X86 DYNAMIPS_ARCH )
+# found native library, not the target architecture library
+function ( bad_library _type _lib _vars )
+   message (
+      ${_type} 
+      "${_lib} was found but cannot be used with DYNAMIPS_ARCH=${DYNAMIPS_ARCH}. "
+      "Make sure the library for the target architecture is installed. "
+      "If needed, you can set the variables ${_vars} manually. "
+      )
+endfunction ()
 
 # Compiler flags
 foreach ( _flag
@@ -131,11 +140,18 @@ endif ()
 # libelf
 set_cmake_required ()
 find_package ( LibElf REQUIRED )
+print_variables ( LIBELF_FOUND LIBELF_INCLUDE_DIRS LIBELF_LIBRARIES LIBELF_DEFINITIONS )
+# make sure it can be used
+set_cmake_required ()
+list ( APPEND CMAKE_REQUIRED_DEFINITIONS ${LIBELF_DEFINITIONS} )
+list ( APPEND CMAKE_REQUIRED_INCLUDES ${LIBELF_INCLUDE_DIRS} )
+check_library_exists ( "${LIBELF_LIBRARIES}" elf_begin "libelf.h" LIBELF_VALID )
+if ( NOT LIBELF_VALID )
+   bad_library ( FATAL_ERROR "libelf" "LIBELF_INCLUDE_DIRS and LIBELF_LIBRARIES" )
+endif ()
 list ( APPEND DYNAMIPS_DEFINITIONS ${LIBELF_DEFINITIONS} )
 list ( APPEND DYNAMIPS_INCLUDES ${LIBELF_INCLUDE_DIRS} )
 list ( APPEND DYNAMIPS_LIBRARIES ${LIBELF_LIBRARIES} )
-print_variables ( LIBELF_FOUND LIBELF_INCLUDE_DIRS LIBELF_LIBRARIES 
-   LIBELF_DEFINITIONS )
 # XXX some old libelf's aren't large file aware with ILP32
 set ( _code "
 #define _FILE_OFFSET_BITS 64
@@ -151,9 +167,16 @@ print_variables ( LIBELF_LARGEFILE )
 # libuuid
 set_cmake_required ()
 find_package ( UUID REQUIRED )
+print_variables ( UUID_FOUND UUID_INCLUDE_DIR UUID_LIBRARY )
+# make sure it can be used
+set_cmake_required ()
+list ( APPEND CMAKE_REQUIRED_INCLUDES ${UUID_INCLUDE_DIR} )
+check_library_exists ( "${UUID_LIBRARY}" uuid_generate "uuid/uuid.h" UUID_VALID )
+if ( NOT UUID_VALID )
+   bad_library ( FATAL_ERROR "uuid" "UUID_INCLUDE_DIR and UUID_LIBRARY" )
+endif ()
 list ( APPEND DYNAMIPS_INCLUDES ${UUID_INCLUDE_DIR} )
 list ( APPEND DYNAMIPS_LIBRARIES ${UUID_LIBRARY} )
-print_variables ( UUID_FOUND UUID_INCLUDE_DIR UUID_LIBRARY )
 
 # pthreads
 set ( CMAKE_THREAD_PREFER_PTHREAD 1 )
@@ -173,9 +196,20 @@ else ()
 endif ()
 
 # libpcap/winpcap (optional)
+set_cmake_required ()
 find_package ( PCAP )
 print_variables ( PCAP_FOUND PCAP_INCLUDE_DIRS PCAP_LIBRARIES )
 set ( HAVE_PCAP ${PCAP_FOUND} )
+if ( HAVE_PCAP )
+   # make sure it can be used
+   set_cmake_required ()
+   list ( APPEND CMAKE_REQUIRED_INCLUDES ${PCAP_INCLUDE_DIRS} )
+   check_library_exists ( "${PCAP_LIBRARIES}" pcap_open_live "pcap.h" PCAP_VALID )
+   if ( NOT PCAP_VALID )
+      bad_library ( WARNING "pcap" "PCAP_INCLUDE_DIRS and PCAP_LIBRARIES" )
+   endif ()
+   set ( HAVE_PCAP ${PCAP_VALID} )
+endif ()
 if ( HAVE_PCAP AND CYGWIN )
    # cygwin requires pcap_open
    set_cmake_required ()
