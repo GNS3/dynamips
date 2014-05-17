@@ -1,13 +1,16 @@
 language: c
 compiler:
   - gcc
-  - clang	
+  - clang
+env:
+  - DYNAMIPS_ARCH=
+  - DYNAMIPS_ARCH=nojit
 # Change this to your needs
 before_install: sudo apt-get update -qq
 install: sudo apt-get install -qq libpcap0.8-dev libelf-dev uuid-dev
 before_script:
   - mkdir build
   - cd build
-script: 
-  - cmake -DANY_COMPILER=1 ..
-  - make
+script:
+  - cmake -DDYNAMIPS_ARCH=$DYNAMIPS_ARCH -DANY_COMPILER=1 -DCMAKE_INSTALL_PREFIX=$(pwd)/test ..
+  - make install
