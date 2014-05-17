@@ -8,8 +8,7 @@
 #ifndef __SBOX_H__
 #define __SBOX_H__
 
-#include <sys/types.h>
-#include "utils.h"
+#include "common.h"
 
 extern m_uint32_t sbox_array[];
 
