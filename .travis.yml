@@ -8,10 +8,15 @@ env:
   - DYNAMIPS_ARCH=nojit ARCH=       CMAKE_LIBRARY_PATH=
 before_install: sudo apt-get update -qq
 install:
+  - dpkg --get-selections
   - sudo apt-get install -q libc6-dev-i386
+  - dpkg --get-selections
   - sudo apt-get install -q libelf-dev$ARCH
+  - dpkg --get-selections
   - sudo apt-get install -q uuid-dev$ARCH
+  - dpkg --get-selections
   - sudo apt-get install -q libpcap0.8-dev$ARCH
+  - dpkg --get-selections
 before_script:
   - mkdir build
   - cd build
