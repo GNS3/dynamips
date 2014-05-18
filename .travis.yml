@@ -6,9 +6,7 @@ env:
   - DYNAMIPS_ARCH=amd64 ARCH=:amd64 CMAKE_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
   - DYNAMIPS_ARCH=x86   ARCH=:i386  CMAKE_LIBRARY_PATH=/usr/lib/i386-linux-gnu
   - DYNAMIPS_ARCH=nojit ARCH=       CMAKE_LIBRARY_PATH=
-before_install:
-  - sudo dpkg
-  - sudo apt-get update -qq
+before_install: sudo apt-get update -qq
 install:
   - sudo apt-get install -q libelf-dev$ARCH
   - sudo apt-get install -q uuid-dev$ARCH
