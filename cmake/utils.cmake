@@ -31,30 +31,34 @@ macro ( standard_variable_name _var _name )
       string ( TOUPPER "${${_var}}" ${_var} )
 endmacro ()
 
-# test if all the headers exist (also defines HAVE_<HEADER> variables)
-macro ( check_headers_exist _missingvar )
-   foreach ( _header ${ARGN} )
-      standard_variable_name ( _var "HAVE_${_header}" )
-      check_include_file ( ${_header} ${_var} )
-      if ( NOT "${${_var}}" )
-         print_variables ( ${_var} )
-         list ( APPEND ${_missingvar} ${_header} )
-      endif ( NOT "${${_var}}" )
-   endforeach ( _header ${ARGN} )
-endmacro ( check_headers_exist _missingvar )
+# check if we can compile with the library for the target architecture
+macro ( check_arch_library _var _func _header _libvar )
+   set ( _n 0 )
+   set ( ${_var} )
+   foreach ( _lib "${${_libvar}}" ${ARGN} )
+      check_library_exists ( "${_lib}" ${_func} ${_header} ${_var}_${_n} )
+      if ( ${_var}_${_n} )
+         # success
+         set ( ${_var} 1 )
+         if ( NOT "${_lib}" STREQUAL "${${_libvar}}" )
+            set ( ${_libvar} ${_lib} )
+            print_variables ( ${_libvar} )
+         endif ()
+         break ()
+      endif ()
+      math ( EXPR _n "${_n}+1" )
+   endforeach ()
+endmacro ()
 
-# test if all the headers exist (also defines HAVE_<HEADER> variables)
-macro ( check_dependent_headers_exist _missingvar _dependencies )
-   foreach ( _header ${ARGN} )
-      string ( REGEX REPLACE "[^a-zA-Z0-9]" "_" _var "HAVE_${_header}" )
-      string ( TOUPPER "${_var}" _var )
-      check_include_files ( "${_dependencies};${_header}" ${_var} )
-      if ( NOT "${${_var}}" )
-         print_variables ( ${_var} )
-         list ( APPEND ${_missingvar} ${_header} )
-      endif ( NOT "${${_var}}" )
-   endforeach ( _header ${ARGN} )
-endmacro ( check_dependent_headers_exist _missingvar _dependencies )
+# could not compile with the library for the target architecture
+macro ( bad_arch_library _type _lib _vars )
+   message (
+      ${_type} 
+      "${_lib} was found but cannot be used with DYNAMIPS_ARCH=${DYNAMIPS_ARCH}. "
+      "Make sure the library for the target architecture is installed. "
+      "If needed, you can set the variables ${_vars} manually. "
+      )
+endmacro ()
 
 # rename target DYNAMIPS_RENAME_TARGET to dynamips
 macro ( maybe_rename_to_dynamips _target )

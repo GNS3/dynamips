@@ -91,15 +91,6 @@ elseif ( NOT "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
    message ( FATAL_ERROR "cannot build target arch DYNAMIPS_ARCH=${DYNAMIPS_ARCH}" )
 endif ()
 print_variables ( ARCH_AMD64 ARCH_X86 DYNAMIPS_ARCH )
-# found native library, not the target architecture library
-function ( bad_library _type _lib _vars )
-   message (
-      ${_type} 
-      "${_lib} was found but cannot be used with DYNAMIPS_ARCH=${DYNAMIPS_ARCH}. "
-      "Make sure the library for the target architecture is installed. "
-      "If needed, you can set the variables ${_vars} manually. "
-      )
-endfunction ()
 
 # Compiler flags
 foreach ( _flag
@@ -145,9 +136,9 @@ print_variables ( LIBELF_FOUND LIBELF_INCLUDE_DIRS LIBELF_LIBRARIES LIBELF_DEFIN
 set_cmake_required ()
 list ( APPEND CMAKE_REQUIRED_DEFINITIONS ${LIBELF_DEFINITIONS} )
 list ( APPEND CMAKE_REQUIRED_INCLUDES ${LIBELF_INCLUDE_DIRS} )
-check_library_exists ( "${LIBELF_LIBRARIES}" elf_begin "libelf.h" LIBELF_VALID )
+check_arch_library ( LIBELF_VALID elf_begin "libelf.h" LIBELF_LIBRARIES elf )
 if ( NOT LIBELF_VALID )
-   bad_library ( FATAL_ERROR "libelf" "LIBELF_INCLUDE_DIRS and LIBELF_LIBRARIES" )
+   bad_arch_library ( FATAL_ERROR "libelf" "LIBELF_INCLUDE_DIRS and LIBELF_LIBRARIES" )
 endif ()
 list ( APPEND DYNAMIPS_DEFINITIONS ${LIBELF_DEFINITIONS} )
 list ( APPEND DYNAMIPS_INCLUDES ${LIBELF_INCLUDE_DIRS} )
@@ -171,9 +162,9 @@ print_variables ( UUID_FOUND UUID_INCLUDE_DIR UUID_LIBRARY )
 # make sure it can be used
 set_cmake_required ()
 list ( APPEND CMAKE_REQUIRED_INCLUDES ${UUID_INCLUDE_DIR} )
-check_library_exists ( "${UUID_LIBRARY}" uuid_generate "uuid/uuid.h" UUID_VALID )
+check_arch_library ( UUID_VALID uuid_generate "uuid/uuid.h" UUID_LIBRARY uuid )
 if ( NOT UUID_VALID )
-   bad_library ( FATAL_ERROR "uuid" "UUID_INCLUDE_DIR and UUID_LIBRARY" )
+   bad_arch_library ( FATAL_ERROR "uuid" "UUID_INCLUDE_DIR and UUID_LIBRARY" )
 endif ()
 list ( APPEND DYNAMIPS_INCLUDES ${UUID_INCLUDE_DIR} )
 list ( APPEND DYNAMIPS_LIBRARIES ${UUID_LIBRARY} )
@@ -204,9 +195,9 @@ if ( HAVE_PCAP )
    # make sure it can be used
    set_cmake_required ()
    list ( APPEND CMAKE_REQUIRED_INCLUDES ${PCAP_INCLUDE_DIRS} )
-   check_library_exists ( "${PCAP_LIBRARIES}" pcap_open_live "pcap.h" PCAP_VALID )
+   check_arch_library ( PCAP_VALID pcap_open_live "pcap.h" PCAP_LIBRARIES pcap wpcap )
    if ( NOT PCAP_VALID )
-      bad_library ( WARNING "pcap" "PCAP_INCLUDE_DIRS and PCAP_LIBRARIES" )
+      bad_arch_library ( WARNING "pcap/wpcap" "PCAP_INCLUDE_DIRS and PCAP_LIBRARIES" )
    endif ()
    set ( HAVE_PCAP ${PCAP_VALID} )
 endif ()
