@@ -9,6 +9,7 @@
 #define __TSG_H__
 
 #include "utils.h"
+#include "vm.h"
 
 /* Checksum type */
 typedef m_uint64_t tsg_checksum_t;

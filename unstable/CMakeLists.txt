@@ -225,7 +225,7 @@ endif ()
 if ( "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_nojit_unstable
    ${_files}
-   "${COMMON}/mips64_nojit_trans.c"
+   "${LOCAL}/mips64_nojit_trans.c"
    "${COMMON}/ppc32_nojit_trans.c"
    )
 add_dependencies ( dynamips_nojit_unstable ${_dependencies} )
