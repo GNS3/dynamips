@@ -146,7 +146,7 @@ set ( _files
    "${COMMON}/dev_ap1011.c"
    "${COMMON}/dev_plx6520cb.c"
    "${COMMON}/dev_ns16552.c"
-   "${LOCAL}/dev_dec21140.c"
+   "${COMMON}/dev_dec21140.c"
    "${COMMON}/dev_am79c971.c"
    "${COMMON}/dev_i8254x.c"
    "${COMMON}/dev_i8255x.c"
