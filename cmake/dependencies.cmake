@@ -174,6 +174,7 @@ set ( CMAKE_THREAD_PREFER_PTHREAD 1 )
 set_cmake_required ()
 find_package ( Threads REQUIRED )
 if ( CMAKE_USE_PTHREADS_INIT )
+   list ( APPEND DYNAMIPS_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} )
    print_variables ( CMAKE_THREAD_LIBS_INIT CMAKE_USE_PTHREADS_INIT )
    # ok
 else ()
