@@ -10,6 +10,7 @@
  * Copyright (c) 2014 Flávio J. Saraiva <flaviojs2005@gmail.com>
  */
 
+#pragma once
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
