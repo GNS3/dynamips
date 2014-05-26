@@ -5,17 +5,6 @@
  * Dallas DS1620 Temperature sensors.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-
-#include <termios.h>
-#include <fcntl.h>
-#include <pthread.h>
-
-#include "utils.h"
 #include "dev_ds1620.h"
 
 /* DS1620 commands */

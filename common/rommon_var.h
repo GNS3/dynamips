@@ -8,6 +8,8 @@
 #ifndef __ROMMON_VAR_H__
 #define __ROMMON_VAR_H__
 
+#include "dynamips_common.h"
+
 /* ROMMON variable */
 struct rommon_var {
    struct rommon_var *next;

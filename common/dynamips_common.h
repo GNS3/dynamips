@@ -28,6 +28,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 #include <pthread.h>
 
