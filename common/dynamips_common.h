@@ -106,6 +106,8 @@
 #define unlikely(x)  (x)
 #endif
 
+#define __not_aligned __attribute__ ((aligned (1)))
+
 /* Common types */
 typedef unsigned char m_uint8_t;
 typedef signed char m_int8_t;

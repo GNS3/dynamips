@@ -577,7 +577,7 @@ m_uint16_t nvram_cksum(m_uint16_t *ptr,size_t count)
 /* Byte-swap a memory block */
 void mem_bswap32(void *ptr,size_t len)
 {
-   m_uint32_t *p = ptr;
+   m_uint32_t *p __not_aligned = ptr;
    size_t count = len >> 2;
    int i;
 
