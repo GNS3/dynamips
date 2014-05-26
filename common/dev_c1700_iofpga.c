@@ -249,7 +249,9 @@ dev_c1700_iofpga_access(cpu_gen_t *cpu,struct vdevice *dev,
       case 0x20:
       */
 
-      /* Unknown, read on 1760 */
+      /* Unknown, read on 1760. Considering the activity pattern, 
+       * it's probably used to update the fpga.
+       */
       case 0x4c:
          if (op_type == MTS_READ)
             *data = 0xFF;
