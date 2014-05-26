@@ -8,7 +8,13 @@
 #ifndef __NET_H__
 #define __NET_H__  1
 
-#include "utils.h"
+#include "dynamips_common.h"
+
+#include <arpa/inet.h>
+#include <netdb.h>
+/* TODO missing in MinGW */
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 #define N_IP_ADDR_LEN   4 
 #define N_IP_ADDR_BITS  32
