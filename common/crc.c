@@ -5,7 +5,7 @@
  * CRC functions.
  */
 
-#include "common.h"
+#include "dynamips_common.h"
 
 #define CRC12_POLY  0x0f01
 #define CRC16_POLY  0xa001

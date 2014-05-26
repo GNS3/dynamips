@@ -5,7 +5,7 @@
  * S-Box: http://bretm.home.comcast.net/hash/10.html
  */
 
-#include "common.h"
+#include "dynamips_common.h"
 
 m_uint32_t sbox_array[] = {
    0xF53E1837, 0x5F14C86B, 0x9EE3964C, 0xFA796D53,

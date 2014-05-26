@@ -1,4 +1,4 @@
-/** @file common.h
+/** @file
  * @brief Common includes, types, defines and platform specific stuff.
  *
  * This header should be included before other headers.
@@ -11,8 +11,8 @@
  */
 
 #pragma once
-#ifndef __COMMON_H__
-#define __COMMON_H__
+#ifndef __DYNAMIPS_COMMON_H__
+#define __DYNAMIPS_COMMON_H__
 
 /* Config file - not used at the moment */
 #if HAVE_DYNAMIPS_CONFIG_H

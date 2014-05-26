@@ -6,7 +6,7 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#include "common.h"
+#include "dynamips_common.h"
 
 #include <sys/time.h>
 #include <netinet/in.h>
