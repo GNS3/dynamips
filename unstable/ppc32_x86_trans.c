@@ -655,7 +655,7 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 }
 
 /* Dump regs */
-__unused static void ppc32_emit_dump_regs(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
+_unused static void ppc32_emit_dump_regs(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 {   
    jit_op_t *iop;
    

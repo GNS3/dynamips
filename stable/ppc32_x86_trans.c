@@ -503,7 +503,7 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 {
    m_uint32_t val = sign_extend(offset,16);
    u_char *test1,*test2,*p_exit;
-   __maybe_unused u_char *p_fast_exit;
+   _maybe_used u_char *p_fast_exit;
    jit_op_t *iop;
 
    /* 
@@ -688,7 +688,7 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 }
 
 /* Dump regs */
-__unused static void ppc32_emit_dump_regs(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
+_unused static void ppc32_emit_dump_regs(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 {   
    jit_op_t *iop;
    
