@@ -19,6 +19,11 @@
 #include "dynamips_config.h"
 #endif
 
+/* By default, Cygwin supports only 64 FDs with select()! */
+#if defined(__CYGWIN__) && !defined(FD_SETSIZE)
+#define FD_SETSIZE 1024
+#endif
+
 #define _GNU_SOURCE
 #include <stdarg.h>
 #include <sys/types.h>

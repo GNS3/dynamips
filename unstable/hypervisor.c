@@ -5,10 +5,7 @@
  * Hypervisor routines.
  */
 
-/* By default, Cygwin supports only 64 FDs with select()! */
-#ifdef __CYGWIN__
-#define FD_SETSIZE 1024
-#endif
+#include "dynamips_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
