@@ -243,7 +243,7 @@ static void dec21140_update_mac_addr(struct dec21140_data *d,
 }
 
 /* Get a PCI register name */
-__maybe_unused static char *pci_cfgreg_name(int reg)
+_maybe_used static char *pci_cfgreg_name(int reg)
 {
    static char *name[] = {
       "FID", "FCS", "FRV", "FLT", "BIO", "BMA", "?", "?",

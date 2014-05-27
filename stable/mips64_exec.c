@@ -289,7 +289,7 @@ void mips64_dump_insn_block(cpu_mips_t *cpu,m_uint64_t pc,u_int count,
 }
 
 /* Execute a memory operation */
-__unused static forced_inline void mips64_exec_memop(cpu_mips_t *cpu,int memop,
+_unused static forced_inline void mips64_exec_memop(cpu_mips_t *cpu,int memop,
                                             m_uint64_t vaddr,u_int dst_reg,
                                             int keep_ll_bit)
 {     

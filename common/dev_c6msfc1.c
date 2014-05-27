@@ -246,7 +246,7 @@ static int c6msfc1_set_eeprom(c6msfc1_t *router)
 }
 
 /* Set the base MAC address of the chassis */
-__unused static int c6msfc1_burn_mac_addr(c6msfc1_t *router,n_eth_addr_t *addr)
+_unused static int c6msfc1_burn_mac_addr(c6msfc1_t *router,n_eth_addr_t *addr)
 {
    m_uint8_t eeprom_ver;
 

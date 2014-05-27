@@ -681,7 +681,7 @@ static int c6sup1_boot_ios(c6sup1_t *router)
 /* Set an IRQ */
 static void c6sup1_set_irq(vm_instance_t *vm,u_int irq)
 {
-   __maybe_unused c6sup1_t *router = VM_C6SUP1(vm);
+   _maybe_used c6sup1_t *router = VM_C6SUP1(vm);
    cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
    u_int slot,port;
    
@@ -703,7 +703,7 @@ static void c6sup1_set_irq(vm_instance_t *vm,u_int irq)
 /* Clear an IRQ */
 static void c6sup1_clear_irq(vm_instance_t *vm,u_int irq)
 {
-   __maybe_unused c6sup1_t *router = VM_C6SUP1(vm);
+   _maybe_used c6sup1_t *router = VM_C6SUP1(vm);
    cpu_mips_t *cpu0 = CPU_MIPS64(vm->boot_cpu);
    u_int slot,port;
    

@@ -111,7 +111,7 @@ static void *dev_pos_access(cpu_gen_t *cpu,struct vdevice *dev,
                             m_uint32_t offset,u_int op_size,u_int op_type,
                             m_uint64_t *data)
 {
-   __maybe_unused struct pos_oc3_data *d = dev->priv_data;
+   _maybe_used struct pos_oc3_data *d = dev->priv_data;
 
    if (op_type == MTS_READ)
       *data = 0;

@@ -144,7 +144,7 @@ static void plx9054_doorbell_callback(struct plx_data *plx_data,
 /*
  * pa_mc8te1_access()
  */
-__unused static void *pa_mc8te1_access(cpu_gen_t *cpu,struct vdevice *dev,
+_unused static void *pa_mc8te1_access(cpu_gen_t *cpu,struct vdevice *dev,
                               m_uint32_t offset,u_int op_size,u_int op_type,
                               m_uint64_t *data)
 {

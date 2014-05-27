@@ -348,7 +348,7 @@ static void ilt_compile(insn_lookup_t *ilt)
 }
 
 /* Dump an instruction lookup table */
-__unused static int ilt_dump(char *table_name,insn_lookup_t *ilt)
+_unused static int ilt_dump(char *table_name,insn_lookup_t *ilt)
 {
    rfc_array_t *rfct;
    char *filename;

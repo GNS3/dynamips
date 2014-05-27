@@ -1125,7 +1125,7 @@ static int mv64460_sdma_handle_rxqueue(struct mv64460_data *d,
 }
 
 /* Handle RX packet for a SDMA channel */
-__unused static int mv64460_sdma_handle_rx_pkt(netio_desc_t *nio,
+_unused static int mv64460_sdma_handle_rx_pkt(netio_desc_t *nio,
                                       u_char *pkt,ssize_t pkt_len,
                                       struct mv64460_data *d,void *arg)
 {

@@ -357,7 +357,7 @@ static m_uint32_t fs_nvram_read32(fs_nvram_t *fs,u_int offset)
 
 
 /** Write a 32-bit value to NVRAM. */
-__unused static void fs_nvram_write32(fs_nvram_t *fs,u_int offset,m_uint32_t val)
+_unused static void fs_nvram_write32(fs_nvram_t *fs,u_int offset,m_uint32_t val)
 {
    fs->write_byte(fs,offset,val >> 24);
    fs->write_byte(fs,offset+1,val >> 16);

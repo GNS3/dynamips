@@ -326,7 +326,7 @@ static int m32_post_interrupt(struct m32_data *d,m_uint32_t iq_value)
 }
 
 /* Fetch a timeslot assignment */
-__unused static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
+_unused static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
 {
    m_uint32_t offset;
 
@@ -348,7 +348,7 @@ static int m32_fetch_all_ts(struct m32_data *d)
 }
 
 /* Show timeslots assignments (debugging) */
-__maybe_unused static void m32_show_ts_assign(struct m32_data *d)
+_maybe_used static void m32_show_ts_assign(struct m32_data *d)
 {
    m_uint32_t ts;
    u_int i;
@@ -646,7 +646,7 @@ void *pa_4b_access(cpu_gen_t *cpu,struct vdevice *dev,m_uint32_t offset,
                    u_int op_size,u_int op_type,m_uint64_t *data)
 {
    struct pa_4b_data *d = dev->priv_data;
-   __maybe_unused static m_uint32_t test1,test2,test3;
+   _maybe_used static m_uint32_t test1,test2,test3;
 
    if (op_type == MTS_READ)
       *data = 0xFFFFFFFF;

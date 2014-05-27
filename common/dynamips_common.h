@@ -80,14 +80,14 @@
 #define fastcall
 #endif
 
-#ifndef __unused
+#ifndef _unused
 /* Function that is never used */
-#define __unused  __attribute__((unused))
+#define _unused  __attribute__((unused))
 #endif
 
-#ifndef __maybe_unused
+#ifndef _maybe_used
 /* Function that is referenced from excluded code (commented out or depends on preprocessor) */
-#define __maybe_unused  __attribute__((unused))
+#define _maybe_used  __attribute__((unused))
 #endif
 
 #ifndef UNUSED
@@ -112,7 +112,9 @@
 #define unlikely(x)  (x)
 #endif
 
-#define __not_aligned __attribute__ ((aligned (1)))
+#ifndef _not_aligned
+#define _not_aligned __attribute__ ((aligned (1)))
+#endif
 
 /* Common types */
 typedef unsigned char m_uint8_t;

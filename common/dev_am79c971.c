@@ -206,7 +206,7 @@ static m_uint16_t mii_reg_read(struct am79c971_data *d,u_int phy,u_int reg)
 }
 
 /* Write a MII register */
-__maybe_unused static void mii_reg_write(struct am79c971_data *d,u_int phy,u_int reg,
+_maybe_used static void mii_reg_write(struct am79c971_data *d,u_int phy,u_int reg,
                           m_uint16_t value)
 {
    if ((phy < 32) && (reg < 32))

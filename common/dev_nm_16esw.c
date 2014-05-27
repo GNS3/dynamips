@@ -675,7 +675,7 @@ static void bcm5600_reg_dump(struct nm_16esw_data *d,int show_null)
 }
 
 /* Fill a string buffer with all ports of the specified bitmap */
-__maybe_unused static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
+_maybe_used static char *bcm5600_port_bitmap_str(struct nm_16esw_data *d,
                                      char *buffer,m_uint32_t bitmap)
 {
    char *ptr = buffer;
@@ -874,7 +874,7 @@ static int bcm5600_table_write_entry(struct nm_16esw_data *d)
 }
 
 /* Dump a table (for debugging) */
-__unused static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
+_unused static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
 {
    struct bcm5600_table *table;
    m_uint32_t *entry;
@@ -1313,7 +1313,7 @@ static void bcm5600_handle_write_mem_cmd(struct nm_16esw_data *d)
 static void bcm5600_handle_gen_cmd(struct nm_16esw_data *d)
 {
    m_uint32_t op;
-   __maybe_unused m_uint32_t src,dst,len;
+   _maybe_used m_uint32_t src,dst,len;
 
    /* Extract the opcode */
    op  = (d->dw[0] & BCM5600_CMD_OP_MASK) >> BCM5600_CMD_OP_SHIFT;
@@ -1786,8 +1786,8 @@ static int bcm5600_trunk_egress_port(struct nm_16esw_data *d,
                                      struct bcm5600_pkt *p,
                                      u_int trunk_id)
 {   
-   __maybe_unused n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
-   __maybe_unused u_int i, hash;
+   _maybe_used n_eth_hdr_t *eth_hdr = (n_eth_hdr_t *)p->pkt;
+   _maybe_used u_int i, hash;
    struct bcm5600_tg_info *tgi;
    m_uint32_t *ttr_entry;
    u_int nr_links;
