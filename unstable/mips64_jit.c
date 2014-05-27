@@ -137,7 +137,7 @@ static struct mips64_insn_tag *insn_tag_find(mips_insn_t ins)
 }
 
 /* Check if the specified MIPS instruction is a jump */
-__unused static struct mips64_insn_jump *insn_jump_find(mips_insn_t ins)
+_unused static struct mips64_insn_jump *insn_jump_find(mips_insn_t ins)
 {
    struct mips64_insn_jump *jump = NULL;
    int i;

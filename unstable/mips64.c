@@ -999,7 +999,7 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
    Elf_Scn *scn;
    Elf *img_elf;
    size_t len,clen;
-   __maybe_unused char *name;
+   _maybe_used char *name;
    int i,fd;
    FILE *bfd;
 

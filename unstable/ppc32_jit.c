@@ -252,7 +252,7 @@ static forced_inline ppc_insn_t insn_fetch(ppc32_jit_tcb_t *tcb)
 #define DEBUG_HREG  0
 
 /* Show register allocation status */
-__unused static void ppc32_jit_show_hreg_status(cpu_ppc_t *cpu)
+_unused static void ppc32_jit_show_hreg_status(cpu_ppc_t *cpu)
 {    
    struct hreg_map *map;
 
@@ -464,7 +464,7 @@ struct ppc32_insn_tag *ppc32_jit_fetch_and_emit(cpu_ppc_t *cpu,
 }
 
 /* Add end of JIT block */
-__unused static void ppc32_jit_tcb_add_end(ppc32_jit_tcb_t *tcb)
+_unused static void ppc32_jit_tcb_add_end(ppc32_jit_tcb_t *tcb)
 {
    ppc32_set_ia(&tcb->jit_ptr,tcb->start_ia+(tcb->ppc_trans_pos<<2));
    ppc32_jit_tcb_push_epilog(&tcb->jit_ptr);
@@ -781,7 +781,7 @@ static void ppc32_op_dump_opcode(jit_op_t *op)
 }
 
 /* Dump JIT operations (debugging) */
-__unused static void ppc32_op_dump(cpu_gen_t *cpu,ppc32_jit_tcb_t *tcb)
+_unused static void ppc32_op_dump(cpu_gen_t *cpu,ppc32_jit_tcb_t *tcb)
 {
    m_uint32_t ia = tcb->start_ia;
    jit_op_t *op;
@@ -869,7 +869,7 @@ static void ppc32_dump_reg_map(ppc_reg_map_t *map_array,int *host_map)
 }
 
 /* Check register mapping consistency */
-__maybe_unused static int ppc32_check_reg_map(ppc_reg_map_t *map_array,int *host_map)
+_maybe_used static int ppc32_check_reg_map(ppc_reg_map_t *map_array,int *host_map)
 {
    ppc_reg_map_t *map;
    int i;

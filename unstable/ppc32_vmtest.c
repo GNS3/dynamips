@@ -82,7 +82,7 @@ static void ppc32_vmtest_clear_irq(vm_instance_t *vm,u_int irq)
 /* Initialize the PPC32 VM test Platform */
 static int ppc32_vmtest_init_platform(vm_instance_t *vm)
 {
-   __maybe_unused cpu_ppc_t *cpu0; 
+   _maybe_used cpu_ppc_t *cpu0; 
    cpu_gen_t *gen0;
 
    /* Create Console and AUX ports */
@@ -151,7 +151,7 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
 }
 
 /* Boot the RAW image */
-__unused static int ppc32_vmtest_boot_raw(vm_instance_t *vm)
+_unused static int ppc32_vmtest_boot_raw(vm_instance_t *vm)
 {   
    cpu_ppc_t *cpu;
 

@@ -137,7 +137,7 @@ static insn_exec_page_t *exec_page_alloc(cpu_gen_t *cpu)
 {
    tsg_t *tsg = tsg_array[cpu->tsg];
    insn_exec_page_t *p;
-   __maybe_unused int count;
+   _maybe_used int count;
 
    TSG_LOCK(tsg);
 
