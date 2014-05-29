@@ -20,13 +20,6 @@
 #define NETIO_FILTER_DIR_TX  1
 #define NETIO_FILTER_DIR_BOTH 2 
 
-#ifdef GEN_ETH
-struct netio_filter_capture {
-   pcap_t *desc;
-   pcap_dumper_t *dumper;
-};
-#endif
-
 /* Find a filter */
 netio_pktfilter_t *netio_filter_find(char *name);
 

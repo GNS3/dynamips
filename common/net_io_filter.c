@@ -136,6 +136,12 @@ int netio_filter_setup(netio_desc_t *nio,int direction,int argc,char *argv[])
 /* ======================================================================== */
 #ifdef GEN_ETH
 
+struct netio_filter_capture {
+   pcap_t *desc;
+   pcap_dumper_t *dumper;
+   pthread_mutex_t lock;
+};
+
 /* Free resources used by filter */
 static void pf_capture_free(netio_desc_t *nio,void **opt)
 {
@@ -151,6 +157,8 @@ static void pf_capture_free(netio_desc_t *nio,void **opt)
       /* Close PCAP descriptor */
       if (c->desc)
          pcap_close(c->desc);
+
+      pthread_mutex_destroy(&c->lock);
 
       free(c);
       *opt = NULL;
@@ -174,6 +182,12 @@ static int pf_capture_setup(netio_desc_t *nio,void **opt,
    /* Allocate structure to hold PCAP info */
    if (!(c = malloc(sizeof(*c))))
       return(-1);
+
+   if (pthread_mutex_init(&c->lock,NULL)) {
+      fprintf(stderr,"NIO %s: pthread_mutex_init failure (file %s)\n",
+              nio->name,argv[0]); 
+      goto pcap_lock_err;
+   }
 
    if ((link_type = pcap_datalink_name_to_val(argv[0])) == -1) {
       fprintf(stderr,"NIO %s: unknown link type %s, assuming Ethernet.\n",
@@ -201,6 +215,8 @@ static int pf_capture_setup(netio_desc_t *nio,void **opt,
  pcap_dump_err:
    pcap_close(c->desc);
  pcap_open_err:
+   pthread_mutex_destroy(&c->lock);
+ pcap_lock_err:
    free(c);
    return(-1);
 }
@@ -214,11 +230,14 @@ static int pf_capture_pkt_handler(netio_desc_t *nio,void *pkt,size_t len,
 
    if (c != NULL) {
       gettimeofday(&pkt_hdr.ts,0);
-      pkt_hdr.caplen = len;
+      pkt_hdr.caplen = m_min(len, (u_int)pcap_snapshot(c->desc));
       pkt_hdr.len = len;
 
+      /* thread safe dump */
+      pthread_mutex_lock(&c->lock);
       pcap_dump((u_char *)c->dumper,&pkt_hdr,pkt);
       pcap_dump_flush(c->dumper);
+      pthread_mutex_unlock(&c->lock);
    }
 
    return(NETIO_FILTER_ACTION_PASS);
