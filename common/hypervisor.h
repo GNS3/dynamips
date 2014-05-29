@@ -35,7 +35,8 @@
 #define HSC_ERR_FILE        211  /* file error */
 #define HSC_ERR_BAD_OBJ     212  /* Bad object */
 #define HSC_ERR_RENAME      213  /* unable to rename object */
-#define HSC_ERR_NOT_FOUND   214  /* not found (generic)*/
+#define HSC_ERR_NOT_FOUND   214  /* not found (generic) */
+#define HSC_ERR_UNSPECIFIED 215  /* unspecified error (generic) */
 
 typedef struct hypervisor_conn hypervisor_conn_t;
 typedef struct hypervisor_cmd hypervisor_cmd_t;

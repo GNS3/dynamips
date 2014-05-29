@@ -452,14 +452,19 @@ static int cmd_unbind_filter(hypervisor_conn_t *conn,int argc,char *argv[])
 static int cmd_setup_filter(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    netio_desc_t *nio;
+   int res;
 
    if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
       return(-1);
-   
-   netio_filter_setup(nio,atoi(argv[1]),argc-2,&argv[2]);
+
+   res = netio_filter_setup(nio,atoi(argv[1]),argc-2,&argv[2]);
    netio_release(argv[0]);
 
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   if (!res) {
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
+   } else {
+      hypervisor_send_reply(conn,HSC_ERR_UNSPECIFIED,1,"Failed to setup filter");
+   }
    return(0);
 }
 
