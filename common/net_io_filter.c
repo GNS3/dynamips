@@ -196,7 +196,7 @@ static int pf_capture_setup(netio_desc_t *nio,void **opt,
    }
 
    /* Open a dead pcap descriptor */
-   if (!(c->desc = pcap_open_dead(link_type,8192))) {
+   if (!(c->desc = pcap_open_dead(link_type,65535))) {
       fprintf(stderr,"NIO %s: pcap_open_dead failure\n",nio->name); 
       goto pcap_open_err;
    }

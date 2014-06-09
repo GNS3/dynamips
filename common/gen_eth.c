@@ -43,7 +43,7 @@ pcap_t *gen_eth_init(char *device)
    pcap_t *p;
 
 #ifndef CYGWIN
-   if (!(p = pcap_open_live(device,2048,TRUE,10,pcap_errbuf)))
+   if (!(p = pcap_open_live(device,65535,TRUE,10,pcap_errbuf)))
       goto pcap_error;
 
    pcap_setdirection(p,PCAP_D_INOUT);
@@ -54,7 +54,7 @@ pcap_t *gen_eth_init(char *device)
    }
 #endif
 #else
-   p = pcap_open(device,2048,
+   p = pcap_open(device,65535,
                  PCAP_OPENFLAG_PROMISCUOUS | 
                  PCAP_OPENFLAG_NOCAPTURE_LOCAL |
 		 PCAP_OPENFLAG_MAX_RESPONSIVENESS |
