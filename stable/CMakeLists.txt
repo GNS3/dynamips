@@ -225,6 +225,8 @@ set ( _files
    "${COMMON}/hv_c1700.c"
    "${COMMON}/rommon_var.c"
    "${COMMON}/get_cpu_time.c"
+   "${COMMON}/fs_fat.c"
+   "${COMMON}/fs_mbr.c"
    "${COMMON}/fs_nvram.c"
    "${COMMON}/dev_lxt970a.c"
    )

@@ -20,6 +20,8 @@
 #include "dynamips.h"
 #include "memory.h"
 #include "device.h"
+#include "fs_mbr.h"
+#include "fs_fat.h"
 
 #define DEBUG_ACCESS  0
 #define DEBUG_ATA     0
@@ -236,14 +238,65 @@ static inline m_uint32_t chs_to_lba(struct pcmcia_disk_data *d,
    return((((cyl * d->nr_heads) + head) * d->sects_per_track) + sect - 1);
 }
 
+/* Convert a LBA reference to a CHS reference */
+static inline void lba_to_chs(struct pcmcia_disk_data *d,m_uint32_t lba,
+                              u_int *cyl,u_int *head,u_int *sect)
+{
+   *cyl = lba / (d->sects_per_track * d->nr_heads);
+   *head = (lba / d->sects_per_track) % d->nr_heads;
+   *sect = (lba % d->sects_per_track) + 1;
+}
+
+/* Format disk with a single FAT16 partition */
+static int disk_format(struct pcmcia_disk_data *d)
+{
+   struct mbr_data mbr;
+   struct mbr_partition *part;
+   u_int cyl=0, head=1, sect=1;
+
+   /* Master Boot Record */
+   memset(&mbr,0,sizeof(mbr));
+   mbr.signature[0] = MBR_SIGNATURE_0;
+   mbr.signature[1] = MBR_SIGNATURE_1;
+   part = &mbr.partition[0];
+   part->bootable = 0;
+   part->type = MBR_PARTITION_TYPE_FAT16;
+   part->lba = chs_to_lba(d, 0, 1, 1);
+   part->nr_sectors = d->nr_heads * d->nr_cylinders * d->sects_per_track - part->lba;
+   lba_to_chs(d, part->lba + part->nr_sectors - 1, &cyl, &head, &sect);
+   mbr_set_chs(part->first_chs, 0, 1, 1);
+   mbr_set_chs(part->last_chs, cyl, head, sect);
+
+   if (mbr_write_fd(d->fd, &mbr)<0) {
+      return(-1);
+   }
+
+   /* FAT16 partition */
+   if (fs_fat_format16(d->fd, part->lba, part->nr_sectors, d->sects_per_track,
+                       d->nr_heads, d->vm_obj.name)) {
+      return(-1);
+   }
+
+   return(0);
+}
+
 /* Create the virtual disk */
 static int disk_create(struct pcmcia_disk_data *d)
 {
    off_t disk_len;
 
-   if ((d->fd = open(d->filename,O_CREAT|O_RDWR,0600)) < 0) {
-      perror("disk_create: open");
-      return(-1);
+   if ((d->fd = open(d->filename,O_CREAT|O_EXCL|O_RDWR,0600)) < 0) {
+      /* already exists? */
+      if ((d->fd = open(d->filename,O_CREAT|O_RDWR,0600)) < 0) {
+         perror("disk_create: open");
+         return(-1);
+      }
+   }
+   else {
+      /* new disk */
+      if (disk_format(d)) {
+         return(-1);
+      }
    }
 
    disk_len = d->nr_heads * d->nr_cylinders * d->sects_per_track * SECTOR_SIZE;
