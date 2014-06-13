@@ -39,6 +39,9 @@
 /* Maximum packet size */
 #define I8254X_MAX_PKT_SIZE  16384
 
+/* Send up to 16 packets in a TX ring scan pass */
+#define I8254X_TXRING_PASS_COUNT  16
+
 /* Register list */
 #define I8254X_REG_CTRL      0x0000  /* Control Register */
 #define I8254X_REG_STATUS    0x0008  /* Device Status Register */
@@ -827,8 +830,8 @@ static void txdesc_read(struct i8254x_data *d,m_uint64_t txd_addr,
    txd->tdes[3] = vmtoh32(txd->tdes[3]);
 }
 
-/* Handle the TX ring */
-static int dev_i8254x_handle_txring(struct i8254x_data *d)
+/* Handle the TX ring (single packet) */
+static int dev_i8254x_handle_txring_single(struct i8254x_data *d)
 {
    m_uint64_t txd_addr,buf_addr;
    m_uint32_t buf_len,tot_len;
@@ -836,16 +839,14 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
    struct tx_desc txd;
    m_uint8_t *pkt_ptr;
 
-   /* Transmit Enabled ? */
-   if (!(d->tctl & I8254X_TCTL_EN))
-      return(FALSE);
-
    /* If Head is at same position than Tail, the ring is empty */
    if (d->tdh == d->tdt)
       return(FALSE);
 
-   LVG_LOCK(d);
-   
+   /* Check if the NIO can transmit */
+   if (!netio_can_transmit(d->nio))
+      return(FALSE);
+
    /* Empty packet for now */
    pkt_ptr = d->tx_buffer;
    tot_len = 0;
@@ -897,7 +898,28 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
    /* Update the interrupt cause register and trigger IRQ if needed */
    d->icr |= icr;
    dev_i8254x_update_irq_status(d);
-   LVG_UNLOCK(d);
+   return(TRUE);
+}
+
+/* Handle the TX ring */
+static int dev_i8254x_handle_txring(struct i8254x_data *d)
+{
+   int res,i;
+
+   /* Transmit Enabled ? */
+   if (!(d->tctl & I8254X_TCTL_EN))
+      return(FALSE);
+
+   for(i=0;i<I8254X_TXRING_PASS_COUNT;i++) {
+      LVG_LOCK(d);
+      res = dev_i8254x_handle_txring_single(d);
+      LVG_UNLOCK(d);
+
+      if (!res)
+         break;
+   }
+
+   netio_clear_bw_stat(d->nio);
    return(TRUE);
 }
 
