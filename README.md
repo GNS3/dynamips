@@ -79,8 +79,11 @@ cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 
 ### Useful Information 
 Website: http://www.gns3.net/dynamips/
+
 Forum: http://forum.gns3.net/
+
 Repository: https://github.com/GNS3/dynamips
+
 Bugtracker: https://github.com/GNS3/dynamips/issues
 
 ### Original websites
