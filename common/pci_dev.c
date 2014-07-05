@@ -154,19 +154,6 @@ void pci_dev_data_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
    /* Find the corresponding PCI device */
    dev = pci_dev_lookup(pci_bus,bus,device,function);
 
-#if DEBUG_PCI
-   if (op_type == MTS_READ) {
-      cpu_log(cpu,"PCI","read request at pc=0x%llx: "
-              "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
-              cpu_get_pc(cpu), bus, device, function, reg);
-   } else {
-      cpu_log(cpu,"PCI","write request (data=0x%8.8x) at pc=0x%llx: "
-              "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
-              pci_swap(*data,swap), cpu_get_pc(cpu), 
-              bus, device, function, reg);
-   }
-#endif
-
    if (!dev) {
       if (op_type == MTS_READ) {
          cpu_log(cpu,"PCI","read request for unknown device at pc=0x%llx "
@@ -183,6 +170,18 @@ void pci_dev_data_handler(cpu_gen_t *cpu,struct pci_bus *pci_bus,
       if ((op_type == MTS_READ) && (reg == PCI_REG_ID))
          *data = 0xffffffff;
    } else {
+#if DEBUG_PCI
+      if (op_type == MTS_READ) {
+         cpu_log(cpu,"PCI","read request for device '%s' at pc=0x%llx: "
+                 "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
+                 dev->name, cpu_get_pc(cpu), bus, device, function, reg);
+      } else {
+         cpu_log(cpu,"PCI","write request (data=0x%8.8x) for device '%s' at pc=0x%llx: "
+                 "bus=%d,device=%d,function=%d,reg=0x%2.2x\n",
+                 pci_swap(*data,swap), dev->name, cpu_get_pc(cpu), 
+                 bus, device, function, reg);
+      }
+#endif
       if (op_type == MTS_WRITE) {
          if (dev->write_register != NULL)
             dev->write_register(cpu,dev,reg,pci_swap(*data,swap));
