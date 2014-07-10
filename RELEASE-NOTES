@@ -1,40 +1,35 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.12
+Version:  v0.2.13
 
-Release date:  Thursday, March 27, 2014 (2014-03-27)
+Release date:  Thursday, July 10, 2014 (2014-07-10)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.12
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.13
 
 License: GNU GPLv2
 
 
-What's New since v0.2.11
+What's New since v0.2.12
 ========================
 
-Fixed all known multicast issues. Patches by Peter Palúch.
-New hypervisor command:
-- vm_debug pmem_cfind <instance_name> <cpu_id> <bytes> [<first> [<last>]]
+Identify 10Mbps Ethernet chip in dev_am79c971 as Am79C970A. IOS said "AMD Unknown", now it's "AMD Presidio".
+Add CMake build system.
+Enable the Travis Continual Integration service.
+Fix Wireshark error "Frame too long" (thread safety issue could cause bad capture file data)
+Make a single FAT16 partition when pcmcia disks are first created.
+Improve packet transmission performance of i8254x (C7200-IO-2FE/E, C7200-I/O-GE+E, PA-2FE-TX, PA-GE) by sending up to 16 packets at a time.
+  - Code by candlerb (merged)
+Cleanups.
 
-Fixed issue #29 - packet loss with multicast traffic
-Closed issue #31 - create hypervisor command to find a pattern in the router memory
-
-
-What's Also New since v0.2.10
-=============================
-
-(forgot these in the previous release notes)
-
-Old text is replayed when you connect to the console/aux port.
-Warn the VM isn't running when connecting to the console/aux port.
+Final fix for issue #9 - Reproducable crash
+Fixed issue #38 - Unknown file system detected
+Fixed issue #41 - "Frame is Too Long" error in Wireshark
+Merge pull request #45 from candlerb/candlerb/txperformance
 
 
 Known Issues
 ============
-
-There is lots of missing hardware functionality.
-  - https://github.com/GNS3/dynamips/issues/5
 
 Reload from the router console doesn't work.
   - https://github.com/GNS3/dynamips/issues/6
@@ -42,4 +37,11 @@ Reload from the router console doesn't work.
 Using a self decompressing image can lead to an invalid IA and stop the cpu.
   - https://github.com/GNS3/dynamips/issues/8
 
-There are still memory leaks.
+Packet transmission rate is limited.
+  - https://github.com/GNS3/dynamips/issues/46
+
+IOS crashes after router restart
+  - https://github.com/GNS3/dynamips/issues/49
+
+There is lots of missing hardware functionality.
+There are memory leaks.

@@ -2865,3 +2865,62 @@ Closed issue #31 - create hypervisor command to find a pattern in the router mem
 +--------------------.
 | Release:  v0.2.12   |
 +--------------------'
+
+04-Apr-2014 to 05-Jul-2014
+--------------------------
+   - MPC860: Add debug message for the unimplemented CP reset command
+   - Report the partid of dev_am79c971 type AM79C971_TYPE_10BASE_T as Am79C970A.
+     - Fixes the "AMD Unknown" that shows up in "show controllers".
+       IOS calls this "AMD Presidio" or "AmdP2".
+   - MPC860 FEC: (logic is inlined in dev_mpc860.c for now)
+     - implement PHY LXT970A, which was hardcoded as values in the MII registers
+     - if sending with link down, report no heartbeat and lost carrier
+   - PCMCIA disk:
+     - annotate the "Card Information Structure" data
+     - add missing CISTPL_END
+   - Document Cisco EEPROM format v1 and v4.
+   - Add CMake build system.
+   - Missing empty line at end of fs_nvram.c
+   - Fix unused function warnings.
+   - Remove unused duplicate of physmem_get_hptr from stable/mips64_jit.c
+   - Add test builds using Travis CI.
+   - Create new README.md based on README for GitHub frontpage.
+   - Add common.h.
+     - Move generic includes, types and macros from utils.h to common.h.
+   - Minimize includes in sbox.c/h.
+   - Minimize includes in crc.c/h.
+   - Fix unstable nojit compilation.
+   - Fix unused variable warning in ppc32_jit.c.
+   - Use dev_dec21140.c from unstable.
+     - Fix bandwidth statistics
+     - Check if the NIO can trasmit
+   - Add #pragma once to common.h
+   - Rename common.h to dynamips_common.h.
+   - Delete ds1620.h.
+     - This file is not used and most of the constants are in dev_ds1620.c.
+   - Tell the compiler that mem_bswap32 does not require aligned data.
+   - Minimize headers.
+   - define FD_SETSIZE for Cygwin in dynamips_common.h
+   - Rename double underscore macros:
+     - rename __not_aligned to _not_aligned
+     - rename __maybe_unused to _maybe_used
+     - rename __unused to _unused
+   - Use an exclusive lock while dumping captured packets. (thread safety)
+   - Respect the snapshot length of the descriptor.
+   - Report failed setups of hypervisor command 'nio setup_filter'.
+   - Make a single FAT16 partition when pcmia disks are first created.
+   - Change pcap snapshot length to 65535.
+   - Remove old Makefiles to avoid confusion. (not gonna be maintained)
+   - Improve TX performance of i8254x (PA-GE) by sending up to 16 packets at a time.
+     - Merge pull request #45 from candlerb/candlerb/txperformance
+   - Print the device name when debugging pci accesses.
+   - Indicate the TODO list is from the original author.
+
+Final fix for issue #9 - Reproducable crash
+Fixed issue #38 - Unknown file system detected
+Fixed issue #41 - "Frame is Too Long" error in Wireshark
+Merge pull request #45 from candlerb/candlerb/txperformance
+
++--------------------.
+| Release:  v0.2.13   |
++--------------------'
