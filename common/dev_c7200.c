@@ -329,6 +329,7 @@ static int c7200_create_instance(vm_instance_t *vm)
 
    memset(router,0,sizeof(*router));
    router->vm = vm;
+   router->npe400_ram_size = C7200_DEFAULT_RAM_SIZE;
    vm->hw_data = router;
    vm->elf_machine_id = C7200_ELF_MACHINE_ID;
 
@@ -1195,11 +1196,14 @@ int c7200_init_npe400(c7200_t *router)
    /* 
     * Add supplemental memory (as "iomem") if we have more than 256 Mb.
     */
-   if (vm->ram_size > C7200_BASE_RAM_LIMIT) {
-      vm->iomem_size = vm->ram_size - C7200_BASE_RAM_LIMIT;
+   if (VM_C7200(vm)->npe400_ram_size > C7200_BASE_RAM_LIMIT) {
+      vm->iomem_size = VM_C7200(vm)->npe400_ram_size - C7200_BASE_RAM_LIMIT;
       vm->ram_size = C7200_BASE_RAM_LIMIT;
-      dev_ram_init(vm,"ram1",vm->ram_mmap,TRUE,NULL,vm->sparse_mem,
+      dev_ram_init(vm,"iomem",vm->ram_mmap,TRUE,NULL,vm->sparse_mem,
                    C7200_IOMEM_ADDR,vm->iomem_size*1048576);
+   }
+   else {
+      vm->iomem_size = 0;
    }
 
    /* Initialize the Galileo GT-64120 system controller */

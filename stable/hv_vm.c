@@ -301,6 +301,10 @@ static int cmd_set_ram(hypervisor_conn_t *conn,int argc,char *argv[])
 
    vm->ram_size = atoi(argv[1]);
 
+   /* XXX npe-400 can split excess ram into iomem, adjusting ram_size */
+   if (vm->elf_machine_id == C7200_ELF_MACHINE_ID)
+      VM_C7200(vm)->npe400_ram_size = vm->ram_size;
+
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);

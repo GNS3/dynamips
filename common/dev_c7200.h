@@ -164,6 +164,9 @@ struct c7200_router {
    /* Associated VM instance */
    vm_instance_t *vm;
 
+   /* RAM size for npe-400 */
+   m_uint32_t npe400_ram_size;
+
    /* MV64460 device for NPE-G2 */
    struct mv64460_data *mv64460_sysctr;
 
