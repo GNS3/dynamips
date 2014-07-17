@@ -618,21 +618,21 @@ static int vtty_store(vtty_t *vtty,u_char c)
    return(0);
 }
 
-/* Store a string in the FIFO buffer */
-int vtty_store_str(vtty_t *vtty,char *str)
+/* Store arbritary data in the FIFO buffer */
+int vtty_store_data(vtty_t *vtty,char *data, int len)
 {
-   if (!vtty)
-      return(0);
+   int bytes;
 
-   while(*str != 0) {
-      if (vtty_store(vtty,*str) == -1)
-         return(-1);
-      
-      str++;
+   if (!vtty || !data || len < 0)
+      return(-1); // invalid argument
+
+   for (bytes = 0; bytes < len; bytes++) {
+      if (vtty_store(vtty,data[bytes]) == -1)
+         break;
    }
 
    vtty->input_pending = TRUE;
-   return(0);
+   return(bytes);
 }
 
 /* Store CTRL+C in buffer */

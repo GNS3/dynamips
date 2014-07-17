@@ -101,8 +101,8 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
 /* delete a virtual tty */
 void vtty_delete(vtty_t *vtty);
 
-/* Store a string in the FIFO buffer */
-int vtty_store_str(vtty_t *vtty,char *str);
+/* Store arbritary data in the FIFO buffer */
+int vtty_store_data(vtty_t *vtty,char *data, int len);
 
 /* read a character from the buffer (-1 if the buffer is empty) */
 int vtty_get_char(vtty_t *vtty);

@@ -274,11 +274,33 @@ Show cpu usage of dynamips in seconds. (experimental)
 The instance must exist, "cpu_id" is ignored.
 (since version 0.2.8\-RC5\-community)
 .TP
-.B vm send_con_msg <instance_name> <str>
-Send a message on the console. (since version 0.2.6\-RC3)
+.B vm send_con_msg <instance_name> <str> [<format>]
+(since version 0.2.6\-RC3) Send a message on the console. 
+It only writes the bytes that fit in the console buffer.
+.RS
+.PP
+(since version 0.2.14)
+The optional argument <format> indicates the string format.
+On success it will report "X byte(s) written".
+.PP
+String formats:
+ * plain - plain string (default, old behavior)
+ * base64 - base64 encoded string
+.RE
 .TP
-.B vm send_aux_msg <instance_name> <str>
-Send a message on the AUX port. (since version 0.2.6\-RC3)
+.B vm send_aux_msg <instance_name> <str> [<format>]
+(since version 0.2.6\-RC3) Send a message on the AUX port.
+It only writes the bytes that fit in the aux buffer.
+.RS
+.PP
+(since version 0.2.14)
+The optional argument <format> indicates the string format.
+On success it will report "X byte(s) written".
+.PP
+String formats:
+ * plain - plain string (default, old behavior)
+ * base64 - base64 encoded string
+.RE
 .TP
 .B vm slot_bindings <instance_name>
 Show slot bindings. (since version 0.2.8\-RC1)

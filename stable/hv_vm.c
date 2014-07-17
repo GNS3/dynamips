@@ -860,31 +860,75 @@ static int cmd_resume(hypervisor_conn_t *conn,int argc,char *argv[])
 /* Send a message on the console */
 static int cmd_send_con_msg(hypervisor_conn_t *conn,int argc,char *argv[])
 {
-   vm_instance_t *vm;
+   vm_instance_t *vm = NULL;
+   const char *format = NULL;
+   char *data = NULL;
+   int len,written;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   vtty_store_str(vm->vtty_con,argv[1]);
+   format = (argc > 2)? argv[2]: "plain";
+   len = (int)strlen(argv[1]);
+   written = -1;
+
+   if (strcmp(format,"plain") == 0 && len >= 0) {
+      written = vtty_store_data(vm->vtty_con,argv[1],len);
+   }
+   else if (strcmp(format,"base64") == 0 && len >= 0) {
+      data = malloc(len+1);
+      len = base64_decode((unsigned char*)data,(const unsigned char *)argv[1],len);
+      written = vtty_store_data(vm->vtty_con,data,len);
+      free(data);
+      data = NULL;
+   }
 
    vm_release(vm);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
-   return(0);
+   if (written < 0) {
+      hypervisor_send_reply(conn,HSC_ERR_INV_PARAM,1,"Invalid parameter");
+      return(-1);
+   }
+   else {
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"%d byte(s) written",written);
+      return(0);
+   }
 }
 
 /* Send a message on the AUX port */
 static int cmd_send_aux_msg(hypervisor_conn_t *conn,int argc,char *argv[])
 {
-   vm_instance_t *vm;
+   vm_instance_t *vm = NULL;
+   const char *format = NULL;
+   char *data = NULL;
+   int len,written;
 
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   vtty_store_str(vm->vtty_aux,argv[1]);
+   format = (argc > 2)? argv[2]: "plain";
+   len = (int)strlen(argv[1]);
+   written = -1;
+
+   if (strcmp(format,"plain") == 0 && len >= 0) {
+      written = vtty_store_data(vm->vtty_aux,argv[1],len);
+   }
+   else if (strcmp(format,"base64") == 0 && len >= 0) {
+      data = malloc(len+1);
+      len = base64_decode((unsigned char*)data,(const unsigned char *)argv[1],len);
+      written = vtty_store_data(vm->vtty_aux,data,len);
+      free(data);
+      data = NULL;
+   }
 
    vm_release(vm);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
-   return(0);
+   if (written < 0) {
+      hypervisor_send_reply(conn,HSC_ERR_INV_PARAM,1,"Invalid parameter");
+      return(-1);
+   }
+   else {
+      hypervisor_send_reply(conn,HSC_INFO_OK,1,"%d byte(s) written",written);
+      return(0);
+   }
 }
 
 
@@ -1241,8 +1285,8 @@ static hypervisor_cmd_t vm_cmd_array[] = {
    { "cpu_usage", 2, 2, cmd_show_cpu_usage, NULL },
    { "suspend", 1, 1, cmd_suspend, NULL },
    { "resume", 1, 1, cmd_resume, NULL },
-   { "send_con_msg", 2, 2, cmd_send_con_msg, NULL },
-   { "send_aux_msg", 2, 2, cmd_send_aux_msg, NULL },
+   { "send_con_msg", 2, 3, cmd_send_con_msg, NULL },
+   { "send_aux_msg", 2, 3, cmd_send_aux_msg, NULL },
    { "slot_bindings", 1, 1, cmd_slot_bindings, NULL },
    { "slot_nio_bindings", 2, 2, cmd_slot_nio_bindings, NULL },
    { "slot_add_binding", 4, 4, cmd_slot_add_binding, NULL },
