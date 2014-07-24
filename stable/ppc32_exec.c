@@ -22,6 +22,8 @@
 #include "insn_lookup.h"
 #include "dynamips.h"
 
+#include "gdb_proto.h"
+
 /* Forward declaration of instruction array */
 static struct ppc32_insn_exec_tag ppc32_exec_tags[];
 static insn_lookup_t *ilt = NULL;
@@ -95,7 +97,7 @@ static forced_inline void ppc32_exec_memop(cpu_ppc_t *cpu,int memop,
 }
 
 /* Fetch an instruction */
-static forced_inline int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
+int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
                                           ppc_insn_t *insn)
 {
    m_uint32_t exec_page,offset;
@@ -106,7 +108,16 @@ static forced_inline int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
       cpu->njm_exec_page = exec_page;
       cpu->njm_exec_ptr  = cpu->mem_op_lookup(cpu,exec_page,PPC32_MTS_ICACHE);
    }
-
+   
+   if (!cpu->njm_exec_ptr)
+   {
+       printf("\n---> ia_prev = 0x%X\n", cpu->ia_prev);
+       printf("---> ia      = 0x%X\n", cpu->ia);
+       cpu->ia = cpu->ia_prev;
+       ppc32_trigger_exception(cpu,PPC32_EXC_ISI);
+       return(1);
+   }
+       
    offset = (ia & PPC32_MIN_PAGE_IMASK) >> 2;
    *insn = vmtoh32(cpu->njm_exec_ptr[offset]);
    return(0);
@@ -121,8 +132,7 @@ static fastcall int ppc32_exec_unknown(cpu_ppc_t *cpu,ppc_insn_t insn)
 }
 
 /* Execute a single instruction */
-static forced_inline int 
-ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
+int ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
 {
    register fastcall int (*exec)(cpu_ppc_t *,ppc_insn_t) = NULL;
    struct ppc32_insn_exec_tag *tag;
@@ -232,8 +242,19 @@ void *ppc32_exec_run_cpu(cpu_gen_t *gen)
       /* Increment the time base */
       cpu->tb += 100;
 
+      /* Run any breakpoint at the current PC address (if any) */
+      if (ppc32_is_breakpoint_at_pc(cpu))
+      {
+          cpu->vm->gdb_ctx->signal = GDB_SIGTRAP;
+          vm_suspend(cpu->vm);
+          continue;
+      }
+      
       /* Fetch and execute the instruction */
-      ppc32_exec_fetch(cpu,cpu->ia,&insn);
+      if (ppc32_exec_fetch(cpu,cpu->ia,&insn))
+          continue;
+	  
+      cpu->ia_prev = cpu->ia;
       res = ppc32_exec_single_instruction(cpu,insn);
 
       /* Normal flow ? */

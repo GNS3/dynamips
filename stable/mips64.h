@@ -302,7 +302,7 @@ enum {
 };
 
 /* Maximum number of breakpoints */
-#define MIPS64_MAX_BREAKPOINTS  8
+#define MIPS64_MAX_BREAKPOINTS  20
 
 /* MIPS CPU type */
 typedef struct cpu_mips cpu_mips_t;
@@ -549,6 +549,9 @@ int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 
 /* Remove a virtual breakpoint */
 void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
+
+/* Return is the current PC points to a breakpoint */
+int mips64_is_breakpoint_at_pc(cpu_mips_t *cpu);
 
 /* Debugging for register-jump to address 0 */
 fastcall void mips64_debug_jr0(cpu_mips_t *cpu);

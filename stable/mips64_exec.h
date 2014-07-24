@@ -38,4 +38,12 @@ fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
 /* Run MIPS code in step-by-step mode */
 void *mips64_exec_run_cpu(cpu_gen_t *cpu);
 
+/* Fetch an instruction */
+/*static forced_inline*/ int mips64_exec_fetch(cpu_mips_t *cpu,m_uint64_t pc,
+                                           mips_insn_t *insn);
+
+                                           /* Execute a single instruction */
+/*static forced_inline*/ int 
+mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction);
+
 #endif

@@ -5,7 +5,7 @@
  * MIPS64 Step-by-step execution.
  */
 
-#if __GNUC__ > 2
+//#if __GNUC__ > 2
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +22,8 @@
 #include "memory.h"
 #include "insn_lookup.h"
 #include "dynamips.h"
+
+#include "gdb_proto.h"
 
 /* Forward declaration of instruction array */
 static struct mips64_insn_exec_tag mips64_exec_tags[];
@@ -314,7 +316,7 @@ static forced_inline void mips64_exec_memop2(cpu_mips_t *cpu,int memop,
 }
 
 /* Fetch an instruction */
-static forced_inline int mips64_exec_fetch(cpu_mips_t *cpu,m_uint64_t pc,
+/*static forced_inline*/ int mips64_exec_fetch(cpu_mips_t *cpu,m_uint64_t pc,
                                            mips_insn_t *insn)
 {   
    m_uint64_t exec_page;
@@ -341,7 +343,7 @@ static fastcall int mips64_exec_unknown(cpu_mips_t *cpu,mips_insn_t insn)
 }
 
 /* Execute a single instruction */
-static forced_inline int 
+/*static forced_inline*/ int
 mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
 {
    register fastcall int (*exec)(cpu_mips_t *,mips_insn_t) = NULL;
@@ -468,6 +470,14 @@ void *mips64_exec_run_cpu(cpu_gen_t *gen)
       if (unlikely(cpu->irq_pending)) {
          mips64_trigger_irq(cpu);
          continue;
+      }
+
+      /* Run any breakpoint at the current PC address (if any) */
+      if (mips64_is_breakpoint_at_pc(cpu))
+      {
+          cpu->vm->gdb_ctx->signal = GDB_SIGTRAP;
+          vm_suspend(cpu->vm);
+          continue;
       }
 
       /* Fetch and execute the instruction */      
@@ -2283,4 +2293,4 @@ static struct mips64_insn_exec_tag mips64_exec_tags[] = {
    { NULL     , NULL                , 0x00000000 , 0x00000000, 1, 0 },
 };
 
-#endif
+//#endif

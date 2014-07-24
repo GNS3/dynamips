@@ -597,6 +597,7 @@ int hypervisor_tcp_server(char *ip_addr,int tcp_port)
    hypervisor_vm_init();
    hypervisor_vm_debug_init();
    hypervisor_store_init();
+   hypervisor_vm_gdb_debug_init(); /* added for GDB remote debugging support throught hypervisor */
 
    signal(SIGPIPE,sigpipe_handler);
 

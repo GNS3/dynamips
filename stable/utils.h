@@ -45,6 +45,25 @@
 #define vmtoh64(x) (swap64(x))
 #endif
 
+/* Common types */
+#ifndef COMMON_TYPES
+#define COMMON_TYPES
+typedef unsigned char m_uint8_t;                                                                                                
+typedef signed char m_int8_t;                                                                                                   
+
+typedef unsigned short m_uint16_t;                                                                                              
+typedef signed short m_int16_t;                                                                                                 
+
+typedef unsigned int m_uint32_t;                                                                                                
+typedef signed int m_int32_t;                                                                                                   
+
+typedef unsigned long long m_uint64_t;                                                                                          
+typedef signed long long m_int64_t;                                                                                             
+
+typedef unsigned long m_iptr_t;                                                                                                 
+typedef m_uint64_t m_tmcnt_t;                                                                                                   
+#endif
+
 /* FD pool */
 #define FD_POOL_MAX  16
 
@@ -55,7 +74,10 @@ struct fd_pool {
 };
 
 /* Forward declarations */
+#ifndef CPU_GEN_T
+#define CPU_GEN_T
 typedef struct cpu_gen cpu_gen_t;
+#endif
 typedef struct vm_instance vm_instance_t;
 typedef struct vm_platform vm_platform_t;
 typedef struct mips64_jit_tcb mips64_jit_tcb_t;

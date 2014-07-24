@@ -25,6 +25,8 @@
 #include "memory.h"
 #include "device.h"
 
+#include "gdb_proto.h"
+
 /* MIPS general purpose registers names */
 char *mips64_gpr_reg_names[MIPS64_GPR_NR] = {
    "zr", "at", "v0", "v1", "a0", "a1", "a2", "a3",
@@ -358,7 +360,25 @@ void mips64_general_exception(cpu_mips_t *cpu,u_int exc_code)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t cause;
-   
+
+   /* First check if a GDB session is present so it can handle the exception */
+   switch (exc_code)
+   {
+       case MIPS_CP0_CAUSE_ILLOP:
+       case MIPS_CP0_CAUSE_TLB_LOAD:
+       case MIPS_CP0_CAUSE_TLB_SAVE:
+       case MIPS_CP0_CAUSE_ADDR_LOAD:
+       case MIPS_CP0_CAUSE_ADDR_SAVE:
+       case MIPS_CP0_CAUSE_TRAP:
+       case MIPS_CP0_CAUSE_BP:
+           if ((cpu->vm->gdb_server_running == TRUE))// && (mips64_is_breakpoint_at_pc(cpu)))
+           {
+              cpu->vm->gdb_ctx->signal = GDB_SIGINT;
+              vm_suspend(cpu->vm);
+              return;
+           }
+   }
+
    /* Update cause register (set BD and ExcCode) */
    cause = cp0->reg[MIPS_CP0_CAUSE] & MIPS_CP0_CAUSE_IMASK;
 
@@ -622,6 +642,21 @@ fastcall void mips64_run_breakpoint(cpu_mips_t *cpu)
 
    mips64_dump_regs(cpu->gen);
    memlog_dump(cpu->gen);
+}
+
+/* Check if cufrrent PC has a breakpoint set */
+int mips64_is_breakpoint_at_pc(cpu_mips_t *cpu)
+{
+   m_uint64_t pc = cpu->pc;
+   int i;
+
+   for(i=0; i < MIPS64_MAX_BREAKPOINTS; i++)
+   {
+      if (pc == cpu->breakpoints[i]) {
+         return TRUE;
+      }
+   }
+   return FALSE;
 }
 
 /* Add a virtual breakpoint */

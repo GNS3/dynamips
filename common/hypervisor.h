@@ -96,6 +96,9 @@ extern int hypervisor_vm_init(void);
 /* Hypervisor VM debugging initialization */
 extern int hypervisor_vm_debug_init(void);
 
+/* Hypervisor VM GDB debugging initialization */
+extern int hypervisor_vm_gdb_debug_init(void);
+
 /* Hypervisor store initialization */
 extern int hypervisor_store_init(void);
 

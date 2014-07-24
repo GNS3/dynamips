@@ -42,4 +42,11 @@ fastcall int ppc32_exec_page(cpu_ppc_t *cpu);
 /* Execute a single instruction (external) */
 fastcall int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn);
 
+/* Execute a single instruction */
+int ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction);
+
+/* Fetch an instruction */
+int ppc32_exec_fetch(cpu_ppc_t *cpu,m_uint32_t ia,
+                                          ppc_insn_t *insn);
+
 #endif

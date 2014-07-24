@@ -159,7 +159,8 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       /* Stop the virtual machine */
       case 0x034:
-         vm->status = VM_STATUS_SHUTDOWN;
+          // FIXME: WTF is this for?!?!?
+         //vm->status = VM_STATUS_SHUTDOWN;
          break;
 
       /* Debugging/Log message: /!\ physical address */

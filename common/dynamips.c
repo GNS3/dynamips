@@ -64,6 +64,8 @@
 #include "profiler.h"
 #endif
 
+#include "gdb_server.h"
+
 /* Default name for logfile */
 #define LOGFILE_DEFAULT_NAME  "dynamips_log.txt"
 
@@ -121,6 +123,10 @@ void signal_gen_handler(int sig)
             vm_instance_t *vm;
 
             if ((vm = vm_acquire("default")) != NULL) {
+               /* stop the running gdb server */
+               if (vm->gdb_server_running)
+                  gdb_server_stopsig(vm);
+
                /* Only forward ctrl-c if user has requested local terminal */
                if (vm->vtty_con_type == VTTY_TYPE_TERM) {
                   vtty_store_ctrlc(vm->vtty_con);
@@ -190,6 +196,7 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
           "  -P <platform>      : Platform to emulate (7200, 3600, "
           "2691, 3725, 3745, 2600 or 1700) "
           "(default: 7200)\n\n"
+          "  -Z <tcp_port>      : Start a GDB server\n"
           "  -l <log_file>      : Set logging file (default is %s)\n"
           "  -j                 : Disable the JIT compiler, very slow\n"
           "  --idle-pc <pc>     : Set the idle PC (default: disabled)\n"
@@ -395,7 +402,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
 static int parse_std_cmd_line(int argc,char *argv[])
 {
    char *options_list = 
-      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:I:";
+      "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:I:Z:";
    vm_platform_t *platform;
    vm_instance_t *vm = NULL;
    int instance_id;
@@ -437,6 +444,12 @@ static int parse_std_cmd_line(int argc,char *argv[])
    {
       switch(option)
       {
+         /* Initialize the GDB Stub to handle gdb protocol connections */
+         case 'Z':
+            vm->gdb_port = strtol(optarg, NULL, 10);
+            vm->gdb_server_running = TRUE;
+            break;
+
          /* Instance ID (already managed) */
          case 'i':
             break;
@@ -963,6 +976,20 @@ int main(int argc,char *argv[])
          exit(EXIT_FAILURE);
       }
 
+      /* Start GDB server before the image to allow debugging from
+         the begining of it's execution */
+      if (vm->gdb_server_running)
+      {
+        /* Stop main CPU */
+        vm_suspend(vm);
+//         cpu_stop(vm->boot_cpu);
+
+        if (gdb_server_start_listener(vm) < 0) {
+            fprintf(stderr,"GDB server unable to create TCP sockets.\n");
+            exit(EXIT_FAILURE);
+        }
+      }
+
 #if (DEBUG_INSN_PERF_CNT > 0) || (DEBUG_BLOCK_PERF_CNT > 0)
       {
          m_uint32_t counter,prev = 0,delta;
@@ -978,6 +1005,14 @@ int main(int argc,char *argv[])
       /* Start instance monitoring */
       vm_monitor(vm);
 #endif
+
+      // FIXME: remove this kludge
+      if (vm->gdb_server_running)
+      {
+         //while (vm->gdb_conn->active)
+         //   usleep(1000000);
+         gdb_server_close_control_sockets();
+      }
 
       /* Free resources used by instance */
       vm_release(vm);

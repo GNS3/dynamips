@@ -1240,7 +1240,7 @@ static void *vtty_thread_main(void *arg)
          }
 
          /* Flush any pending output */
-         if (!vtty->managed_flush)
+         //if (!vtty->managed_flush) // FIXME: commented by topo to aviud Konsole flushing problem
             vtty_flush(vtty);
       }
       VTTY_LIST_UNLOCK();

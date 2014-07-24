@@ -23,10 +23,12 @@
 #include "ppc32_exec.h"
 #include "ppc32_jit.h"
 
+#include "gdb_proto.h"
+
 /* Reset a PowerPC CPU */
 int ppc32_reset(cpu_ppc_t *cpu)
 {
-   cpu->ia = PPC32_ROM_START;
+   cpu->ia_prev = cpu->ia = PPC32_ROM_START;
    cpu->gpr[1] = PPC32_ROM_SP;
    cpu->msr = PPC32_MSR_IP;
 
@@ -288,8 +290,31 @@ void ppc32_vm_clear_irq(vm_instance_t *vm,u_int irq)
 /* Generate an exception */
 void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector)
 {
-   //printf("TRIGGER_EXCEPTION: saving cpu->ia=0x%8.8x, msr=0x%8.8x\n",
-   //       cpu->ia,cpu->msr);
+//    printf("TRIGGER_EXCEPTION: saving cpu->ia=0x%8.8x, msr=0x%8.8x\n",
+//          cpu->ia,cpu->msr);
+
+   /* First check if a GDB session is present so it can handle the exception */
+   switch (exc_vector)
+   {
+        //case PPC32_EXC_SYS_RST:   /* System Reset */
+        //case PPC32_EXC_MC_CHK:    /* Machine Check */
+        case PPC32_EXC_DSI:       /* Data memory access failure */
+        case PPC32_EXC_ISI:       /* Instruction fetch failure */
+        //case PPC32_EXC_EXT:       /* External Interrupt */
+        case PPC32_EXC_ALIGN:     /* Alignment */
+        case PPC32_EXC_PROG:      /* FPU, Illegal instruction, ... */
+        //case PPC32_EXC_NO_FPU:    /* FPU unavailable */
+        //case PPC32_EXC_DEC:       /* Decrementer */
+        //case PPC32_EXC_SYSCALL:   /* System Call */
+        case PPC32_EXC_TRACE:     /* Trace */
+        //case PPC32_EXC_FPU_HLP:   /* Floating-Point Assist */
+        if (cpu->vm->gdb_server_running == TRUE)
+        {
+                cpu->vm->gdb_ctx->signal = GDB_SIGINT;
+                vm_suspend(cpu->vm);
+                return;
+        }
+   }
 
    /* Save the return instruction address */
    cpu->srr0 = cpu->ia;
@@ -312,7 +337,10 @@ void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector)
 
    /* Use bootstrap vectors ? */
    if (cpu->msr & PPC32_MSR_IP)
+   {
+      //printf("[-] Exception at IP 0x%8.8x\n", exc_vector);
       cpu->ia = 0xFFF00000 + exc_vector;
+   }
    else
       cpu->ia = exc_vector;
 }
@@ -357,6 +385,22 @@ fastcall void ppc32_run_breakpoint(cpu_ppc_t *cpu)
    ppc32_dump_regs(cpu->gen);
 }
 
+/* Check if current EPC has a breakpoint set */
+int ppc32_is_breakpoint_at_pc(cpu_ppc_t *cpu)
+{
+   m_uint64_t pc = cpu->ia;
+   int i;
+        
+   for(i=0; i < PPC32_MAX_BREAKPOINTS; i++)
+   {
+      if (pc == cpu->breakpoints[i]) {
+         return TRUE;
+      }
+   }
+   
+   return FALSE;
+}
+
 /* Add a virtual breakpoint */
 int ppc32_add_breakpoint(cpu_gen_t *cpu,m_uint64_t ia)
 {
@@ -381,9 +425,11 @@ void ppc32_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t ia)
    cpu_ppc_t *pcpu = CPU_PPC32(cpu);
    int i,j;
 
+   //printf("About to check breakpoints list to remove bp at 0x%llx\n", ia);
    for(i=0;i<PPC32_MAX_BREAKPOINTS;i++)
-      if (pcpu->breakpoints[i] == ia)
+      if (pcpu->breakpoints[i] == (m_uint32_t)ia)
       {
+         //printf ("--->bp found at index %d\n", i);
          for(j=i;j<PPC32_MAX_BREAKPOINTS-1;j++)
             pcpu->breakpoints[j] = pcpu->breakpoints[j+1];
 

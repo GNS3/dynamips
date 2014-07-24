@@ -18,6 +18,8 @@
 #include "cisco_card.h"
 #include "rommon_var.h"
 
+#include "gdb_utils.h"
+
 #define VM_PAGE_SHIFT  12
 #define VM_PAGE_SIZE   (1 << VM_PAGE_SHIFT)
 #define VM_PAGE_IMASK  (VM_PAGE_SIZE - 1)
@@ -117,6 +119,12 @@ struct vm_instance {
    int jit_use;                   /* CPUs use JIT */
    int sparse_mem;                /* Use sparse virtual memory */
    u_int nm_iomem_size;           /* IO mem size to be passed to Smart Init */
+   
+   /* GDB Server variables */
+   int gdb_server_running;        /* Indicate current state of the GDB Server */
+   int gdb_port;                  /* TCP port for listening incomming GDB client connections. */
+   gdb_debug_context_t *gdb_ctx;
+   gdb_server_conn_t *gdb_conn;
 
    /* ROMMON variables */
    struct rommon_var_list rommon_vars;
@@ -185,7 +193,8 @@ struct vm_instance {
    void *hw_data;
 
    /* VM objects */
-   struct vm_obj *vm_object_list;   
+   struct vm_obj *vm_object_list;
+
 };
 
 /* VM Platform definition */

@@ -669,6 +669,8 @@ void vm_monitor(vm_instance_t *vm)
 {
    while(vm->status != VM_STATUS_SHUTDOWN)         
       usleep(200000);
+      
+   return;
 }
 
 /* Create a new chunk */
