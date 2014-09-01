@@ -37,6 +37,8 @@ if ( NOT BUILD_DYNAMIPS_UNSTABLE )
 endif ( NOT BUILD_DYNAMIPS_UNSTABLE )
 
 # dynamips_*_unstable
+add_definitions( "-DUSE_UNSTABLE" )
+
 set ( _files
    "${COMMON}/mempool.c"
    "${COMMON}/registry.c"
