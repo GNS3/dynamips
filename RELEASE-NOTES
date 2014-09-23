@@ -1,31 +1,29 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.13
+Version:  v0.2.14
 
-Release date:  Thursday, July 10, 2014 (2014-07-10)
+Release date:  Tuesday, September 23, 2014 (2014-09-23)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.13
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.14
 
 License: GNU GPLv2
 
 
-What's New since v0.2.12
+What's New since v0.2.13
 ========================
 
-Identify 10Mbps Ethernet chip in dev_am79c971 as Am79C970A. IOS said "AMD Unknown", now it's "AMD Presidio".
-Add CMake build system.
-Enable the Travis Continual Integration service.
-Fix Wireshark error "Frame too long" (thread safety issue could cause bad capture file data)
-Make a single FAT16 partition when pcmcia disks are first created.
-Improve packet transmission performance of i8254x (C7200-IO-2FE/E, C7200-I/O-GE+E, PA-2FE-TX, PA-GE) by sending up to 16 packets at a time.
-  - Code by candlerb (merged)
-Cleanups.
+Allow building unstable version on MacOSX
+Add optional argument 'format' to hypervisor commands 'send_con_msg' and 
+'send_aux_msg'. Report "X byte(s) written" on succeess.
+    - String formats:
+        * plain - plain string (default, old behavior)
+        * base64 - base64 encoded string
+Fix issue with 7200 IOS crashing after restart
 
-Final fix for issue #9 - Reproducable crash
-Fixed issue #38 - Unknown file system detected
-Fixed issue #41 - "Frame is Too Long" error in Wireshark
-Merge pull request #45 from candlerb/candlerb/txperformance
+Fixed issue #49 - IOS crashes after router restart
+Fixed issue #50 - vm send_con_msg
+Fixed issue #55 - 'unstable' installs 'stable' version on Mac OS X
 
 
 Known Issues
@@ -40,8 +38,8 @@ Using a self decompressing image can lead to an invalid IA and stop the cpu.
 Packet transmission rate is limited.
   - https://github.com/GNS3/dynamips/issues/46
 
-IOS crashes after router restart
-  - https://github.com/GNS3/dynamips/issues/49
+c1700 IOS Images start once and then fail to boot on second boot
+  - https://github.com/GNS3/dynamips/issues/54
 
 There is lots of missing hardware functionality.
 There are memory leaks.
