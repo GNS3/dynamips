@@ -2924,3 +2924,23 @@ Merge pull request #45 from candlerb/candlerb/txperformance
 +--------------------.
 | Release:  v0.2.13   |
 +--------------------'
+
+10-Jul-2014 to 01-Sep-2014
+--------------------------
+   - Add -DUSE_UNSTABLE when making an unstable build (MacOSX)
+   - Add optional argument 'format' to hypervisor commands
+     - 'send_con_msg' and 'send_aux_msg'.
+     - Report "X byte(s) written" on succeess.
+     - String formats:
+        * plain - plain string (default, old behavior)
+        * base64 - base64 encoded string
+   - Use an auxiliary variable to record configured ram size for npe-400
+
+Fixed issue #49 - IOS crashes after router restart
+Fixed issue #50 - vm send_con_msg
+Fixed issue #55 - 'unstable' installs 'stable' version on Mac OS X
+
++--------------------+
+| Release:  v0.2.14  |
++--------------------+
+
