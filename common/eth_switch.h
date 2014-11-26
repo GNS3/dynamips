@@ -74,6 +74,7 @@ typedef void (*ethsw_foreach_entry_t)(ethsw_table_t *t,
 
 #define ETHSW_LOCK(t)   pthread_mutex_lock(&(t)->lock)
 #define ETHSW_UNLOCK(t) pthread_mutex_unlock(&(t)->lock)
+#define ETHSW_TRYLOCK(t) pthread_mutex_trylock(&(t)->lock)
 
 /* Acquire a reference to an Ethernet switch (increment reference count) */
 ethsw_table_t *ethsw_acquire(char *name);

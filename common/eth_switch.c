@@ -359,9 +359,10 @@ static inline int ethsw_receive(ethsw_table_t *t,netio_desc_t *nio,
 static int ethsw_recv_pkt(netio_desc_t *nio,u_char *pkt,ssize_t pkt_len,
                           ethsw_table_t *t)
 {
-   ETHSW_LOCK(t);
-   ethsw_receive(t,nio,pkt,pkt_len);
-   ETHSW_UNLOCK(t);
+   if (ETHSW_TRYLOCK(t) == 0) {
+      ethsw_receive(t,nio,pkt,pkt_len);
+      ETHSW_UNLOCK(t);
+   }
    return(0);
 }
 
