@@ -15,21 +15,26 @@
 
 message ( STATUS "dependencies - BEGIN" )
 
-# gnu compiler
-if ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
+if ( "${CMAKE_C_COMPILER}" MATCHES "clang$" OR "${CMAKE_C_COMPILER_ID}" STREQUAL "Clang" )
+  set ( CMAKE_COMPILER_IS_CLANG 1 )
+endif()
+
+# compiler check
+if ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT CMAKE_COMPILER_IS_CLANG AND NOT ANY_COMPILER )
    print_variables (
       CMAKE_COMPILER_IS_GNUCC
+      CMAKE_COMPILER_IS_CLANG
       CMAKE_C_COMPILER
       CMAKE_C_COMPILER_ABI
       CMAKE_C_COMPILER_ID
       CMAKE_C_COMPILER_VERSION
       )
    message ( FATAL_ERROR
-      "Not a GNU C compiler. "
-      "The source and build system assumes gcc so it might not compile. "
+      "Not a GNU C or Clang compiler. "
+      "The source and build system assumes gcc or clang so it might not compile. "
       "Invoke cmake with -DANY_COMPILER=1 to skip this check. "
       )
-endif ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT ANY_COMPILER )
+endif ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT CMAKE_COMPILER_IS_CLANG AND NOT ANY_COMPILER )
 
 set ( DYNAMIPS_FLAGS -Wall -O2 -fomit-frame-pointer )
 set ( DYNAMIPS_DEFINITIONS )
