@@ -326,7 +326,7 @@ static int m32_post_interrupt(struct m32_data *d,m_uint32_t iq_value)
 }
 
 /* Fetch a timeslot assignment */
-_unused static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
+_Unused static int m32_fetch_ts_assign(struct m32_data *d,u_int ts_id)
 {
    m_uint32_t offset;
 

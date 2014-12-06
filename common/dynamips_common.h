@@ -80,9 +80,9 @@
 #define fastcall
 #endif
 
-#ifndef _unused
+#ifndef _Unused
 /* Function that is never used */
-#define _unused  __attribute__((unused))
+#define _Unused  __attribute__((unused))
 #endif
 
 #ifndef _maybe_used

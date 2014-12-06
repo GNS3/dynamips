@@ -874,7 +874,7 @@ static int bcm5600_table_write_entry(struct nm_16esw_data *d)
 }
 
 /* Dump a table (for debugging) */
-_unused static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
+_Unused static int bcm5600_table_dump(struct nm_16esw_data *d,m_uint32_t addr)
 {
    struct bcm5600_table *table;
    m_uint32_t *entry;

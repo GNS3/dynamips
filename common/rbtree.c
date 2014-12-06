@@ -57,7 +57,7 @@ static inline rbtree_node *rbtree_min(rbtree_tree *tree,rbtree_node *x)
 }
 
 /* Returns the node which represents the maximum value */
-_unused static inline rbtree_node *rbtree_max(rbtree_tree *tree,rbtree_node *x)
+_Unused static inline rbtree_node *rbtree_max(rbtree_tree *tree,rbtree_node *x)
 {
    while(!NIL(tree,x->right))
       x = x->right;
