@@ -43,6 +43,12 @@ installed using apt-get:
 - uuid-dev
 - libpcap0.8-dev
 
+On Redhat based systems (CentOS, Fedora etc) the following build dependencies are
+required and can be installed using yum:
+- elfutils-libelf-devel
+- libuuid-devel
+- libpcap-devel
+
 Similar packages should be available for most distributions, consult your 
 distributions package list to find them.
 
