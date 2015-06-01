@@ -2949,3 +2949,11 @@ Fixed issue #55 - 'unstable' installs 'stable' version on Mac OS X
     - Rename _unused to _Unused to fix a clash when building on PPC/PPC64EL
 	* See thread starting at: 
 		https://lists.debian.org/debian-mentors/2014/10/msg00272.html
+
++--------------------+
+| Release:  v0.2.15  |
++--------------------+
+
+01-06-2015
+   - Fix build on MacOSX
+	- Fix packet capture on MacOSX

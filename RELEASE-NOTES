@@ -1,30 +1,20 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.14
+Version:  v0.2.15
 
-Release date:  Tuesday, September 23, 2014 (2014-09-23)
+Release date:  Monday, September 23, 2015 (2015-06-01)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.14
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.15
 
 License: GNU GPLv2
 
 
-What's New since v0.2.13
+What's New since v0.2.15
 ========================
 
 Allow building unstable version on MacOSX
-Add optional argument 'format' to hypervisor commands 'send_con_msg' and 
-'send_aux_msg'. Report "X byte(s) written" on succeess.
-    - String formats:
-        * plain - plain string (default, old behavior)
-        * base64 - base64 encoded string
-Fix issue with 7200 IOS crashing after restart
-
-Fixed issue #49 - IOS crashes after router restart
-Fixed issue #50 - vm send_con_msg
-Fixed issue #55 - 'unstable' installs 'stable' version on Mac OS X
-
+Fix issue with packet capture on MacOSX
 
 Known Issues
 ============
