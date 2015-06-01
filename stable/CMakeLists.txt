@@ -78,6 +78,12 @@ if ( NOT BUILD_DYNAMIPS_STABLE )
    return ()
 endif ( NOT BUILD_DYNAMIPS_STABLE )
 
+# set MAC64HACK on stable OSX amd64 build
+if ( APPLE AND "amd64" STREQUAL "${DYNAMIPS_ARCH}" )
+   add_definitions( "-DMAC64HACK" )
+endif()
+
+
 # dynamips_*_stable
 set ( _files
    "${COMMON}/mempool.c"
