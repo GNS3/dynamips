@@ -70,7 +70,7 @@ cd build
 cmake ..
 ```
 
-On OSX Yosemite you need to force usage of GCC 4.2:
+On OSX Yosemite you need to force usage of GCC 4.9:
 ```
 cmake ..  -DCMAKE_C_COMPILER=/usr/local/bin/gcc-4.9
 ```
