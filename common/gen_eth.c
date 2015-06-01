@@ -46,7 +46,12 @@ pcap_t *gen_eth_init(char *device)
    if (!(p = pcap_open_live(device,65535,TRUE,10,pcap_errbuf)))
       goto pcap_error;
 
+
+#ifdef __APPLE__
+   pcap_setdirection(p,PCAP_D_IN);
+#else
    pcap_setdirection(p,PCAP_D_INOUT);
+#endif /* __APPLE__ */
 #ifdef BIOCFEEDBACK
    {
      int on = 1;
@@ -55,18 +60,18 @@ pcap_t *gen_eth_init(char *device)
 #endif
 #else
    p = pcap_open(device,65535,
-                 PCAP_OPENFLAG_PROMISCUOUS | 
+                 PCAP_OPENFLAG_PROMISCUOUS |
                  PCAP_OPENFLAG_NOCAPTURE_LOCAL |
 		 PCAP_OPENFLAG_MAX_RESPONSIVENESS |
 		 PCAP_OPENFLAG_NOCAPTURE_RPCAP,
 		 10,NULL,pcap_errbuf);
-		 
+
    if (!p)
       goto pcap_error;
 #endif
 
    return p;
-   
+
  pcap_error:
    fprintf(stderr,"gen_eth_init: unable to open device '%s' "
            "with PCAP (%s)\n",device,pcap_errbuf);
