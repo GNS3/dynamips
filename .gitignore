@@ -3,3 +3,13 @@
 .project
 /build/*
 /CMakeLists.txt.*
+unstable/stable
+unstable/man
+unstable/c7200_i0_log.txt
+unstable/CMakeCache.txt
+unstable/CMakeFiles
+unstable/Makefile
+unstable/cmake_install.cmake
+unstable/cmake_uninstall.cmake
+unstable/common
+unstable/unstable
