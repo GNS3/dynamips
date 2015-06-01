@@ -3,18 +3,18 @@ Release Notes for Cisco router simulator (Dynamips)
 
 Version:  v0.2.15
 
-Release date:  Monday, September 23, 2015 (2015-06-01)
+Release date:  Monday, June 1st, 2015 (2015-06-01)
 
 Source code:  https://github.com/GNS3/dynamips/tree/v0.2.15
 
 License: GNU GPLv2
 
 
-What's New since v0.2.15
+What's New since v0.2.14
 ========================
 
-Allow building unstable version on MacOSX
-Fix issue with packet capture on MacOSX
+Allow building unstable version on Mac OS X
+Fixes issue with packet capture on Mac OS X
 
 Known Issues
 ============
