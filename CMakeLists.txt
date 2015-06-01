@@ -32,6 +32,11 @@ include ( utils )
 include ( dependencies )
 include ( configure )
 
+if(APPLE)
+    include_directories(include /usr/local/include/)
+    include_directories(include /opt/local/include/)
+endif()
+
 add_subdirectory ( man )
 add_subdirectory ( common )
 add_subdirectory ( stable )

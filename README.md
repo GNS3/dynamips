@@ -49,6 +49,11 @@ required and can be installed using yum:
 - libuuid-devel
 - libpcap-devel
 
+MacPort & Homebrew:
+- libelf
+- cmake
+
+
 Similar packages should be available for most distributions, consult your 
 distributions package list to find them.
 
@@ -63,6 +68,11 @@ cd dynamips
 mkdir build
 cd build
 cmake ..
+```
+
+On OSX Yosemite you need to force usage of GCC 4.2:
+```
+cmake ..  -DCMAKE_C_COMPILER=/usr/local/bin/gcc-4.9
 ```
 
 This will generate the Makefiles required for compiling Dynamips. To just build 
