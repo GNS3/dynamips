@@ -98,6 +98,7 @@ cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 * Update ChangeLog
 * In common/dynamips.c update sw_version_tag with date
 * Update RELEASE-NOTE
+* git tag the release
 
 ### Useful Information 
 Website: http://www.gns3.net/dynamips/
