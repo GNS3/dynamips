@@ -2955,5 +2955,7 @@ Fixed issue #55 - 'unstable' installs 'stable' version on Mac OS X
 +--------------------+
 
 01-06-2015
-   - Fix build on MacOSX
-	- Fix packet capture on MacOSX
+----------
+
+Fixed issue #60 - build on Mac OS X
+Fixed packet capture on Mac OS X (echoed packets)

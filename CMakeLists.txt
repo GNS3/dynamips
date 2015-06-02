@@ -26,7 +26,7 @@ message ( STATUS "CMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}" )
 
 project ( dynamips C )
 set ( DYNAMIPS_VERSION_TRAIN 0.2.15 )
-set ( DYNAMIPS_VERSION_SUB -dev )
+set ( DYNAMIPS_VERSION_SUB )
 
 include ( utils )
 include ( dependencies )
