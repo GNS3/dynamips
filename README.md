@@ -93,6 +93,12 @@ The specify a differant installation location run:
 cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 ```
 
+### Releasing
+
+* Update ChangeLog
+* In common/dynamips.c update sw_version_tag with date
+* Update RELEASE-NOTE
+
 ### Useful Information 
 Website: http://www.gns3.net/dynamips/
 
