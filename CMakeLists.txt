@@ -46,7 +46,7 @@ install_docs (
    "ChangeLog"
    "COPYING"
    "MAINTAINERS"
-   "README"
+   "README.md"
    "README.hypervisor"
    "RELEASE-NOTES"
    "TODO"
