@@ -178,7 +178,7 @@ struct netio_desc {
    void *dptr;
    char *name;
    int debug;
-   
+
    /* Frame Relay specific information */
    m_uint8_t fr_lmi_seq;
    void *fr_conn_list;
@@ -187,6 +187,7 @@ struct netio_desc {
    u_int vlan_port_type;
    m_uint16_t vlan_id;
    void *vlan_input_vector;
+   m_uint16_t ethertype;
 
    union {
       netio_unix_desc_t nud;
@@ -217,7 +218,7 @@ struct netio_desc {
    u_int bandwidth;
    m_uint64_t bw_cnt[NETIO_BW_SAMPLES];
    m_uint64_t bw_cnt_total;
-   u_int bw_pos;  
+   u_int bw_pos;
    u_int bw_ptask_cnt;
 
    /* Packet filters */

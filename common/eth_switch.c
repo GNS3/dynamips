@@ -59,7 +59,7 @@ static void ethsw_invalidate_port(ethsw_table_t *t,netio_desc_t *nio)
 {
    ethsw_mac_entry_t *entry;
    int i;
-   
+
    for(i=0;i<ETHSW_HASH_SIZE;i++) {
       entry = &t->mac_addr_table[i];
       if (entry->nio == nio) {
@@ -70,14 +70,14 @@ static void ethsw_invalidate_port(ethsw_table_t *t,netio_desc_t *nio)
 }
 
 /* Push a 802.1Q tag */
-static void dot1q_push_tag(m_uint8_t *pkt,ethsw_packet_t *sp,u_int vlan)
-{   
+static void dot1q_push_tag(m_uint8_t *pkt,ethsw_packet_t *sp,u_int vlan,m_uint16_t ethertype)
+{
    n_eth_dot1q_hdr_t *hdr;
 
    memcpy(pkt,sp->pkt,(N_ETH_HLEN - 2));
 
    hdr = (n_eth_dot1q_hdr_t *)pkt;
-   hdr->type    = htons(N_ETH_PROTO_DOT1Q);
+   hdr->type    = htons(ethertype);
    hdr->vlan_id = htons(sp->input_vlan);
 
    memcpy(pkt + sizeof(n_eth_dot1q_hdr_t),
@@ -103,20 +103,20 @@ static void ethsw_iv_access(ethsw_table_t *t,ethsw_packet_t *sp,
 
    switch(op->vlan_port_type) {
       /* Access -> Access: no special treatment */
-      case ETHSW_PORT_TYPE_ACCESS:  
+      case ETHSW_PORT_TYPE_ACCESS:
          netio_send(op,sp->pkt,sp->pkt_len);
          break;
 
       /* Access -> 802.1Q: push tag */
       case ETHSW_PORT_TYPE_DOT1Q:
-         /* 
+         /*
           * If the native VLAN of output port is the same as input,
           * forward the packet without adding the tag.
           */
          if (op->vlan_id == sp->input_vlan) {
             netio_send(op,sp->pkt,sp->pkt_len);
          } else {
-            dot1q_push_tag(pkt,sp,op->vlan_id);
+            dot1q_push_tag(pkt,sp,op->vlan_id,sp->input_port->ethertype);
             netio_send(op,pkt,sp->pkt_len+4);
          }
          break;
@@ -156,7 +156,7 @@ static void ethsw_iv_dot1q(ethsw_table_t *t,ethsw_packet_t *sp,
          }
          break;
 
-      /* 
+      /*
        * 802.1Q -> QinQ: pop outer tag if native VLAN in the one specified
        * tunnel port.
        */
@@ -182,11 +182,11 @@ static void ethsw_iv_qinq(ethsw_table_t *t,ethsw_packet_t *sp,
    switch(op->vlan_port_type) {
       /* QinQ -> 802.1Q: push outer tag */
       case ETHSW_PORT_TYPE_DOT1Q:
-         dot1q_push_tag(pkt,sp,sp->input_port->vlan_id);
+         dot1q_push_tag(pkt,sp,sp->input_port->vlan_id,sp->input_port->ethertype);
          netio_send(op,pkt,sp->pkt_len+4);
          break;
 
-      /* 
+      /*
        * QinQ -> QinQ: valid situation if we have the same customer connected
        * on two ports (so with identical VLAN id on tunnel ports).
        */
@@ -257,8 +257,8 @@ static void ethsw_forward(ethsw_table_t *t,ethsw_packet_t *sp)
    entry = &t->mac_addr_table[h_index];
 
    /* If the dest MAC is unknown, flood the packet */
-   if (memcmp(&entry->mac_addr,&hdr->daddr,N_ETH_ALEN) || 
-       (entry->vlan_id != sp->input_vlan)) 
+   if (memcmp(&entry->mac_addr,&hdr->daddr,N_ETH_ALEN) ||
+       (entry->vlan_id != sp->input_vlan))
    {
       ethsw_debug(t,"unknown dest, flooding packet.\n");
       ethsw_flood(t,sp);
@@ -278,8 +278,9 @@ static void ethsw_forward(ethsw_table_t *t,ethsw_packet_t *sp)
 /* Receive a packet and prepare its forwarding */
 static inline int ethsw_receive(ethsw_table_t *t,netio_desc_t *nio,
                                 u_char *pkt,ssize_t pkt_len)
-{   
+{
    n_eth_dot1q_hdr_t *dot1q_hdr;
+   m_uint16_t ethertype;
    n_eth_isl_hdr_t *isl_hdr;
    n_eth_hdr_t *eth_hdr;
    n_eth_llc_hdr_t *llc_hdr;
@@ -303,9 +304,13 @@ static inline int ethsw_receive(ethsw_table_t *t,netio_desc_t *nio,
 
       case ETHSW_PORT_TYPE_DOT1Q:
          dot1q_hdr = (n_eth_dot1q_hdr_t *)sp.pkt;
+         ethertype = ntohs(dot1q_hdr->type);
 
          /* use the native VLAN if no tag is found */
-         if (ntohs(dot1q_hdr->type) != N_ETH_PROTO_DOT1Q) {
+         if (ethertype != N_ETH_PROTO_DOT1Q &&
+             ethertype != N_ETH_PROTO_DOT1Q_2 &&
+             ethertype != N_ETH_PROTO_DOT1Q_3 &&
+             ethertype != N_ETH_PROTO_DOT1Q_4) {
             sp.input_vlan = nio->vlan_id;
             sp.input_tag  = FALSE;
          } else {
@@ -313,14 +318,18 @@ static inline int ethsw_receive(ethsw_table_t *t,netio_desc_t *nio,
             sp.input_tag  = TRUE;
          }
          break;
-         
+
       case ETHSW_PORT_TYPE_QINQ:
          dot1q_hdr = (n_eth_dot1q_hdr_t *)sp.pkt;
+         ethertype = ntohs(dot1q_hdr->type);
 
          /* Drop untagged traffic */
-         if (ntohs(dot1q_hdr->type) != N_ETH_PROTO_DOT1Q)
+         if (ethertype != N_ETH_PROTO_DOT1Q &&
+             ethertype != N_ETH_PROTO_DOT1Q_2 &&
+             ethertype != N_ETH_PROTO_DOT1Q_3 &&
+             ethertype != N_ETH_PROTO_DOT1Q_4)
             return(-1);
-         
+
          /* The MAC address lookup is done on the outer VLAN */
          sp.input_vlan = nio->vlan_id;
          break;
@@ -372,6 +381,7 @@ static void set_access_port(netio_desc_t *nio,u_int vlan_id)
    nio->vlan_port_type    = ETHSW_PORT_TYPE_ACCESS;
    nio->vlan_id           = vlan_id;
    nio->vlan_input_vector = ethsw_iv_access;
+   nio->ethertype         = N_ETH_PROTO_DOT1Q;
 }
 
 /* Set a port as a 802.1Q trunk port */
@@ -380,14 +390,16 @@ static void set_dot1q_port(netio_desc_t *nio,u_int native_vlan)
    nio->vlan_port_type    = ETHSW_PORT_TYPE_DOT1Q;
    nio->vlan_id           = native_vlan;
    nio->vlan_input_vector = ethsw_iv_dot1q;
+   nio->ethertype         = N_ETH_PROTO_DOT1Q;
 }
 
 /* Set a port as a Q-in-Q trunk port */
-static void set_qinq_port(netio_desc_t *nio,u_int outer_vlan)
+static void set_qinq_port(netio_desc_t *nio,u_int outer_vlan,m_uint16_t ethertype)
 {
    nio->vlan_port_type    = ETHSW_PORT_TYPE_QINQ;
    nio->vlan_id           = outer_vlan;
    nio->vlan_input_vector = ethsw_iv_qinq;
+   nio->ethertype         = ethertype;
 }
 
 /* Acquire a reference to an Ethernet switch (increment reference count) */
@@ -444,7 +456,7 @@ int ethsw_add_netio(ethsw_table_t *t,char *nio_name)
    for(i=0;i<ETHSW_MAX_NIO;i++)
       if (t->nio[i] == NULL)
          break;
-   
+
    /* No free slot found ... */
    if (i == ETHSW_MAX_NIO)
       goto error;
@@ -495,14 +507,14 @@ int ethsw_remove_netio(ethsw_table_t *t,char *nio_name)
    /* Invalidate this port in the MAC address table */
    ethsw_invalidate_port(t,nio);
    t->nio[i] = NULL;
-   
+
    ETHSW_UNLOCK(t);
 
    /* Remove the NIO from the RX multiplexer */
    ethsw_free_nio(nio);
    return(0);
 
- error:  
+ error:
    ETHSW_UNLOCK(t);
    return(-1);
 }
@@ -527,7 +539,7 @@ int ethsw_iterate_mac_addr_table(ethsw_table_t *t,ethsw_foreach_entry_t cb,
 
    for(i=0;i<ETHSW_HASH_SIZE;i++) {
       entry = &t->mac_addr_table[i];
-      
+
       if (!entry->nio)
          continue;
 
@@ -544,7 +556,7 @@ int ethsw_set_access_port(ethsw_table_t *t,char *nio_name,u_int vlan_id)
    int i,res = -1;
 
    ETHSW_LOCK(t);
-   
+
    for(i=0;i<ETHSW_MAX_NIO;i++)
       if (t->nio[i] && !strcmp(t->nio[i]->name,nio_name)) {
          set_access_port(t->nio[i],vlan_id);
@@ -562,7 +574,7 @@ int ethsw_set_dot1q_port(ethsw_table_t *t,char *nio_name,u_int native_vlan)
    int i,res = -1;
 
    ETHSW_LOCK(t);
-   
+
    for(i=0;i<ETHSW_MAX_NIO;i++)
       if (t->nio[i] && !strcmp(t->nio[i]->name,nio_name)) {
          set_dot1q_port(t->nio[i],native_vlan);
@@ -575,15 +587,22 @@ int ethsw_set_dot1q_port(ethsw_table_t *t,char *nio_name,u_int native_vlan)
 }
 
 /* Set port as a Q-in-Q port */
-int ethsw_set_qinq_port(ethsw_table_t *t,char *nio_name,u_int outer_vlan)
+int ethsw_set_qinq_port(ethsw_table_t *t,char *nio_name,u_int outer_vlan,m_uint16_t ethertype)
 {
    int i,res = -1;
 
+   if(ethertype != N_ETH_PROTO_DOT1Q &&
+      ethertype != N_ETH_PROTO_DOT1Q_2 &&
+      ethertype != N_ETH_PROTO_DOT1Q_3 &&
+      ethertype != N_ETH_PROTO_DOT1Q_4 ) {
+      return -1;
+    }
+
    ETHSW_LOCK(t);
-   
+
    for(i=0;i<ETHSW_MAX_NIO;i++)
       if (t->nio[i] && !strcmp(t->nio[i]->name,nio_name)) {
-         set_qinq_port(t->nio[i],outer_vlan);
+         set_qinq_port(t->nio[i],outer_vlan,ethertype);
          res = 0;
          break;
       }
@@ -597,7 +616,7 @@ void ethsw_save_config(ethsw_table_t *t,FILE *fd)
 {
    netio_desc_t *nio;
    int i;
-   
+
    fprintf(fd,"ethsw create %s\n",t->name);
 
    ETHSW_LOCK(t);
@@ -618,11 +637,11 @@ void ethsw_save_config(ethsw_table_t *t,FILE *fd)
             fprintf(fd,"ethsw set_dot1q_port %s %s %u\n",
                     t->name,nio->name,nio->vlan_id);
             break;
-            
+
          case ETHSW_PORT_TYPE_QINQ:
-            fprintf(fd,"ethsw set_qinq_port %s %s %u\n",
-                    t->name,nio->name,nio->vlan_id);
-            break;            
+            fprintf(fd,"ethsw set_qinq_port %s %s %u 0x%x\n",
+                    t->name,nio->name,nio->vlan_id,nio->ethertype);
+            break;
 
          default:
             fprintf(stderr,"ethsw_save_config: unknown port type %u\n",
@@ -752,7 +771,7 @@ static int ethsw_cfg_create_if(ethsw_table_t *t,char **tokens,int count)
                     "for Generic Ethernet NIO\n");
             break;
          }
-         
+
          nio = netio_desc_create_geneth(tokens[1],tokens[3]);
          break;
 #endif
@@ -764,7 +783,7 @@ static int ethsw_cfg_create_if(ethsw_table_t *t,char **tokens,int count)
                     "for Linux Ethernet NIO\n");
             break;
          }
-         
+
          nio = netio_desc_create_lnxeth(tokens[1],tokens[3]);
          break;
 #endif
@@ -816,20 +835,23 @@ static int ethsw_cfg_set_dot1q_port(ethsw_table_t *t,char **tokens,int count)
 /* Set a port as a Q-in-Q port */
 static int ethsw_cfg_set_qinq_port(ethsw_table_t *t,char **tokens,int count)
 {
-   /* 3 parameters: "QINQ", IF, Outer VLAN */
-   if (count != 3) {
+   m_uint16_t ethertype = N_ETH_PROTO_DOT1Q;
+   /* 3 + 1 parameters: "QINQ", IF, Outer VLAN, Ethertype (optional) */
+   if (count == 4) {
+      sscanf(tokens[3], "0x%hx", &ethertype);
+   } else if (count != 3) {
       fprintf(stderr,"ETHSW: invalid QinQ port description.\n");
       return(-1);
    }
 
-   return(ethsw_set_qinq_port(t,tokens[1],atoi(tokens[2])));
+   return(ethsw_set_qinq_port(t,tokens[1],atoi(tokens[2]),ethertype));
 }
 
 #define ETHSW_MAX_TOKENS  16
 
 /* Handle a ETHSW configuration line */
 static int ethsw_handle_cfg_line(ethsw_table_t *t,char *str)
-{  
+{
    char *tokens[ETHSW_MAX_TOKENS];
    int count;
 
@@ -861,11 +883,11 @@ static int ethsw_read_cfg_file(ethsw_table_t *t,char *filename)
       perror("fopen");
       return(-1);
    }
-   
+
    while(!feof(fd)) {
       if (!fgets(buffer,sizeof(buffer),fd))
          break;
-      
+
       /* skip comments and end of line */
       if ((ptr = strpbrk(buffer,"#\r\n")) != NULL)
          *ptr = 0;
@@ -874,7 +896,7 @@ static int ethsw_read_cfg_file(ethsw_table_t *t,char *filename)
       if (strchr(buffer,':'))
          ethsw_handle_cfg_line(t,buffer);
    }
-   
+
    fclose(fd);
    return(0);
 }
@@ -893,7 +915,7 @@ int ethsw_start(char *filename)
       fprintf(stderr,"ETHSW: unable to parse configuration file.\n");
       return(-1);
    }
-   
+
    ethsw_release("default");
    return(0);
 }

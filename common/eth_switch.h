@@ -55,7 +55,7 @@ struct ethsw_table {
    char *name;
    pthread_mutex_t lock;
    int debug;
-   
+
    /* Virtual Ports */
    netio_desc_t *nio[ETHSW_MAX_NIO];
 
@@ -105,7 +105,7 @@ int ethsw_set_access_port(ethsw_table_t *t,char *nio_name,u_int vlan_id);
 int ethsw_set_dot1q_port(ethsw_table_t *t,char *nio_name,u_int native_vlan);
 
 /* Set port as a Q-in-Q port */
-int ethsw_set_qinq_port(ethsw_table_t *t,char *nio_name,u_int outer_vlan);
+int ethsw_set_qinq_port(ethsw_table_t *t,char *nio_name,u_int outer_vlan,m_uint16_t ethertype);
 
 /* Save the configuration of a switch */
 void ethsw_save_config(ethsw_table_t *t,FILE *fd);
