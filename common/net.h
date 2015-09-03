@@ -16,7 +16,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define N_IP_ADDR_LEN   4 
+#define N_IP_ADDR_LEN   4
 #define N_IP_ADDR_BITS  32
 
 #define N_IPV6_ADDR_LEN   16
@@ -113,6 +113,7 @@ typedef struct {
 #define N_ETH_PROTO_DOT1Q    0x8100
 #define N_ETH_PROTO_DOT1Q_2  0x9100
 #define N_ETH_PROTO_DOT1Q_3  0x9200
+#define N_ETH_PROTO_DOT1Q_4  0x88A8
 #define N_ETH_PROTO_MPLS     0x8847
 #define N_ETH_PROTO_MPLS_MC  0x8848
 #define N_ETH_PROTO_LOOP     0x9000

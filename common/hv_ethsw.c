@@ -106,7 +106,7 @@ static int cmd_delete(hypervisor_conn_t *conn,int argc,char *argv[])
    return(res);
 }
 
-/* 
+/*
  * Add a NIO to an Ethernet switch.
  *
  * Parameters: <ethsw_name> <nio_name>
@@ -117,7 +117,7 @@ static int cmd_add_nio(hypervisor_conn_t *conn,int argc,char *argv[])
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
+
    if (ethsw_add_netio(t,argv[1]) == -1) {
       ethsw_release(argv[0]);
       hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
@@ -131,7 +131,7 @@ static int cmd_add_nio(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
-/* 
+/*
  * Remove a NIO from an Ethernet switch
  *
  * Parameters: <ethsw_name> <nio_name>
@@ -142,7 +142,7 @@ static int cmd_remove_nio(hypervisor_conn_t *conn,int argc,char *argv[])
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
+
    if (ethsw_remove_netio(t,argv[1]) == -1) {
       ethsw_release(argv[0]);
       hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
@@ -156,7 +156,7 @@ static int cmd_remove_nio(hypervisor_conn_t *conn,int argc,char *argv[])
    return(0);
 }
 
-/* 
+/*
  * Set a port as an access port.
  *
  * Parameters: <ethsw_name> <nio> <VLAN>
@@ -167,7 +167,7 @@ static int cmd_set_access_port(hypervisor_conn_t *conn,int argc,char *argv[])
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
+
    if (ethsw_set_access_port(t,argv[1],atoi(argv[2])) == -1) {
       ethsw_release(argv[0]);
       hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
@@ -175,12 +175,12 @@ static int cmd_set_access_port(hypervisor_conn_t *conn,int argc,char *argv[])
       return(-1);
    }
 
-   ethsw_release(argv[0]);   
+   ethsw_release(argv[0]);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"Port settings OK");
    return(0);
 }
 
-/* 
+/*
  * Set a port as a trunk (802.1Q) port.
  *
  * Parameters: <ethsw_name> <nio> <native_VLAN>
@@ -191,7 +191,7 @@ static int cmd_set_dot1q_port(hypervisor_conn_t *conn,int argc,char *argv[])
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
+
    if (ethsw_set_dot1q_port(t,argv[1],atoi(argv[2])) == -1) {
       ethsw_release(argv[0]);
       hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
@@ -199,31 +199,35 @@ static int cmd_set_dot1q_port(hypervisor_conn_t *conn,int argc,char *argv[])
       return(-1);
    }
 
-   ethsw_release(argv[0]);   
+   ethsw_release(argv[0]);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"Port settings OK");
    return(0);
 }
 
-/* 
+/*
  * Set a port as a trunk (QinQ) port.
  *
- * Parameters: <ethsw_name> <nio> <outer_VLAN>
+ * Parameters: <ethsw_name> <nio> <outer_VLAN> <ethertype>
  */
 static int cmd_set_qinq_port(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    ethsw_table_t *t;
+   m_uint16_t ethertype = N_ETH_PROTO_DOT1Q;
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
-   if (ethsw_set_qinq_port(t,argv[1],atoi(argv[2])) == -1) {
+
+   if (argc == 4) {
+      sscanf(argv[3], "0x%hx", &ethertype);
+   }
+   if (ethsw_set_qinq_port(t,argv[1],atoi(argv[2]),ethertype) == -1) {
       ethsw_release(argv[0]);
       hypervisor_send_reply(conn,HSC_ERR_BINDING,1,
                             "unable to apply port settings");
       return(-1);
    }
 
-   ethsw_release(argv[0]);   
+   ethsw_release(argv[0]);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"Port settings OK");
    return(0);
 }
@@ -238,7 +242,7 @@ static int cmd_clear_mac_addr_table(hypervisor_conn_t *conn,
       return(-1);
 
    ethsw_clear_mac_addr_table(t);
-   ethsw_release(argv[0]);   
+   ethsw_release(argv[0]);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
@@ -266,12 +270,12 @@ static int cmd_show_mac_addr_table(hypervisor_conn_t *conn,
 
    if (!(t = hypervisor_find_object(conn,argv[0],OBJ_TYPE_ETHSW)))
       return(-1);
-   
+
    ethsw_iterate_mac_addr_table(t,
                                 (ethsw_foreach_entry_t)cmd_show_mac_addr_entry,
                                 conn);
 
-   ethsw_release(argv[0]);   
+   ethsw_release(argv[0]);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");
    return(0);
 }
@@ -302,7 +306,7 @@ static hypervisor_cmd_t ethsw_cmd_array[] = {
    { "remove_nio", 2, 2, cmd_remove_nio, NULL },
    { "set_access_port", 3, 3, cmd_set_access_port, NULL },
    { "set_dot1q_port", 3, 3, cmd_set_dot1q_port, NULL },
-   { "set_qinq_port", 3, 3, cmd_set_qinq_port, NULL },
+   { "set_qinq_port", 3, 4, cmd_set_qinq_port, NULL },
    { "clear_mac_addr_table", 1, 1, cmd_clear_mac_addr_table, NULL },
    { "show_mac_addr_table", 1, 1, cmd_show_mac_addr_table, NULL },
    { "list", 0, 0, cmd_list, NULL },
