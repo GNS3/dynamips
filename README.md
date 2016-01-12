@@ -75,6 +75,11 @@ On OSX Yosemite you need to force usage of GCC 4.9:
 cmake ..  -DCMAKE_C_COMPILER=/usr/local/bin/gcc-4.9
 ```
 
+And for building stable release:
+```
+cmake .. -DDYNAMIPS_CODE=stable  -DCMAKE_C_COMPILER=/usr/local/bin/gcc-4.9
+```
+
 This will generate the Makefiles required for compiling Dynamips. To just build 
 Dynamips simple run:
 
