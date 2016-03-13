@@ -51,11 +51,20 @@ MacPort & Homebrew:
 - libelf
 - cmake
 
+Windows with Cygwin:
+
+- Install Winpcap: https://www.winpcap.org/
+- Install Cygwin 32-bit (setup-x86.exe): https://cygwin.com/install.html
+- In Cygwin setup, install the ``make``, ``cmake``, ``gcc-core`` and ``git`` packages
+- Additionally, install the ``libelf0`` package (**important:** both bin and src)
+- Download and unzip Winpcap developer pack: http://www.winpcap.org/devel.htm
+- Copy the libraries ``WpdPack\Lib\libpacket.a`` and ``WpdPack\Lib\libwpcap.a`` to ``cygwin\lib\``
+- Copy all headers from ``WpdPack\Include`` to ``cygwin\usr\include\``
 
 Similar packages should be available for most distributions, consult your 
 distributions package list to find them.
 
-#### Compiling
+#### Compiling (Linux/Mac)
 
 Either download and extract a source tarball from the releases page or clone the
 Git repository using:
@@ -95,6 +104,39 @@ The specify a differant installation location run:
 ```
 cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 ```
+
+#### Compiling (Windows)
+
+Open the Cygwin terminal.
+
+First, the libelf has to be manually compiled and installed:
+
+``<MIRROR_DOWNLOADS>`` is the directory used by your Cygwin mirror to download packages.
+It is possible that the libelf version differs from below.
+
+```
+cp <MIRROR_DOWNLOADS>/x86/release/libelf/libelf0/libelf0-0.8.13-2-src.tar.bz2 .
+mkdir libelf && tar xvjf libelf0-0.8.13-2-src.tar.bz2 -C libelf
+cd libelf
+tar xvzf libelf-0.8.13.tar.gz
+cd libelf-0.8.13
+./configure
+make
+make install
+```
+
+Then, Dynamips can be build:
+
+```
+git clone git://github.com/GNS3/dynamips.git
+cd dynamips
+mkdir build
+cd build
+cmake ..
+make
+```
+
+You will find ``dynamips.exe`` in the stable directory. Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dynamips.exe`` to be able to start it from outside Cygwin terminal.
 
 ### Releasing
 
