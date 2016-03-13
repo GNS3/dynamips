@@ -249,16 +249,6 @@ int atm_bridge_cfg_create_if(atm_bridge_t *t,char **tokens,int count)
                                      tokens[4],atoi(tokens[5]));
          break;
 
-      case NETIO_TYPE_MCAST:
-         if (count != 5) {
-            fprintf(stderr,"ATMSW: invalid number of arguments "
-                    "for Multicast NIO '%s'\n",tokens[1]);
-            break;
-         }
-
-         nio = netio_desc_create_mcast(tokens[1],tokens[3],atoi(tokens[4]));
-         break;
-
       case NETIO_TYPE_TCP_CLI:
          if (count != 5) {
             fprintf(stderr,"ATMSW: invalid number of arguments "

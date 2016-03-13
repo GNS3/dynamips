@@ -102,9 +102,6 @@ Save the configuration of all objects into the specified file.
 .B hypervisor parser_test [<a1> [... <a10>]]
 Display up to 10 arguments. (since version 0.2.6\-RC1)
 .TP
-.B hypervisor uuid
-Display the local uuid. (since version 0.2.8\-RC3)
-.TP
 .B hypervisor tsg_stats
 Dump statistics about JIT code sharing to the console.
 (since version 0.2.8\-RC3, unstable)
@@ -593,14 +590,6 @@ Create an auto UDP NIO.
 .TP
 .B nio connect_udp_auto <nio_name> <remote_host> <remote_port>
 Connect an UDP Auto NIO to a remote host/port.
-(since version 0.2.8\-RC3\-community)
-.TP
-.B nio create_mcast <nio_name> <mcast_group> <mcast_port>
-Create a Multicast NIO.
-(since version 0.2.8\-RC3\-community)
-.TP
-.B nio set_mcast_ttl <nio_name> <ttl>
-Set TTL for a Multicast NIO.
 (since version 0.2.8\-RC3\-community)
 .TP
 .B nio create_unix <nio_name> <local_file> <remote_file>

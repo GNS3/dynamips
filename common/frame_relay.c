@@ -516,16 +516,6 @@ int frsw_cfg_create_if(frsw_table_t *t,char **tokens,int count)
                                      tokens[4],atoi(tokens[5]));
          break;
 
-      case NETIO_TYPE_MCAST:
-         if (count != 5) {
-            fprintf(stderr,"FRSW: invalid number of arguments "
-                    "for UDP NIO '%s'\n",tokens[1]);
-            break;
-         }
-
-         nio = netio_desc_create_mcast(tokens[1],tokens[3],atoi(tokens[4]));
-         break;
-
       case NETIO_TYPE_TCP_CLI:
          if (count != 5) {
             fprintf(stderr,"FRSW: invalid number of arguments "

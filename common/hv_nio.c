@@ -87,7 +87,7 @@ static int cmd_create_udp_auto(hypervisor_conn_t *conn,int argc,char *argv[])
  * Connect an UDP Auto NIO to a remote host/port.
  *
  * Parameters: <nio_name> <remote_host> <remote_port>
- */ 
+ */
 static int cmd_connect_udp_auto(hypervisor_conn_t *conn,int argc,char *argv[])
 {   
    netio_desc_t *nio;
@@ -106,44 +106,6 @@ static int cmd_connect_udp_auto(hypervisor_conn_t *conn,int argc,char *argv[])
       hypervisor_send_reply(conn,HSC_ERR_CREATE,1,"unable to connect NIO");
       return(-1);
    }
-}
-
-
-/* 
- * Create a Multicast NIO
- *
- * Parameters: <nio_name> <mcast_group> <mcast_port>
- */
-static int cmd_create_mcast(hypervisor_conn_t *conn,int argc,char *argv[])
-{   
-   netio_desc_t *nio;
-
-   nio = netio_desc_create_mcast(argv[0],argv[1],atoi(argv[2]));
-
-   if (!nio) {
-      hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
-                            "unable to create Multicast NIO");
-      return(-1);
-   }
-
-   netio_release(argv[0]);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' created",argv[0]);
-   return(0);
-}
-
-/* Set TTL for a Multicast NIO */
-static int cmd_set_mcast_ttl(hypervisor_conn_t *conn,int argc,char *argv[])
-{   
-   netio_desc_t *nio;
-
-   if (!(nio = hypervisor_find_object(conn,argv[0],OBJ_TYPE_NIO)))
-      return(-1);
-
-   netio_mcast_set_ttl(nio,atoi(argv[1]));
-
-   netio_release(argv[0]);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"NIO '%s' TTL changed",argv[0]);
-   return(0);
 }
 
 /* 
@@ -540,8 +502,6 @@ static hypervisor_cmd_t nio_cmd_array[] = {
    { "create_udp", 4, 4, cmd_create_udp, NULL },
    { "create_udp_auto", 4, 4, cmd_create_udp_auto, NULL },
    { "connect_udp_auto", 3, 3, cmd_connect_udp_auto, NULL },
-   { "create_mcast", 3, 3, cmd_create_mcast, NULL },
-   { "set_mcast_ttl", 2, 2, cmd_set_mcast_ttl, NULL },
    { "create_unix", 3, 3, cmd_create_unix, NULL },
    { "create_vde", 3, 3, cmd_create_vde, NULL },
    { "create_tap", 2, 2, cmd_create_tap, NULL },

@@ -932,16 +932,6 @@ int vm_slot_cmd_add_nio(vm_instance_t *vm,char *str)
                                      tokens[4],atoi(tokens[5]));
          break;
 
-      case NETIO_TYPE_MCAST:
-         if (count != 5) {
-            vm_error(vm,"invalid number of arguments for Multicast NIO '%s'\n",
-                     str);
-            goto done;
-         }
-
-         nio = netio_desc_create_mcast(nio_name,tokens[3],atoi(tokens[4]));
-         break;
-
       case NETIO_TYPE_TCP_CLI:
          if (count != 5) {
             vm_error(vm,"invalid number of arguments for TCP CLI NIO '%s'\n",

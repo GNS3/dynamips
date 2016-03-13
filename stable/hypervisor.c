@@ -25,7 +25,6 @@
 #include <pthread.h>
 
 #include "utils.h"
-#include "gen_uuid.h"
 #include "parser.h"
 #include "net.h"
 #include "registry.h"
@@ -58,19 +57,6 @@ static hypervisor_conn_t *hypervisor_conn_list = NULL;
 static int cmd_version(hypervisor_conn_t *conn,int argc,char *argv[])
 {
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"%s",sw_version);
-   return(0);
-}
-
-/* Show UUID */
-static int cmd_uuid(hypervisor_conn_t *conn,int argc,char *argv[])
-{
-   char buffer[40];
-   uuid_t local_uuid;
-   
-   gen_uuid_get_local(local_uuid);
-   uuid_unparse(local_uuid,buffer);
-   
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"%s",buffer);
    return(0);
 }
 
@@ -184,7 +170,6 @@ static int cmd_stop(hypervisor_conn_t *conn,int argc,char *argv[])
 /* Hypervisor commands */
 static hypervisor_cmd_t hypervisor_cmd_array[] = {
    { "version", 0, 0, cmd_version, NULL },
-   { "uuid", 0, 0, cmd_uuid, NULL },
    { "parser_test", 0, 10, cmd_parser_test, NULL },
    { "module_list", 0, 0, cmd_mod_list, NULL },
    { "cmd_list", 1, 1, cmd_modcmd_list, NULL },

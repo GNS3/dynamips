@@ -21,7 +21,6 @@
 #include <getopt.h>
 
 #include "dynamips.h"
-#include "gen_uuid.h"
 #include "cpu.h"
 #include "vm.h"
 
@@ -906,8 +905,6 @@ int main(int argc,char *argv[])
 
    printf("Copyright (c) 2005-2011 Christophe Fillot.\n");
    printf("Build date: %s %s\n\n",__DATE__,__TIME__);
-
-   gen_uuid_init();
 
    /* Register platforms */
    register_default_platforms();

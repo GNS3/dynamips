@@ -47,7 +47,6 @@ set ( _files
    "${COMMON}/sbox.c"
    "${COMMON}/utils.c"
    "${COMMON}/parser.c"
-   "${COMMON}/gen_uuid.c"
    "${COMMON}/plugin.c"
    "${COMMON}/ptask.c"
    "${COMMON}/timer.c"

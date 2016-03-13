@@ -40,13 +40,11 @@ CMake and a working GCC or Clang compiler, as well as the build dependencies.
 On Debian based systems the following build dependencies are required and can be
 installed using apt-get:
 - libelf-dev
-- uuid-dev
 - libpcap0.8-dev
 
 On Redhat based systems (CentOS, Fedora etc) the following build dependencies are
 required and can be installed using yum:
 - elfutils-libelf-devel
-- libuuid-devel
 - libpcap-devel
 
 MacPort & Homebrew:

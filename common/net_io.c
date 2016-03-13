@@ -35,7 +35,6 @@
 #endif
 
 #include "registry.h"
-#include "gen_uuid.h"
 #include "net.h"
 #include "net_io.h"
 #include "net_io_filter.h"
@@ -74,7 +73,6 @@ static netio_type_t netio_types[NETIO_TYPE_MAX] = {
    { "udp_auto"  , "Auto UDP sockets" },
    { "tcp_cli"   , "TCP client" },
    { "tcp_ser"   , "TCP server" },
-   { "mcast"     , "Multicast bus" },
 #ifdef LINUX_ETH
    { "linux_eth" , "Linux Ethernet device" },
 #endif
@@ -284,9 +282,6 @@ int netio_get_fd(netio_desc_t *nio)
       case NETIO_TYPE_UDP:
       case NETIO_TYPE_UDP_AUTO:
          fd = nio->u.nid.fd;
-         break;
-      case NETIO_TYPE_MCAST:
-         fd = nio->u.nmd.fd;
          break;
 #ifdef LINUX_ETH
       case NETIO_TYPE_LINUX_ETH:
@@ -1054,133 +1049,6 @@ netio_desc_t *netio_desc_create_udp_auto(char *nio_name,char *local_addr,
 error:
    netio_free(nio,NULL);
    return NULL;
-}
-
-/*
- * =========================================================================
- * Multicast sockets
- * =========================================================================
- */
-
-/* Free a NetIO Mcast descriptor */
-static void netio_mcast_free(netio_mcast_desc_t *nmd)
-{
-   if (nmd->mcast_group) {
-      free(nmd->mcast_group);
-      nmd->mcast_group = NULL;
-   }
-
-   if (nmd->fd != -1) 
-      close(nmd->fd);
-}
-
-/* Send a packet to a Multicast socket */
-static ssize_t netio_mcast_send(netio_mcast_desc_t *nmd,
-                                void *pkt,size_t pkt_len)
-{
-   struct msghdr mh;
-   struct iovec vec[2];
-
-   memset(&mh,0,sizeof(mh));
-   mh.msg_name = &nmd->sa;
-   mh.msg_namelen = nmd->sa_len;
-   mh.msg_iov = vec;
-   mh.msg_iovlen = 2;
-   
-   vec[0].iov_base = nmd->local_id;
-   vec[0].iov_len  = sizeof(uuid_t);
-   vec[1].iov_base = pkt;
-   vec[1].iov_len  = pkt_len;
-
-   return(sendmsg(nmd->fd,&mh,0));
-}
-
-/* Receive a packet from a Multicast socket */
-static ssize_t netio_mcast_recv(netio_mcast_desc_t *nmd,
-                                void *pkt,size_t max_len)
-{
-   uuid_t remote_id;   
-   struct msghdr mh;
-   struct iovec vec[2];
-   ssize_t len;
-
-   memset(&mh,0,sizeof(mh));
-   mh.msg_iov = vec;
-   mh.msg_iovlen = 2;
-   
-   vec[0].iov_base = remote_id;
-   vec[0].iov_len  = sizeof(uuid_t);
-   vec[1].iov_base = pkt;
-   vec[1].iov_len  = max_len;
-
-   len = recvmsg(nmd->fd,&mh,0);
-
-   if ((len <= sizeof(uuid_t)) || (uuid_compare(remote_id,nmd->local_id) == 0))
-      return(-1);
-
-   return(len - sizeof(uuid_t));
-}
-
-/* Save the NIO configuration */
-static void netio_mcast_save_cfg(netio_desc_t *nio,FILE *fd)
-{
-   netio_mcast_desc_t *nmd = nio->dptr;
-   fprintf(fd,"nio create_mcast %s %s %d\n",
-           nio->name,nmd->mcast_group,nmd->mcast_port);
-}
-
-/* Create a new NetIO descriptor with Multicast method */
-netio_desc_t *
-netio_desc_create_mcast(char *nio_name,char *mcast_group,int mcast_port)
-{
-   netio_mcast_desc_t *nmd;
-   netio_desc_t *nio;
-   
-   if (!(nio = netio_create(nio_name)))
-      return NULL;
-
-   nmd = &nio->u.nmd;
-   nmd->mcast_port  = mcast_port;
-   uuid_generate(nmd->local_id);
-
-   if (!(nmd->mcast_group = strdup(mcast_group))) {
-      fprintf(stderr,"netio_desc_create_mcast: insufficient memory\n");
-      goto error;
-   }
-
-   nmd->fd = udp_mcast_socket(mcast_group,mcast_port,
-                              (struct sockaddr *)&nmd->sa,&nmd->sa_len);
-
-   if (nmd->fd < 0) {
-      fprintf(stderr,"netio_desc_create_mcast: unable to connect to %s:%d\n",
-              mcast_group,mcast_port);
-      goto error;
-   }
-
-   nio->type     = NETIO_TYPE_MCAST;
-   nio->send     = (void *)netio_mcast_send;
-   nio->recv     = (void *)netio_mcast_recv;
-   nio->free     = (void *)netio_mcast_free;
-   nio->save_cfg = netio_mcast_save_cfg;
-   nio->dptr     = &nio->u.nmd;
-
-   if (netio_record(nio) == -1)
-      goto error;
-
-   return nio;
-
- error:
-   netio_free(nio,NULL);
-   return NULL;
-}
-
-/* Set TTL for a multicast socket */
-int netio_mcast_set_ttl(netio_desc_t *nio,int ttl)
-{
-   if (nio->type == NETIO_TYPE_MCAST)
-      return(-1);
-
-   return(udp_mcast_set_ttl(netio_get_fd(nio),ttl));
 }
 
 /*

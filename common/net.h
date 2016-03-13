@@ -361,13 +361,6 @@ int udp_listen_range(char *ip_addr,int port_start,int port_end,int *port);
 /* Connect an existing socket to connect to specified host */
 int ip_connect_fd(int fd,char *remote_host,int remote_port);
 
-/* Open a multicast socket */
-int udp_mcast_socket(char *mcast_group,int mcast_port,
-                     struct sockaddr *sa,int *sa_len);
-
-/* Set TTL for a multicast socket */
-int udp_mcast_set_ttl(int sck,int ttl);
-
 /* ISL rewrite */
 void cisco_isl_rewrite(m_uint8_t *pkt,m_uint32_t tot_len);
 

@@ -14,7 +14,6 @@
 #include <pthread.h>
 
 #include "utils.h"
-#include "gen_uuid.h"
 
 #ifdef LINUX_ETH
 #include "linux_eth.h"
@@ -37,7 +36,6 @@ enum {
    NETIO_TYPE_UDP_AUTO,
    NETIO_TYPE_TCP_CLI,
    NETIO_TYPE_TCP_SER,
-   NETIO_TYPE_MCAST,
 #ifdef LINUX_ETH
    NETIO_TYPE_LINUX_ETH,
 #endif
@@ -100,21 +98,6 @@ struct netio_inet_desc {
    int local_port,remote_port;
    char *remote_host;
    int fd;
-};
-
-/* netio mcast descriptor */
-typedef struct netio_mcast_desc netio_mcast_desc_t;
-struct netio_mcast_desc {
-   uuid_t local_id;
-   char *mcast_group;
-   int mcast_port;
-   int fd;
-#if HAS_RFC2553
-   struct sockaddr_storage sa;
-#else
-   struct sockaddr_in sa;
-#endif
-   int sa_len;
 };
 
 #ifdef LINUX_ETH
@@ -194,7 +177,6 @@ struct netio_desc {
       netio_vde_desc_t nvd;
       netio_tap_desc_t ntd;
       netio_inet_desc_t nid;
-      netio_mcast_desc_t nmd;
 #ifdef LINUX_ETH
       netio_lnxeth_desc_t nled;
 #endif
@@ -285,13 +267,6 @@ int netio_udp_auto_connect(netio_desc_t *nio,char *host,int port);
 /* Create a new NetIO descriptor with auto UDP method */
 netio_desc_t *netio_desc_create_udp_auto(char *nio_name,char *local_addr,
                                          int port_start,int port_end);
-
-/* Create a new NetIO descriptor with Multicast method */
-netio_desc_t *
-netio_desc_create_mcast(char *nio_name,char *mcast_group,int mcast_port);
-
-/* Set TTL for a multicast socket */
-int netio_mcast_set_ttl(netio_desc_t *nio,int ttl);
 
 #ifdef LINUX_ETH
 /* Create a new NetIO descriptor with raw Ethernet method */

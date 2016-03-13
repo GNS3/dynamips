@@ -3,7 +3,6 @@
 #  - librt           : maybe required
 #  - libsocket       : maybe required
 #  - libelf          : required
-#  - libuuid         : required
 #  - pthreads        : required
 #  - libpcap/winpcap : optional
 # accumulators:
@@ -160,20 +159,6 @@ set_cmake_required ()
 check_c_source_compiles ( "${_code}" LIBELF_LARGEFILE )
 print_variables ( LIBELF_LARGEFILE )
 
-# libuuid
-set_cmake_required ()
-find_package ( UUID REQUIRED )
-print_variables ( UUID_FOUND UUID_INCLUDE_DIR UUID_LIBRARY )
-# make sure it can be used
-set_cmake_required ()
-list ( APPEND CMAKE_REQUIRED_INCLUDES ${UUID_INCLUDE_DIR} )
-check_arch_library ( UUID_VALID uuid_generate "uuid/uuid.h" UUID_LIBRARY uuid )
-if ( NOT UUID_VALID )
-   bad_arch_library ( FATAL_ERROR "uuid" "UUID_INCLUDE_DIR and UUID_LIBRARY" )
-endif ()
-list ( APPEND DYNAMIPS_INCLUDES ${UUID_INCLUDE_DIR} )
-list ( APPEND DYNAMIPS_LIBRARIES ${UUID_LIBRARY} )
-
 # pthreads
 set ( CMAKE_THREAD_PREFER_PTHREAD 1 )
 set_cmake_required ()
@@ -259,7 +244,6 @@ foreach ( _header #standalone
    "termios.h"
    "time.h"
    "unistd.h"
-   #"uuid/uuid.h" #find_package
    )
    standard_variable_name ( _var "HAVE_${_header}" )
    set_cmake_required ()
