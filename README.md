@@ -47,6 +47,9 @@ required and can be installed using yum:
 - elfutils-libelf-devel
 - libpcap-devel
 
+Similar packages should be available for most distributions, consult your
+distributions package list to find them.
+
 MacPort & Homebrew:
 - libelf
 - cmake
@@ -60,9 +63,6 @@ Windows with Cygwin:
 - Download and unzip Winpcap developer pack: http://www.winpcap.org/devel.htm
 - Copy the libraries ``WpdPack\Lib\libpacket.a`` and ``WpdPack\Lib\libwpcap.a`` to ``cygwin\lib\``
 - Copy all headers from ``WpdPack\Include`` to ``cygwin\usr\include\``
-
-Similar packages should be available for most distributions, consult your 
-distributions package list to find them.
 
 #### Compiling (Linux/Mac)
 
@@ -136,7 +136,8 @@ cmake ..
 make
 ```
 
-You will find ``dynamips.exe`` in the stable directory. Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dynamips.exe`` to be able to start it from outside Cygwin terminal.
+You will find ``dynamips.exe`` in the stable directory.
+Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dynamips.exe`` to be able to start it from outside Cygwin terminal.
 
 ### Releasing
 
