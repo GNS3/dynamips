@@ -2167,8 +2167,7 @@ static int bcm5600_handle_rx_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
 #endif
 
    /* Source MAC address learning */
-   if (!bcm5600_src_mac_learning(d,p))
-      return(FALSE);
+   bcm5600_src_mac_learning(d,p);
 
    /* Take forwarding decision based on destination MAC address */
    if (!bcm5600_dst_mac_lookup(d,p))
