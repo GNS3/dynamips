@@ -32,7 +32,7 @@ include ( utils )
 include ( dependencies )
 include ( configure )
 
-if(APPLE)
+if( APPLE OR (CMAKE_SYSTEM_NAME MATCHES "FreeBSD") )
     include_directories(include /usr/local/include/)
     include_directories(include /opt/local/include/)
 endif()
