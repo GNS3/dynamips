@@ -399,7 +399,7 @@ int m_fd_set_non_block(int fd)
 {
    int flags;
 
-   if ((flags = fcntl(fd,F_GETFL,0)) < 1)
+   if ((flags = fcntl(fd,F_GETFL,0)) < 0)
       return(-1);
 
    return(fcntl(fd,F_SETFL, flags | O_NONBLOCK));

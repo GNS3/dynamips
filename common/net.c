@@ -342,6 +342,10 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    }
 
    freeaddrinfo(res0);
+
+   if (sck >= 0 && m_fd_set_non_block(sck) < 0)
+      perror("Warning: udp_connect: m_fd_set_non_block");
+
    return(sck);
 }
 #else
@@ -387,7 +391,11 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    if (connect(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("udp_connect: connect");
       close(sck);
+      return(-1);
    }
+
+   if (m_fd_set_non_block(sck) < 0)
+      perror("Warning: udp_connect: m_fd_set_non_block");
 
    return(sck);
 }
