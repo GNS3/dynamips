@@ -4,7 +4,7 @@
  * Patched by Jeremy Grossmann for the GNS3 project (www.gns3.net)
  *
  * Many thanks to Nicolas Szalay for his patch
- * for the command line parsing and virtual machine 
+ * for the command line parsing and virtual machine
  * settings (RAM, ROM, NVRAM, ...)
  */
 
@@ -73,7 +73,7 @@ const char *os_name = STRINGIFY(OSNAME);
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2015060118";
+const char *sw_version_tag = "2017072410";
 
 /* Hypervisor */
 int hypervisor_mode = 0;
@@ -110,7 +110,7 @@ void signal_gen_handler(int sig)
       case SIGPIPE:
          fprintf(stderr,"Error: unwanted SIGPIPE.\n");
          break;
-		 
+
       case SIGINT:
          /* CTRL+C has been pressed */
          if (hypervisor_mode)
@@ -183,7 +183,7 @@ static void close_log_file(void)
 static void show_usage(vm_instance_t *vm,int argc,char *argv[])
 {
    printf("Usage: %s [options] <ios_image>\n\n",argv[0]);
-   
+
    printf("Available options:\n"
           "  -H [<ip_address>:]<tcp_port> : Run in hypervisor mode\n\n"
           "  -P <platform>      : Platform to emulate (7200, 3600, "
@@ -289,7 +289,7 @@ static void show_usage(vm_instance_t *vm,int argc,char *argv[])
 
    /* Show possible slot drivers */
    vm_slot_show_drivers(vm);
-   
+
    /* Show the possible NETIO types */
    netio_show_types();
 }
@@ -381,7 +381,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
    vm_instance_t *vm;
 
    vm = vm_create_instance(name,instance_id,platform_name);
-  
+
    if (vm == NULL) {
       fprintf(stderr,"%s: unable to create instance %s!\n",platform_name,name);
       return NULL;
@@ -393,7 +393,7 @@ static vm_instance_t *cli_create_instance(char *name,char *platform_name,
 /* Parse the command line */
 static int parse_std_cmd_line(int argc,char *argv[])
 {
-   char *options_list = 
+   char *options_list =
       "r:o:n:c:m:l:C:i:jt:p:s:k:T:U:A:B:a:f:E:b:S:R:M:eXP:N:G:g:L:I:";
    vm_platform_t *platform;
    vm_instance_t *vm = NULL;
@@ -427,12 +427,12 @@ static int parse_std_cmd_line(int argc,char *argv[])
       goto exit_failure;
 
    opterr = 0;
-   
+
    vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
    vtty_set_telnetmsg(1);   /* By default allow telnet message */
 
    while((option = getopt_long(argc,argv,options_list,
-                               cmd_line_lopts,NULL)) != -1) 
+                               cmd_line_lopts,NULL)) != -1)
    {
       switch(option)
       {
@@ -503,7 +503,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
             vm->ram_mmap = 0;
             break;
 
-         /* Use a ghost file to simulate RAM */           
+         /* Use a ghost file to simulate RAM */
          case 'G':
             free(vm->ghost_ram_filename);
             vm->ghost_ram_filename = strdup(optarg);
@@ -541,7 +541,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
               printf("Unable to save to %s.\n",optarg);
             }
             break;
-			
+
          /* Idle PC */
          case OPT_IDLE_PC:
             vm->idle_pc = strtoull(optarg,NULL,0);
@@ -668,7 +668,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
          case 'e':
             gen_eth_show_dev_list();
             goto exit_success;
-#endif            
+#endif
 
          /* Load plugin (already handled) */
          case 'L':
@@ -696,7 +696,7 @@ static int parse_std_cmd_line(int argc,char *argv[])
       /* setting IOS image file	*/
       vm_ios_set_image(vm,argv[optind]);
       printf("IOS image file: %s\n\n",vm->ios_image);
-   } else { 
+   } else {
       /* IOS missing */
       fprintf(stderr,"Please specify an IOS image filename\n");
       show_usage(vm,argc,argv);
@@ -722,8 +722,8 @@ exit_failure:
    return(-1);
 }
 
-/* 
- * Run in hypervisor mode with a config file if the "-H" option 
+/*
+ * Run in hypervisor mode with a config file if the "-H" option
  * is present in command line.
  */
 static int run_hypervisor(int argc,char *argv[])
@@ -731,7 +731,7 @@ static int run_hypervisor(int argc,char *argv[])
    char *options_list = "H:l:hN:L:";
    int i,option;
    char *index;
-   size_t len;  
+   size_t len;
    FILE *pid_file = NULL; // For saving the pid if requested
 
    vtty_set_ctrlhandler(1); /* By default allow ctrl ] */
@@ -914,7 +914,7 @@ int main(int argc,char *argv[])
 
    /* Initialize object registry */
    registry_init();
-   
+
    /* Initialize ATM module (for HEC checksums) */
    atm_init();
 
@@ -929,7 +929,7 @@ int main(int argc,char *argv[])
 
    /* Initialize VTTY code */
    vtty_init();
-   
+
    /* Parse standard command line */
    atexit(destroy_cmd_line_vars);
    if (!run_hypervisor(argc,argv))
@@ -947,7 +947,7 @@ int main(int argc,char *argv[])
    mips64_exec_create_ilt();
    ppc32_jit_create_ilt();
    ppc32_exec_create_ilt();
-   
+
    setup_signals();
 
    if (!hypervisor_mode) {
