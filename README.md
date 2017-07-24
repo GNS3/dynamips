@@ -139,11 +139,12 @@ make
 You will find ``dynamips.exe`` in the stable directory.
 Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dynamips.exe`` to be able to start it from outside Cygwin terminal.
 
-### Releasing
+### Releasing
 
 * Update ChangeLog
 * In common/dynamips.c update sw_version_tag with date
 * Update RELEASE-NOTE
+* Update CMakeLists.txt
 * git tag the release
 
 ### Useful Information 
