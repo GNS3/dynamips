@@ -2970,3 +2970,16 @@ Fixed packet capture on Mac OS X (echoed packets)
 * Add instructions to build on Windows.
 * Remove libuuid dependency and NIO Multicast implementation that depends on it. NIO Multicast is never used and maybe not even functional. This will simplify the compilation requirements, especially on Windows with Cygwin.
 * EthernetSwitch: Allow to choose ethertype for QinQ outer tag.
+
++--------------------+
+| Release:  v0.2.17  |
++--------------------+
+
+24-07-2017
+----------
+
+* Set nonblocking I/O for UDP sockets
+* Fix tap interface usage on FreeBSD
+* Fix build on FreeBSD
+* NM-16ESW: process packets even if MAC address table is full. Fixes #72.
+

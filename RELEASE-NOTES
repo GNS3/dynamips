@@ -1,21 +1,22 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.16
+Version:  v0.2.17
 
-Release date:  Wenesday, March 16st, 2016 (2016-03-16)
+Release date:  Monday, July 24st, 2017 (2017-07-24)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.16
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.17
 
 License: GNU GPLv2
 
 
-What's New since v0.2.15
+What's New since v0.2.17
 ========================
 
-    - Add instructions to build on Windows.
-    - Remove libuuid dependency and NIO Multicast implementation that depends on it. NIO Multicast is never used and maybe not even functional. This will simplify the compilation requirements, especially on Windows with Cygwin.
-    - EthernetSwitch: Allow to choose ethertype for QinQ outer tag.
+* Set nonblocking I/O for UDP sockets
+* Fix tap interface usage on FreeBSD
+* Fix build on FreeBSD
+* NM-16ESW: process packets even if MAC address table is full. Fixes #72.
 
 Known Issues
 ============
