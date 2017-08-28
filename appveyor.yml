@@ -16,6 +16,14 @@ install:
     - 'appveyor DownloadFile http://www.mr511.de/software/libelf-0.8.13.tar.gz'
     - 'mkdir libelf && tar xvzf libelf-0.8.13.tar.gz -C libelf'
     - '%CYG_ROOT%/bin/bash -lc "cd $APPVEYOR_BUILD_FOLDER/libelf/libelf-0.8.13 && ./configure && make && make install'
+    - 'cinst 7zip.commandline'
+    - 'cinst winpcap'
+    - 'appveyor DownloadFile http://www.winpcap.org/install/bin/WpdPack_4_1_2.zip'
+    - 'dir'
+    - '7za x .\WpdPack_4_1_2.zip -o.'
+    - 'xcopy .\WpdPack\Lib\libwpcap.a C:\cygwin\lib'
+    - 'xcopy .\WpdPack\Lib\libpacket.a C:\cygwin\lib'
+    - 'xcopy /Y /E .\WpdPack\Include\*.* C:\cygwin\usr\include\'
 
 build_script:
     - '%CYG_ROOT%/bin/bash -lc "ls $APPVEYOR_BUILD_FOLDER'
