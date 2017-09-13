@@ -1,5 +1,10 @@
 machine:
+  timezone:
+    Europe/Warsaw
   pre:
+    # fixes not setting correct timezone by CCI
+    - sudo systemsetup -settimezone Europe/Warsaw
+    - echo "Today is $(date +"%Y-%m-%d %T")"
     # fixes circle-ci bug https://discuss.circleci.com/t/virtualenv-error-on-osx-build/387/7
     - sudo -H pip install --upgrade virtualenv
 
