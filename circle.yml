@@ -9,6 +9,9 @@ machine:
     - sudo -H pip install --upgrade virtualenv
 
 dependencies:
+  # pre dependencies are required due to bug in CCI: https://discuss.circleci.com/t/homebrew-must-be-run-under-ruby-2-3-runtimeerror/17232/5
+  pre:
+    - brew update
   override:
     - brew install libelf
     - brew upgrade cmake
