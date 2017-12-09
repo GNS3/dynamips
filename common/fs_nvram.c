@@ -623,8 +623,12 @@ int fs_nvram_read_config(fs_nvram_t *fs, u_char **startup_config, size_t *startu
    if (FS_NVRAM_MAGIC_STARTUP_CONFIG != startup_head.magic)
       return(0); // done, no startup-config and no private-config
 
-   off = fs_nvram_offset_of(fs, startup_head.end);
+   off = fs_nvram_offset_of(fs, startup_head.start + startup_head.len);
    off += fs_nvram_padding_at(fs, off);
+
+   if (off + sizeof(private_head) > fs->len)
+      goto err_memory;
+
    fs_nvram_memcpy_from(fs, off, (u_char *)&private_head, sizeof(private_head));
    be_to_native_header_private(&private_head);
 
@@ -667,7 +671,7 @@ int fs_nvram_read_config(fs_nvram_t *fs, u_char **startup_config, size_t *startu
    }
 
    // read private-config
-   if (FS_NVRAM_MAGIC_PRIVATE_CONFIG != private_head.magic)
+   if (fs_nvram_offset_of(fs, private_head.start + private_head.len) > fs->len || FS_NVRAM_MAGIC_PRIVATE_CONFIG != private_head.magic)
       return(0); // done, no private-config
 
    if (FS_NVRAM_FORMAT_RAW == private_head.format) {
