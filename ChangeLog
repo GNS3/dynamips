@@ -2983,3 +2983,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 * Fix build on FreeBSD
 * NM-16ESW: process packets even if MAC address table is full. Fixes #72.
 
++--------------------+
+| Release:  v0.2.18  |
++--------------------+
+
+31-03-2018
+----------
+
+* Allow to reuse socket in udp_connect. Fixes #87
+* Fix segfault when exporting startup-config. Fixes #68

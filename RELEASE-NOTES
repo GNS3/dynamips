@@ -1,11 +1,11 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.17
+Version:  v0.2.18
 
-Release date:  Monday, July 24st, 2017 (2017-07-24)
+Release date:  Saturday, March 31st, 2018 (2018-03-31)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.17
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.18
 
 License: GNU GPLv2
 
@@ -13,10 +13,9 @@ License: GNU GPLv2
 What's New since v0.2.17
 ========================
 
-* Set nonblocking I/O for UDP sockets
-* Fix tap interface usage on FreeBSD
-* Fix build on FreeBSD
-* NM-16ESW: process packets even if MAC address table is full. Fixes #72.
+* Allow to reuse socket in udp_connect. Fixes #87
+* Fix segfault when exporting startup-config. Fixes #68
+
 
 Known Issues
 ============
