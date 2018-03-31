@@ -278,7 +278,7 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
 {
    struct addrinfo hints,*res,*res0;
    struct sockaddr_storage st;
-   int error, sck = -1;
+   int error, sck = -1, yes = 1;
    char port_str[20];
 
    memset(&hints,0,sizeof(hints));
@@ -333,6 +333,7 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
       }
 
       /* try to connect to remote host */
+      setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
       if (!bind(sck,(struct sockaddr *)&st,res->ai_addrlen) &&
           !connect(sck,res->ai_addr,res->ai_addrlen))
          break;
@@ -359,7 +360,7 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
 { 
    struct sockaddr_in sin;
    struct hostent *hp;
-   int sck;
+   int sck, yes = 1;
 
    if (!(hp = gethostbyname(remote_host))) {
       fprintf(stderr,"udp_connect: unable to resolve '%s'\n",remote_host);
@@ -375,7 +376,8 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    memset(&sin,0,sizeof(sin));
    sin.sin_family = PF_INET;
    sin.sin_port = htons(local_port);
-   
+
+   setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("udp_connect: bind");
       close(sck);
