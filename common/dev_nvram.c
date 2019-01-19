@@ -50,11 +50,15 @@ static m_uint64_t get_current_time(cpu_gen_t *cpu)
 {
    m_uint64_t res;
    struct tm *tmx;
+   struct tm tmn;
    time_t ct;
-   
+
    time(&ct);
-   tmx = localtime(&ct);
-   
+   if (timezone == 0)
+      tmx = gmtime_r(&ct,&tmn);
+   else
+      tmx = localtime_r(&ct,&tmn);
+
    res =  u8_to_bcd(tmx->tm_sec)  << 8;
    res += u8_to_bcd(tmx->tm_min)  << 16;
    res += u8_to_bcd(tmx->tm_hour) << 24;
