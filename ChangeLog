@@ -2992,3 +2992,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 
 * Allow to reuse socket in udp_connect. Fixes #87
 * Fix segfault when exporting startup-config. Fixes #68
+
++--------------------+
+| Release:  v0.2.19  |
++--------------------+
+
+19-01-2019
+----------
+
+* Fix segmentation fault when using localtime() (64-bit only). Fixes #91
