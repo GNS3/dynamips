@@ -3001,3 +3001,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 ----------
 
 * Fix segmentation fault when using localtime() (64-bit only). Fixes #91
+
++--------------------+
+| Release:  v0.2.20  |
++--------------------+
+
+20-02-2019
+----------
+
+* New fix for segmentation fault when using localtime() (64-bit only). Fixes #91

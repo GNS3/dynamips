@@ -1,19 +1,19 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.19
+Version:  v0.2.20
 
-Release date:  Saturday, January 19th, 2019 (2019-01-19)
+Release date:  Wednesday, February 20th, 2019 (2019-02-20)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.19
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.20
 
 License: GNU GPLv2
 
 
-What's New since v0.2.18
+What's New since v0.2.19
 ========================
 
-* Fix segmentation fault when using localtime() (64-bit only). Fixes #91
+* New fix for segmentation fault when using localtime() (64-bit only). Fixes #91
 
 
 Known Issues
