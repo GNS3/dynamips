@@ -265,11 +265,7 @@ void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
    if (fd != NULL) {
       gettimeofday(&now,0);
       ct = now.tv_sec;
-
-      if (timezone == 0)
-         gmtime_r(&ct,&tmn);
-      else
-         localtime_r(&ct,&tmn);
+      localtime_r(&ct,&tmn);
 
       strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
 
