@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <getopt.h>
+#include <time.h>
 
 #include "dynamips.h"
 #include "cpu.h"
@@ -905,6 +906,13 @@ int main(int argc,char *argv[])
 
    printf("Copyright (c) 2005-2011 Christophe Fillot.\n");
    printf("Build date: %s %s\n\n",__DATE__,__TIME__);
+
+   /* Force a timezone to avoid a bug with UTC/GMT */
+   tzset();
+   if (timezone == 0 && !getenv("TZ")) {
+      setenv("TZ", "Europe/London", 1);
+      tzset();
+   }
 
    /* Register platforms */
    register_default_platforms();
