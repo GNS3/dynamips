@@ -1,0 +1,61 @@
+# iOS CircleCI 2.0 configuration file
+version: 2
+jobs:
+  build:
+    macos:
+      xcode: "9.4.0"
+
+    steps:
+      - checkout
+
+      - run:
+          name: Set timezone and check current datetime
+          command: |
+            sudo systemsetup -settimezone Europe/Warsaw
+            echo "Today is $(date +"%Y-%m-%d %T")"
+
+      - run:
+          name: Install libelf
+          command: |
+            brew install libelf
+
+      - run:
+          name: Build dynamips
+          command: |
+            mkdir build
+            cd build
+            cmake ..
+            make
+            cd ..
+
+      - run:
+          name: Gather artifacts
+          command: |
+            mkdir artifacts
+            mv build/unstable/dynamips artifacts/dynamips-unstable-osx
+
+      - store_artifacts:
+          path: artifacts
+          destination: artifacts
+
+      - run:
+          name: Upload nightly builds to SF
+          command: |
+            if [ -n "${RUN_NIGHTLY_BUILD}" ]; then
+              ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+              echo "mkdir \"/home/frs/project/gns-3/Nightly Builds/$(date +"%Y-%m-%d")/\"" | sftp gns3build@frs.sourceforge.net
+              echo -ne "
+                cd \"/home/frs/project/gns-3/Nightly Builds/$(date +"%Y-%m-%d")/\"
+                put \"artifacts/dynamips-unstable-osx\"
+              " | sftp gns3build@frs.sourceforge.net
+            fi
+
+# workflows:
+#   version: 2
+#   build_and_deploy:
+#     jobs:
+#       - build:
+#           filters:
+#             tags:
+#               only: /v.*/
+
