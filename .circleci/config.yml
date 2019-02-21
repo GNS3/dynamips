@@ -20,6 +20,11 @@ jobs:
             brew install libelf
 
       - run:
+          name: Install cmake
+          command: |
+            brew install cmake
+
+      - run:
           name: Build dynamips
           command: |
             mkdir build
