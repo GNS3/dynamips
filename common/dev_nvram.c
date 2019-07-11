@@ -49,19 +49,19 @@ static m_uint8_t u8_to_bcd(m_uint8_t val)
 static m_uint64_t get_current_time(cpu_gen_t *cpu)
 {
    m_uint64_t res;
-   struct tm *tmx;
-   time_t ct;
-   
-   time(&ct);
-   tmx = localtime(&ct);
-   
-   res =  u8_to_bcd(tmx->tm_sec)  << 8;
-   res += u8_to_bcd(tmx->tm_min)  << 16;
-   res += u8_to_bcd(tmx->tm_hour) << 24;
-   res += ((m_uint64_t)(u8_to_bcd(tmx->tm_wday))) << 32;
-   res += ((m_uint64_t)(u8_to_bcd(tmx->tm_mday))) << 40;
-   res += ((m_uint64_t)(u8_to_bcd(tmx->tm_mon+1))) << 48;
-   res += ((m_uint64_t)(u8_to_bcd(tmx->tm_year))) << 56;
+   struct tm tmx;
+   struct timespec spec;
+
+   clock_gettime(CLOCK_REALTIME, &spec);
+   gmtime_r(&spec.tv_sec, &tmx);
+
+   res =  u8_to_bcd(tmx.tm_sec)  << 8;
+   res += u8_to_bcd(tmx.tm_min)  << 16;
+   res += u8_to_bcd(tmx.tm_hour) << 24;
+   res += ((m_uint64_t)(u8_to_bcd(tmx.tm_wday))) << 32;
+   res += ((m_uint64_t)(u8_to_bcd(tmx.tm_mday))) << 40;
+   res += ((m_uint64_t)(u8_to_bcd(tmx.tm_mon+1))) << 48;
+   res += ((m_uint64_t)(u8_to_bcd(tmx.tm_year))) << 56;
 
    return(res);
 }

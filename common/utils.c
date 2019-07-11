@@ -257,19 +257,17 @@ void mem_dump(FILE *f_output,u_char *pkt,u_int len)
 /* Logging function */
 void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
 {
-   struct timeval now;
+   struct timespec spec;
    struct tm tmn;
-   time_t ct;
    char buf[256];
 
    if (fd != NULL) {
-      gettimeofday(&now,0);
-      ct = now.tv_sec;
-      localtime_r(&ct,&tmn);
+      clock_gettime(CLOCK_REALTIME, &spec);
+      gmtime_r(&spec.tv_sec, &tmn);
 
       strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
 
-      fprintf(fd,"%s.%03ld %s: ",buf,(long)now.tv_usec/1000,module);
+      fprintf(fd,"%s.%03ld %s: ",buf,(long)spec.tv_nsec/1000000,module);
       vfprintf(fd,fmt,ap);
       fflush(fd);
    }
