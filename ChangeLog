@@ -3010,3 +3010,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 ----------
 
 * New fix for segmentation fault when using localtime() (64-bit only). Fixes #91
+
++--------------------+
+| Release:  v0.2.21  |
++--------------------+
+
+12-07-2019
+----------
+
+* Fix SEGV during snprintf and localtime_r. Fixes #91
