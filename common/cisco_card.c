@@ -201,7 +201,7 @@ static int cisco_card_save_config(vm_instance_t *vm,struct cisco_card *card,
    struct cisco_nio_binding *nb;
 
    if (card != NULL) {
-      fprintf(fd,"vm add_slot_binding %s %u %u %s\n",
+      fprintf(fd,"vm slot_add_binding %s %u %u %s\n",
               vm->name,card->slot_id,card->subslot_id,card->dev_type);
 
       for(nb=card->nio_list;nb;nb=nb->next) {
