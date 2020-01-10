@@ -13,15 +13,18 @@ jobs:
           command: |
             sudo systemsetup -settimezone Europe/Warsaw
             echo "Today is $(date +"%Y-%m-%d %T")"
+            echo 'export HOMEBREW_NO_AUTO_UPDATE=1' >> ~/.envs
 
       - run:
           name: Install libelf
           command: |
+            source ~/.envs
             brew install libelf
 
       - run:
           name: Install cmake
           command: |
+            source ~/.envs
             brew install cmake
 
       - run:
