@@ -1,5 +1,5 @@
-# iOS CircleCI 2.0 configuration file
-version: 2
+# iOS CircleCI 2.1 configuration file
+version: 2.1
 jobs:
   build:
     macos:
