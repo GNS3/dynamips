@@ -1,0 +1,27 @@
+name: dynamips
+version: git
+summary: Dynamips
+description: |
+  Dynamips is an emulator designed to run Cisco IOS images.
+base: core18
+confinement: strict
+
+parts:
+  dynamips:
+    plugin: cmake
+    source: .
+    build-packages:
+      - gcc
+      - cmake
+      - libelf-dev
+      - libpcap-dev
+    stage-packages:
+      - libelf1
+      - libpcap0.8
+
+apps:
+  dynamips:
+    command: dynamips
+    plugs:
+      - network
+      - network-bind
