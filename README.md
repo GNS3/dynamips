@@ -148,14 +148,11 @@ Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dyn
 * git tag the release
 
 ### Useful Information 
-Website: http://www.gns3.net/dynamips/
 
-Forum: http://forum.gns3.net/
+Website: https://gns3.com/dynamips/
+
+Forum: https://gns3.com/community
 
 Repository: https://github.com/GNS3/dynamips
 
 Bugtracker: https://github.com/GNS3/dynamips/issues
-
-### Original websites
-http://www.ipflow.utc.fr/index.php/Cisco_7200_Simulator
-http://www.ipflow.utc.fr/blog/
