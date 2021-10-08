@@ -149,8 +149,6 @@ Put ``cygwin1.dll`` from the Cygwin bin directory in the same directory as ``dyn
 
 ### Useful Information 
 
-Website: https://gns3.com/dynamips/
-
 Forum: https://gns3.com/community
 
 Repository: https://github.com/GNS3/dynamips
