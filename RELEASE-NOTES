@@ -1,19 +1,19 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.21
+Version:  v0.2.22
 
-Release date:  Friday, July 12th, 2019 (2019-07-12)
+Release date:  Tuesday, May 24th, 2022 (2022-05-24)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.21
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.22
 
 License: GNU GPLv2
 
 
-What's New since v0.2.20
+What's New since v0.2.21
 ========================
 
-* Fix SEGV during snprintf and localtime_r. Fixes #91
+* Fix stack alignment for JIT function call targets. Fixes #128
 
 
 Known Issues

@@ -73,7 +73,7 @@ const char *os_name = STRINGIFY(OSNAME);
 const char *sw_version = DYNAMIPS_VERSION"-"JIT_ARCH;
 
 /* Software version tag */
-const char *sw_version_tag = "2019071212";
+const char *sw_version_tag = "2022052400";
 
 /* Hypervisor */
 int hypervisor_mode = 0;

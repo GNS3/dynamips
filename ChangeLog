@@ -3019,3 +3019,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 ----------
 
 * Fix SEGV during snprintf and localtime_r. Fixes #91
+
++--------------------+
+| Release:  v0.2.22  |
++--------------------+
+
+24-05-2022
+----------
+
+* Fix stack alignment for JIT function call targets. Fixes #128
