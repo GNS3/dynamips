@@ -1,5 +1,5 @@
 platform:
-    - x86
+    - x64
 
 environment:
     global:
@@ -8,7 +8,7 @@ environment:
         CYG_MIRROR: http://mirrors.kernel.org/sourceware/cygwin/
         CC: gcc
     matrix:
-        - CYG_ARCH: x86
+        - CYG_ARCH: x86_64
 
 install:
     - 'appveyor DownloadFile http://cygwin.com/setup-%CYG_ARCH%.exe -FileName setup.exe'
@@ -21,8 +21,8 @@ install:
     - 'appveyor DownloadFile http://www.winpcap.org/install/bin/WpdPack_4_1_2.zip'
     - 'dir'
     - '7za x .\WpdPack_4_1_2.zip -o.'
-    - 'xcopy .\WpdPack\Lib\libwpcap.a C:\cygwin\lib'
-    - 'xcopy .\WpdPack\Lib\libpacket.a C:\cygwin\lib'
+    - 'xcopy .\WpdPack\Lib\x64\libwpcap.a C:\cygwin\lib'
+    - 'xcopy .\WpdPack\Lib\x64\libpacket.a C:\cygwin\lib'
     - 'xcopy /Y /E .\WpdPack\Include\*.* C:\cygwin\usr\include\'
 
 build_script:
