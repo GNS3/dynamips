@@ -3,8 +3,8 @@ platform:
 
 environment:
     global:
-        CYG_ROOT: C:/cygwin
-        CYG_CACHE: C:/cygwin/var/cache/setup
+        CYG_ROOT: C:/cygwin64
+        CYG_CACHE: C:/cygwin64/var/cache/setup
         CYG_MIRROR: http://mirrors.kernel.org/sourceware/cygwin/
         CC: gcc
     matrix:
@@ -21,9 +21,9 @@ install:
     - 'appveyor DownloadFile http://www.winpcap.org/install/bin/WpdPack_4_1_2.zip'
     - 'dir'
     - '7za x .\WpdPack_4_1_2.zip -o.'
-    - 'xcopy .\WpdPack\Lib\x64\libwpcap.a C:\cygwin\lib'
-    - 'xcopy .\WpdPack\Lib\x64\libpacket.a C:\cygwin\lib'
-    - 'xcopy /Y /E .\WpdPack\Include\*.* C:\cygwin\usr\include\'
+    - 'xcopy .\WpdPack\Lib\x64\libwpcap.a C:\cygwin64\lib'
+    - 'xcopy .\WpdPack\Lib\x64\libpacket.a C:\cygwin64\lib'
+    - 'xcopy /Y /E .\WpdPack\Include\*.* C:\cygwin64\usr\include\'
 
 build_script:
     - '%CYG_ROOT%/bin/bash -lc "ls $APPVEYOR_BUILD_FOLDER'
