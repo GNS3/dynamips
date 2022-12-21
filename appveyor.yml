@@ -21,8 +21,7 @@ install:
     - 'appveyor DownloadFile http://www.winpcap.org/install/bin/WpdPack_4_1_2.zip'
     - 'dir'
     - '7za x .\WpdPack_4_1_2.zip -o.'
-    - 'xcopy .\WpdPack\Lib\x64\libwpcap.a C:\cygwin64\lib'
-    - 'xcopy .\WpdPack\Lib\x64\libpacket.a C:\cygwin64\lib'
+    - 'xcopy .\WpdPack\Lib\x64\*.* C:\cygwin64\lib\'
     - 'xcopy /Y /E .\WpdPack\Include\*.* C:\cygwin64\usr\include\'
 
 build_script:
