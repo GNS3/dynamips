@@ -1,6 +1,6 @@
 # Dynamips (Cisco Router Emulator)
 
-[![Build Status](https://travis-ci.org/GNS3/dynamips.svg?branch=master)](https://travis-ci.org/GNS3/dynamips)
+[![Build Status](https://github.com/GNS3/dynamips/actions/workflows/codeql.yml/badge.svg)](https://github.com/GNS3/dynamips/actions/workflows/codeql.yml)
 
 ## Overview
 
