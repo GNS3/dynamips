@@ -25,7 +25,7 @@ list ( APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" )
 message ( STATUS "CMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}" )
 
 project ( dynamips C )
-set ( DYNAMIPS_VERSION_TRAIN 0.2.22 )
+set ( DYNAMIPS_VERSION_TRAIN 0.2.23 )
 set ( DYNAMIPS_VERSION_SUB )
 
 include ( utils )
