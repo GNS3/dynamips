@@ -259,7 +259,7 @@ static int cmd_pmem_cfind(hypervisor_conn_t *conn,int argc,char *argv[])
 
    free(bytes);
    vm_release(vm);
-   hypervisor_send_reply(conn,HSC_INFO_OK,1,"0x%4.4x",addr);
+   hypervisor_send_reply(conn,HSC_INFO_OK,1,"0x%4.4llx",addr);
    return(0);
 }
 

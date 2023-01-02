@@ -67,7 +67,7 @@ static int cmd_parser_test(hypervisor_conn_t *conn,int argc,char *argv[])
 
    for(i=0;i<argc;i++)
       hypervisor_send_reply(conn,HSC_INFO_MSG,0,
-                            "arg %d (len %u): \"%s\"",
+                            "arg %d (len %lu): \"%s\"",
                             i,strlen(argv[i]),argv[i]);
 
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");

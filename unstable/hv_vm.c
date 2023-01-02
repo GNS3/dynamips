@@ -841,7 +841,7 @@ static int cmd_show_cpu_usage(hypervisor_conn_t *conn,int argc,char *argv[])
    usage = get_cpu_time();
    if (usage == -1)
       return(-1);
-   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%u", (unsigned long)usage);
+   hypervisor_send_reply(conn,HSC_INFO_MSG,0,"%lu", (unsigned long)usage);
 
    vm_release(vm);
    hypervisor_send_reply(conn,HSC_INFO_OK,1,"OK");

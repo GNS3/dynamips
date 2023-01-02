@@ -299,7 +299,7 @@ static int disk_create(struct pcmcia_disk_data *d)
       }
    }
 
-   disk_len = d->nr_heads * d->nr_cylinders * d->sects_per_track * SECTOR_SIZE;
+   disk_len = (off_t) d->nr_heads * d->nr_cylinders * d->sects_per_track * SECTOR_SIZE;
    ftruncate(d->fd,disk_len);
    return(0);
 }

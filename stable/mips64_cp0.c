@@ -271,7 +271,7 @@ static inline void mips64_cp0_s1_set_reg(cpu_mips_t *cpu,u_int cp0_s1_reg,
 
       default:
          cpu_log(cpu->gen,
-                 "CP0_S1","trying to set unknown register %u (val=0x%x)\n",
+                 "CP0_S1","trying to set unknown register %u (val=0x%llx)\n",
                  cp0_s1_reg,val);
    }
 }
