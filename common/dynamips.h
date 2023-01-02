@@ -62,6 +62,9 @@ extern const char *sw_version_tag;
 /* Global binding address */
 extern char *binding_addr;
 
+/* Global console (vtty tcp) binding address */
+extern char *console_binding_addr;
+
 /* Command Line long options */
 #define OPT_DISK0_SIZE  0x100
 #define OPT_DISK1_SIZE  0x101
@@ -76,6 +79,7 @@ extern char *binding_addr;
 #define OPT_FILEPID     0x122
 #define OPT_STARTUP_CONFIG_FILE  0x140
 #define OPT_PRIVATE_CONFIG_FILE  0x141
+#define OPT_CONSOLE_BINDING_ADDR 0x150
 
 /* Delete all objects */
 void dynamips_reset(void);

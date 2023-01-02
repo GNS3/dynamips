@@ -144,8 +144,12 @@ static int vtty_tcp_conn_wait(vtty_t *vtty)
     hints.ai_flags = AI_PASSIVE;
     
     snprintf(port_str,sizeof(port_str),"%d",vtty->tcp_port);
-    addr = (binding_addr && strlen(binding_addr)) ? binding_addr : NULL;
-    
+
+    /* Try to use the console binding address first, then fallback to the global binding address */
+    addr = (console_binding_addr && strlen(console_binding_addr)) ? console_binding_addr : NULL;
+    if (addr == NULL)
+       addr = (binding_addr && strlen(binding_addr)) ? binding_addr : "127.0.0.1";
+
     if (getaddrinfo(addr,port_str,&hints,&res0) != 0) {
         perror("vtty_tcp_waitcon: getaddrinfo");
         return(-1);

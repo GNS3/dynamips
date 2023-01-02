@@ -3028,3 +3028,11 @@ Fixed packet capture on Mac OS X (echoed packets)
 ----------
 
 * Fix stack alignment for JIT function call targets. Fixes #128
+
++--------------------+
+| Release:  v0.2.23  |
++--------------------+
+
+
+* Command line option to configure console binding for TCP/AUX console.
+  - Fallbacks to the hypervisor binding address if not set.
