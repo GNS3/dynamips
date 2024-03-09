@@ -948,6 +948,7 @@ int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
 
    if (fstat(fileno(bfd),&file_info) == -1) {
       perror("stat");
+      fclose(bfd);
       return(-1);
    }
 
@@ -963,6 +964,7 @@ int mips64_load_raw_image(cpu_mips_t *cpu,char *filename,m_uint64_t vaddr)
       if (!haddr) {
          fprintf(stderr,"load_raw_image: invalid load address 0x%llx\n",
                  vaddr);
+         fclose(bfd);
          return(-1);
       }
 
