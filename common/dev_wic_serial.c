@@ -133,7 +133,6 @@ dev_wic_serial_init(vm_instance_t *vm,char *name,u_int model,
                     m_uint64_t paddr,m_uint32_t len)
 {
    struct wic_serial_data *d;
-   struct vdevice *dev;
 
    /* Allocate the private data structure for WIC */
    if (!(d = malloc(sizeof(*d)))) {
@@ -142,13 +141,6 @@ dev_wic_serial_init(vm_instance_t *vm,char *name,u_int model,
    }
 
    memset(d,0,sizeof(*d));
-
-   /* Create the device itself */
-   if (!(dev = dev_create(name))) {
-      fprintf(stderr,"%s (WIC): unable to create device.\n",name);
-      free(d);
-      return NULL;
-   }
 
    d->name = name;
    d->vm   = vm;
