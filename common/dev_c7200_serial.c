@@ -149,13 +149,20 @@ static int dev_c7200_pa_8t_init(vm_instance_t *vm,struct cisco_card *card)
    data->mueslix[0] = dev_mueslix_init(vm,card->dev_name,1,
                                        card->pci_bus,0,
                                        c7200_net_irq_for_slot_port(slot,0));
-   if (!data->mueslix[0]) return(-1);
+   if (!data->mueslix[0]) {
+      free(data);
+      return(-1);
+   }
 
    /* Create the 2nd Mueslix chip */
    data->mueslix[1] = dev_mueslix_init(vm,card->dev_name,1,
                                        card->pci_bus,1,
                                        c7200_net_irq_for_slot_port(slot,1));
-   if (!data->mueslix[1]) return(-1);
+   if (!data->mueslix[1]) {
+      dev_mueslix_remove(data->mueslix[0]);
+      free(data);
+      return(-1);
+   }
 
    /* Store device info into the router structure */
    card->drv_info = data;
