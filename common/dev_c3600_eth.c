@@ -66,6 +66,7 @@ static int dev_c3600_nm_eth_init(vm_instance_t *vm,struct cisco_card *card,
       
    if (!bay_info) {
       vm_error(vm,"unable to get info for NM bay %u\n",slot);
+      free(data);
       return(-1);
    }
 
