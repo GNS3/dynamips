@@ -90,6 +90,18 @@ static struct rommon_var *rommon_var_create(char *name)
    return var;
 }
 
+/* Delete a variable */
+static struct rommon_var *rommon_var_delete(struct rommon_var *var)
+{
+   struct rommon_var *next_var;
+
+   next_var = var->next;
+   free(var->value);
+   free(var->name);
+   free(var);
+   return(next_var);
+}
+
 /* Set value for a variable */
 static int rommon_var_set(struct rommon_var *var,char *value)
 {
@@ -116,8 +128,10 @@ int rommon_var_add(struct rommon_var_list *rvl,char *name,char *value)
       var = rommon_var_create(name);
       if (!var) return(-1);
 
-      if (rommon_var_set(var,value) == -1)
+      if (rommon_var_set(var,value) == -1) {
+         rommon_var_delete(var);
          return(-1);
+      }
 
       var->next = rvl->var_list;
       rvl->var_list = var;
@@ -171,10 +185,7 @@ void rommon_var_clear(struct rommon_var_list *rvl)
       return;
 
    for (var = rvl->var_list; var; var = next_var) {
-      next_var = var->next;
-      free(var->value);
-      free(var->name);
-      free(var);
+      next_var = rommon_var_delete(var);
    }
    rvl->var_list = NULL;
 }
