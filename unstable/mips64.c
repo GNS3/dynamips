@@ -1021,17 +1021,21 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
 
    if (elf_version(EV_CURRENT) == EV_NONE) {
       fprintf(stderr,"load_elf_image: library out of date\n");
+      close(fd);
       return(-1);
    }
 
    if (!(img_elf = elf_begin(fd,ELF_C_READ,NULL))) {
       fprintf(stderr,"load_elf_image: elf_begin: %s\n",
               elf_errmsg(elf_errno()));
+      close(fd);
       return(-1);
    }
 
    if (!(ehdr = elf32_getehdr(img_elf))) {
       fprintf(stderr,"load_elf_image: invalid ELF file\n");
+      elf_end(img_elf);
+      close(fd);
       return(-1);
    }
 
@@ -1040,6 +1044,8 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
 
    if (!bfd) {
       perror("load_elf_image: fdopen");
+      elf_end(img_elf);
+      close(fd);
       return(-1);
    }
 
