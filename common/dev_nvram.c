@@ -167,6 +167,7 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
 
    if (!(d->filename = vm_build_filename(vm,name))) {
       fprintf(stderr,"NVRAM: unable to create filename.\n");
+      free(d);
       return(-1);
    }
 
@@ -182,6 +183,7 @@ int dev_nvram_init(vm_instance_t *vm,char *name,
 
    if (d->dev.fd == -1) {
       fprintf(stderr,"NVRAM: unable to map file '%s'\n",d->filename);
+      free(d);
       return(-1);
    }
 
