@@ -492,6 +492,7 @@ int ppc32_load_raw_image(cpu_ppc_t *cpu,char *filename,m_uint32_t vaddr)
 
    if (fstat(fileno(bfd),&file_info) == -1) {
       perror("stat");
+      fclose(bfd);
       return(-1);
    }
 
@@ -507,6 +508,7 @@ int ppc32_load_raw_image(cpu_ppc_t *cpu,char *filename,m_uint32_t vaddr)
       if (!haddr) {
          fprintf(stderr,"load_raw_image: invalid load address 0x%8.8x\n",
                  vaddr);
+         fclose(bfd);
          return(-1);
       }
 
