@@ -2459,8 +2459,11 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
    data->vm = vm;
 
    /* Create the BCM5600 tables */
-   if (bcm5600_table_create(data) == -1)
+   if (bcm5600_table_create(data) == -1) {
+      pthread_mutex_destroy(&data->lock);
+      free(data);
       return NULL;
+   }
 
    /* Clear the various tables */
    bcm5600_reset_arl(data);
@@ -2491,12 +2494,19 @@ dev_nm_16esw_init(vm_instance_t *vm,char *name,u_int nm_bay,
 
    if (!data->pci_dev) {
       fprintf(stderr,"%s: unable to create PCI device.\n",name);
+      bcm5600_table_free(data);
+      pthread_mutex_destroy(&data->lock);
+      free(data);
       return NULL;
    }
 
    /* Create the BCM5605 device itself */
    if (!(dev = dev_create(name))) {
       fprintf(stderr,"%s: unable to create device.\n",name);
+      pci_dev_remove(data->pci_dev);
+      bcm5600_table_free(data);
+      pthread_mutex_destroy(&data->lock);
+      free(data);
       return NULL;
    }
 
