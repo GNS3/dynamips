@@ -2649,6 +2649,8 @@ int dev_mv64460_init(vm_instance_t *vm,char *name,
 
    if (!d->sram_dev.host_addr) {
       fprintf(stderr,"mv64460: unable to create SRAM data.\n");
+      pthread_mutex_destroy(&d->lock);
+      free(d);
       return(-1);
    }
 
@@ -2659,6 +2661,8 @@ int dev_mv64460_init(vm_instance_t *vm,char *name,
                                0,0,-1,d,NULL,pci_mv64460_read,NULL);
       if (!d->pci_dev) {
          fprintf(stderr,"mv64460: unable to create PCI device.\n");
+         pthread_mutex_destroy(&d->lock);
+         free(d);
          return(-1);
       }
    }
