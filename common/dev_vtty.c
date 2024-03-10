@@ -546,6 +546,7 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
 
       default:
          fprintf(stderr,"tty_create: bad vtty type %d\n",vtty->type);
+         free(vtty);
          return NULL;
    }
 
