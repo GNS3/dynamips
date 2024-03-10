@@ -505,6 +505,9 @@ static int parse_std_cmd_line(int argc,char *argv[])
 
          /* Global console (vtty tcp) binding address */
          case OPT_CONSOLE_BINDING_ADDR:
+            if (console_binding_addr) {
+               free(console_binding_addr);
+            }
             console_binding_addr = strdup(optarg);
             printf("Console binding address set to %s\n", console_binding_addr);
             break;
@@ -828,6 +831,9 @@ static int run_hypervisor(int argc,char *argv[])
 
          /* Global console (vtty tcp) binding address */
          case OPT_CONSOLE_BINDING_ADDR:
+            if (console_binding_addr) {
+               free(console_binding_addr);
+            }
             console_binding_addr = strdup(optarg);
             printf("Console binding address set to %s\n", console_binding_addr);
             break;
