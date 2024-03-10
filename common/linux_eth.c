@@ -83,6 +83,7 @@ int lnx_eth_init_socket(char *device)
 
    if (bind(sck,(struct sockaddr *)&sa,sizeof(struct sockaddr_ll)) == -1) {
       fprintf(stderr,"eth_init_socket: bind: %s\n",strerror(errno));
+      close(sck);
       return(-1);
    }
 
@@ -90,6 +91,7 @@ int lnx_eth_init_socket(char *device)
                   &mreq,sizeof(mreq)) == -1) 
    {
       fprintf(stderr,"eth_init_socket: setsockopt: %s\n",strerror(errno));
+      close(sck);
       return(-1);
    }
 
