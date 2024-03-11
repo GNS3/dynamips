@@ -462,12 +462,16 @@ static insn_lookup_t *ilt_load_table(FILE *fd)
    fseek(fd,0,SEEK_SET);
 
    for(i=0;i<RFC_ARRAY_NUMBER;i++) {
-      if (ilt_load_rfct(fd,ilt) == -1)
+      if (ilt_load_rfct(fd,ilt) == -1) {
+         ilt_destroy(ilt);
          return NULL;
+      }
    }
 
-   if (ilt_check_cached_table(ilt) == -1)
+   if (ilt_check_cached_table(ilt) == -1) {
+      ilt_destroy(ilt);
       return NULL;
+   }
 
    return ilt;
 }
