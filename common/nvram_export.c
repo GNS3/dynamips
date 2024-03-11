@@ -121,19 +121,22 @@ int nvram_export_config(const char *nvram_filename, const char *startup_filename
    fs_nvram_t *fs;
    size_t len;
    struct nvram_format *fmt;
+   int ret = 0;
 
    // read nvram
    printf("Reading %s...\n", nvram_filename);
    if (read_file(nvram_filename, &data, &data_len)) {
       perror(nvram_filename);
-      return(-1);
+         ret = -1;
+         goto done;
    }
 
    // try each format
    for (fmt = &nvram_formats[0]; ; fmt++) {
       if (fmt->name == NULL) {
          fprintf(stderr,"NVRAM not found\n");
-         return(-1);
+         ret = -1;
+         goto done;
       }
 
       if (fmt->rom_res_0x200) {
@@ -178,17 +181,20 @@ int nvram_export_config(const char *nvram_filename, const char *startup_filename
       printf("Writing startup-config to %s...\n", startup_filename);
       if (write_file(startup_filename, startup_config, startup_len)) {
          perror(startup_filename);
-         return(-1);
+         ret = -1;
+         goto done;
       }
    }
    if (private_filename) {
       printf("Writing private-config to %s...\n", private_filename);
       if (write_file(private_filename, private_config, private_len)) {
          perror(private_filename);
-         return(-1);
+         ret = -1;
+         goto done;
       }
    }
 
+done:
    // cleanup
    if (startup_config) {
       free(startup_config);
@@ -198,7 +204,11 @@ int nvram_export_config(const char *nvram_filename, const char *startup_filename
       free(private_config);
       private_config = NULL;
    }
-   return(0);
+   if (data)  {
+      free(data);
+      data = NULL;
+   }
+   return(ret);
 }
 
 int main(int argc,char *argv[])
