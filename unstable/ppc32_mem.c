@@ -688,6 +688,7 @@ static mts32_entry_t *ppc405_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
    {
       map.vaddr  = vaddr & PPC32_MIN_PAGE_MASK;
       map.paddr  = vaddr & PPC32_MIN_PAGE_MASK;
+      map.offset = vaddr & PPC32_MIN_PAGE_IMASK;
       map.cached = FALSE;
 
       if (!(entry = ppc32_mem_map(cpu,op_type,&map,entry,alt_entry)))
@@ -715,6 +716,7 @@ static mts32_entry_t *ppc405_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
       if ((vaddr & mask) == (tlb_entry->tlb_hi & mask)) {
          map.vaddr  = vaddr & mask;
          map.paddr  = tlb_entry->tlb_lo & mask;
+         map.offset = vaddr & !mask;
          map.cached = FALSE;
 
          if (!(entry = ppc32_mem_map(cpu,op_type,&map,entry,alt_entry)))
