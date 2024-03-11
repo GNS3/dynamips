@@ -292,6 +292,7 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
 
    /* Re-enable IRQ */
    mcpu->irq_disable = FALSE;
+   free(pc_hash);
    return(0);
 }
 
