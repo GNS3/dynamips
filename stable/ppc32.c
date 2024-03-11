@@ -253,6 +253,7 @@ int ppc32_get_idling_pc(cpu_gen_t *cpu)
 
    /* Re-enable IRQ */
    pcpu->irq_disable = FALSE;
+   free(pc_hash);
    return(0);
 }
 
