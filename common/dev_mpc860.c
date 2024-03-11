@@ -1515,7 +1515,7 @@ static void mpc860_fec_mii_read_access(struct mpc860_data *d,
             d->fec_mii_regs[reg] &= LX970A_SR_LINKSTATUS;
          }
          break;
-      case LX970A_ISR_MINT:
+      case LX970A_ISR:
          if (d->fec_mii_last_read_reg == LX970A_SR) {
             d->fec_mii_regs[reg] &= ~LX970A_ISR_MINT;
          }
