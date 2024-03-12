@@ -608,7 +608,7 @@ static int mpc860_idma_start_channel(struct mpc860_data *d,u_int id)
          break;
       }
 
-      bd_offset += sizeof(MPC860_IDMA_BD_SIZE);
+      bd_offset += MPC860_IDMA_BD_SIZE;
    }
 
    mpc860_idma_update_idsr(d,id);
