@@ -200,7 +200,7 @@ int hex_decode(unsigned char *out,const unsigned char *in,int maxlen)
    int empty = TRUE;
 
    for(;len < maxlen;) {
-      if (*in > sizeof(hexval) || hexval[*in] == BAD)
+      if (*in >= sizeof(hexval) || hexval[*in] == BAD)
          break;
 
       if (empty) {
