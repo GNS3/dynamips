@@ -536,7 +536,7 @@ static void mpc860_idma_transfer(struct mpc860_data *d,
 static int mpc860_idma_fetch_bd(struct mpc860_data *d,m_uint16_t bd_addr,
                                 struct mpc860_idma_bd *bd)
 {
-   if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr > MPC860_DPRAM_END))
+   if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr >= MPC860_DPRAM_END - MPC860_IDMA_BD_SIZE))
       return(-1);
 
    bd->offset = bd_addr - MPC860_DPRAM_OFFSET;
