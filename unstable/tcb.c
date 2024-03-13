@@ -268,7 +268,7 @@ int tsg_bind_cpu(cpu_gen_t *cpu)
 /* Unbind a CPU from a TSG - release all resources used */
 int tsg_unbind_cpu(cpu_gen_t *cpu)
 {
-   tsg_t *tsg = tsg_array[cpu->tsg];
+   tsg_t *tsg;
    cpu_tb_t *tb,*next;
    
    if (cpu->tsg == -1)
@@ -290,6 +290,7 @@ int tsg_unbind_cpu(cpu_gen_t *cpu)
    cpu->tb_list = NULL;
    cpu->tb_free_list = NULL;
    
+   tsg = tsg_array[cpu->tsg];
    TSG_LOCK(tsg);
    M_LIST_REMOVE(cpu,tsg);
    TSG_UNLOCK(tsg);
