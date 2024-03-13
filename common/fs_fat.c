@@ -48,8 +48,8 @@ static struct {
 static inline void set_u32(m_uint8_t *p, size_t i, m_uint32_t v) {
    p[i+0] = (m_uint8_t)((v>>0)&0xFF);
    p[i+1] = (m_uint8_t)((v>>8)&0xFF);
-   p[i+1] = (m_uint8_t)((v>>16)&0xFF);
-   p[i+1] = (m_uint8_t)((v>>24)&0xFF);
+   p[i+2] = (m_uint8_t)((v>>16)&0xFF);
+   p[i+3] = (m_uint8_t)((v>>24)&0xFF);
 }
 
 static inline void set_u16(m_uint8_t *p, size_t i, m_uint16_t v) {
