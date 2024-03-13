@@ -862,7 +862,7 @@ static int mpc860_scc_update_irq(struct mpc860_data *d,u_int scc_chan)
 static int mpc860_scc_fetch_bd(struct mpc860_data *d,m_uint16_t bd_addr,
                                struct mpc860_scc_bd *bd)
 {
-   if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr > MPC860_DPRAM_END))
+   if ((bd_addr < MPC860_DPRAM_OFFSET) || (bd_addr >= MPC860_DPRAM_END - MPC860_SCC_BD_SIZE))
       return(-1);
 
    bd->offset = bd_addr - MPC860_DPRAM_OFFSET;
