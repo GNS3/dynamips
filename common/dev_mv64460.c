@@ -2027,10 +2027,10 @@ static int mv64460_eth_access(cpu_gen_t *cpu,struct vdevice *dev,
 
       case MV64460_REG_ETH_MACAH:
          if (op_type == MTS_READ) {
-            *data  = port->mac_addr.eth_addr_byte[0] << 24;
-            *data |= port->mac_addr.eth_addr_byte[1] << 16;
-            *data |= port->mac_addr.eth_addr_byte[2] << 8;
-            *data |= port->mac_addr.eth_addr_byte[3];
+            *data  = (((m_uint64_t)port->mac_addr.eth_addr_byte[0]) << 24)
+               | (((m_uint64_t)port->mac_addr.eth_addr_byte[1]) << 16)
+               | (((m_uint64_t)port->mac_addr.eth_addr_byte[2]) << 8)
+               | ((m_uint64_t)port->mac_addr.eth_addr_byte[3]);
          } else {
             port->mac_addr.eth_addr_byte[0] = *data >> 24;
             port->mac_addr.eth_addr_byte[1] = *data >> 16;
