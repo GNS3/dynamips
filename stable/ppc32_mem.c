@@ -360,9 +360,9 @@ static mts32_entry_t *ppc32_slow_lookup(cpu_ppc_t *cpu,m_uint32_t vaddr,
 
  pte_lookup_done:
    pte2  = vmtoh32(*(m_uint32_t *)(pte_haddr + sizeof(m_uint32_t)));
-   paddr =   pte2 & PPC32_PTEL_RPN_MASK;
-   paddr |= (pte2 & PPC32_PTEL_XPN_MASK) << (33 - PPC32_PTEL_XPN_SHIFT);
-   paddr |= (pte2 & PPC32_PTEL_X_MASK) << (32 - PPC32_PTEL_X_SHIFT);
+   paddr =  ((m_uint64_t)(pte2 & PPC32_PTEL_RPN_MASK));
+   paddr |= ((m_uint64_t)(pte2 & PPC32_PTEL_XPN_MASK)) << (33 - PPC32_PTEL_XPN_SHIFT);
+   paddr |= ((m_uint64_t)(pte2 & PPC32_PTEL_X_MASK)) << (32 - PPC32_PTEL_X_SHIFT);
 
    map.vaddr  = vaddr & ~PPC32_MIN_PAGE_IMASK;
    map.paddr  = paddr;
