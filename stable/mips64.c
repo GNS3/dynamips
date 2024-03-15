@@ -978,7 +978,12 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
          if (!(shdr->sh_flags & SHF_ALLOC) || !len)
             continue;
 
-         fseek(bfd,shdr->sh_offset,SEEK_SET);
+         if (fseek(bfd,shdr->sh_offset,SEEK_SET) != 0) {
+            perror("load_elf_image: fseek");
+            elf_end(img_elf);
+            fclose(bfd);
+            return(-1);
+         }
          vaddr = sign_extend(shdr->sh_addr,32);
 
          if (cpu->vm->debug_level > 0) {
@@ -993,6 +998,8 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
             if (!haddr) {
                fprintf(stderr,"load_elf_image: invalid load address 0x%llx\n",
                        vaddr);
+               elf_end(img_elf);
+               fclose(bfd);
                return(-1);
             }
 
@@ -1006,8 +1013,12 @@ int mips64_load_elf_image(cpu_mips_t *cpu,char *filename,int skip_load,
 
             clen = m_min(clen,remain);
 
-            if (fread((u_char *)haddr,clen,1,bfd) < 1)
-               break;
+            if (fread((u_char *)haddr,clen,1,bfd) != 1) {
+               perror("load_elf_image: fread");
+               elf_end(img_elf);
+               fclose(bfd);
+               return(-1);
+            }
 
             vaddr += clen;
             len -= clen;
