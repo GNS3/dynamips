@@ -547,7 +547,10 @@ static int ip_socket_bind(struct addrinfo *addr)
       return(-1);
       
 #ifdef IPV6_V6ONLY
-   setsockopt(fd,IPPROTO_IPV6,IPV6_V6ONLY,&off,sizeof(off));
+   if (addr->ai_family == AF_INET6) {
+      // if supported, allow packets to/from IPv4-mapped IPv6 addresses
+      (void)setsockopt(fd,IPPROTO_IPV6,IPV6_V6ONLY,&off,sizeof(off));
+   }
 #endif
 
    if ( (bind(fd,addr->ai_addr,addr->ai_addrlen) < 0) ||
