@@ -245,9 +245,9 @@ void *dev_c7200_mpfpga_access(cpu_gen_t *cpu,struct vdevice *dev,
                offset = dev_c7200_net_get_reg_offset(0);               
 
                if (router->net_irq_status[2]) {
-                  *data |= 0xFF << offset;
+                  *data |= ((m_uint64_t)0xFF) << offset;
                } else {
-                  *data &= ~(0xFF << offset);
+                  *data &= ~(((m_uint64_t)0xFF) << offset);
                }
             }
          }
