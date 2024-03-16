@@ -333,11 +333,14 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
       }
 
       /* try to connect to remote host */
-      setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+      error = setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
       if (!bind(sck,(struct sockaddr *)&st,res->ai_addrlen) &&
           !connect(sck,res->ai_addr,res->ai_addrlen))
          break;
 
+      if (error) {
+         fprintf(stderr,"Warning: udp_connect: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
+      }
       close(sck);
       sck = -1;
    }
@@ -377,9 +380,12 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    sin.sin_family = PF_INET;
    sin.sin_port = htons(local_port);
 
-   setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+   error = setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("udp_connect: bind");
+      if (error) {
+         fprintf(stderr,"Warning: udp_connect: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
+      }
       close(sck);
       return(-1);
    }
