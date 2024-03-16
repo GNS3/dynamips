@@ -440,11 +440,14 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
       if (fd_array[nsock] < 0)
          continue;      
 
-      setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+      error = setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
 
       if ((bind(fd_array[nsock],res->ai_addr,res->ai_addrlen) < 0) ||
           ((sock_type == SOCK_STREAM) && (listen(fd_array[nsock],5) < 0)))
       {
+         if (error) {
+            fprintf(stderr,"Warning: ip_listen: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
+         }
          close(fd_array[nsock]);
          fd_array[nsock] = -1;
          continue;
@@ -479,7 +482,7 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
    if (ip_addr && strlen(ip_addr))
       sin.sin_addr.s_addr = inet_addr(ip_addr);
 
-   setsockopt(sck,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+   error = setsockopt(sck,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
 
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("ip_listen: bind");
@@ -495,6 +498,9 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
    return(1);
 
  error:
+   if (error) {
+      fprintf(stderr,"Warning: ip_listen: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
+   }
    close(sck);
    return(-1);
 }
