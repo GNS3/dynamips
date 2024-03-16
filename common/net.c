@@ -592,7 +592,10 @@ int ip_listen_range(char *ip_addr,int port_start,int port_end,int *port,
          
          if ((fd = ip_socket_bind(res)) >= 0) {
             st_len = sizeof(st);
-            getsockname(fd,(struct sockaddr *)&st,&st_len);
+            if (getsockname(fd,(struct sockaddr *)&st,&st_len) != 0) {
+               close(fd);
+               continue;
+            }
             *port = ip_socket_get_port((struct sockaddr *)&st);
             goto done;
          }
@@ -677,7 +680,10 @@ int ip_listen_range(char *ip_addr,int port_start,int port_end,int *port,
       
       if ((fd = ip_socket_bind(&sin,sock_type)) >= 0) {
          len = sizeof(sin);
-         getsockname(fd,(struct sockaddr *)&sin,&len);
+         if (getsockname(fd,(struct sockaddr *)&sin,&len) != 0) {
+            close(fd);
+            continue;
+         }
          *port = ntohs(sin.sin_port);
          return(fd);
       }
