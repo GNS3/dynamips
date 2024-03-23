@@ -1230,7 +1230,9 @@ int vm_rename_instance(vm_instance_t *vm, char *name)
          if ((filename = dyn_sprintf("%s_%s_%s",vm_get_type(vm),vm->name,globbuf.gl_pathv[i] + strlen(pattern) - 1)) == NULL)
             break; /* out of memory */
 
-         rename(globbuf.gl_pathv[i], filename);
+         if (rename(globbuf.gl_pathv[i], filename) != 0) {
+            fprintf(stderr, "Warning: vm_rename_instance: rename(\"%s\",\"%s\"): %s\n", globbuf.gl_pathv[i], filename, strerror(errno));
+         }
          free(filename);
       }
       globfree(&globbuf);
