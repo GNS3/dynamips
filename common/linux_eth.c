@@ -46,7 +46,8 @@ int lnx_eth_get_dev_index(char *name)
    }
 
    memset((void *)&if_req,0,sizeof(if_req));
-   strcpy(if_req.ifr_name,name);
+   strncpy(if_req.ifr_name,name,IFNAMSIZ-1);
+   if_req.ifr_name[IFNAMSIZ-1] = '\0';
 
    if (ioctl(fd,SIOCGIFINDEX,&if_req) < 0) {
       fprintf(stderr,"eth_get_dev_index: SIOCGIFINDEX: %s\n",strerror(errno));
