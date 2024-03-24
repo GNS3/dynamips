@@ -569,13 +569,13 @@ void vtty_delete(vtty_t *vtty)
    int i;
 
    if (vtty != NULL) {
+      VTTY_LIST_LOCK();
       if (vtty->pprev != NULL) {
-         VTTY_LIST_LOCK();
          if (vtty->next)
             vtty->next->pprev = vtty->pprev;
          *(vtty->pprev) = vtty->next;
-         VTTY_LIST_UNLOCK();
       }
+      VTTY_LIST_UNLOCK();
 
       switch(vtty->type) {
            case VTTY_TYPE_TCP:
