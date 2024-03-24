@@ -1703,8 +1703,9 @@ int netio_rxl_add(netio_desc_t *nio,netio_rx_handler_t rx_handler,
 
    rxl->next = netio_rxl_add_list;
    netio_rxl_add_list = rxl;
-
-   pthread_cond_wait(&netio_rxl_cond,&netio_rxq_mutex);
+   while(netio_rxl_add_list != NULL) {
+      pthread_cond_wait(&netio_rxl_cond,&netio_rxq_mutex);
+   }
    NETIO_RXQ_UNLOCK();
    return(0);
 }
@@ -1715,7 +1716,9 @@ int netio_rxl_remove(netio_desc_t *nio)
    NETIO_RXQ_LOCK();
    nio->rxl_next = netio_rxl_remove_list;
    netio_rxl_remove_list = nio;
-   pthread_cond_wait(&netio_rxl_cond,&netio_rxq_mutex);
+   while(netio_rxl_remove_list != NULL) {
+      pthread_cond_wait(&netio_rxl_cond,&netio_rxq_mutex);
+   }
    NETIO_RXQ_UNLOCK();
    return(0);
 }
