@@ -311,7 +311,8 @@ static int netio_unix_create_socket(netio_unix_desc_t *nud)
 
    memset(&local_sock,0,sizeof(local_sock));
    local_sock.sun_family = AF_UNIX;
-   strcpy(local_sock.sun_path,nud->local_filename);
+   strncpy(local_sock.sun_path,nud->local_filename, sizeof(local_sock.sun_path) - 1);
+   local_sock.sun_path[sizeof(local_sock.sun_path) - 1] = '\0';
 
    if (bind(nud->fd,(struct sockaddr *)&local_sock,sizeof(local_sock)) == -1) {
       perror("netio_unix: bind");
