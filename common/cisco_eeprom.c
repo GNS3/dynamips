@@ -547,7 +547,7 @@ int cisco_eeprom_copy(struct cisco_eeprom *dst,const struct cisco_eeprom *src)
 {
    m_uint16_t *data;
 
-   if (!src || !src)
+   if (!dst || !src)
       return(-1);
 
    cisco_eeprom_free(dst);
