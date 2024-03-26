@@ -598,8 +598,10 @@ static int netio_tap_open(char *tap_devname)
     *        IFF_NO_PI - Do not provide packet information
     */
    ifr.ifr_flags = IFF_TAP|IFF_NO_PI;
-   if (*tap_devname)
-      strncpy(ifr.ifr_name,tap_devname,IFNAMSIZ);
+   if (*tap_devname) {
+      strncpy(ifr.ifr_name,tap_devname,IFNAMSIZ-1);
+      ifr.ifr_name[IFNAMSIZ-1] = '\0';
+   }
 
    if ((err = ioctl(fd,TUNSETIFF,(void *)&ifr)) < 0) {
       close(fd);
