@@ -73,7 +73,7 @@ char **parser_map_array(parser_context_t *ctx)
    if (ctx->tok_count <= 0)
       return NULL;
 
-   if (!(map = calloc(ctx->tok_count,sizeof(char **))))
+   if (!(map = calloc(ctx->tok_count,sizeof(char *))))
       return NULL;
 
    for(i=0,tok=ctx->tok_head;(i<ctx->tok_count) && tok;i++,tok=tok->next)
