@@ -259,7 +259,8 @@ error:
 static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
 {
    int fd,*fd_slot;
-   u_int i;
+   size_t i;
+   ssize_t n;
    
    if (fd_pool_get_free_slot(&vtty->fd_pool,&fd_slot) < 0) {
       vm_error(vtty->vm,"unable to create a new VTTY TCP connection\n");
@@ -294,15 +295,19 @@ static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
                 vtty->vm->name, vtty->vm->instance_id, vm_get_type(vtty->vm),
                 vtty->name);
       /* replay old text */
-      for (i = vtty->replay_ptr; i < VTTY_BUFFER_SIZE; i++) {
-         if (vtty->replay_buffer[i] != 0) {
-            send(fd,&vtty->replay_buffer[i],VTTY_BUFFER_SIZE-i,0);
-            break;
+      if (vtty->replay_full) {
+         for (i = vtty->replay_ptr; i < VTTY_BUFFER_SIZE; i += (size_t)n) {
+            n = send(fd,&vtty->replay_buffer[i],VTTY_BUFFER_SIZE-i,0);
+            if (n < 0) {
+               perror("vtty_tcp_conn_accept: send");
+               break;
+            }
          }
       }
-      for (i = 0; i < vtty->replay_ptr; i++) {
-         if (vtty->replay_buffer[i] != 0) {
-            send(fd,&vtty->replay_buffer[i],vtty->replay_ptr-i,0);
+      for (i = 0; i < vtty->replay_ptr; i += (size_t)n) {
+         n = send(fd,&vtty->replay_buffer[i],vtty->replay_ptr-i,0);
+         if (n < 0) {
+            perror("vtty_tcp_conn_accept: send");
             break;
          }
       }
@@ -1120,8 +1125,10 @@ void vtty_put_char(vtty_t *vtty, char ch)
    vtty->replay_buffer[vtty->replay_ptr] = ch;
 
    ++vtty->replay_ptr;
-   if (vtty->replay_ptr == VTTY_BUFFER_SIZE)
+   if (vtty->replay_ptr == VTTY_BUFFER_SIZE) {
       vtty->replay_ptr = 0;
+      vtty->replay_full = 1;
+   }
 }
 
 /* Put a buffer to vtty */
