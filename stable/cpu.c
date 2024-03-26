@@ -384,7 +384,8 @@ void cpu_idle_loop(cpu_gen_t *cpu)
    pthread_mutex_lock(&cpu->idle_mutex);
    t_spc.tv_sec = expire / 1000000;
    t_spc.tv_nsec = (expire % 1000000) * 1000;
-   pthread_cond_timedwait(&cpu->idle_cond,&cpu->idle_mutex,&t_spc);
+   while(pthread_cond_timedwait(&cpu->idle_cond,&cpu->idle_mutex,&t_spc) != ETIMEDOUT) {
+   }
    pthread_mutex_unlock(&cpu->idle_mutex);
 }
 
