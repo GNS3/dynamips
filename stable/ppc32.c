@@ -639,11 +639,16 @@ int ppc32_load_elf_image(cpu_ppc_t *cpu,char *filename,int skip_load,
 
             clen = m_min(clen,remain);
 
-            if (fread((u_char *)haddr,clen,1,bfd) != 1) {
-               perror("load_elf_image: fread");
-               elf_end(img_elf);
-               fclose(bfd);
-               return(-1);
+            if (shdr->sh_type == SHT_NOBITS) {
+               // section with uninitialized data, zero it
+               memset((u_char *)haddr, 0, clen);
+            } else {
+               if (fread((u_char *)haddr,clen,1,bfd) != 1) {
+                  perror("load_elf_image: fread");
+                  elf_end(img_elf);
+                  fclose(bfd);
+                  return(-1);
+               }
             }
 
             vaddr += clen;
