@@ -241,6 +241,11 @@ static int cmd_pmem_cfind(hypervisor_conn_t *conn,int argc,char *argv[])
 
    len = len / 2;
    bytes = malloc(sizeof(m_uint8_t)*len);
+   if (bytes == NULL) {
+      vm_release(vm);
+      hypervisor_send_reply(conn,HSC_ERR_UNSPECIFIED,1,"out of memory");
+      return(-1);
+   }
    if (len != hex_decode(bytes, (unsigned char*)argv[2], len)) {
       free(bytes);
       vm_release(vm);
