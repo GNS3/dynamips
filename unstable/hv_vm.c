@@ -935,6 +935,10 @@ static int cmd_send_aux_msg(hypervisor_conn_t *conn,int argc,char *argv[])
    }
    else if (strcmp(format,"base64") == 0 && len >= 0) {
       data = malloc(len+1);
+      if (data == NULL) {
+         hypervisor_send_reply(conn,HSC_ERR_UNSPECIFIED,1,"out of memory");
+         return(-1);
+      }
       len = base64_decode((unsigned char*)data,(const unsigned char *)argv[1],len);
       written = vtty_store_data(vm->vtty_aux,data,len);
       free(data);
