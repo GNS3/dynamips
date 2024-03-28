@@ -322,6 +322,10 @@ int physmem_cfind(vm_instance_t *vm,m_uint8_t *bytes,size_t len,
         return(-1); // nothing to find
 
    buffer = malloc(len);
+   if (buffer == NULL) {
+      perror("physmem_cfind: malloc");
+      return(-1);
+   }
    i = 0;
    buflen = 0;
    for(dev = vm->dev_list; dev; dev = dev->next) { // each device
