@@ -392,8 +392,10 @@ cpu_tc_t *tc_alloc(cpu_gen_t *cpu,m_uint64_t vaddr,m_uint32_t exec_state)
       tc = tsg->tc_free_list;
       tsg->tc_free_list = tc->sc_next;
    } else {
-      if (!(tc = malloc(sizeof(*tc))))
+      if (!(tc = malloc(sizeof(*tc)))) {
+         TSG_UNLOCK(tsg);
          return NULL;
+      }
    }
    TSG_UNLOCK(tsg);
    
