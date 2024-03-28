@@ -75,6 +75,10 @@ int read_file(const char *filename, u_char **data, size_t *data_len)
     // data
    if (data) {
       *data = (u_char *)malloc((size_t)len);
+      if (*data == NULL) {
+         fclose(fd);
+         return(-1);
+      }
       if (fread(*data, (size_t)len, 1, fd) != 1) {
          free(*data);
          *data = NULL;
