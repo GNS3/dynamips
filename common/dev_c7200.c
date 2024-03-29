@@ -776,7 +776,7 @@ static int c7200_init_dual_gt64120(c7200_t *router)
    vm->pci_bus[1] = pci_bus_create("MB2",0);
 
    if (!vm->pci_bus[0] || !vm->pci_bus[1]) {
-      vm_error(vm,"unable to create PCI data.\n",vm->name);
+      vm_error(vm,"unable to create PCI data.\n");
       return(-1);
    }
    
