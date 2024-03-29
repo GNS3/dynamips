@@ -140,8 +140,7 @@ static int cmd_read(hypervisor_conn_t *conn,int argc,char *argv[])
    registry_unref(so->name,OBJ_TYPE_STORE);
 
    hypervisor_send_reply(conn,HSC_ERR_CREATE,1,
-                         "unable to encode data in base64",
-                         argv[0]);
+                         "unable to encode data in base64");
    return(-1);
 }
 
