@@ -86,7 +86,12 @@ static int atm_bridge_recv_cell(netio_desc_t *nio,
 static int atm_bridge_recv_pkt(netio_desc_t *nio,u_char *pkt,ssize_t len,
                                atm_bridge_t *t)
 {
-   return(atm_aal5_send_rfc1483b(t->atm_nio,t->vpi,t->vci,pkt,len));
+   int res;
+
+   ATM_BRIDGE_LOCK(t);
+   res = atm_aal5_send_rfc1483b(t->atm_nio,t->vpi,t->vci,pkt,len);
+   ATM_BRIDGE_UNLOCK(t);
+   return(res);
 }
 
 /* Create a virtual ATM bridge */
