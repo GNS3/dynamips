@@ -1409,7 +1409,7 @@ static int ti1570_handle_rx_cell(netio_desc_t *nio,
 
             if (bptr < TI1570_RX_DMA_TABLE_OFFSET) {
                TI1570_LOG(d,"ti1570_handle_rx_cell: inconsistency in "
-                          "RX VPI/VCI table, VPI/VCI=%u/u, bptr=0x%x\n",
+                          "RX VPI/VCI table, VPI/VCI=%u/%u, bptr=0x%x\n",
                           vpi,vci,bptr);
                return(FALSE);
             }
