@@ -148,9 +148,8 @@ int ipv6_parse_cidr(char *token,n_ipv6_addr_t *net_addr,u_int *net_mask)
 
    if ((tmp = strdup(token)) == NULL)
       return(-1);
-    
-   sl = strchr(tmp,'/');
-   *sl = 0;
+
+   tmp[sl - token] = '\0';
 
    /* Parse IP Address */
    if (n_ipv6_aton(net_addr,tmp) <= 0) {
