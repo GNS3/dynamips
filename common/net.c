@@ -110,9 +110,8 @@ int ip_parse_cidr(char *token,n_ip_addr_t *net_addr,n_ip_addr_t *net_mask)
 
    if ((tmp = strdup(token)) == NULL)
       return(-1);
-    
-   sl = strchr(tmp,'/');
-   *sl = 0;
+
+   tmp[sl - token] = '\0';
 
    /* Parse IP Address */
    if (n_ip_aton(net_addr,tmp) == -1) {
