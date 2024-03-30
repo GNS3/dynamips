@@ -419,7 +419,7 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
                pca >>= MIPS_TLB_C_SHIFT;
                res->cached = mips64_cca_cached(pca);     
                                              
-               if (!(entry->lo0 & MIPS_TLB_D_MASK))
+               if (!(entry->lo1 & MIPS_TLB_D_MASK))
                   res->flags |= MTS_FLAG_RO;
                          
                return(MIPS_TLB_LOOKUP_OK);
