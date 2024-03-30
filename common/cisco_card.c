@@ -305,7 +305,11 @@ vm_slot_translate_port_id(vm_instance_t *vm,u_int slot_id,u_int port_id,
    struct cisco_card **tmp;
    u_int real_port_id = 0;
 
-   vm_slot_get_info(vm,slot_id,port_id,&tmp,&real_port_id);
+   if (vm_slot_get_info(vm,slot_id,port_id,&tmp,&real_port_id) == -1) {
+      *rc = NULL;
+      return(port_id);
+   }
+
    *rc = *tmp;
    return(real_port_id);
 }
