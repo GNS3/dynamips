@@ -73,7 +73,10 @@ int main(int argc,char *argv[])
 
    for(i=0;i<ehdr->e_phnum;i++,phdr++)
    {
-      fseek(bfd,phdr->p_offset,SEEK_SET);
+      if (fseek(bfd,phdr->p_offset,SEEK_SET) != 0) {
+         perror("fseek");
+         return(-1);
+      }
 
       vaddr = (m_uint64_t)phdr->p_vaddr;
       len = phdr->p_filesz;
