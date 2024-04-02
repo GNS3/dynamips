@@ -909,8 +909,10 @@ static int dev_i8254x_handle_txring(struct i8254x_data *d)
    for(i=0;i<I8254X_TXRING_PASS_COUNT;i++) {
       LVG_LOCK(d);
       /* Transmit Enabled ? */
-      if (!(d->tctl & I8254X_TCTL_EN))
+      if (!(d->tctl & I8254X_TCTL_EN)) {
+         LVG_UNLOCK(d);
          break;
+      }
 
       res = dev_i8254x_handle_txring_single(d);
       LVG_UNLOCK(d);
