@@ -631,9 +631,9 @@ int ppc32_map_page(cpu_ppc_t *cpu,u_int vsid,m_uint32_t vaddr,m_uint64_t paddr,
    tmp |= (vaddr >> 22) & 0x3F;
    *(m_uint32_t *)pte_haddr = htovm32(tmp);
 
-   tmp = ((m_uint32_t)vaddr) & PPC32_PTEL_RPN_MASK;
-   tmp |= ((m_uint32_t)(vaddr >> (32 - PPC32_PTEL_X_SHIFT))) & PPC32_PTEL_X_MASK;
-   tmp |= ((m_uint32_t)(vaddr >> (33 - PPC32_PTEL_XPN_SHIFT))) & PPC32_PTEL_XPN_MASK;
+   tmp = ((m_uint32_t)paddr) & PPC32_PTEL_RPN_MASK;
+   tmp |= ((m_uint32_t)(paddr >> (32 - PPC32_PTEL_X_SHIFT))) & PPC32_PTEL_X_MASK;
+   tmp |= ((m_uint32_t)(paddr >> (33 - PPC32_PTEL_XPN_SHIFT))) & PPC32_PTEL_XPN_MASK;
 
    tmp |= (wimg << PPC32_PTEL_WIMG_SHIFT) + pp;
    *(m_uint32_t *)(pte_haddr+sizeof(m_uint32_t)) = htovm32(tmp);
