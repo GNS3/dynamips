@@ -120,12 +120,22 @@ int mips64_init(cpu_mips_t *cpu)
    return(0);
 }
 
+/* Delete the symbol tree node */
+static void mips64_delete_sym_tree_node(void *key, void *value, void *opt) {
+   free(key);
+}
+
 /* Delete a MIPS64 processor */
 void mips64_delete(cpu_mips_t *cpu)
 {
    if (cpu) {
       mips64_mem_shutdown(cpu);
       mips64_jit_shutdown(cpu);
+      if (cpu->sym_tree) {
+         rbtree_foreach(cpu->sym_tree, mips64_delete_sym_tree_node, NULL);
+         rbtree_delete(cpu->sym_tree);
+         cpu->sym_tree = NULL;
+      }
    }
 }
 
