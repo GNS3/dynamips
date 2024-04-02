@@ -333,14 +333,15 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
       }
 
       /* try to connect to remote host */
-      error = setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-      if (!bind(sck,(struct sockaddr *)&st,res->ai_addrlen) &&
-          !connect(sck,res->ai_addr,res->ai_addrlen))
-         break;
+      if (setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0)
+         perror("Warning: upd_connect: setsockopt(SO_REUSEADDR)");
 
-      if (error) {
-         fprintf(stderr,"Warning: udp_connect: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
+      if (!bind(sck,(struct sockaddr *)&st,res->ai_addrlen) &&
+          !connect(sck,res->ai_addr,res->ai_addrlen)) {
+         perror("udp_connect: bind/connect");
+         break;
       }
+
       close(sck);
       sck = -1;
    }
@@ -380,12 +381,11 @@ int udp_connect(int local_port,char *remote_host,int remote_port)
    sin.sin_family = PF_INET;
    sin.sin_port = htons(local_port);
 
-   error = setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+   if (setsockopt(sck, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0)
+      perror("Warning: upd_connect: setsockopt(SO_REUSEADDR)");
+
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("udp_connect: bind");
-      if (error) {
-         fprintf(stderr,"Warning: udp_connect: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
-      }
       close(sck);
       return(-1);
    }
@@ -446,14 +446,13 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
       if (fd_array[nsock] < 0)
          continue;      
 
-      error = setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+      if (setsockopt(fd_array[nsock],SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse)) != 0)
+         perror("Warning: ip_listen: setsockopt(SO_REUSEADDR): The same address-port combination can be retried after the TCP TIME_WAIT state expires.");
 
       if ((bind(fd_array[nsock],res->ai_addr,res->ai_addrlen) < 0) ||
           ((sock_type == SOCK_STREAM) && (listen(fd_array[nsock],5) < 0)))
       {
-         if (error) {
-            fprintf(stderr,"Warning: ip_listen: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
-         }
+         perror("ip_listen: bind/listen");
          close(fd_array[nsock]);
          fd_array[nsock] = -1;
          continue;
@@ -488,7 +487,8 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
    if (ip_addr && strlen(ip_addr))
       sin.sin_addr.s_addr = inet_addr(ip_addr);
 
-   error = setsockopt(sck,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+   if (setsockopt(sck,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse)) != 0)
+      perror("Warning: ip_listen: setsockopt(SO_REUSEADDR): The same address-port combination can be retried after the TCP TIME_WAIT state expires.");
 
    if (bind(sck,(struct sockaddr *)&sin,sizeof(sin)) < 0) {
       perror("ip_listen: bind");
@@ -504,9 +504,6 @@ int ip_listen(char *ip_addr,int port,int sock_type,int max_fd,int fd_array[])
    return(1);
 
  error:
-   if (error) {
-      fprintf(stderr,"Warning: ip_listen: SO_REUSEADDR is not set. The same address-port combination can be retried after the TIME_WAIT state expires.");
-   }
    close(sck);
    return(-1);
 }
