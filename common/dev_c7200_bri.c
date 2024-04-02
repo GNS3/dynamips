@@ -816,6 +816,7 @@ int dev_c7200_pa_bri_init(vm_instance_t *vm,struct cisco_card *card)
 
    if (!pci_dev) {
       vm_error(vm,"%s: unable to create PCI device.\n",card->dev_name);
+      free(d);
       return(-1);
    }
 
@@ -827,6 +828,8 @@ int dev_c7200_pa_bri_init(vm_instance_t *vm,struct cisco_card *card)
    /* Create the device itself */
    if (!(dev = dev_create(card->dev_name))) {
       vm_error(vm,"%s: unable to create device.\n",card->dev_name);
+      pci_dev_remove(d->pci_dev);
+      free(d);
       return(-1);
    }
 
