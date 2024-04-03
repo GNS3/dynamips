@@ -176,6 +176,10 @@ int ppc32_get_idling_pc(cpu_gen_t *cpu)
    printf("\nPlease wait while gathering statistics...\n");
 
    pc_hash = calloc(IDLE_HASH_SIZE,sizeof(struct ppc32_idle_pc_hash *));
+   if (pc_hash == NULL) {
+      printf("Out of memory.");
+      return(-1);
+   }
 
    /* Disable IRQ */
    pcpu->irq_disable = TRUE;
