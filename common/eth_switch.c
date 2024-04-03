@@ -182,7 +182,7 @@ static void ethsw_iv_dot1q(ethsw_table_t *t,ethsw_packet_t *sp,
          if (op->vlan_id == sp->input_vlan) {
             pkt = malloc(sp->pkt_len-4);
             if (pkt == NULL) {
-               perror("ethsw_iv_dot1q: access");
+               perror("ethsw_iv_dot1q: qinq");
                break;
             }
             dot1q_pop_tag(pkt,sp);
