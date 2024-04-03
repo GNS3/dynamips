@@ -117,6 +117,7 @@ static void ethsw_iv_access(ethsw_table_t *t,ethsw_packet_t *sp,
             netio_send(op,sp->pkt,sp->pkt_len);
          } else {
             pkt = malloc(sp->pkt_len+4);
+            memset(pkt, 0, sp->pkt_len+4);
             if (pkt == NULL) {
                perror("ethsw_iv_access: dot1q");
                break;
@@ -149,6 +150,7 @@ static void ethsw_iv_dot1q(ethsw_table_t *t,ethsw_packet_t *sp,
       /* 802.1Q -> Access: pop tag */
       case ETHSW_PORT_TYPE_ACCESS:
          pkt = malloc(sp->pkt_len-4);
+         memset(pkt, 0, sp->pkt_len-4);
          if (pkt == NULL) {
             perror("ethsw_iv_dot1q: access");
             break;
@@ -162,6 +164,7 @@ static void ethsw_iv_dot1q(ethsw_table_t *t,ethsw_packet_t *sp,
       case ETHSW_PORT_TYPE_DOT1Q:
          if (op->vlan_id == sp->input_vlan) {
             pkt = malloc(sp->pkt_len-4);
+            memset(pkt, 0, sp->pkt_len-4);
             if (pkt == NULL) {
                perror("ethsw_iv_dot1q: dot1q");
                break;
@@ -181,6 +184,7 @@ static void ethsw_iv_dot1q(ethsw_table_t *t,ethsw_packet_t *sp,
       case ETHSW_PORT_TYPE_QINQ:
          if (op->vlan_id == sp->input_vlan) {
             pkt = malloc(sp->pkt_len-4);
+            memset(pkt, 0, sp->pkt_len-4);
             if (pkt == NULL) {
                perror("ethsw_iv_dot1q: qinq");
                break;
@@ -207,6 +211,7 @@ static void ethsw_iv_qinq(ethsw_table_t *t,ethsw_packet_t *sp,
       /* QinQ -> 802.1Q: push outer tag */
       case ETHSW_PORT_TYPE_DOT1Q:
          pkt = malloc(sp->pkt_len+4);
+         memset(pkt, 0, sp->pkt_len+4);
          if (pkt == NULL) {
             perror("ethsw_iv_qinq: dot1q");
             break;
@@ -223,6 +228,7 @@ static void ethsw_iv_qinq(ethsw_table_t *t,ethsw_packet_t *sp,
       case ETHSW_PORT_TYPE_QINQ:
          if (sp->input_port->vlan_id == op->vlan_id) {
             pkt = malloc(sp->pkt_len-4);
+            memset(pkt, 0, sp->pkt_len-4);
             if (pkt == NULL) {
                perror("ethsw_iv_qinq: qinq");
                break;
