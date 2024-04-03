@@ -268,6 +268,10 @@ int dev_c7200_pa_mc8te1_init(vm_instance_t *vm,struct cisco_card *card)
    d->plx_obj = dev_plx9054_init(vm,d->plx_name,
                                  card->pci_bus,1,
                                  &d->ssram_dev,NULL);
+   if (d->plx_obj == NULL) {
+      dev_c7200_pa_mc8te1_shutdown(vm, card);
+      return(-1);
+   }
 
    /* Set callback function for PLX9054 PCI-To-Local doorbell */
    dev_plx_set_pci2loc_doorbell_cbk(d->plx_obj->data,
