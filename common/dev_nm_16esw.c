@@ -1108,7 +1108,8 @@ static inline int bcm5600_gen_arl_lookup(struct nm_16esw_data *d,
    mask = BCM5600_ARL_VLAN_TAG_MASK | BCM5600_ARL_MAC_MSB_MASK;
 
    for(i=index_start;i<index_end;i++) {
-      entry = bcm5600_table_get_entry(d,table,i);
+      if (!(entry = bcm5600_table_get_entry(d,table,i)))
+         continue;
 
       if ((entry[0] == tmp[0]) && ((entry[1] & mask) == tmp[1]))
          return(i);
@@ -1152,7 +1153,8 @@ static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
    mask = BCM5600_ARL_VLAN_TAG_MASK | BCM5600_ARL_MAC_MSB_MASK;
 
    for(i=0;i<d->arl_cnt[0]-1;i++) {
-      entry = bcm5600_table_get_entry(d,table,i);
+      if (!(entry = bcm5600_table_get_entry(d,table,i)))
+         continue;
 
       /* If entry already exists, just modify it */
       if ((entry[0] == d->dw[1]) && ((entry[1] & mask) == (d->dw[2] & mask))) {
@@ -1166,7 +1168,9 @@ static int bcm5600_insert_arl_entry(struct nm_16esw_data *d)
 
    index = d->arl_cnt[0] - 1;
 
-   entry = bcm5600_table_get_entry(d,table,index);
+   if (!(entry = bcm5600_table_get_entry(d,table,index))) {
+      return(-1);
+   }
    entry[0] = d->dw[1];
    entry[1] = d->dw[2];
    entry[2] = d->dw[3];
@@ -1193,7 +1197,8 @@ static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
    mac_msb = d->dw[2] & BCM5600_ARL_MAC_MSB_MASK;
 
    for(i=table->min_index;i<=table->max_index;i++) {
-      entry = bcm5600_table_get_entry(d,table,i);
+      if (!(entry = bcm5600_table_get_entry(d,table,i)))
+         continue;
 
       /* compare VLANs and MAC addresses */
       cvlan = (entry[1] & BCM5600_ARL_VLAN_TAG_MASK);
@@ -1202,10 +1207,11 @@ static int bcm5600_delete_arl_entry(struct nm_16esw_data *d)
       if ((cvlan == vlan) && (entry[0] == d->dw[1]) &&
           ((entry[1] & BCM5600_ARL_MAC_MSB_MASK) == mac_msb))
       {            
+         if (!(last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2)))
+            continue;
+
          d->dw[1] = i;
 
-         last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2);
-            
          entry[0] = last_entry[0];
          entry[1] = last_entry[1];
          entry[2] = last_entry[2];
@@ -1229,8 +1235,8 @@ static int bcm5600_reset_arl(struct nm_16esw_data *d)
       return(-1);
 
    for(i=table->min_index;i<=table->max_index;i++) {
-      entry = bcm5600_table_get_entry(d,table,i);
-      bcm5600_invalidate_arl_entry(entry);
+      if ((entry = bcm5600_table_get_entry(d,table,i)))
+         bcm5600_invalidate_arl_entry(entry);
    }
 
    return(0);
@@ -1245,16 +1251,19 @@ static int bcm5600_arl_ager(struct nm_16esw_data *d)
    BCM_LOCK(d);
 
    for(i=1;i<d->arl_cnt[0]-1;i++) {
-      entry = bcm5600_table_get_entry(d,d->t_arl,i);
-      assert(entry);
+      if (!(entry = bcm5600_table_get_entry(d,d->t_arl,i))) {
+         assert(entry);
+         continue;
+      }
 
       if (entry[2] & BCM5600_ARL_ST_FLAG)
          continue;
 
       /* The entry has expired, purge it */
       if (!(entry[2] & BCM5600_ARL_HIT_FLAG)) {
-         last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2);
-        
+         if (!(last_entry = bcm5600_table_get_entry(d,d->t_arl,d->arl_cnt[0]-2)))
+            continue;
+
          entry[0] = last_entry[0];
          entry[1] = last_entry[1];
          entry[2] = last_entry[2];
@@ -1588,7 +1597,8 @@ static int bcm5600_mirror_show_status(struct nm_16esw_data *d)
    printf("  Ingress Ports: ");
 
    for(i=0;i<d->nr_port;i++) {
-      port = bcm5600_table_get_entry(d,d->t_ptable,i);
+      if (!(port = bcm5600_table_get_entry(d,d->t_ptable,i)))
+         continue;
       if (port[1] & BCM5600_PTABLE_MI_FLAG)
          printf("%s ",d->ports[i].name);
    }
@@ -1690,8 +1700,10 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
    if (eth_addr_is_mcast(src_mac))
       return(FALSE);
 
-   src_port = bcm5600_table_get_entry(d,d->t_ptable,p->ingress_port);
-   assert(src_port != NULL);
+   if (!(src_port = bcm5600_table_get_entry(d,d->t_ptable,p->ingress_port))) {
+      assert(src_port != NULL);
+      return(FALSE);
+   }
 
    /* 
     * The packet comes from a trunk port. Prevent sending the packet
@@ -1701,8 +1713,10 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
       trunk_id = src_port[0] & BCM5600_PTABLE_TGID_MASK;
       trunk_id >>= BCM5600_PTABLE_TGID_SHIFT;
 
-      trunk = bcm5600_table_get_entry(d,d->t_tbmap,trunk_id);
-      assert(trunk != NULL);
+      if (!(trunk = bcm5600_table_get_entry(d,d->t_tbmap,trunk_id))) {
+         assert(trunk != NULL);
+         return(FALSE);
+      }
 
       p->egress_filter_bitmap |= trunk[0] & BCM5600_TBMAP_MASK;
    }
@@ -1711,8 +1725,10 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
    src_mac_index = bcm5600_arl_lookup(d,src_mac,p->real_vlan);
 
    if (src_mac_index != -1) {
-      arl_entry = bcm5600_table_get_entry(d,d->t_arl,src_mac_index);
-      assert(arl_entry != NULL);
+      if (!(arl_entry = bcm5600_table_get_entry(d,d->t_arl,src_mac_index))) {
+         assert(arl_entry != NULL);
+         return(FALSE);
+      }
 
       old_ingress_port = arl_entry[2] & BCM5600_ARL_PORT_MASK;
       old_ingress_port >>= BCM5600_ARL_PORT_SHIFT;
@@ -1756,8 +1772,10 @@ static int bcm5600_src_mac_learning(struct nm_16esw_data *d,
       return(FALSE);
    }
 
-   arl_entry = bcm5600_table_get_entry(d,d->t_arl,src_mac_index);
-   assert(arl_entry != NULL);
+   if (!(arl_entry = bcm5600_table_get_entry(d,d->t_arl,src_mac_index))) {
+      assert(arl_entry != NULL);
+      return(FALSE);
+   }
     
    /* Fill the new ARL entry */
    arl_entry[0]  = src_mac->eth_addr_byte[2] << 24;
@@ -1793,8 +1811,10 @@ static int bcm5600_trunk_egress_port(struct nm_16esw_data *d,
    u_int nr_links;
    u_int port_id;
 
-   ttr_entry = bcm5600_table_get_entry(d,d->t_ttr,trunk_id);
-   assert(ttr_entry != NULL);
+   if (!(ttr_entry = bcm5600_table_get_entry(d,d->t_ttr,trunk_id))) {
+      assert(ttr_entry != NULL);
+      return(-1);
+   }
 
    nr_links = ttr_entry[1] & BCM5600_TTR_TG_SIZE_MASK;
    nr_links >>= BCM5600_TTR_TG_SIZE_SHIFT;
@@ -1873,8 +1893,10 @@ static int bcm5600_dst_mac_lookup(struct nm_16esw_data *d,
    }
 
    /* The MAC address was found in the ARL/MARL table */
-   arl_entry = bcm5600_table_get_entry(d,arl_table,dst_mac_index);
-   assert(arl_entry != NULL);
+   if (!(arl_entry = bcm5600_table_get_entry(d,arl_table,dst_mac_index))) {
+      assert(arl_entry != NULL);
+      return(FALSE);
+   }
 
    /* If the CPU bit is set, send a copy of the packet to the CPU */
    if (arl_entry[1] & BCM5600_ARL_CPU_FLAG)
@@ -2024,15 +2046,19 @@ static int bcm5600_forward_pkt(struct nm_16esw_data *d,struct bcm5600_pkt *p)
        * duplicate frames (typically, when a dest MAC address is unknown
        * or for a broadcast/multicast).
        */
-      dst_port = bcm5600_table_get_entry(d,d->t_ptable,i);
-      assert(dst_port != NULL);
+      if (!(dst_port = bcm5600_table_get_entry(d,d->t_ptable,i))) {
+         assert(dst_port != NULL);
+         return(FALSE);
+      }
 
       if (dst_port[0] & BCM5600_PTABLE_TRUNK_FLAG) {
          trunk_id = dst_port[0] & BCM5600_PTABLE_TGID_MASK;
          trunk_id >>= BCM5600_PTABLE_TGID_SHIFT;
 
-         trunk = bcm5600_table_get_entry(d,d->t_tbmap,trunk_id);
-         assert(trunk != NULL);
+         if (!(trunk = bcm5600_table_get_entry(d,d->t_tbmap,trunk_id))) {
+            assert(trunk != NULL);
+            return(FALSE);
+         }
          
          p->egress_bitmap &= ~trunk[0];
       }
