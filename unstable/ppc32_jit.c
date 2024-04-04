@@ -79,12 +79,18 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
 
    /* Virtual address mapping for TCB */
    len = PPC_JIT_VIRT_HASH_SIZE * sizeof(void *);
-   cpu->tcb_virt_hash = m_memalign(4096,len);
+   if (!(cpu->tcb_virt_hash = m_memalign(4096,len))) {
+      perror("ppc32_jit_init: tcb_virt_hash");
+      goto err_tcb_virt_hash;
+   }
    memset(cpu->tcb_virt_hash,0,len);
 
    /* Physical address mapping for TCB */
    len = PPC_JIT_PHYS_HASH_SIZE * sizeof(void *);
-   cpu->tcb_phys_hash = m_memalign(4096,len);
+   if (!(cpu->tcb_phys_hash = m_memalign(4096,len))) {
+      perror("ppc32_jit_init: tcb_phys_hash");
+      goto err_tcb_phys_hash;
+   }
    memset(cpu->tcb_phys_hash,0,len);
 
    /* Get area size */
@@ -99,7 +105,7 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
       fprintf(stderr,
               "ppc32_jit_init: unable to create exec area (size %lu)\n",
               (u_long)cpu->exec_page_area_size);
-      return(-1);
+      goto err_exec_page_area;
    }
 
    /* Carve the executable page area */
@@ -110,7 +116,7 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
    
    if (!cpu->exec_page_array) {
       fprintf(stderr,"ppc32_jit_init: unable to create exec page array\n");
-      return(-1);
+      goto err_exec_page_array;
    }
 
    for(i=0,cp_addr=cpu->exec_page_area;i<cpu->exec_page_count;i++) {
@@ -128,6 +134,18 @@ int ppc32_jit_init(cpu_ppc_t *cpu)
           (u_long)(cpu->exec_page_area_size / 1048576),
           (u_long)cpu->exec_page_count,PPC_JIT_BUFSIZE / 1024);
    return(0);
+
+err_exec_page_array:
+   memzone_unmap(cpu->exec_page_area, cpu->exec_page_area_size);
+   cpu->exec_page_area = NULL;
+err_exec_page_area:
+   free(cpu->tcb_phys_hash);
+   cpu->tcb_phys_hash = NULL;
+err_tcb_phys_hash:
+   free(cpu->tcb_virt_hash);
+   cpu->tcb_virt_hash = NULL;
+err_tcb_virt_hash:
+   return(-1);
 }
 
 /* Flush the JIT */
