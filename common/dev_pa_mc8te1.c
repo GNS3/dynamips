@@ -257,20 +257,22 @@ int dev_c7200_pa_mc8te1_init(vm_instance_t *vm,struct cisco_card *card)
                             NULL,pci_pos_read,pci_pos_write);
 
    /* Initialize SSRAM device */
-   d->ssram_name = dyn_sprintf("%s_ssram",card->dev_name);
+   if (!(d->ssram_name = dyn_sprintf("%s_ssram",card->dev_name))) {
+      goto err_ssram_name;
+   }
    dev_init(&d->ssram_dev);
    d->ssram_dev.name      = d->ssram_name;
    d->ssram_dev.priv_data = d;
    d->ssram_dev.handler   = dev_ssram_access;
 
    /* Create the PLX9054 */
-   d->plx_name = dyn_sprintf("%s_plx",card->dev_name);
-   d->plx_obj = dev_plx9054_init(vm,d->plx_name,
+   if (!(d->plx_name = dyn_sprintf("%s_plx",card->dev_name))) {
+      goto err_plx_name;
+   }
+   if (!(d->plx_obj = dev_plx9054_init(vm,d->plx_name,
                                  card->pci_bus,1,
-                                 &d->ssram_dev,NULL);
-   if (d->plx_obj == NULL) {
-      dev_c7200_pa_mc8te1_shutdown(vm, card);
-      return(-1);
+                                 &d->ssram_dev,NULL))) {
+      goto err_plx_obj;
    }
 
    /* Set callback function for PLX9054 PCI-To-Local doorbell */
@@ -282,6 +284,16 @@ int dev_c7200_pa_mc8te1_init(vm_instance_t *vm,struct cisco_card *card)
    /* Store device info into the router structure */
    card->drv_info = d;
    return(0);
+
+err_plx_obj:
+   free(d->plx_name);
+err_plx_name:
+   free(d->ssram_name);
+err_ssram_name:
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,NULL);
+   free(d);
+   return(-1);
 }
 
 /* Remove a PA-POS-OC3 from the specified slot */

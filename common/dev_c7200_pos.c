@@ -690,34 +690,46 @@ int dev_c7200_pa_pos_init(vm_instance_t *vm,struct cisco_card *card)
    c7200_set_slot_eeprom(VM_C7200(vm),slot,&card->eeprom);
 
    /* Initialize RX device */
-   d->rx_name = dyn_sprintf("%s_RX",card->dev_name);
+   if (!(d->rx_name = dyn_sprintf("%s_RX",card->dev_name))) {
+      goto err_rx_name;
+   }
    dev_init(&d->rx_dev);
    d->rx_dev.name      = d->rx_name;
    d->rx_dev.priv_data = d;
    d->rx_dev.handler   = dev_pos_rx_access;
 
    /* Initialize TX device */
-   d->tx_name = dyn_sprintf("%s_TX",card->dev_name);
+   if (!(d->tx_name = dyn_sprintf("%s_TX",card->dev_name))) {
+      goto err_tx_name;
+   }
    dev_init(&d->tx_dev);
    d->tx_dev.name      = d->tx_name;
    d->tx_dev.priv_data = d;
    d->tx_dev.handler   = dev_pos_tx_access;
 
    /* Initialize CS device */
-   d->cs_name = dyn_sprintf("%s_CS",card->dev_name);
+   if (!(d->cs_name = dyn_sprintf("%s_CS",card->dev_name))) {
+      goto err_cs_name;
+   }
    dev_init(&d->cs_dev);
    d->cs_dev.name      = d->cs_name;
    d->cs_dev.priv_data = d;
    d->cs_dev.handler   = dev_pos_cs_access;
 
    /* Initialize PLX9060 for RX part */
-   d->rx_obj = dev_plx9060_init(vm,d->rx_name,card->pci_bus,0,&d->rx_dev);
+   if (!(d->rx_obj = dev_plx9060_init(vm,d->rx_name,card->pci_bus,0,&d->rx_dev))) {
+      goto err_rx_obj;
+   }
 
    /* Initialize PLX9060 for TX part */
-   d->tx_obj = dev_plx9060_init(vm,d->tx_name,card->pci_bus,1,&d->tx_dev);
+   if (!(d->tx_obj = dev_plx9060_init(vm,d->tx_name,card->pci_bus,1,&d->tx_dev))) {
+      goto err_tx_obj;
+   }
 
    /* Initialize PLX9060 for CS part (CS=card status, chip status, ... ?) */
-   d->cs_obj = dev_plx9060_init(vm,d->cs_name,card->pci_bus,2,&d->cs_dev);
+   if (!(d->cs_obj = dev_plx9060_init(vm,d->cs_name,card->pci_bus,2,&d->cs_dev))) {
+      goto err_cs_obj;
+   }
 
    /* Unknown PCI device here (will be mapped at 0x30000) */
    dev_init(&d->dev);
@@ -726,13 +738,33 @@ int dev_c7200_pa_pos_init(vm_instance_t *vm,struct cisco_card *card)
    d->dev.phys_len  = 0x10000;
    d->dev.handler   = dev_pos_access;
 
-   d->pci_dev = pci_dev_add(card->pci_bus,card->dev_name,0,0,3,0,
+   if (!(d->pci_dev = pci_dev_add(card->pci_bus,card->dev_name,0,0,3,0,
                             c7200_net_irq_for_slot_port(slot,0),
-                            d,NULL,pci_pos_read,pci_pos_write);
+                            d,NULL,pci_pos_read,pci_pos_write))) {
+      goto err_pci_dev;
+   }
 
    /* Store device info into the router structure */
    card->drv_info = d;
    return(0);
+
+err_pci_dev:
+   vm_object_remove(vm, d->cs_obj);
+err_cs_obj:
+   vm_object_remove(vm, d->tx_obj);
+err_tx_obj:
+   vm_object_remove(vm, d->rx_obj);
+err_rx_obj:
+   free(d->cs_name);
+err_cs_name:
+   free(d->tx_name);
+err_tx_name:
+   free(d->rx_name);
+err_rx_name:
+   cisco_card_unset_eeprom(card);
+   c7200_set_slot_eeprom(VM_C7200(vm),slot,NULL);
+   free(d);
+   return(-1);
 }
 
 /* Remove a PA-POS-OC3 from the specified slot */
