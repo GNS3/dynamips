@@ -109,7 +109,10 @@ int mips64_jit_init(cpu_mips_t *cpu)
 
    /* Physical mapping for executable pages */
    len = MIPS_JIT_PC_HASH_SIZE * sizeof(void *);
-   cpu->exec_blk_map = m_memalign(4096,len);
+   if (!(cpu->exec_blk_map = m_memalign(4096,len))) {
+      perror("mips64_jit_init: exec_blk_map");
+      goto err_exec_blk_map;
+   }
    memset(cpu->exec_blk_map,0,len);
 
    /* Get area size */
@@ -124,7 +127,7 @@ int mips64_jit_init(cpu_mips_t *cpu)
       fprintf(stderr,
               "mips64_jit_init: unable to create exec area (size %lu)\n",
               (u_long)cpu->exec_page_area_size);
-      return(-1);
+      goto err_exec_page_area;
    }
 
    /* Carve the executable page area */
@@ -135,7 +138,7 @@ int mips64_jit_init(cpu_mips_t *cpu)
    
    if (!cpu->exec_page_array) {
       fprintf(stderr,"mips64_jit_init: unable to create exec page array\n");
-      return(-1);
+      goto err_exec_page_array;
    }
 
    for(i=0,cp_addr=cpu->exec_page_area;i<cpu->exec_page_count;i++) {
@@ -153,6 +156,15 @@ int mips64_jit_init(cpu_mips_t *cpu)
           (u_long)(cpu->exec_page_area_size / 1048576),
           (u_long)cpu->exec_page_count,MIPS_JIT_BUFSIZE / 1024);
    return(0);
+
+err_exec_page_array:
+   memzone_unmap(cpu->exec_page_area, cpu->exec_page_area_size);
+   cpu->exec_page_area = NULL;
+err_exec_page_area:
+   free(cpu->exec_blk_map);
+   cpu->exec_blk_map = NULL;
+err_exec_blk_map:
+   return(-1);
 }
 
 /* Flush the JIT */

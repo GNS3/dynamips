@@ -786,15 +786,27 @@ int cpu_jit_init(cpu_gen_t *cpu,size_t virt_hash_size,size_t phys_hash_size)
 
    /* Virtual address mapping for TCB */
    len = virt_hash_size * sizeof(void *);
-   cpu->tb_virt_hash = m_memalign(4096,len);
+   if (!(cpu->tb_virt_hash = m_memalign(4096,len))) {
+      perror("cpu_jit_init: tb_virt_hash");
+      goto err_tb_virt_hash;
+   }
    memset(cpu->tb_virt_hash,0,len);
 
    /* Physical address mapping for TCB */
    len = phys_hash_size * sizeof(void *);
-   cpu->tb_phys_hash = m_memalign(4096,len);
+   if (!(cpu->tb_phys_hash = m_memalign(4096,len))) {
+      perror("cpu_jit_init: tb_phys_hash");
+      goto err_tb_phys_hash;
+   }
    memset(cpu->tb_phys_hash,0,len);
    
    return(0);
+
+err_tb_phys_hash:
+   free(cpu->tb_virt_hash);
+   cpu->tb_virt_hash = NULL;
+err_tb_virt_hash:
+   return(-1);
 }
 
 /* Shutdown the JIT structures of a CPU */
