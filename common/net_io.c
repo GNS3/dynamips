@@ -232,6 +232,7 @@ ssize_t netio_recv(netio_desc_t *nio,void *pkt,size_t max_len)
       return(-1);
 
    /* Receive the packet */
+   memset(pkt, 0, max_len);
    if ((len = nio->recv(nio->dptr,pkt,max_len)) <= 0)
       return(-1);
 
