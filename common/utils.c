@@ -259,15 +259,13 @@ void m_flog(FILE *fd,char *module,char *fmt,va_list ap)
 {
    struct timespec spec;
    struct tm tmn;
-   char buf[256];
 
    if (fd != NULL) {
       clock_gettime(CLOCK_REALTIME, &spec);
       gmtime_r(&spec.tv_sec, &tmn);
 
-      strftime(buf,sizeof(buf),"%b %d %H:%M:%S",&tmn);
-
-      fprintf(fd,"%s.%03ld %s: ",buf,(long)spec.tv_nsec/1000000,module);
+      // NOTE never use strftime for timestamps, it is crashy
+      fprintf(fd,"%d-%02d-%02dT%02d:%02d:%02d.%03dZ %s: ",tmn.tm_year+1900,tmn.tm_mon+1,tmn.tm_mday,tmn.tm_hour,tmn.tm_min,tmn.tm_sec,(int)(spec.tv_nsec/1000000),module);
       vfprintf(fd,fmt,ap);
       fflush(fd);
    }
