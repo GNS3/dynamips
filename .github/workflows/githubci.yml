@@ -1,0 +1,28 @@
+name: Github CI
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get -yq update
+        sudo apt-get -yq install libelf-dev libpcap0.8-dev
+
+    - name: Install rust
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSfL https://sh.rustup.rs | sh -s -- -y -v
+
+    - name: Build
+      run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDYNAMIPS_CODE=both ..
+          make
