@@ -13,3 +13,4 @@ unstable/cmake_install.cmake
 unstable/cmake_uninstall.cmake
 unstable/common
 unstable/unstable
+/rust/target

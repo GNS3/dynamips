@@ -1,0 +1,10 @@
+[package]
+name = "rust-dynamips"
+version = "0.2.23"
+edition = "2021"
+workspace = ".."
+publish = false
+rust-version = "1.57" # custom profiles need 1.57
+
+[lib]
+crate-type = ["staticlib"]

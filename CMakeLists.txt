@@ -37,6 +37,18 @@ if( APPLE OR (CMAKE_SYSTEM_NAME MATCHES "FreeBSD") )
     include_directories(include /opt/local/include/)
 endif()
 
+# Rust code
+include ( FetchContent )
+FetchContent_Declare (
+   Corrosion
+   GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+   GIT_TAG v0.4
+)
+FetchContent_MakeAvailable ( Corrosion )
+corrosion_import_crate ( MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/dynamips/Cargo.toml" PROFILE release-with-debug )
+corrosion_experimental_cbindgen( MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/dynamips/Cargo.toml" TARGET rust-dynamips HEADER_NAME "rust-dynamips.h" )
+list ( APPEND DYNAMIPS_LIBRARIES rust-dynamips )
+
 add_subdirectory ( man )
 add_subdirectory ( common )
 add_subdirectory ( stable )

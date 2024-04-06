@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+	"dynamips",
+]
+
+# NOTE custom profiles need cargo 1.57
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
