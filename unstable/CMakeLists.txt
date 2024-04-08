@@ -188,7 +188,6 @@ set ( _files
    "${COMMON}/fs_fat.c"
    "${COMMON}/fs_mbr.c"
    "${COMMON}/fs_nvram.c"
-   "${COMMON}/dev_lxt970a.c"
    )
 if ( ENABLE_LINUX_ETH )
    set ( _files ${_files} "${COMMON}/linux_eth.c" )

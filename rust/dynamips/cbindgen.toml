@@ -2,3 +2,4 @@ language = "C"
 include_version = true
 include_guard = "RUST_DYNAMIPS_H"
 pragma_once = true
+documentation_style = "c++"
