@@ -1584,7 +1584,7 @@ int mpc860_fec_set_nio(struct mpc860_data *d,netio_desc_t *nio)
 
    d->fec_nio = nio;
    netio_rxl_add(nio,(netio_rx_handler_t)mpc860_fec_handle_rx_pkt,d,NULL);
-   lxt970a_set_has_nio(d->fec_mii_phy, true);
+   lxt970a_set_link_partner(d->fec_mii_phy, true, LXT907A_AN_LP_ABILITY_ASSUMED);
    return(0);
 }
 
@@ -1597,7 +1597,7 @@ int mpc860_fec_unset_nio(struct mpc860_data *d)
    if (d->fec_nio != NULL) {
       netio_rxl_remove(d->fec_nio);
       d->fec_nio = NULL;
-      lxt970a_set_has_nio(d->fec_mii_phy, false);
+      lxt970a_set_link_partner(d->fec_mii_phy, false, 0);
    }
 
    return(0);

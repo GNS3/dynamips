@@ -5,3 +5,12 @@ version = 3
 [[package]]
 name = "rust-dynamips"
 version = "0.2.23"
+dependencies = [
+ "tock-registers",
+]
+
+[[package]]
+name = "tock-registers"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b9e2fdb3a1e862c0661768b7ed25390811df1947a8acbfbefe09b47078d93c4"

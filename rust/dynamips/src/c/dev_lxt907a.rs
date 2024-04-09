@@ -1,12 +1,13 @@
 //! C interface for [`crate::phy::lxt970a::Lxt970A`].
 
 use crate::c::prelude::*;
-use crate::phy::lxt970a::Lxt970A;
+use crate::phy::lxt970a::*;
 
 /// Allocate a new PHY.
 #[no_mangle]
 pub extern "C" fn lxt970a_new() -> *mut Lxt970A {
-    let phy = Box::new(Lxt970A::new());
+    let mut phy = Box::new(Lxt970A::new());
+    phy.update_regs();
     Box::into_raw(phy) // memory managed by C
 }
 
@@ -17,12 +18,16 @@ pub extern "C" fn lxt970a_drop(phy: *mut Lxt970A) {
     let _ = unsafe { Box::from_raw(phy.as_ptr()) }; // memory managed by rust
 }
 
-/// Notify PHY if a nio is available.
+/// Notify PHY about the partner link.
 #[no_mangle]
-pub extern "C" fn lxt970a_set_has_nio(phy: *mut Lxt970A, has_nio: bool) {
+pub extern "C" fn lxt970a_set_link_partner(phy: *mut Lxt970A, link_up: bool, an_lp_ability: u16) {
     let mut phy = NonNull::new(phy).unwrap();
     let phy = unsafe { phy.as_mut() };
-    phy.has_nio = has_nio;
+    if link_up {
+        phy.set_link_partner(Some(an_lp_ability));
+    } else {
+        phy.set_link_partner(None);
+    }
 }
 
 /// Check if the link is up.
@@ -39,7 +44,7 @@ pub extern "C" fn lxt970a_mii_read_access(phy: *mut Lxt970A, reg: c_uint) -> u16
     let mut phy = NonNull::new(phy).unwrap();
     let phy = unsafe { phy.as_mut() };
     let reg = usize::try_from(reg).unwrap();
-    phy.mii_read_access(reg)
+    phy.mii_read_access(reg).unwrap_or(0)
 }
 
 /// MII register write access.
@@ -48,5 +53,5 @@ pub extern "C" fn lxt970a_mii_write_access(phy: *mut Lxt970A, reg: c_uint, value
     let mut phy = NonNull::new(phy).unwrap();
     let phy = unsafe { phy.as_mut() };
     let reg = usize::try_from(reg).unwrap();
-    phy.mii_write_access(reg, value)
+    phy.mii_write_access(reg, value).unwrap_or(())
 }
