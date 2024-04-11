@@ -8,3 +8,6 @@ rust-version = "1.57" # custom profiles need 1.57
 
 [lib]
 crate-type = ["staticlib"]
+
+[dependencies]
+tock-registers = "0.9.0"
