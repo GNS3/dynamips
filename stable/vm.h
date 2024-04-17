@@ -214,18 +214,10 @@ struct vm_platform_list {
 extern int vm_file_naming_type;
 
 /* Set an IRQ for a VM */
-static inline void vm_set_irq(vm_instance_t *vm,u_int irq)
-{
-   if (vm->set_irq != NULL)
-      vm->set_irq(vm,irq);
-}
+void vm_set_irq(vm_instance_t *vm,u_int irq);
 
 /* Clear an IRQ for a VM */
-static inline void vm_clear_irq(vm_instance_t *vm,u_int irq)
-{
-   if (vm->clear_irq != NULL)
-      vm->clear_irq(vm,irq);
-}
+void vm_clear_irq(vm_instance_t *vm,u_int irq);
 
 /* Initialize a VM object */
 void vm_object_init(vm_obj_t *obj);

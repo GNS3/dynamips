@@ -46,6 +46,20 @@ static pthread_mutex_t vm_global_lock = PTHREAD_MUTEX_INITIALIZER;
 /* Free all chunks used by a VM */
 static void vm_chunk_free_all(vm_instance_t *vm);
 
+/* Set an IRQ for a VM */
+void vm_set_irq(vm_instance_t *vm,u_int irq)
+{
+   if (vm->set_irq != NULL)
+      vm->set_irq(vm,irq);
+}
+
+/* Clear an IRQ for a VM */
+void vm_clear_irq(vm_instance_t *vm,u_int irq)
+{
+   if (vm->clear_irq != NULL)
+      vm->clear_irq(vm,irq);
+}
+
 /* Initialize a VM object */
 void vm_object_init(vm_obj_t *obj)
 {
