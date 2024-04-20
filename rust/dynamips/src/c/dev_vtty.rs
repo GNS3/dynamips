@@ -1,6 +1,7 @@
 //! TODO doc
 
 use crate::c::prelude::*;
+use crate::c::utils::fd_pool_t;
 
 /// 4 Kb should be enough for a keyboard buffer
 pub const VTTY_BUFFER_SIZE: usize = 4096;
@@ -86,3 +87,38 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
         0
     }
 }
+
+/// Virtual TTY structure
+#[repr(C)]
+pub struct virtual_tty {
+    pub vm: *mut vm_instance_t,
+    pub name: *mut c_char,
+    pub type_: c_int,
+    pub fd_array: [c_int; VTTY_MAX_FD],
+    pub fd_count: c_int,
+    pub tcp_port: c_int,
+    pub terminal_support: c_int,
+    pub input_state: c_int,
+    pub input_pending: c_int,
+    pub telnet_cmd: c_int,
+    pub telnet_opt: c_int,
+    pub telnet_qual: c_int,
+    pub managed_flush: c_int,
+    pub buffer: [u8; VTTY_BUFFER_SIZE],
+    pub read_ptr: c_uint,
+    pub write_ptr: c_uint,
+    pub lock: libc::pthread_mutex_t,
+    pub next: *mut virtual_tty,
+    pub pprev: *mut *mut virtual_tty,
+    pub priv_data: *mut c_void,
+    pub user_arg: c_ulong,
+    /// FD Pool (for TCP connections)
+    pub fd_pool: fd_pool_t,
+    /// Read notification
+    pub read_notifier: Option<unsafe extern "C" fn(_: *mut virtual_tty)>,
+    /// Old text for replay
+    pub replay_buffer: [u8; VTTY_BUFFER_SIZE],
+    pub replay_ptr: c_uint,
+    pub replay_full: u8,
+}
+pub type vtty_t = virtual_tty;

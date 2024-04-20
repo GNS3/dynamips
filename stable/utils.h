@@ -45,14 +45,7 @@
 #define vmtoh64(x) (swap64(x))
 #endif
 
-/* FD pool */
-#define FD_POOL_MAX  16
-
-typedef struct fd_pool fd_pool_t;
-struct fd_pool {
-   int fd[FD_POOL_MAX];
-   struct fd_pool *next;
-};
+#include "rust-dynamips.h"
 
 /* Forward declarations */
 typedef struct cpu_gen cpu_gen_t;

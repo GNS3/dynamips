@@ -16,39 +16,6 @@
 
 #include "rust-dynamips.h"
 
-/* Virtual TTY structure */
-typedef struct virtual_tty vtty_t;
-struct virtual_tty {
-   vm_instance_t *vm;
-   char *name;
-   int type;
-   int fd_array[VTTY_MAX_FD];
-   int fd_count;
-   int tcp_port;
-   int terminal_support;
-   int input_state;
-   int input_pending;
-   int telnet_cmd, telnet_opt, telnet_qual;
-   int managed_flush;
-   u_char buffer[VTTY_BUFFER_SIZE];
-   u_int read_ptr,write_ptr;
-   pthread_mutex_t lock;
-   vtty_t *next,**pprev;
-   void *priv_data;
-   u_long user_arg;
-
-   /* FD Pool (for TCP connections) */
-   fd_pool_t fd_pool;
-   
-   /* Read notification */
-   void (*read_notifier)(vtty_t *);
-
-   /* Old text for replay */
-   u_char replay_buffer[VTTY_BUFFER_SIZE];
-   u_int replay_ptr;
-   u_char replay_full;
-};
-
 #define VTTY_LOCK(tty) pthread_mutex_lock(&(tty)->lock);
 #define VTTY_UNLOCK(tty) pthread_mutex_unlock(&(tty)->lock);
 

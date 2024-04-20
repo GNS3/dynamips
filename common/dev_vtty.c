@@ -466,7 +466,7 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
    }
    memset(vtty,0,sizeof(*vtty));
    vtty->name = name;
-   vtty->type = type;
+   vtty->type_ = type;
    vtty->vm   = vm;
    vtty->fd_count = 0;
    pthread_mutex_init(&vtty->lock,NULL);
@@ -476,7 +476,7 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
    for(i=0;i<VTTY_MAX_FD;i++)
        vtty->fd_array[i] = -1;
     
-   switch (vtty->type) {
+   switch (vtty->type_) {
       case VTTY_TYPE_NONE:
          break;
 
@@ -507,7 +507,7 @@ vtty_t *vtty_create(vm_instance_t *vm,char *name,int type,int tcp_port,
          break;
 
       default:
-         fprintf(stderr,"tty_create: bad vtty type %d\n",vtty->type);
+         fprintf(stderr,"tty_create: bad vtty type %d\n",vtty->type_);
          free(vtty);
          return NULL;
    }
@@ -539,7 +539,7 @@ void vtty_delete(vtty_t *vtty)
       }
       VTTY_LIST_UNLOCK();
 
-      switch(vtty->type) {
+      switch(vtty->type_) {
            case VTTY_TYPE_TCP:
                
                for(i=0;i<vtty->fd_count;i++)
@@ -651,14 +651,14 @@ static int vtty_tcp_read(vtty_t *vtty,int *fd_slot)
  */
 static int vtty_read(vtty_t *vtty,int *fd_slot)
 {
-   switch(vtty->type) {
+   switch(vtty->type_) {
       case VTTY_TYPE_TERM:
       case VTTY_TYPE_SERIAL:
          return(vtty_term_read(vtty));
       case VTTY_TYPE_TCP:
          return(vtty_tcp_read(vtty,fd_slot));
       default:
-         fprintf(stderr,"vtty_read: bad vtty type %d\n",vtty->type);
+         fprintf(stderr,"vtty_read: bad vtty type %d\n",vtty->type_);
          return(-1);
    }
 
@@ -750,7 +750,7 @@ static void remote_control(vtty_t *vtty,u_char c)
       /* Reboot the C7200 */
       case 'k':
 #if 0
-         if (vm->type == VM_TYPE_C7200)
+         if (vm->type_ == VM_TYPE_C7200)
             c7200_boot_ios(VM_C7200(vm));
 #endif
          break;
@@ -1057,7 +1057,7 @@ int vtty_is_char_avail(vtty_t *vtty)
 /* Put char to vtty */
 void vtty_put_char(vtty_t *vtty, char ch)
 {
-   switch(vtty->type) {
+   switch(vtty->type_) {
       case VTTY_TYPE_NONE:
          break;
 
@@ -1074,7 +1074,7 @@ void vtty_put_char(vtty_t *vtty, char ch)
          break;
 
       default:
-         vm_error(vtty->vm,"vtty_put_char: bad vtty type %d\n",vtty->type);
+         vm_error(vtty->vm,"vtty_put_char: bad vtty type %d\n",vtty->type_);
          exit(1);
    }
 
@@ -1102,7 +1102,7 @@ void vtty_put_buffer(vtty_t *vtty,char *buf,size_t len)
 /* Flush VTTY output */
 void vtty_flush(vtty_t *vtty)
 {
-   switch(vtty->type) {
+   switch(vtty->type_) {
       case VTTY_TYPE_TERM:
       case VTTY_TYPE_SERIAL:
          if (vtty->fd_array[0] != -1)
@@ -1134,7 +1134,7 @@ static void *vtty_thread_main(void *arg)
       fd_max = -1;
       for(vtty=vtty_list;vtty;vtty=vtty->next) {
 
-          switch(vtty->type) {
+          switch(vtty->type_) {
               case VTTY_TYPE_TCP:
 
                   for(i=0;i<vtty->fd_count;i++)
@@ -1174,7 +1174,7 @@ static void *vtty_thread_main(void *arg)
       VTTY_LIST_LOCK();
       for(vtty=vtty_list;vtty;vtty=vtty->next) {
 
-         switch(vtty->type) {
+         switch(vtty->type_) {
             case VTTY_TYPE_TCP:
 
                /* check incoming connection */

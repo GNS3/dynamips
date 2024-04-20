@@ -14,16 +14,12 @@ pub(crate) mod prelude {
     pub(crate) use std::ptr::null_mut;
     pub(crate) use std::ptr::NonNull;
     pub(crate) type size_t = usize;
+    pub(crate) use crate::c::dev_vtty::vtty_t;
 
     /// cbindgen:no-export
     #[repr(C)]
     pub struct vm_instance(());
     pub type vm_instance_t = vm_instance;
-
-    /// cbindgen:no-export
-    #[repr(C)]
-    pub struct virtual_tty(());
-    pub type vtty_t = virtual_tty;
 
     extern "C" {
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
@@ -52,3 +48,4 @@ pub(crate) mod prelude {
 pub mod dev_lxt907a;
 pub mod dev_ns16552;
 pub mod dev_vtty;
+pub mod utils;
