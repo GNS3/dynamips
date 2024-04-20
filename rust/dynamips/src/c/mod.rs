@@ -8,7 +8,9 @@ pub(crate) mod prelude {
 
     pub(crate) use crate::macros::opaque_struct;
     pub(crate) use sptr::Strict;
+    pub(crate) use static_assertions::const_assert_eq;
     pub(crate) use std::ffi::*;
+    pub(crate) use std::mem::size_of;
     pub(crate) use std::ptr::null_mut;
     pub(crate) use std::ptr::NonNull;
     pub(crate) type size_t = usize;
@@ -31,7 +33,22 @@ pub(crate) mod prelude {
         pub fn vtty_is_char_avail(vtty: *mut vtty_t) -> c_int;
         pub fn vtty_put_char(vtty: *mut vtty_t, ch: c_char);
     }
+
+    // compatibility functions
+
+    pub(crate) fn strdup(s: &str) -> *mut c_char {
+        const_assert_eq!(size_of::<u8>(), size_of::<c_char>());
+        let bytes = s.as_bytes();
+        let n = bytes.len();
+        let p: *mut c_char = unsafe { libc::malloc(n + 1).cast::<_>() };
+        if !p.is_null() {
+            unsafe { libc::memcpy(p.cast::<_>(), bytes.as_ptr().cast::<_>(), n) };
+            unsafe { *p.add(n) = 0 };
+        }
+        p
+    }
 }
 
 pub mod dev_lxt907a;
 pub mod dev_ns16552;
+pub mod dev_vtty;

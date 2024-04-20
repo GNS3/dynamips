@@ -319,49 +319,6 @@ static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
    return(0);
 }
 
-/* 
- * Parse serial interface descriptor string, return 0 if success
- * string takes the form "device:baudrate:databits:parity:stopbits:hwflow"
- * device is mandatory, other options are optional (default=9600,8,N,1,0).
- */
-int vtty_parse_serial_option(vtty_serial_option_t *option, char *optarg)
-{
-   char *array[6];
-   int count;
-
-   if ((count = m_strtok(optarg, ':', array, 6)) < 1) {
-      fprintf(stderr,"vtty_parse_serial_option: invalid string\n");
-      return(-1);
-   }
-
-   if (!(option->device = strdup(array[0]))) {
-      fprintf(stderr,"vtty_parse_serial_option: unable to copy string\n");
-      return(-1);
-   }
-   
-   option->baudrate = (count>1) ? atoi(array[1]) : 9600;
-   option->databits = (count>2) ? atoi(array[2]) : 8;
-
-   if (count > 3) {
-      switch(*array[3]) {
-         case 'o':
-         case 'O': 
-            option->parity = 1;  /* odd */
-         case 'e':
-         case 'E': 
-            option->parity = 2;  /* even */
-         default:
-            option->parity = 0;  /* none */
-      }
-   } else {
-      option->parity = 0;
-   }
-
-   option->stopbits = (count>4) ? atoi(array[4]) : 1;
-   option->hwflow   = (count>5) ? atoi(array[5]) : 0;
-   return(0);
-}
-
 #if defined(__CYGWIN__) || defined(SUNOS)
 void cfmakeraw(struct termios *termios_p) {
     termios_p->c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|

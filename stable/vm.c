@@ -493,6 +493,8 @@ void vm_free(vm_instance_t *vm)
       vm_chunk_free_all(vm);
 
       /* Free various elements */
+      free(vm->vtty_aux_serial_option.device);
+      free(vm->vtty_con_serial_option.device);
       rommon_var_clear(&vm->rommon_vars);
       free(vm->rommon_vars.filename);
       free(vm->ghost_ram_filename);

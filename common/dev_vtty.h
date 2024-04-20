@@ -14,50 +14,7 @@
 #include "vm.h"
 #include <stdio.h>
 
-/* 4 Kb should be enough for a keyboard buffer */
-#define VTTY_BUFFER_SIZE  4096
-
-/* Maximum listening socket number */
-#define VTTY_MAX_FD   10
-
-/* VTTY connection types */
-enum {
-   VTTY_TYPE_NONE = 0,
-   VTTY_TYPE_TERM,
-   VTTY_TYPE_TCP,
-   VTTY_TYPE_SERIAL,
-};
-
-/* VTTY connection states (for TCP) */
-enum {
-   VTTY_STATE_TCP_INVALID,    /* connection is not working */
-   VTTY_STATE_TCP_WAITING,    /* waiting for incoming connection */
-   VTTY_STATE_TCP_RUNNING,    /* character reading/writing ok */
-};
-
-/* VTTY input states */
-enum {
-   VTTY_INPUT_TEXT,
-   VTTY_INPUT_VT1,
-   VTTY_INPUT_VT2,
-   VTTY_INPUT_REMOTE,
-   VTTY_INPUT_TELNET,
-   VTTY_INPUT_TELNET_IYOU,
-   VTTY_INPUT_TELNET_SB1,
-   VTTY_INPUT_TELNET_SB2,
-   VTTY_INPUT_TELNET_SB_TTYPE,
-   VTTY_INPUT_TELNET_NEXT
-};
-
-
-/* Commmand line support utility */
-typedef struct vtty_serial_option vtty_serial_option_t;
-struct vtty_serial_option {
-   char *device;
-   int baudrate, databits, parity, stopbits, hwflow;
-};
-
-int vtty_parse_serial_option(vtty_serial_option_t *params, char *optarg);
+#include "rust-dynamips.h"
 
 /* Virtual TTY structure */
 typedef struct virtual_tty vtty_t;
