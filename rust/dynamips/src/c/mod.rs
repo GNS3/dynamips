@@ -7,6 +7,7 @@ pub(crate) mod prelude {
     //! What is needed to interact with C code.
 
     pub(crate) use crate::macros::opaque_struct;
+    pub(crate) use sptr::Strict;
     pub(crate) use std::ffi::*;
     pub(crate) use std::ptr::null_mut;
     pub(crate) use std::ptr::NonNull;

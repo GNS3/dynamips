@@ -12,4 +12,10 @@ crate-type = ["staticlib"]
 [dependencies]
 circular-buffer = "0.1.7"
 gcd = "2.3.0"
+libc = "0.2.153"
+libc_alloc = "1.0.7"
+sptr = "0.3.2"
 tock-registers = "0.9.0"
+
+[build-dependencies]
+autocfg = "1.2.0"
