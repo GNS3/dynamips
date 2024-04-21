@@ -726,3 +726,15 @@ pub extern "C" fn vtty_flush(vtty: NonNull<vtty_t>) {
         }
     }
 }
+
+/// Returns TRUE if a character is available in buffer
+#[no_mangle]
+pub extern "C" fn vtty_is_char_avail(mut vtty: NonNull<vtty_t>) -> c_int {
+    unsafe {
+        let vtty = vtty.as_mut();
+        vtty_lock(vtty);
+        let res = (vtty.read_ptr != vtty.write_ptr).into();
+        vtty_unlock(vtty);
+        res
+    }
+}
