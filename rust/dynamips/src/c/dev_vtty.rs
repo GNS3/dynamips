@@ -637,3 +637,28 @@ pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_i
         bytes
     }
 }
+
+/// Read a character from the buffer (-1 if the buffer is empty)
+#[no_mangle]
+pub extern "C" fn vtty_get_char(mut vtty: NonNull<vtty_t>) -> c_int {
+    unsafe {
+        let vtty = vtty.as_mut();
+
+        vtty_lock(vtty);
+
+        if vtty.read_ptr == vtty.write_ptr {
+            vtty_unlock(vtty);
+            return -1;
+        }
+
+        let c = vtty.buffer[vtty.read_ptr as usize];
+        vtty.read_ptr += 1;
+
+        if vtty.read_ptr == VTTY_BUFFER_SIZE as u32 {
+            vtty.read_ptr = 0;
+        }
+
+        vtty_unlock(vtty);
+        c.into()
+    }
+}

@@ -597,27 +597,6 @@ static void vtty_read_and_store(vtty_t *vtty,int *fd_slot)
    }
 }
 
-/* Read a character from the buffer (-1 if the buffer is empty) */
-int vtty_get_char(vtty_t *vtty)
-{
-   u_char c;
-
-   VTTY_LOCK(vtty);
-   
-   if (vtty->read_ptr == vtty->write_ptr) {
-      VTTY_UNLOCK(vtty);
-      return(-1);
-   }
-   
-   c = vtty->buffer[vtty->read_ptr++];
-
-   if (vtty->read_ptr == VTTY_BUFFER_SIZE)
-      vtty->read_ptr = 0;
-
-   VTTY_UNLOCK(vtty);
-   return(c);
-}
-
 /* Returns TRUE if a character is available in buffer */
 int vtty_is_char_avail(vtty_t *vtty)
 {
