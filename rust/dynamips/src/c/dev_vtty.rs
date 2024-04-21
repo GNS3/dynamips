@@ -738,3 +738,15 @@ pub extern "C" fn vtty_is_char_avail(mut vtty: NonNull<vtty_t>) -> c_int {
         res
     }
 }
+
+/// Store CTRL+C in buffer
+#[no_mangle]
+pub extern "C" fn vtty_store_ctrlc(vtty: *mut vtty_t) -> c_int {
+    unsafe {
+        if !vtty.is_null() {
+            let vtty = &mut *vtty;
+            vtty_store(vtty, 0x03);
+        }
+        0
+    }
+}

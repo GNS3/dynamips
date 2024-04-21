@@ -177,14 +177,6 @@ static int vtty_store(vtty_t *vtty,u_char c)
    return(0);
 }
 
-/* Store CTRL+C in buffer */
-int vtty_store_ctrlc(vtty_t *vtty)
-{
-   if (vtty)
-      vtty_store(vtty,0x03);
-   return(0);
-}
-
 /* 
  * Read a character from the terminal.
  */
