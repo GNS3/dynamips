@@ -45,7 +45,11 @@ FetchContent_Declare (
    GIT_TAG b25a1fa # v0.4 always triggers rebuilds
 )
 FetchContent_MakeAvailable ( Corrosion )
-corrosion_import_crate ( MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/dynamips/Cargo.toml" PROFILE release-with-debug )
+set ( RUST_FEATURES )
+if( ENABLE_IPV6 )
+   list ( APPEND RUST_FEATURES "ENABLE_IPV6" )
+endif()
+corrosion_import_crate ( MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/dynamips/Cargo.toml" PROFILE release-with-debug FEATURES ${RUST_FEATURES} )
 corrosion_experimental_cbindgen( MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/dynamips/Cargo.toml" TARGET rust-dynamips HEADER_NAME "rust-dynamips.h" )
 list ( APPEND DYNAMIPS_LIBRARIES rust-dynamips )
 add_custom_target ( cargo_fmt COMMAND cargo fmt -v WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/rust" USES_TERMINAL )

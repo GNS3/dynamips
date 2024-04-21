@@ -20,3 +20,6 @@ tock-registers = "0.9.0"
 
 [build-dependencies]
 autocfg = "1.2.0"
+
+[features]
+ENABLE_IPV6 = []

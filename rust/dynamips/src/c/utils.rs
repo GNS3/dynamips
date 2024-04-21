@@ -13,6 +13,16 @@ pub struct fd_pool {
     pub next: *mut fd_pool,
 }
 pub type fd_pool_t = fd_pool;
+impl fd_pool {
+    pub fn new() -> Self {
+        Self { fd: [0; FD_POOL_MAX], next: null_mut() }
+    }
+}
+impl Default for fd_pool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Drop for fd_pool {
     fn drop(&mut self) {
         while !self.next.is_null() {

@@ -90,12 +90,6 @@ volatile int vm_save_state = 0;
 /* Default platform */
 static char *default_platform = "7200";
 
-/* Binding address (NULL means any or 0.0.0.0) */
-char *binding_addr = NULL;
-
-/* Console (vtty tcp) binding address (NULL means any or 0.0.0.0) */
-char *console_binding_addr = NULL;
-
 /* Generic signal handler */
 void signal_gen_handler(int sig)
 {

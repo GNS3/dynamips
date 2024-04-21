@@ -22,5 +22,16 @@ fn main() {
             autocfg::emit(cfg);
         }
     }
-    emit_dep_path_cfg("libc", "libc::just::an::example", "has_libc_just_an_example");
+    emit_dep_path_cfg("libc", "libc::B76800", "has_libc_B76800");
+    emit_dep_path_cfg("libc", "libc::B230400", "has_libc_B230400");
+    emit_dep_path_cfg("libc", "libc::CRTSCTS", "has_libc_CRTSCTS");
+    emit_dep_path_cfg("libc", "libc::CNEW_RTSCTS", "has_libc_CNEW_RTSCTS");
+    emit_dep_path_cfg("libc", "libc::cfmakeraw", "has_libc_cfmakeraw");
+    #[cfg(feature = "ENABLE_IPV6")]
+    {
+        println!("ENABLE_IPV6");
+        assert!(probe_dep_path("libc", "libc::getaddrinfo").status.success());
+        assert!(probe_dep_path("libc", "libc::freeaddrinfo").status.success());
+        assert!(probe_dep_path("libc", "libc::gai_strerror").status.success());
+    }
 }

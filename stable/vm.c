@@ -286,6 +286,12 @@ void vm_log(vm_instance_t *vm,char *module,char *format,...)
    }
 }
 
+/* temporary function for rust */
+void vm_log_msg(vm_instance_t *vm,char *module,char *msg)
+{ 
+   vm_log(vm, module, "%s", msg);
+}
+
 /* Close the log file */
 int vm_close_log(vm_instance_t *vm)
 {
