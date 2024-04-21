@@ -707,6 +707,22 @@ pub extern "C" fn vtty_put_buffer(vtty: NonNull<vtty_t>, buf: *mut c_char, len: 
             vtty_put_char(vtty, *buf.add(i));
         }
 
-        vtty_flush(vtty.as_ptr());
+        vtty_flush(vtty);
+    }
+}
+
+/// Flush VTTY output
+#[no_mangle]
+pub extern "C" fn vtty_flush(vtty: NonNull<vtty_t>) {
+    unsafe {
+        let vtty = vtty.as_ref();
+        match vtty.type_ {
+            VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
+                if vtty.fd_array[0] != -1 {
+                    libc::fsync(vtty.fd_array[0]);
+                }
+            }
+            _ => {}
+        }
     }
 }
