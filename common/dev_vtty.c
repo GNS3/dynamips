@@ -608,40 +608,6 @@ int vtty_is_char_avail(vtty_t *vtty)
    return(res);
 }
 
-/* Put char to vtty */
-void vtty_put_char(vtty_t *vtty, char ch)
-{
-   switch(vtty->type_) {
-      case VTTY_TYPE_NONE:
-         break;
-
-      case VTTY_TYPE_TERM:
-      case VTTY_TYPE_SERIAL:
-         if (write(vtty->fd_array[0],&ch,1) != 1) {
-            vm_log(vtty->vm,"VTTY","%s: put char 0x%x failed (%s)\n",
-                   vtty->name,(int)ch,strerror(errno));
-         }
-         break;
-
-      case VTTY_TYPE_TCP:
-         fd_pool_send(&vtty->fd_pool,&ch,1,0);
-         break;
-
-      default:
-         vm_error(vtty->vm,"vtty_put_char: bad vtty type %d\n",vtty->type_);
-         exit(1);
-   }
-
-   /* store char for replay */
-   vtty->replay_buffer[vtty->replay_ptr] = ch;
-
-   ++vtty->replay_ptr;
-   if (vtty->replay_ptr == VTTY_BUFFER_SIZE) {
-      vtty->replay_ptr = 0;
-      vtty->replay_full = 1;
-   }
-}
-
 /* Put a buffer to vtty */
 void vtty_put_buffer(vtty_t *vtty,char *buf,size_t len)
 {

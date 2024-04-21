@@ -29,7 +29,9 @@ pub(crate) mod prelude {
     extern "C" {
         pub fn fd_pool_free(pool: *mut fd_pool_t);
         pub fn fd_pool_init(pool: *mut fd_pool_t);
+        pub fn fd_pool_send(pool: *mut fd_pool_t, buffer: *mut c_void, len: size_t, flags: c_int) -> c_int;
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
+        pub fn vm_error_msg(vm: *mut vm_instance_t, msg: *mut c_char);
         pub fn vm_set_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vtty_flush(vtty: *mut vtty_t);
         pub fn vtty_get_char(vtty: *mut vtty_t) -> c_int;
@@ -81,6 +83,13 @@ pub(crate) mod prelude {
         msg.push('\0');
         let msg = msg.as_mut_str().as_mut_ptr().cast::<_>();
         unsafe { vm_log_msg(vm, module, msg) };
+    }
+
+    pub(crate) fn vm_error(vm: *mut vm_instance_t, msg: &str) {
+        let mut msg = msg.to_owned();
+        msg.push('\0');
+        let msg = msg.as_mut_str().as_mut_ptr().cast::<_>();
+        unsafe { vm_error_msg(vm, msg) };
     }
 
     pub trait PtrAsStr {

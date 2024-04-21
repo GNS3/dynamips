@@ -662,3 +662,39 @@ pub extern "C" fn vtty_get_char(mut vtty: NonNull<vtty_t>) -> c_int {
         c.into()
     }
 }
+
+/// Put char to vtty
+#[no_mangle]
+pub extern "C" fn vtty_put_char(mut vtty: NonNull<vtty_t>, mut ch: c_char) {
+    unsafe {
+        let vtty = vtty.as_mut();
+
+        match vtty.type_ {
+            VTTY_TYPE_NONE => {}
+
+            VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
+                if libc::write(vtty.fd_array[0], addr_of!(ch).cast::<_>(), 1) != 1 {
+                    vm_log(vtty.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.name.as_str(), ch, strerror(errno())));
+                }
+            }
+
+            VTTY_TYPE_TCP => {
+                fd_pool_send(addr_of_mut!(vtty.fd_pool), addr_of_mut!(ch).cast::<_>(), 1, 0);
+            }
+
+            _ => {
+                vm_error(vtty.vm, &format!("vtty_put_char: bad vtty type {}\n", vtty.type_));
+                libc::exit(1);
+            }
+        }
+
+        // store char for replay
+        vtty.replay_buffer[vtty.replay_ptr as usize] = ch as u8;
+
+        vtty.replay_ptr += 1;
+        if vtty.replay_ptr == VTTY_BUFFER_SIZE as u32 {
+            vtty.replay_ptr = 0;
+            vtty.replay_full = 1;
+        }
+    }
+}

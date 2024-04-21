@@ -360,6 +360,12 @@ void vm_error(vm_instance_t *vm,char *format,...)
    fprintf(stderr,"%s '%s': %s",vm_get_log_name(vm),vm->name,buffer);
 }
 
+/* temporary function for rust */
+void vm_error_msg(vm_instance_t *vm,char *msg)
+{
+   vm_error(vm, "%s", msg);
+}
+
 /* Create a new VM instance */
 static vm_instance_t *vm_create(char *name,int instance_id,
                                 vm_platform_t *platform)
