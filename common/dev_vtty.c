@@ -608,17 +608,6 @@ int vtty_is_char_avail(vtty_t *vtty)
    return(res);
 }
 
-/* Put a buffer to vtty */
-void vtty_put_buffer(vtty_t *vtty,char *buf,size_t len)
-{
-   size_t i;
-
-   for(i=0;i<len;i++)
-      vtty_put_char(vtty,buf[i]);
-   
-   vtty_flush(vtty);
-}
-
 /* Flush VTTY output */
 void vtty_flush(vtty_t *vtty)
 {

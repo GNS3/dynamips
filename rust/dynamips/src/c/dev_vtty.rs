@@ -698,3 +698,15 @@ pub extern "C" fn vtty_put_char(mut vtty: NonNull<vtty_t>, mut ch: c_char) {
         }
     }
 }
+
+/// Put a buffer to vtty
+#[no_mangle]
+pub extern "C" fn vtty_put_buffer(vtty: NonNull<vtty_t>, buf: *mut c_char, len: size_t) {
+    unsafe {
+        for i in 0..len {
+            vtty_put_char(vtty, *buf.add(i));
+        }
+
+        vtty_flush(vtty.as_ptr());
+    }
+}
