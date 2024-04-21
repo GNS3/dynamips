@@ -20,6 +20,13 @@ fn vtty_list_unlock() {
     unsafe { libc::pthread_mutex_unlock(addr_of_mut!(vtty_list_mutex)) };
 }
 
+fn vtty_lock(vtty: &mut vtty_t) {
+    unsafe { libc::pthread_mutex_lock(addr_of_mut!(vtty.lock)) };
+}
+fn vtty_unlock(vtty: &mut vtty_t) {
+    unsafe { libc::pthread_mutex_unlock(addr_of_mut!(vtty.lock)) };
+}
+
 /// 4 Kb should be enough for a keyboard buffer
 pub const VTTY_BUFFER_SIZE: usize = 4096;
 
@@ -587,5 +594,46 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
                 }
             }
         }
+    }
+}
+
+/// Store a character in the FIFO buffer
+fn vtty_store(vtty: &mut vtty_t, c: u8) -> c_int {
+    vtty_lock(vtty);
+    let mut nwptr = vtty.write_ptr + 1;
+    if nwptr == VTTY_BUFFER_SIZE as u32 {
+        nwptr = 0;
+    }
+
+    if nwptr == vtty.read_ptr {
+        vtty_unlock(vtty);
+        return -1;
+    }
+
+    vtty.buffer[vtty.write_ptr as usize] = c;
+    vtty.write_ptr = nwptr;
+    vtty_unlock(vtty);
+    0
+}
+
+/// Store arbritary data in the FIFO buffer
+#[no_mangle]
+pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_int) -> c_int {
+    unsafe {
+        if vtty.is_null() || data.is_null() || len < 0 {
+            return -1; // invalid argument
+        }
+
+        let vtty = &mut *vtty;
+        let mut bytes = 0;
+        while bytes < len {
+            if vtty_store(vtty, *data.wrapping_add(bytes as usize) as u8) == -1 {
+                break;
+            }
+            bytes += 1;
+        }
+
+        vtty.input_pending = 1;
+        bytes
     }
 }
