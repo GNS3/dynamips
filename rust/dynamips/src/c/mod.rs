@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub(crate) mod prelude {
     //! What is needed to interact with C code.
@@ -26,6 +27,7 @@ pub(crate) mod prelude {
     pub type vm_instance_t = vm_instance;
 
     extern "C" {
+        pub fn fd_pool_free(pool: *mut fd_pool_t);
         pub fn fd_pool_init(pool: *mut fd_pool_t);
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vm_set_irq(vm: *mut vm_instance_t, irq: c_uint);

@@ -549,3 +549,43 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         Box::into_raw(vtty) // memory managed by C
     }
 }
+
+/// Delete a virtual tty
+#[no_mangle]
+pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
+    unsafe {
+        if !vtty.is_null() {
+            let mut vtty = Box::from_raw(vtty); // memory managed by rust
+            vtty_list_lock();
+            if !vtty.pprev.is_null() {
+                if !vtty.next.is_null() {
+                    (*vtty.next).pprev = vtty.pprev;
+                }
+                *(vtty.pprev) = vtty.next;
+            }
+            vtty_list_unlock();
+
+            match vtty.type_ {
+                VTTY_TYPE_TCP => {
+                    for i in 0..vtty.fd_count as usize {
+                        if vtty.fd_array[i] != -1 {
+                            vm_log(vtty.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[i]));
+                            libc::close(vtty.fd_array[i]);
+                        }
+                    }
+
+                    fd_pool_free(&mut vtty.fd_pool);
+                    vtty.fd_count = 0;
+                }
+
+                _ => {
+                    // We don't close FD 0 since it is stdin
+                    if vtty.fd_array[0] > 0 {
+                        vm_log(vtty.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[0]));
+                        libc::close(vtty.fd_array[0]);
+                    }
+                }
+            }
+        }
+    }
+}
