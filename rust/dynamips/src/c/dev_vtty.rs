@@ -604,8 +604,10 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
     }
 }
 
-/// Store a character in the FIFO buffer
-fn vtty_store(vtty: &mut vtty_t, c: u8) -> c_int {
+/// Store a character in the FIFO buffer (TODO private)
+#[no_mangle]
+pub extern "C" fn vtty_store(mut vtty: NonNull<vtty_t>, c: u8) -> c_int {
+    let vtty = unsafe { vtty.as_mut() };
     vtty_lock(vtty);
     let mut nwptr = vtty.write_ptr + 1;
     if nwptr == VTTY_BUFFER_SIZE as u32 {
@@ -634,7 +636,7 @@ pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_i
         let vtty = &mut *vtty;
         let mut bytes = 0;
         while bytes < len {
-            if vtty_store(vtty, *data.wrapping_add(bytes as usize) as u8) == -1 {
+            if vtty_store(vtty.into(), *data.wrapping_add(bytes as usize) as u8) == -1 {
                 break;
             }
             bytes += 1;
@@ -752,7 +754,7 @@ pub extern "C" fn vtty_store_ctrlc(vtty: *mut vtty_t) -> c_int {
     unsafe {
         if !vtty.is_null() {
             let vtty = &mut *vtty;
-            vtty_store(vtty, 0x03);
+            vtty_store(vtty.into(), 0x03);
         }
         0
     }

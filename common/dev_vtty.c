@@ -50,27 +50,6 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
-/* Store a character in the FIFO buffer */
-static int vtty_store(vtty_t *vtty,u_char c)
-{
-   u_int nwptr;
-
-   VTTY_LOCK(vtty);
-   nwptr = vtty->write_ptr + 1;
-   if (nwptr == VTTY_BUFFER_SIZE)
-      nwptr = 0;
-
-   if (nwptr == vtty->read_ptr) {
-      VTTY_UNLOCK(vtty);
-      return(-1);
-   }
-
-   vtty->buffer[vtty->write_ptr] = c;
-   vtty->write_ptr = nwptr;
-   VTTY_UNLOCK(vtty);
-   return(0);
-}
-
 /* 
  * Read a character from the terminal.
  */
