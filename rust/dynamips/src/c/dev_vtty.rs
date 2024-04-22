@@ -910,3 +910,24 @@ pub extern "C" fn vtty_term_read(vtty: NonNull<vtty_t>) -> c_int {
         -1
     }
 }
+
+/// Read a character from the TCP connection.
+#[no_mangle]
+pub extern "C" fn vtty_tcp_read(_vtty: NonNull<vtty_t>, mut fd_slot: NonNull<c_int>) -> c_int {
+    unsafe {
+        let fd = *fd_slot.as_ref();
+        let mut c: u8 = 0;
+
+        if libc::read(fd, addr_of_mut!(c).cast::<_>(), 1) == 1 {
+            return c.into();
+        }
+
+        // problem with the connection
+        libc::shutdown(fd, 2);
+        libc::close(fd);
+        *fd_slot.as_mut() = -1;
+
+        // Shouldn't happen...
+        -1
+    }
+}

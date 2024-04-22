@@ -50,26 +50,6 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
-/* 
- * Read a character from the TCP connection.
- */
-static int vtty_tcp_read(vtty_t *vtty,int *fd_slot)
-{
-   int fd = *fd_slot;
-   u_char c;
-   
-   if (read(fd,&c,1) == 1)
-      return(c);
-
-   /* problem with the connection */
-   shutdown(fd,2);
-   close(fd);      
-   *fd_slot = -1;
-
-   /* Shouldn't happen... */
-   return(-1);
-}
-
 /*
  * Read a character from the virtual TTY.
  *
