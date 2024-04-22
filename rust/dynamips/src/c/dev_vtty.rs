@@ -5,21 +5,24 @@ use crate::c::prelude::*;
 use crate::c::utils::*;
 use crate::c::vm::*;
 use std::cmp::max;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 static mut CTRL_CODE_OK: c_int = 1;
 static mut TELNET_MESSAGE_OK: c_int = 1;
-/// VTTY list
-static mut VTTY_LIST_MUTEX: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
-static mut VTTY_LIST: *mut vtty_t = null_mut();
 static mut VTTY_THREAD: libc::pthread_t = 0;
 static mut TIOS: libc::termios = unsafe { zeroed::<libc::termios>() };
 static mut TIOS_ORIG: libc::termios = unsafe { zeroed::<libc::termios>() };
 
-fn vtty_list_lock() {
-    unsafe { libc::pthread_mutex_lock(addr_of_mut!(VTTY_LIST_MUTEX)) };
-}
-fn vtty_list_unlock() {
-    unsafe { libc::pthread_mutex_unlock(addr_of_mut!(VTTY_LIST_MUTEX)) };
+/// Allow vtty pointers to be sent between threads. (unsafe)
+#[repr(transparent)]
+struct VttyPtr(pub *mut vtty_t);
+unsafe impl Send for VttyPtr {}
+
+/// VTTY list
+fn vtty_list() -> &'static Mutex<Vec<VttyPtr>> {
+    static VTTY_LIST: OnceLock<Mutex<Vec<VttyPtr>>> = OnceLock::new();
+    VTTY_LIST.get_or_init(|| Mutex::new(Vec::new()))
 }
 
 fn vtty_lock(vtty: &mut vtty_t) {
@@ -134,8 +137,6 @@ pub struct virtual_tty {
     pub read_ptr: c_uint,
     pub write_ptr: c_uint,
     pub lock: libc::pthread_mutex_t,
-    pub next: *mut virtual_tty,
-    pub pprev: *mut *mut virtual_tty,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
     /// FD Pool (for TCP connections)
@@ -168,8 +169,6 @@ impl virtual_tty {
             read_ptr: 0,
             write_ptr: 0,
             lock: libc::PTHREAD_MUTEX_INITIALIZER,
-            next: null_mut(),
-            pprev: null_mut(),
             priv_data: null_mut(),
             user_arg: 0,
             fd_pool: fd_pool::new(),
@@ -544,17 +543,10 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
             }
         }
 
-        /* Add this new VTTY to the list */
-        vtty_list_lock();
-        vtty.next = VTTY_LIST;
-        vtty.pprev = addr_of_mut!(VTTY_LIST);
-
-        if !VTTY_LIST.is_null() {
-            (*VTTY_LIST).pprev = addr_of_mut!(vtty.next);
-        }
-
-        VTTY_LIST = addr_of_mut!(*vtty);
-        vtty_list_unlock();
+        // Add this new VTTY to the list
+        let mut list = vtty_list().lock().unwrap();
+        list.push(VttyPtr(addr_of_mut!(*vtty)));
+        drop(list);
         Box::into_raw(vtty) // memory managed by C
     }
 }
@@ -565,14 +557,9 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
     unsafe {
         if !vtty.is_null() {
             let mut vtty = Box::from_raw(vtty); // memory managed by rust
-            vtty_list_lock();
-            if !vtty.pprev.is_null() {
-                if !vtty.next.is_null() {
-                    (*vtty.next).pprev = vtty.pprev;
-                }
-                *(vtty.pprev) = vtty.next;
-            }
-            vtty_list_unlock();
+            let mut list = vtty_list().lock().unwrap();
+            list.retain(|x| x.0 != addr_of_mut!(*vtty));
+            drop(list);
 
             match vtty.type_ {
                 VTTY_TYPE_TCP => {
@@ -1126,13 +1113,11 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
         let mut tv = zeroed::<libc::timeval>();
         loop {
             // Build the FD set
-            vtty_list_lock();
+            let list = vtty_list().lock().unwrap();
             libc::FD_ZERO(addr_of_mut!(rfds));
             fd_max = -1;
-            let mut next_vtty = VTTY_LIST;
-            while !next_vtty.is_null() {
-                let mut vtty = NonNull::new(next_vtty).unwrap();
-                next_vtty = vtty.as_ref().next;
+            for vtty in list.iter() {
+                let mut vtty = NonNull::new(vtty.0).unwrap();
 
                 match vtty.as_ref().type_ {
                     VTTY_TYPE_TCP => {
@@ -1157,7 +1142,7 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                     }
                 }
             }
-            vtty_list_unlock();
+            drop(list);
 
             // Wait for incoming data
             tv.tv_sec = 0;
@@ -1172,11 +1157,9 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             }
 
             // Examine active FDs and call user handlers
-            vtty_list_lock();
-            let mut next_vtty = VTTY_LIST;
-            while !next_vtty.is_null() {
-                let mut vtty = NonNull::new(next_vtty).unwrap();
-                next_vtty = vtty.as_ref().next;
+            let list = vtty_list().lock().unwrap();
+            for vtty in list.iter() {
+                let mut vtty = NonNull::new(vtty.0).unwrap();
 
                 match vtty.as_ref().type_ {
                     VTTY_TYPE_TCP => {
@@ -1219,7 +1202,7 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                     vtty_flush(vtty);
                 }
             }
-            vtty_list_unlock();
+            drop(list);
         }
     }
 }
