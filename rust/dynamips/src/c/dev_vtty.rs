@@ -895,3 +895,18 @@ pub extern "C" fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) 
         0
     }
 }
+
+/// Read a character from the terminal (TODO private)
+#[no_mangle]
+pub extern "C" fn vtty_term_read(vtty: NonNull<vtty_t>) -> c_int {
+    unsafe {
+        let mut c: u8 = 0;
+
+        if libc::read(vtty.as_ref().fd_array[0], addr_of_mut!(c).cast::<_>(), 1) == 1 {
+            return c.into();
+        }
+
+        perror("read from vtty failed");
+        -1
+    }
+}

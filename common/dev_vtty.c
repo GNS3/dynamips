@@ -51,20 +51,6 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
 /* 
- * Read a character from the terminal.
- */
-static int vtty_term_read(vtty_t *vtty)
-{
-   u_char c;
-
-   if (read(vtty->fd_array[0],&c,1) == 1)
-      return(c);
-
-   perror("read from vtty failed");
-   return(-1);
-}
-
-/* 
  * Read a character from the TCP connection.
  */
 static int vtty_tcp_read(vtty_t *vtty,int *fd_slot)
