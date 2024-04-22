@@ -50,13 +50,6 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
-/* Send Telnet command: does the client support terminal type message? */
-static void vtty_telnet_do_ttype(int fd)
-{
-   u_char cmd[] = { IAC, DO, TELOPT_TTYPE };
-   write(fd,cmd,sizeof(cmd));
-}
-
 /* Accept a TCP connection */
 static int vtty_tcp_conn_accept(vtty_t *vtty, int nsock)
 {

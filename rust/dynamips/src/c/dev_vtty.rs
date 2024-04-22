@@ -778,12 +778,16 @@ pub extern "C" fn vtty_set_telnetmsg(n: c_int) {
 const IAC: u8 = 255;
 /// you are not to use option
 const DONT: u8 = 254;
+/// please, you use option
+const DO: u8 = 253;
 /// I will use option
 const WILL: u8 = 251;
 /// echo
 const TELOPT_ECHO: u8 = 1;
 /// suppress go ahead
 const TELOPT_SGA: u8 = 3;
+/// terminal type
+const TELOPT_TTYPE: u8 = 24;
 /// Linemode option
 const TELOPT_LINEMODE: u8 = 34;
 
@@ -810,6 +814,15 @@ pub extern "C" fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
 pub extern "C" fn vtty_telnet_dont_linemode(fd: c_int) {
     unsafe {
         let cmd = [IAC, DONT, TELOPT_LINEMODE];
+        libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
+    }
+}
+
+/// Send Telnet command: does the client support terminal type message? (TODO private)
+#[no_mangle]
+pub extern "C" fn vtty_telnet_do_ttype(fd: c_int) {
+    unsafe {
+        let cmd = [IAC, DO, TELOPT_TTYPE];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
