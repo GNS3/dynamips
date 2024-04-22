@@ -15,6 +15,7 @@ pub(crate) mod prelude {
     pub(crate) use std::ptr::null_mut;
     pub(crate) use std::ptr::NonNull;
     pub(crate) type size_t = usize;
+    pub(crate) type ssize_t = isize;
     pub(crate) use crate::c::dev_vtty::vtty_t;
     pub(crate) use crate::c::utils::fd_pool_t;
     pub(crate) use std::mem::zeroed;
@@ -28,10 +29,15 @@ pub(crate) mod prelude {
 
     extern "C" {
         pub fn fd_pool_free(pool: *mut fd_pool_t);
+        pub fn fd_pool_get_free_slot(pool: *mut fd_pool_t, slot: *mut *mut c_int) -> c_int;
         pub fn fd_pool_init(pool: *mut fd_pool_t);
         pub fn fd_pool_send(pool: *mut fd_pool_t, buffer: *mut c_void, len: size_t, flags: c_int) -> c_int;
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vm_error_msg(vm: *mut vm_instance_t, msg: *mut c_char);
+        pub fn vm_get_instance_id(vm: *mut vm_instance_t) -> c_int;
+        pub fn vm_get_name(vm: *mut vm_instance_t) -> *mut c_char;
+        pub fn vm_get_status(vm: *mut vm_instance_t) -> c_int;
+        pub fn vm_get_type(vm: *mut vm_instance_t) -> *mut c_char;
         pub fn vm_set_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vtty_flush(vtty: *mut vtty_t);
         pub fn vtty_get_char(vtty: *mut vtty_t) -> c_int;
@@ -92,6 +98,16 @@ pub(crate) mod prelude {
         unsafe { vm_error_msg(vm, msg) };
     }
 
+    pub(crate) fn fd_puts(fd: c_int, flags: c_int, msg: &str) {
+        extern "C" {
+            pub fn fd_puts(fd: c_int, flags: c_int, msg: *mut c_char) -> ssize_t;
+        }
+        let mut msg = msg.to_owned();
+        msg.push('\0');
+        let msg = msg.as_mut_str().as_mut_ptr().cast::<_>();
+        unsafe { fd_puts(fd, flags, msg) };
+    }
+
     pub trait PtrAsStr {
         fn as_str(&self) -> &str;
     }
@@ -112,3 +128,4 @@ pub mod dev_ns16552;
 pub mod dev_vtty;
 pub mod dynamips;
 pub mod utils;
+pub mod vm;

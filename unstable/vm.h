@@ -18,6 +18,8 @@
 #include "cisco_card.h"
 #include "rommon_var.h"
 
+#include "rust-dynamips.h"
+
 #define VM_PAGE_SHIFT  12
 #define VM_PAGE_SIZE   (1 << VM_PAGE_SHIFT)
 #define VM_PAGE_IMASK  (VM_PAGE_SIZE - 1)
@@ -50,14 +52,6 @@ struct vm_ghost_image {
 
 /* Size of the PCI bus pool */
 #define VM_PCI_POOL_SIZE  32
-
-/* VM instance status */
-enum {   
-   VM_STATUS_HALTED = 0,      /* VM is halted and no HW resources are used */
-   VM_STATUS_SHUTDOWN,        /* Shutdown procedure engaged */
-   VM_STATUS_RUNNING,         /* VM is running */
-   VM_STATUS_SUSPENDED,       /* VM is suspended */
-};
 
 /* Ghost RAM status */
 enum {

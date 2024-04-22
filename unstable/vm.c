@@ -1358,5 +1358,13 @@ int vm_set_tsg(vm_instance_t *vm,int group)
    return(0);
 }
 
-
-
+/* temporary functions for rust */
+int vm_get_instance_id(vm_instance_t *vm) {
+   return(vm->instance_id);
+}
+char *vm_get_name(vm_instance_t *vm) {
+   return(vm->name);
+}
+int vm_get_status(vm_instance_t *vm) {
+   return(vm->status);
+}

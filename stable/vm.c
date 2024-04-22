@@ -1348,3 +1348,13 @@ int vm_oir_stop(vm_instance_t *vm,u_int slot,u_int subslot)
    return(-1);
 }
 
+/* temporary functions for rust */
+int vm_get_instance_id(vm_instance_t *vm) {
+   return(vm->instance_id);
+}
+char *vm_get_name(vm_instance_t *vm) {
+   return(vm->name);
+}
+int vm_get_status(vm_instance_t *vm) {
+   return(vm->status);
+}

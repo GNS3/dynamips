@@ -733,3 +733,9 @@ ssize_t fd_printf(int fd,int flags,char *fmt,...)
    
    return(send(fd,buffer,strlen(buffer),flags));
 }
+
+/* temporary function for rust */
+ssize_t fd_puts(int fd,int flags,char *msg)
+{
+   fd_printf(fd, flags, "%s", msg);
+}
