@@ -931,3 +931,24 @@ pub extern "C" fn vtty_tcp_read(_vtty: NonNull<vtty_t>, mut fd_slot: NonNull<c_i
         -1
     }
 }
+
+/// Read a character from the virtual TTY.
+///
+/// If the VTTY is a TCP connection, restart it in case of error.
+#[no_mangle]
+pub extern "C" fn vtty_read(vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) -> c_int {
+    unsafe {
+        match vtty.as_ref().type_ {
+            VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
+                return vtty_term_read(vtty);
+            }
+            VTTY_TYPE_TCP => {
+                return vtty_tcp_read(vtty, fd_slot);
+            }
+            _ => {
+                eprintln!("vtty_read: bad vtty type {}\n", vtty.as_ref().type_);
+                return -1;
+            }
+        }
+    }
+}
