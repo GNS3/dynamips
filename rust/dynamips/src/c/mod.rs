@@ -32,6 +32,7 @@ pub(crate) mod prelude {
         pub fn fd_pool_get_free_slot(pool: *mut fd_pool_t, slot: *mut *mut c_int) -> c_int;
         pub fn fd_pool_init(pool: *mut fd_pool_t);
         pub fn fd_pool_send(pool: *mut fd_pool_t, buffer: *mut c_void, len: size_t, flags: c_int) -> c_int;
+        pub fn remote_control(vtty: NonNull<vtty_t>, c: u8);
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vm_error_msg(vm: *mut vm_instance_t, msg: *mut c_char);
         pub fn vm_get_instance_id(vm: *mut vm_instance_t) -> c_int;
