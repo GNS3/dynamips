@@ -50,13 +50,6 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
-/* Send Telnet command: WILL TELOPT_ECHO */
-static void vtty_telnet_will_echo(int fd)
-{
-   u_char cmd[] = { IAC, WILL, TELOPT_ECHO };
-   write(fd,cmd,sizeof(cmd));
-}
-
 /* Send Telnet command: Suppress Go-Ahead */
 static void vtty_telnet_will_suppress_go_ahead(int fd)
 {

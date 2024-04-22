@@ -772,3 +772,20 @@ pub extern "C" fn vtty_set_telnetmsg(n: c_int) {
         telnet_message_ok = n;
     }
 }
+
+// from arpa/telnet.h
+/// interpret as command
+const IAC: u8 = 255;
+/// I will use option
+const WILL: u8 = 251;
+/// echo
+const TELOPT_ECHO: u8 = 1;
+
+/// Send Telnet command: WILL TELOPT_ECHO (TODO private)
+#[no_mangle]
+pub extern "C" fn vtty_telnet_will_echo(fd: c_int) {
+    unsafe {
+        let cmd = [IAC, WILL, TELOPT_ECHO];
+        libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
+    }
+}
