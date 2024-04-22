@@ -7,6 +7,9 @@ use crate::c::utils::*;
 /// TODO private
 #[no_mangle]
 pub static mut ctrl_code_ok: c_int = 1;
+/// TODO private
+#[no_mangle]
+pub static mut telnet_message_ok: c_int = 1;
 /// VTTY list (TODO private)
 #[no_mangle]
 pub static mut vtty_list_mutex: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
@@ -759,5 +762,13 @@ pub extern "C" fn vtty_store_ctrlc(vtty: *mut vtty_t) -> c_int {
 pub extern "C" fn vtty_set_ctrlhandler(n: c_int) {
     unsafe {
         ctrl_code_ok = n;
+    }
+}
+
+/// Allow the user to disable the telnet message for AUX and CONSOLE
+#[no_mangle]
+pub extern "C" fn vtty_set_telnetmsg(n: c_int) {
+    unsafe {
+        telnet_message_ok = n;
     }
 }
