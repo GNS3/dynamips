@@ -4,6 +4,7 @@ use crate::c::dynamips::*;
 use crate::c::prelude::*;
 use crate::c::utils::*;
 use crate::c::vm::*;
+use circular_buffer::CircularBuffer;
 use std::cmp::max;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -121,6 +122,8 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    /// Old text for replay
+    pub replay_buffer: CircularBuffer<VTTY_BUFFER_SIZE, u8>,
 }
 impl Vtty {
     pub fn new() -> Self {
@@ -171,10 +174,6 @@ pub struct virtual_tty {
     pub fd_pool: fd_pool_t,
     /// Read notification
     pub read_notifier: Option<unsafe extern "C" fn(_: *mut virtual_tty)>,
-    /// Old text for replay
-    pub replay_buffer: [u8; VTTY_BUFFER_SIZE],
-    pub replay_ptr: c_uint,
-    pub replay_full: u8,
 }
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
@@ -201,9 +200,6 @@ impl virtual_tty {
             user_arg: 0,
             fd_pool: fd_pool::new(),
             read_notifier: None,
-            replay_buffer: [0; VTTY_BUFFER_SIZE],
-            replay_ptr: 0,
-            replay_full: 0,
         }
     }
 }
@@ -686,37 +682,31 @@ pub extern "C" fn vtty_get_char(mut vtty: NonNull<vtty_t>) -> c_int {
 
 /// Put char to vtty
 #[no_mangle]
-pub extern "C" fn vtty_put_char(mut vtty: NonNull<vtty_t>, mut ch: c_char) {
+pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, mut ch: c_char) {
     unsafe {
-        let vtty = vtty.as_mut();
+        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
 
-        match vtty.type_ {
+        match vtty.c.type_ {
             VTTY_TYPE_NONE => {}
 
             VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
-                if libc::write(vtty.fd_array[0], addr_of!(ch).cast::<_>(), 1) != 1 {
-                    vm_log(vtty.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.name.as_str(), ch, strerror(errno())));
+                if libc::write(vtty.c.fd_array[0], addr_of!(ch).cast::<_>(), 1) != 1 {
+                    vm_log(vtty.c.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.c.name.as_str(), ch, strerror(errno())));
                 }
             }
 
             VTTY_TYPE_TCP => {
-                fd_pool_send(addr_of_mut!(vtty.fd_pool), addr_of_mut!(ch).cast::<_>(), 1, 0);
+                fd_pool_send(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(ch).cast::<_>(), 1, 0);
             }
 
             _ => {
-                vm_error(vtty.vm, &format!("vtty_put_char: bad vtty type {}\n", vtty.type_));
+                vm_error(vtty.c.vm, &format!("vtty_put_char: bad vtty type {}\n", vtty.c.type_));
                 libc::exit(1);
             }
         }
 
         // store char for replay
-        vtty.replay_buffer[vtty.replay_ptr as usize] = ch as u8;
-
-        vtty.replay_ptr += 1;
-        if vtty.replay_ptr == VTTY_BUFFER_SIZE as u32 {
-            vtty.replay_ptr = 0;
-            vtty.replay_full = 1;
-        }
+        vtty.replay_buffer.push_back(ch as u8);
     }
 }
 
@@ -849,65 +839,54 @@ fn vtty_telnet_do_ttype(fd: c_int) {
 }
 
 /// Accept a TCP connection
-fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
+fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
     unsafe {
-        let vtty = vtty.as_mut();
+        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
         let nsock = nsock as usize;
         let mut fd_slot: *mut c_int = null_mut();
 
-        if fd_pool_get_free_slot(addr_of_mut!(vtty.fd_pool), addr_of_mut!(fd_slot)) < 0 {
-            vm_error(vtty.vm, "unable to create a new VTTY TCP connection\n");
+        if fd_pool_get_free_slot(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(fd_slot)) < 0 {
+            vm_error(vtty.c.vm, "unable to create a new VTTY TCP connection\n");
             return -1;
         }
 
-        let fd = libc::accept(vtty.fd_array[nsock], null_mut(), null_mut());
+        let fd = libc::accept(vtty.c.fd_array[nsock], null_mut(), null_mut());
         if fd < 0 {
-            vm_error(vtty.vm, &format!("vtty_tcp_conn_accept: accept on port {} failed {}\n", vtty.tcp_port, strerror(errno())));
+            vm_error(vtty.c.vm, &format!("vtty_tcp_conn_accept: accept on port {} failed {}\n", vtty.c.tcp_port, strerror(errno())));
             return -1;
         }
 
         // Register the new FD
         *fd_slot = fd;
 
-        vm_log(vtty.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.name.as_str(), vtty.fd_array[nsock], fd));
+        vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.c.name.as_str(), vtty.c.fd_array[nsock], fd));
 
         // Adapt Telnet settings
-        if vtty.terminal_support != 0 {
+        if vtty.c.terminal_support != 0 {
             vtty_telnet_do_ttype(fd);
             vtty_telnet_will_echo(fd);
             vtty_telnet_will_suppress_go_ahead(fd);
             vtty_telnet_dont_linemode(fd);
-            vtty.input_state = VTTY_INPUT_TEXT;
+            vtty.c.input_state = VTTY_INPUT_TEXT;
         }
 
         if TELNET_MESSAGE_OK == 1 {
-            fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.vm).as_str(), vm_get_instance_id(vtty.vm), vm_get_type(vtty.vm).as_str(), vtty.name.as_str()));
+            fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.c.vm).as_str(), vm_get_instance_id(vtty.c.vm), vm_get_type(vtty.c.vm).as_str(), vtty.c.name.as_str()));
             // replay old text
-            if vtty.replay_full != 0 {
-                let mut i = vtty.replay_ptr as usize;
-                while i < VTTY_BUFFER_SIZE {
-                    let n = libc::send(fd, addr_of!(vtty.replay_buffer[i]).cast::<_>(), VTTY_BUFFER_SIZE - i, 0);
-                    if n < 0 {
-                        perror("vtty_tcp_conn_accept: send");
-                        break;
-                    }
-                    i += n as usize;
-                }
-            }
-            let mut i = 0;
-            while i < vtty.read_ptr as usize {
-                let n = libc::send(fd, addr_of!(vtty.replay_buffer[i]).cast::<_>(), vtty.replay_ptr as usize - i, 0);
+            let mut bytes = vtty.replay_buffer.make_contiguous();
+            while !bytes.is_empty() {
+                let n = libc::send(fd, bytes.as_ptr().cast::<_>(), bytes.len(), 0);
                 if n < 0 {
                     perror("vtty_tcp_conn_accept: send");
                     break;
                 }
-                i += n as usize;
+                bytes = &mut bytes[n as usize..];
             }
             // warn if not running
-            if vm_get_status(vtty.vm) != VM_STATUS_RUNNING {
-                fd_puts(fd, 0, &format!("\r\n!!! WARNING - VM is not running, will be unresponsive (status={}) !!!\r\n", vm_get_status(vtty.vm)));
+            if vm_get_status(vtty.c.vm) != VM_STATUS_RUNNING {
+                fd_puts(fd, 0, &format!("\r\n!!! WARNING - VM is not running, will be unresponsive (status={}) !!!\r\n", vm_get_status(vtty.c.vm)));
             }
-            vtty_flush(vtty.into());
+            vtty_flush((&mut vtty.c).into());
         }
         0
     }
