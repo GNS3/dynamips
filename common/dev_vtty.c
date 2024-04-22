@@ -50,14 +50,8 @@ static pthread_t vtty_thread;
 #define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
 #define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
 
-static int ctrl_code_ok = 1;
 static int telnet_message_ok = 1;
 
-/* Allow the user to disable the CTRL code for the monitor interface */
-void vtty_set_ctrlhandler(int n)
-{
-  ctrl_code_ok = n;
-}
 /* Allow the user to disable the telnet message for AUX and CONSOLE */
 void vtty_set_telnetmsg(int n)
 {

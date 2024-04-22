@@ -4,6 +4,9 @@ use crate::c::dynamips::*;
 use crate::c::prelude::*;
 use crate::c::utils::*;
 
+/// TODO private
+#[no_mangle]
+pub static mut ctrl_code_ok: c_int = 1;
 /// VTTY list (TODO private)
 #[no_mangle]
 pub static mut vtty_list_mutex: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
@@ -748,5 +751,13 @@ pub extern "C" fn vtty_store_ctrlc(vtty: *mut vtty_t) -> c_int {
             vtty_store(vtty, 0x03);
         }
         0
+    }
+}
+
+// Allow the user to disable the CTRL code for the monitor interface */
+#[no_mangle]
+pub extern "C" fn vtty_set_ctrlhandler(n: c_int) {
+    unsafe {
+        ctrl_code_ok = n;
     }
 }
