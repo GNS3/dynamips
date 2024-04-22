@@ -780,12 +780,23 @@ const IAC: u8 = 255;
 const WILL: u8 = 251;
 /// echo
 const TELOPT_ECHO: u8 = 1;
+/// suppress go ahead
+const TELOPT_SGA: u8 = 3;
 
 /// Send Telnet command: WILL TELOPT_ECHO (TODO private)
 #[no_mangle]
 pub extern "C" fn vtty_telnet_will_echo(fd: c_int) {
     unsafe {
         let cmd = [IAC, WILL, TELOPT_ECHO];
+        libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
+    }
+}
+
+/// Send Telnet command: Suppress Go-Ahead (TODO private)
+#[no_mangle]
+pub extern "C" fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
+    unsafe {
+        let cmd = [IAC, WILL, TELOPT_SGA];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
