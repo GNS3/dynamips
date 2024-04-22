@@ -26,13 +26,6 @@ fn vtty_list() -> &'static Mutex<Vec<VttyPtr>> {
     VTTY_LIST.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-fn vtty_lock(vtty: &mut vtty_t) {
-    unsafe { libc::pthread_mutex_lock(addr_of_mut!(vtty.lock)) };
-}
-fn vtty_unlock(vtty: &mut vtty_t) {
-    unsafe { libc::pthread_mutex_unlock(addr_of_mut!(vtty.lock)) };
-}
-
 /// 4 Kb should be enough for a keyboard buffer
 pub const VTTY_BUFFER_SIZE: usize = 4096;
 
@@ -122,6 +115,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    pub buffer: Mutex<CircularBuffer<VTTY_BUFFER_SIZE, u8>>,
     /// Old text for replay
     pub replay_buffer: CircularBuffer<VTTY_BUFFER_SIZE, u8>,
 }
@@ -164,10 +158,6 @@ pub struct virtual_tty {
     pub telnet_opt: c_int,
     pub telnet_qual: c_int,
     pub managed_flush: c_int,
-    pub buffer: [u8; VTTY_BUFFER_SIZE],
-    pub read_ptr: c_uint,
-    pub write_ptr: c_uint,
-    pub lock: libc::pthread_mutex_t,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
     /// FD Pool (for TCP connections)
@@ -192,10 +182,6 @@ impl virtual_tty {
             telnet_opt: 0,
             telnet_qual: 0,
             managed_flush: 0,
-            buffer: [0; VTTY_BUFFER_SIZE],
-            read_ptr: 0,
-            write_ptr: 0,
-            lock: libc::PTHREAD_MUTEX_INITIALIZER,
             priv_data: null_mut(),
             user_arg: 0,
             fd_pool: fd_pool::new(),
@@ -529,7 +515,6 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         vtty.type_ = type_;
         vtty.vm = vm;
         vtty.fd_count = 0;
-        libc::pthread_mutex_init(&mut vtty.lock, null_mut());
         vtty.terminal_support = 1;
         vtty.input_state = VTTY_INPUT_TEXT;
         fd_pool_init(&mut vtty.fd_pool);
@@ -614,23 +599,15 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
 
 /// Store a character in the FIFO buffer (TODO private)
 #[no_mangle]
-pub extern "C" fn vtty_store(mut vtty: NonNull<vtty_t>, c: u8) -> c_int {
-    let vtty = unsafe { vtty.as_mut() };
-    vtty_lock(vtty);
-    let mut nwptr = vtty.write_ptr + 1;
-    if nwptr == VTTY_BUFFER_SIZE as u32 {
-        nwptr = 0;
+pub extern "C" fn vtty_store(vtty: NonNull<vtty_t>, c: u8) -> c_int {
+    unsafe {
+        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
+        if vtty.buffer.lock().unwrap().try_push_back(c).is_ok() {
+            0
+        } else {
+            -1
+        }
     }
-
-    if nwptr == vtty.read_ptr {
-        vtty_unlock(vtty);
-        return -1;
-    }
-
-    vtty.buffer[vtty.write_ptr as usize] = c;
-    vtty.write_ptr = nwptr;
-    vtty_unlock(vtty);
-    0
 }
 
 /// Store arbritary data in the FIFO buffer
@@ -657,26 +634,14 @@ pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_i
 
 /// Read a character from the buffer (-1 if the buffer is empty)
 #[no_mangle]
-pub extern "C" fn vtty_get_char(mut vtty: NonNull<vtty_t>) -> c_int {
+pub extern "C" fn vtty_get_char(vtty: NonNull<vtty_t>) -> c_int {
     unsafe {
-        let vtty = vtty.as_mut();
-
-        vtty_lock(vtty);
-
-        if vtty.read_ptr == vtty.write_ptr {
-            vtty_unlock(vtty);
-            return -1;
+        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
+        if let Some(c) = vtty.buffer.lock().unwrap().pop_front() {
+            c.into()
+        } else {
+            -1
         }
-
-        let c = vtty.buffer[vtty.read_ptr as usize];
-        vtty.read_ptr += 1;
-
-        if vtty.read_ptr == VTTY_BUFFER_SIZE as u32 {
-            vtty.read_ptr = 0;
-        }
-
-        vtty_unlock(vtty);
-        c.into()
     }
 }
 
@@ -740,13 +705,11 @@ pub extern "C" fn vtty_flush(vtty: NonNull<vtty_t>) {
 
 /// Returns TRUE if a character is available in buffer
 #[no_mangle]
-pub extern "C" fn vtty_is_char_avail(mut vtty: NonNull<vtty_t>) -> c_int {
+pub extern "C" fn vtty_is_char_avail(vtty: NonNull<vtty_t>) -> c_int {
     unsafe {
-        let vtty = vtty.as_mut();
-        vtty_lock(vtty);
-        let res = (vtty.read_ptr != vtty.write_ptr).into();
-        vtty_unlock(vtty);
-        res
+        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
+        let not_empty = !vtty.buffer.lock().unwrap().is_empty();
+        not_empty.into()
     }
 }
 
