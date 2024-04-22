@@ -42,10 +42,6 @@ pub(crate) mod prelude {
         pub fn vm_get_status(vm: *mut vm_instance_t) -> c_int;
         pub fn vm_get_type(vm: *mut vm_instance_t) -> *mut c_char;
         pub fn vm_set_irq(vm: *mut vm_instance_t, irq: c_uint);
-        pub fn vtty_flush(vtty: *mut vtty_t);
-        pub fn vtty_get_char(vtty: *mut vtty_t) -> c_int;
-        pub fn vtty_is_char_avail(vtty: *mut vtty_t) -> c_int;
-        pub fn vtty_put_char(vtty: *mut vtty_t, ch: c_char);
         pub fn vm_log_msg(vm: *mut vm_instance_t, module: *mut c_char, msg: *mut c_char);
     }
 

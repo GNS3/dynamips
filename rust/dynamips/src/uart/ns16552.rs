@@ -3,6 +3,7 @@
 //! References
 //! * [PC16552C/NS16C552 Dual Universal Asynchronous Receiver/Transmitter with FIFOs](https://github.com/flaviojs/dynamips-datasheets/blob/master/console/NS16552V.pdf)
 
+use crate::c::dev_vtty::*;
 use crate::c::prelude::*;
 use crate::utils::Fraction;
 use circular_buffer::CircularBuffer;
@@ -186,7 +187,7 @@ impl Uart {
             self.modem.ri = false;
         } else {
             self.modem.cts = true; // assume the vtty can send data
-            self.modem.dsr = unsafe { vtty_is_char_avail(self.vtty) != 0 };
+            self.modem.dsr = unsafe { vtty_is_char_avail(NonNull::new_unchecked(self.vtty)) != 0 };
             self.modem.dcd = true; // assume the vtty is connected
             self.modem.ri = false; // vtty does not have incoming calls
         }
@@ -201,7 +202,7 @@ impl Uart {
         if self.mcr.matches_all(ModemControl::LOOP::WithLoopback) {
             self.transmitter.transmit_byte.is_some()
         } else {
-            !self.vtty.is_null() && unsafe { vtty_is_char_avail(self.vtty) != 0 }
+            !self.vtty.is_null() && unsafe { vtty_is_char_avail(NonNull::new_unchecked(self.vtty)) != 0 }
         }
     }
     pub fn receive_packet(&mut self) -> bool {
@@ -211,7 +212,7 @@ impl Uart {
             if self.vtty.is_null() {
                 return false;
             }
-            u8::try_from(unsafe { vtty_get_char(self.vtty) }).ok()
+            u8::try_from(unsafe { vtty_get_char(NonNull::new_unchecked(self.vtty)) }).ok()
         };
         if let Some(byte) = some_byte {
             if self.fcr.matches_all(FifoControl::FE::FifoDisable) && self.receiver.has_data() {
@@ -244,7 +245,7 @@ impl Uart {
                 if self.vtty.is_null() {
                     return false;
                 }
-                unsafe { vtty_put_char(self.vtty, byte as c_char) };
+                unsafe { vtty_put_char(NonNull::new_unchecked(self.vtty), byte as c_char) };
             }
             true
         } else {
@@ -296,7 +297,7 @@ impl Uart {
             if self.mcr.matches_all(ModemControl::LOOP::WithLoopback) {
                 self.transmitter.transmit_byte = None;
             } else if !self.vtty.is_null() {
-                unsafe { vtty_flush(self.vtty) };
+                unsafe { vtty_flush(NonNull::new_unchecked(self.vtty)) };
             }
             self.lsr.modify(LineStatus::TEMT::DoneTransmitting);
         }

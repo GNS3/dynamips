@@ -6,27 +6,20 @@ use crate::c::utils::*;
 use crate::c::vm::*;
 use std::cmp::max;
 
-/// TODO private
-#[no_mangle]
-pub static mut ctrl_code_ok: c_int = 1;
-/// TODO private
-#[no_mangle]
-pub static mut telnet_message_ok: c_int = 1;
-/// VTTY list (TODO private)
-#[no_mangle]
-pub static mut vtty_list_mutex: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
-// TODO private
-#[no_mangle]
-pub static mut vtty_list: *mut vtty_t = null_mut();
+static mut CTRL_CODE_OK: c_int = 1;
+static mut TELNET_MESSAGE_OK: c_int = 1;
+/// VTTY list
+static mut VTTY_LIST_MUTEX: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
+static mut VTTY_LIST: *mut vtty_t = null_mut();
 static mut VTTY_THREAD: libc::pthread_t = 0;
 static mut TIOS: libc::termios = unsafe { zeroed::<libc::termios>() };
 static mut TIOS_ORIG: libc::termios = unsafe { zeroed::<libc::termios>() };
 
 fn vtty_list_lock() {
-    unsafe { libc::pthread_mutex_lock(addr_of_mut!(vtty_list_mutex)) };
+    unsafe { libc::pthread_mutex_lock(addr_of_mut!(VTTY_LIST_MUTEX)) };
 }
 fn vtty_list_unlock() {
-    unsafe { libc::pthread_mutex_unlock(addr_of_mut!(vtty_list_mutex)) };
+    unsafe { libc::pthread_mutex_unlock(addr_of_mut!(VTTY_LIST_MUTEX)) };
 }
 
 fn vtty_lock(vtty: &mut vtty_t) {
@@ -553,14 +546,14 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
 
         /* Add this new VTTY to the list */
         vtty_list_lock();
-        vtty.next = vtty_list;
-        vtty.pprev = addr_of_mut!(vtty_list);
+        vtty.next = VTTY_LIST;
+        vtty.pprev = addr_of_mut!(VTTY_LIST);
 
-        if !vtty_list.is_null() {
-            (*vtty_list).pprev = addr_of_mut!(vtty.next);
+        if !VTTY_LIST.is_null() {
+            (*VTTY_LIST).pprev = addr_of_mut!(vtty.next);
         }
 
-        vtty_list = addr_of_mut!(*vtty);
+        VTTY_LIST = addr_of_mut!(*vtty);
         vtty_list_unlock();
         Box::into_raw(vtty) // memory managed by C
     }
@@ -762,11 +755,11 @@ pub extern "C" fn vtty_store_ctrlc(vtty: *mut vtty_t) -> c_int {
     }
 }
 
-// Allow the user to disable the CTRL code for the monitor interface */
+// Allow the user to disable the CTRL code for the monitor interface
 #[no_mangle]
 pub extern "C" fn vtty_set_ctrlhandler(n: c_int) {
     unsafe {
-        ctrl_code_ok = n;
+        CTRL_CODE_OK = n;
     }
 }
 
@@ -774,7 +767,7 @@ pub extern "C" fn vtty_set_ctrlhandler(n: c_int) {
 #[no_mangle]
 pub extern "C" fn vtty_set_telnetmsg(n: c_int) {
     unsafe {
-        telnet_message_ok = n;
+        TELNET_MESSAGE_OK = n;
     }
 }
 
@@ -806,18 +799,16 @@ const TELQUAL_IS: u8 = 0;
 /// send option
 const TELQUAL_SEND: u8 = 1;
 
-/// Send Telnet command: WILL TELOPT_ECHO (TODO private)
-#[no_mangle]
-pub extern "C" fn vtty_telnet_will_echo(fd: c_int) {
+/// Send Telnet command: WILL TELOPT_ECHO
+fn vtty_telnet_will_echo(fd: c_int) {
     unsafe {
         let cmd = [IAC, WILL, TELOPT_ECHO];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
 
-/// Send Telnet command: Suppress Go-Ahead (TODO private)
-#[no_mangle]
-pub extern "C" fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
+/// Send Telnet command: Suppress Go-Ahead
+fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
     unsafe {
         let cmd = [IAC, WILL, TELOPT_SGA];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
@@ -825,26 +816,23 @@ pub extern "C" fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
 }
 
 /// Send Telnet command: Don't use linemode
-#[no_mangle]
-pub extern "C" fn vtty_telnet_dont_linemode(fd: c_int) {
+fn vtty_telnet_dont_linemode(fd: c_int) {
     unsafe {
         let cmd = [IAC, DONT, TELOPT_LINEMODE];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
 
-/// Send Telnet command: does the client support terminal type message? (TODO private)
-#[no_mangle]
-pub extern "C" fn vtty_telnet_do_ttype(fd: c_int) {
+/// Send Telnet command: does the client support terminal type message?
+fn vtty_telnet_do_ttype(fd: c_int) {
     unsafe {
         let cmd = [IAC, DO, TELOPT_TTYPE];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
 
-/// Accept a TCP connection (TODO private)
-#[no_mangle]
-pub extern "C" fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
+/// Accept a TCP connection
+fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
     unsafe {
         let vtty = vtty.as_mut();
         let nsock = nsock as usize;
@@ -875,7 +863,7 @@ pub extern "C" fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) 
             vtty.input_state = VTTY_INPUT_TEXT;
         }
 
-        if telnet_message_ok == 1 {
+        if TELNET_MESSAGE_OK == 1 {
             fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.vm).as_str(), vm_get_instance_id(vtty.vm), vm_get_type(vtty.vm).as_str(), vtty.name.as_str()));
             // replay old text
             if vtty.replay_full != 0 {
@@ -908,9 +896,8 @@ pub extern "C" fn vtty_tcp_conn_accept(mut vtty: NonNull<vtty_t>, nsock: c_int) 
     }
 }
 
-/// Read a character from the terminal (TODO private)
-#[no_mangle]
-pub extern "C" fn vtty_term_read(vtty: NonNull<vtty_t>) -> c_int {
+/// Read a character from the terminal
+fn vtty_term_read(vtty: NonNull<vtty_t>) -> c_int {
     unsafe {
         let mut c: u8 = 0;
 
@@ -924,8 +911,7 @@ pub extern "C" fn vtty_term_read(vtty: NonNull<vtty_t>) -> c_int {
 }
 
 /// Read a character from the TCP connection.
-#[no_mangle]
-pub extern "C" fn vtty_tcp_read(_vtty: NonNull<vtty_t>, mut fd_slot: NonNull<c_int>) -> c_int {
+fn vtty_tcp_read(_vtty: NonNull<vtty_t>, mut fd_slot: NonNull<c_int>) -> c_int {
     unsafe {
         let fd = *fd_slot.as_ref();
         let mut c: u8 = 0;
@@ -947,8 +933,7 @@ pub extern "C" fn vtty_tcp_read(_vtty: NonNull<vtty_t>, mut fd_slot: NonNull<c_i
 /// Read a character from the virtual TTY.
 ///
 /// If the VTTY is a TCP connection, restart it in case of error.
-#[no_mangle]
-pub extern "C" fn vtty_read(vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) -> c_int {
+fn vtty_read(vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) -> c_int {
     unsafe {
         match vtty.as_ref().type_ {
             VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => vtty_term_read(vtty),
@@ -962,8 +947,7 @@ pub extern "C" fn vtty_read(vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) -> c
 }
 
 /// Read a character (until one is available) and store it in buffer
-#[no_mangle]
-pub extern "C" fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
+fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
     unsafe {
         // wait until we get a character input
         let c = vtty_read(vtty, fd_slot);
@@ -991,7 +975,7 @@ pub extern "C" fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNul
 
                     /* Ctrl + ']' (0x1d, 29), or Alt-Gr + '*' (0xb3, 179) */
                     0x1d | 0xb3 => {
-                        if ctrl_code_ok == 1 {
+                        if CTRL_CODE_OK == 1 {
                             vtty.as_mut().input_state = VTTY_INPUT_REMOTE;
                         } else {
                             vtty_store(vtty, c);
@@ -1128,16 +1112,14 @@ pub extern "C" fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNul
 }
 
 /// VTTY TCP input
-#[no_mangle]
-pub extern "C" fn vtty_tcp_input(fd_slot: *mut c_int, opt: *mut c_void) {
+extern "C" fn vtty_tcp_input(fd_slot: *mut c_int, opt: *mut c_void) {
     let vtty = NonNull::new(opt.cast::<vtty_t>()).unwrap();
     let fd_slot = NonNull::new(fd_slot).unwrap();
     vtty_read_and_store(vtty, fd_slot);
 }
 
 // VTTY thread
-#[no_mangle]
-pub extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
+extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
     unsafe {
         let mut rfds = zeroed::<libc::fd_set>();
         let mut fd_max;
@@ -1147,7 +1129,7 @@ pub extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             vtty_list_lock();
             libc::FD_ZERO(addr_of_mut!(rfds));
             fd_max = -1;
-            let mut next_vtty = vtty_list;
+            let mut next_vtty = VTTY_LIST;
             while !next_vtty.is_null() {
                 let mut vtty = NonNull::new(next_vtty).unwrap();
                 next_vtty = vtty.as_ref().next;
@@ -1191,7 +1173,7 @@ pub extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
 
             // Examine active FDs and call user handlers
             vtty_list_lock();
-            let mut next_vtty = vtty_list;
+            let mut next_vtty = VTTY_LIST;
             while !next_vtty.is_null() {
                 let mut vtty = NonNull::new(next_vtty).unwrap();
                 next_vtty = vtty.as_ref().next;
