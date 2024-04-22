@@ -776,12 +776,16 @@ pub extern "C" fn vtty_set_telnetmsg(n: c_int) {
 // from arpa/telnet.h
 /// interpret as command
 const IAC: u8 = 255;
+/// you are not to use option
+const DONT: u8 = 254;
 /// I will use option
 const WILL: u8 = 251;
 /// echo
 const TELOPT_ECHO: u8 = 1;
 /// suppress go ahead
 const TELOPT_SGA: u8 = 3;
+/// Linemode option
+const TELOPT_LINEMODE: u8 = 34;
 
 /// Send Telnet command: WILL TELOPT_ECHO (TODO private)
 #[no_mangle]
@@ -797,6 +801,15 @@ pub extern "C" fn vtty_telnet_will_echo(fd: c_int) {
 pub extern "C" fn vtty_telnet_will_suppress_go_ahead(fd: c_int) {
     unsafe {
         let cmd = [IAC, WILL, TELOPT_SGA];
+        libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
+    }
+}
+
+/// Send Telnet command: Don't use linemode
+#[no_mangle]
+pub extern "C" fn vtty_telnet_dont_linemode(fd: c_int) {
+    unsafe {
+        let cmd = [IAC, DONT, TELOPT_LINEMODE];
         libc::write(fd, cmd.as_ptr().cast::<_>(), cmd.len());
     }
 }
