@@ -1124,3 +1124,10 @@ pub extern "C" fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNul
         }
     }
 }
+
+/// VTTY TCP input
+#[no_mangle]
+pub extern "C" fn vtty_tcp_input(fd_slot: NonNull<c_int>, opt: *mut c_void) {
+    let vtty = NonNull::new(opt.cast::<vtty_t>()).unwrap();
+    vtty_read_and_store(vtty, fd_slot);
+}

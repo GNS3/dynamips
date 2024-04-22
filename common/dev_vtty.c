@@ -250,12 +250,6 @@ void remote_control(vtty_t *vtty,u_char c)
    }
 }
 
-/* VTTY TCP input */
-static void vtty_tcp_input(int *fd_slot,void *opt)
-{
-   vtty_read_and_store((vtty_t *)opt,fd_slot);
-}
-
 /* VTTY thread */
 static void *vtty_thread_main(void *arg)
 {
