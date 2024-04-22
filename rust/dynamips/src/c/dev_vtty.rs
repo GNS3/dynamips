@@ -18,6 +18,7 @@ pub static mut vtty_list_mutex: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INIT
 // TODO private
 #[no_mangle]
 pub static mut vtty_list: *mut vtty_t = null_mut();
+static mut VTTY_THREAD: libc::pthread_t = 0;
 static mut TIOS: libc::termios = unsafe { zeroed::<libc::termios>() };
 static mut TIOS_ORIG: libc::termios = unsafe { zeroed::<libc::termios>() };
 
@@ -1238,5 +1239,18 @@ pub extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             }
             vtty_list_unlock();
         }
+    }
+}
+
+/// Initialize the VTTY thread
+#[no_mangle]
+pub extern "C" fn vtty_init() -> c_int {
+    unsafe {
+        if libc::pthread_create(addr_of_mut!(VTTY_THREAD), null_mut(), vtty_thread_main, null_mut()) != 0 {
+            perror("vtty: pthread_create");
+            return -1;
+        }
+
+        0
     }
 }

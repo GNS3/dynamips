@@ -45,11 +45,6 @@
 #define SOL_TCP 6
 #endif
 
-static pthread_t vtty_thread;
-
-#define VTTY_LIST_LOCK()   pthread_mutex_lock(&vtty_list_mutex);
-#define VTTY_LIST_UNLOCK() pthread_mutex_unlock(&vtty_list_mutex);
-
 /* Remote control for MIPS64 processors */
 static int remote_control_mips64(vtty_t *vtty,char c,cpu_mips_t *cpu)
 {
@@ -248,15 +243,4 @@ void remote_control(vtty_t *vtty,u_char c)
                 "^]    - Send ^]\n"
                 "Other - This help\n");
    }
-}
-
-/* Initialize the VTTY thread */
-int vtty_init(void)
-{
-   if (pthread_create(&vtty_thread,NULL,vtty_thread_main,NULL)) {
-      perror("vtty: pthread_create");
-      return(-1);
-   }
-
-   return(0);
 }
