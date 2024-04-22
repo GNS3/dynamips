@@ -117,6 +117,34 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
     }
 }
 
+/// Virtual TTY
+#[derive(Default)]
+pub struct Vtty {
+    pub c: virtual_tty,
+}
+impl Vtty {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn to_c(ptr: *mut Self) -> *mut vtty_t {
+        unsafe { ptr.byte_add(offset_of!(Self, c)).cast::<_>() }
+    }
+    pub fn from_c(ptr: *mut vtty_t) -> *mut Self {
+        unsafe { ptr.byte_sub(offset_of!(Self, c)).cast::<_>() }
+    }
+}
+#[cfg(test)]
+#[test]
+fn test_vtty_as_c_from_c_roundtrip() {
+    let mut x = Box::new(Vtty::new());
+    let ptr = addr_of_mut!(*x);
+    let to_ptr = Vtty::to_c(ptr);
+    let offset = unsafe { to_ptr.byte_offset_from(ptr) };
+    assert_eq!(offset, offset_of!(Vtty, c) as isize);
+    let from_ptr = Vtty::from_c(to_ptr);
+    assert_eq!(ptr, from_ptr);
+}
+
 /// Virtual TTY structure
 #[repr(C)]
 pub struct virtual_tty {
@@ -499,7 +527,8 @@ fn vtty_tcp_conn_wait(vtty: &mut vtty_t) -> c_int {
 pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, type_: c_int, tcp_port: c_int, option: *const vtty_serial_option_t) -> *mut vtty_t {
     unsafe {
         let option = NonNull::new(option.cast_mut()).unwrap();
-        let mut vtty = Box::new(virtual_tty::new());
+        let mut box_vtty = Box::new(Vtty::new());
+        let vtty = &mut box_vtty.c;
         vtty.name = name.as_ptr();
         vtty.type_ = type_;
         vtty.vm = vm;
@@ -520,7 +549,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
 
             VTTY_TYPE_TCP => {
                 vtty.tcp_port = tcp_port;
-                vtty.fd_count = vtty_tcp_conn_wait(&mut vtty);
+                vtty.fd_count = vtty_tcp_conn_wait(vtty);
             }
 
             VTTY_TYPE_SERIAL => {
@@ -529,7 +558,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
                     eprintln!("VTTY: open failed");
                     return null_mut();
                 }
-                if vtty_serial_setup(&mut vtty, option.as_ref()) != 0 {
+                if vtty_serial_setup(vtty, option.as_ref()) != 0 {
                     eprintln!("VTTY: setup failed");
                     libc::close(vtty.fd_array[0]);
                     return null_mut();
@@ -547,7 +576,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         let mut list = vtty_list().lock().unwrap();
         list.push(VttyPtr(addr_of_mut!(*vtty)));
         drop(list);
-        Box::into_raw(vtty) // memory managed by C
+        Vtty::to_c(Box::into_raw(box_vtty)) // memory managed by C
     }
 }
 
@@ -556,7 +585,8 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
 pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
     unsafe {
         if !vtty.is_null() {
-            let mut vtty = Box::from_raw(vtty); // memory managed by rust
+            let mut box_vtty = Box::from_raw(Vtty::from_c(vtty)); // memory managed by rust
+            let vtty = &mut box_vtty.c;
             let mut list = vtty_list().lock().unwrap();
             list.retain(|x| x.0 != addr_of_mut!(*vtty));
             drop(list);
