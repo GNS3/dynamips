@@ -28,10 +28,12 @@ pub(crate) mod prelude {
     pub type vm_instance_t = vm_instance;
 
     extern "C" {
+        pub fn fd_pool_check_input(pool: *mut fd_pool_t, fds: *mut libc::fd_set, cbk: Option<unsafe extern "C" fn(fd_slot: *mut c_int, opt: *mut c_void)>, opt: *mut c_void) -> c_int;
         pub fn fd_pool_free(pool: *mut fd_pool_t);
         pub fn fd_pool_get_free_slot(pool: *mut fd_pool_t, slot: *mut *mut c_int) -> c_int;
         pub fn fd_pool_init(pool: *mut fd_pool_t);
         pub fn fd_pool_send(pool: *mut fd_pool_t, buffer: *mut c_void, len: size_t, flags: c_int) -> c_int;
+        pub fn fd_pool_set_fds(pool: *mut fd_pool_t, fds: *mut libc::fd_set) -> c_int;
         pub fn remote_control(vtty: NonNull<vtty_t>, c: u8);
         pub fn vm_clear_irq(vm: *mut vm_instance_t, irq: c_uint);
         pub fn vm_error_msg(vm: *mut vm_instance_t, msg: *mut c_char);
