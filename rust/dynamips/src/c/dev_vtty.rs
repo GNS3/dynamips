@@ -32,7 +32,15 @@ pub const VTTY_BUFFER_SIZE: usize = 4096;
 /// Maximum listening socket number
 pub const VTTY_MAX_FD: usize = 10;
 
-/// VTTY connection types (TODO enum)
+/// VTTY connection types
+#[derive(Default, Debug)]
+pub enum VttyType {
+    #[default]
+    None,
+    Term,
+    Tcp,
+    Serial,
+}
 pub const VTTY_TYPE_NONE: c_int = 0;
 pub const VTTY_TYPE_TERM: c_int = 1;
 pub const VTTY_TYPE_TCP: c_int = 2;
@@ -120,6 +128,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 pub struct Vtty {
     pub c: virtual_tty,
     pub name: String,
+    pub type_: VttyType,
     pub tcp_port: u16,
     pub terminal_support: bool,
     pub input_pending: bool,
@@ -168,7 +177,6 @@ fn test_vtty_as_c_from_c_roundtrip() {
 #[repr(C)]
 pub struct virtual_tty {
     pub vm: *mut vm_instance_t,
-    pub type_: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
@@ -178,7 +186,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), type_: VTTY_TYPE_NONE, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
+        Self { vm: null_mut(), managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -497,22 +505,25 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         let option = NonNull::new(option.cast_mut()).unwrap();
         let mut vtty = Box::new(Vtty::new());
         vtty.name = name.as_ptr().as_str().into();
-        vtty.c.type_ = type_;
         vtty.c.vm = vm;
         vtty.terminal_support = true;
         vtty.input_state = VttyInput::Text;
         vtty.fd_array.clear();
         vtty.fd_pool.lock().unwrap().clear();
 
-        match vtty.c.type_ {
-            VTTY_TYPE_NONE => {}
+        match type_ {
+            VTTY_TYPE_NONE => {
+                vtty.type_ = VttyType::None;
+            }
 
             VTTY_TYPE_TERM => {
+                vtty.type_ = VttyType::Term;
                 vtty_term_init();
                 vtty.fd_array.push(libc::STDIN_FILENO);
             }
 
             VTTY_TYPE_TCP => {
+                vtty.type_ = VttyType::Tcp;
                 if let Ok(tcp_port) = u16::try_from(tcp_port) {
                     vtty.tcp_port = tcp_port;
                     vtty_tcp_conn_wait(&mut vtty);
@@ -523,6 +534,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
             }
 
             VTTY_TYPE_SERIAL => {
+                vtty.type_ = VttyType::Serial;
                 vtty.fd_array.push(libc::open(option.as_ref().device, libc::O_RDWR));
                 if vtty.fd_array[0] < 0 {
                     eprintln!("VTTY: open failed");
@@ -537,7 +549,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
             }
 
             _ => {
-                eprintln!("tty_create: bad vtty type {}", vtty.c.type_);
+                eprintln!("tty_create: bad vtty type {}", type_);
                 return null_mut();
             }
         }
@@ -560,8 +572,8 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
             list.retain(|x| x.0 != addr_of_mut!(*vtty));
             drop(list);
 
-            match vtty.c.type_ {
-                VTTY_TYPE_TCP => {
+            match vtty.type_ {
+                VttyType::Tcp => {
                     for i in 0..vtty.fd_array.len() {
                         if vtty.fd_array[i] != -1 {
                             vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[i]));
@@ -646,10 +658,10 @@ pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, ch: c_char) {
     unsafe {
         let vtty: &mut Vtty = vtty.into();
 
-        match vtty.c.type_ {
-            VTTY_TYPE_NONE => {}
+        match vtty.type_ {
+            VttyType::None => {}
 
-            VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
+            VttyType::Term | VttyType::Serial => {
                 for &fd in vtty.fd_array.iter() {
                     if fd != -1 && libc::write(fd, addr_of!(ch).cast::<_>(), 1) != 1 {
                         vm_log(vtty.c.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.name.as_str(), ch, strerror(errno())));
@@ -657,7 +669,7 @@ pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, ch: c_char) {
                 }
             }
 
-            VTTY_TYPE_TCP => {
+            VttyType::Tcp => {
                 let fd_pool: Vec<_> = vtty.fd_pool.lock().unwrap().clone();
                 for fd in fd_pool {
                     if fd != -1 && libc::send(fd, addr_of!(ch).cast::<_>(), 1, 0) != 1 {
@@ -666,11 +678,6 @@ pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, ch: c_char) {
                         libc::close(fd);
                     }
                 }
-            }
-
-            _ => {
-                vm_error(vtty.c.vm, &format!("vtty_put_char: bad vtty type {}\n", vtty.c.type_));
-                libc::exit(1);
             }
         }
 
@@ -696,8 +703,8 @@ pub extern "C" fn vtty_put_buffer(vtty: NonNull<vtty_t>, buf: *mut c_char, len: 
 pub extern "C" fn vtty_flush(vtty: NonNull<vtty_t>) {
     unsafe {
         let vtty: &mut Vtty = vtty.into();
-        match vtty.c.type_ {
-            VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
+        match vtty.type_ {
+            VttyType::Term | VttyType::Serial => {
                 for &fd in vtty.fd_array.iter() {
                     if fd != -1 {
                         libc::fsync(fd);
@@ -895,11 +902,11 @@ fn vtty_tcp_read(_vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
 ///
 /// If the VTTY is a TCP connection, restart it in case of error.
 fn vtty_read(vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
-    match vtty.c.type_ {
-        VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => vtty_term_read(vtty),
-        VTTY_TYPE_TCP => vtty_tcp_read(vtty, fd_slot),
+    match vtty.type_ {
+        VttyType::Term | VttyType::Serial => vtty_term_read(vtty),
+        VttyType::Tcp => vtty_tcp_read(vtty, fd_slot),
         _ => {
-            eprintln!("vtty_read: bad vtty type {}\n", vtty.c.type_);
+            eprintln!("vtty_read: bad vtty type {:?}\n", vtty.type_);
             -1
         }
     }
@@ -1080,8 +1087,8 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             for vtty in list.iter() {
                 let vtty = NonNull::new(vtty.0).unwrap().as_mut();
 
-                match vtty.c.type_ {
-                    VTTY_TYPE_TCP => {
+                match vtty.type_ {
+                    VttyType::Tcp => {
                         for &fd in vtty.fd_array.iter() {
                             if fd != -1 {
                                 libc::FD_SET(fd, addr_of_mut!(rfds));
@@ -1127,8 +1134,8 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             for vtty in list.iter() {
                 let vtty = NonNull::new(vtty.0).unwrap().as_mut();
 
-                match vtty.c.type_ {
-                    VTTY_TYPE_TCP => {
+                match vtty.type_ {
+                    VttyType::Tcp => {
                         // check incoming connection
                         for i in 0..vtty.fd_array.len() {
                             if vtty.fd_array[i] == -1 {
