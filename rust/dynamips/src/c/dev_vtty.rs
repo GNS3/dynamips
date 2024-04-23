@@ -130,6 +130,8 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 pub struct Vtty {
     pub c: virtual_tty,
     pub input_state: VttyInput,
+    /// FD Pool (for TCP connections)
+    pub fd_pool: Mutex<Vec<c_int>>,
     pub buffer: Mutex<CircularBuffer<VTTY_BUFFER_SIZE, u8>>,
     /// Old text for replay
     pub replay_buffer: CircularBuffer<VTTY_BUFFER_SIZE, u8>,
@@ -181,15 +183,13 @@ pub struct virtual_tty {
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
-    /// FD Pool (for TCP connections)
-    pub fd_pool: fd_pool_t,
     /// Read notification
     pub read_notifier: Option<unsafe extern "C" fn(_: *mut virtual_tty)>,
 }
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, fd_array: [-1; VTTY_MAX_FD], fd_count: 0, tcp_port: 0, terminal_support: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, fd_pool: fd_pool::new(), read_notifier: None }
+        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, fd_array: [-1; VTTY_MAX_FD], fd_count: 0, tcp_port: 0, terminal_support: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -519,7 +519,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         vtty.c.fd_count = 0;
         vtty.c.terminal_support = 1;
         vtty.input_state = VttyInput::Text;
-        fd_pool_init(&mut vtty.c.fd_pool);
+        vtty.fd_pool.lock().unwrap().clear();
         vtty.c.fd_array = [-1; VTTY_MAX_FD];
 
         match vtty.c.type_ {
@@ -582,7 +582,13 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
                         }
                     }
 
-                    fd_pool_free(&mut vtty.c.fd_pool);
+                    let fd_pool: Vec<_> = take(&mut vtty.fd_pool.lock().unwrap());
+                    for fd in fd_pool {
+                        if fd != -1 {
+                            libc::shutdown(fd, 2);
+                            libc::close(fd);
+                        }
+                    }
                     vtty.c.fd_count = 0;
                 }
 
@@ -648,7 +654,7 @@ pub extern "C" fn vtty_get_char(vtty: NonNull<vtty_t>) -> c_int {
 
 /// Put char to vtty
 #[no_mangle]
-pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, mut ch: c_char) {
+pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, ch: c_char) {
     unsafe {
         let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
 
@@ -662,7 +668,16 @@ pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, mut ch: c_char) {
             }
 
             VTTY_TYPE_TCP => {
-                fd_pool_send(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(ch).cast::<_>(), 1, 0);
+                let fd_pool: Vec<_> = vtty.fd_pool.lock().unwrap().clone();
+                for fd in fd_pool {
+                    if fd != -1 {
+                        if libc::send(fd, addr_of!(ch).cast::<_>(), 1, 0) != 1 {
+                            vtty.fd_pool.lock().unwrap().retain(|tfd| *tfd != fd);
+                            libc::shutdown(fd, 2);
+                            libc::close(fd);
+                        }
+                    }
+                }
             }
 
             _ => {
@@ -807,12 +822,6 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
     unsafe {
         let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
         let nsock = nsock as usize;
-        let mut fd_slot: *mut c_int = null_mut();
-
-        if fd_pool_get_free_slot(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(fd_slot)) < 0 {
-            vm_error(vtty.c.vm, "unable to create a new VTTY TCP connection\n");
-            return -1;
-        }
 
         let fd = libc::accept(vtty.c.fd_array[nsock], null_mut(), null_mut());
         if fd < 0 {
@@ -821,7 +830,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
         }
 
         // Register the new FD
-        *fd_slot = fd;
+        vtty.fd_pool.lock().unwrap().push(fd);
 
         vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.c.name.as_str(), vtty.c.fd_array[nsock], fd));
 
@@ -1099,8 +1108,13 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                             }
                         }
 
-                        let fd_tcp = fd_pool_set_fds(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(rfds));
-                        fd_max = max(fd_tcp, fd_max);
+                        let fd_pool: Vec<_> = vtty.fd_pool.lock().unwrap().clone();
+                        for fd in fd_pool {
+                            if fd != -1 {
+                                libc::FD_SET(fd, addr_of_mut!(rfds));
+                                fd_max = max(fd, fd_max);
+                            }
+                        }
                     }
 
                     _ => {
@@ -1146,7 +1160,16 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                         }
 
                         // check established connection
-                        fd_pool_check_input(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(rfds), Some(vtty_tcp_input), Vtty::to_c(addr_of_mut!(*vtty)).cast::<_>());
+                        let fd_pool: Vec<_> = vtty.fd_pool.lock().unwrap().clone();
+                        for fd in fd_pool {
+                            if fd != -1 && libc::FD_ISSET(fd, addr_of!(rfds)) {
+                                let mut fd_slot = fd;
+                                vtty_read_and_store(vtty.into(), NonNull::new_unchecked(&mut fd_slot));
+                                if fd_slot == -1 {
+                                    vtty.fd_pool.lock().unwrap().retain(|rfd| *rfd != fd);
+                                }
+                            }
+                        }
                     }
 
                     // Term, Serial

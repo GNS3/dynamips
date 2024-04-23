@@ -19,6 +19,7 @@ pub(crate) mod prelude {
     pub(crate) use crate::c::dev_vtty::vtty_t;
     pub(crate) use crate::c::utils::fd_pool_t;
     pub(crate) use std::mem::offset_of;
+    pub(crate) use std::mem::take;
     pub(crate) use std::mem::zeroed;
     pub(crate) use std::ptr::addr_of;
     pub(crate) use std::ptr::addr_of_mut;
