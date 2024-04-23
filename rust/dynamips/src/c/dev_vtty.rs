@@ -53,16 +53,6 @@ pub enum VttyInput {
     TelnetSbTtype(u8, u8, u8),
     TelnetNext,
 }
-pub const VTTY_INPUT_TEXT: c_int = 0;
-pub const VTTY_INPUT_VT1: c_int = 1;
-pub const VTTY_INPUT_VT2: c_int = 2;
-pub const VTTY_INPUT_REMOTE: c_int = 3;
-pub const VTTY_INPUT_TELNET: c_int = 4;
-pub const VTTY_INPUT_TELNET_IYOU: c_int = 5;
-pub const VTTY_INPUT_TELNET_SB1: c_int = 6;
-pub const VTTY_INPUT_TELNET_SB2: c_int = 7;
-pub const VTTY_INPUT_TELNET_SB_TTYPE: c_int = 8;
-pub const VTTY_INPUT_TELNET_NEXT: c_int = 9;
 
 /// Commmand line support utility
 #[repr(C)]
@@ -130,6 +120,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 pub struct Vtty {
     pub c: virtual_tty,
     pub terminal_support: bool,
+    pub input_pending: bool,
     pub input_state: VttyInput,
     pub fd_array: Vec<c_int>,
     /// FD Pool (for TCP connections)
@@ -178,7 +169,6 @@ pub struct virtual_tty {
     pub name: *mut c_char,
     pub type_: c_int,
     pub tcp_port: c_int,
-    pub input_pending: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
@@ -188,7 +178,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, tcp_port: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
+        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, tcp_port: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -618,7 +608,7 @@ pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_i
             return -1; // invalid argument
         }
 
-        let vtty = &mut *vtty;
+        let vtty = &mut *Vtty::from_c(vtty);
         let mut bytes = 0;
         while bytes < len {
             if vtty_store(vtty.into(), *data.wrapping_add(bytes as usize) as u8) == -1 {
@@ -627,7 +617,7 @@ pub extern "C" fn vtty_store_data(vtty: *mut vtty_t, data: *mut c_char, len: c_i
             bytes += 1;
         }
 
-        vtty.input_pending = 1;
+        vtty.input_pending = true;
         bytes
     }
 }
@@ -923,7 +913,7 @@ fn vtty_read_and_store(vtty: &mut Vtty, fd_slot: &mut c_int) {
         let c = c as u8;
 
         // If something was read, make sure the handler is informed
-        vtty.c.input_pending = 1;
+        vtty.input_pending = true;
 
         if !vtty.terminal_support {
             vtty_store(vtty.into(), c);
@@ -1169,18 +1159,18 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                                 if fd_slot == -1 {
                                     vtty.fd_array[i] = -1;
                                 }
-                                vtty.c.input_pending = 1;
+                                vtty.input_pending = true;
                             }
                         }
                     }
                 }
 
-                if vtty.c.input_pending != 0 {
+                if vtty.input_pending {
                     if let Some(read_notifier) = vtty.c.read_notifier {
                         read_notifier(Vtty::to_c(addr_of_mut!(*vtty)));
                     }
 
-                    vtty.c.input_pending = 0;
+                    vtty.input_pending = false;
                 }
 
                 // Flush any pending output
