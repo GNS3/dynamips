@@ -38,7 +38,21 @@ pub const VTTY_TYPE_TERM: c_int = 1;
 pub const VTTY_TYPE_TCP: c_int = 2;
 pub const VTTY_TYPE_SERIAL: c_int = 3;
 
-/// VTTY input states (TODO enum)
+/// VTTY input states
+#[derive(Default)]
+pub enum VttyInput {
+    #[default]
+    Text,
+    Vt1,
+    Vt2,
+    Remote,
+    Telnet,
+    TelnetIyou(u8),
+    TelnetSb1(u8),
+    TelnetSb2(u8, u8),
+    TelnetSbTtype(u8, u8, u8),
+    TelnetNext,
+}
 pub const VTTY_INPUT_TEXT: c_int = 0;
 pub const VTTY_INPUT_VT1: c_int = 1;
 pub const VTTY_INPUT_VT2: c_int = 2;
@@ -115,6 +129,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    pub input_state: VttyInput,
     pub buffer: Mutex<CircularBuffer<VTTY_BUFFER_SIZE, u8>>,
     /// Old text for replay
     pub replay_buffer: CircularBuffer<VTTY_BUFFER_SIZE, u8>,
@@ -128,6 +143,16 @@ impl Vtty {
     }
     pub fn from_c(ptr: *mut vtty_t) -> *mut Self {
         unsafe { ptr.byte_sub(offset_of!(Self, c)).cast::<_>() }
+    }
+}
+impl From<&mut Vtty> for NonNull<virtual_tty> {
+    fn from(vtty: &mut Vtty) -> Self {
+        NonNull::new(addr_of_mut!(vtty.c)).unwrap()
+    }
+}
+impl From<NonNull<virtual_tty>> for &mut Vtty {
+    fn from(vtty: NonNull<virtual_tty>) -> Self {
+        unsafe { &mut *Vtty::from_c(vtty.as_ptr()) }
     }
 }
 #[cfg(test)]
@@ -152,11 +177,7 @@ pub struct virtual_tty {
     pub fd_count: c_int,
     pub tcp_port: c_int,
     pub terminal_support: c_int,
-    pub input_state: c_int,
     pub input_pending: c_int,
-    pub telnet_cmd: c_int,
-    pub telnet_opt: c_int,
-    pub telnet_qual: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
@@ -168,25 +189,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self {
-            vm: null_mut(),
-            name: null_mut(),
-            type_: VTTY_TYPE_NONE,
-            fd_array: [-1; VTTY_MAX_FD],
-            fd_count: 0,
-            tcp_port: 0,
-            terminal_support: 0,
-            input_state: VTTY_INPUT_TEXT,
-            input_pending: 0,
-            telnet_cmd: 0,
-            telnet_opt: 0,
-            telnet_qual: 0,
-            managed_flush: 0,
-            priv_data: null_mut(),
-            user_arg: 0,
-            fd_pool: fd_pool::new(),
-            read_notifier: None,
-        }
+        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, fd_array: [-1; VTTY_MAX_FD], fd_count: 0, tcp_port: 0, terminal_support: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, fd_pool: fd_pool::new(), read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -516,7 +519,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         vtty.vm = vm;
         vtty.fd_count = 0;
         vtty.terminal_support = 1;
-        vtty.input_state = VTTY_INPUT_TEXT;
+        box_vtty.input_state = VttyInput::Text;
         fd_pool_init(&mut vtty.fd_pool);
         vtty.fd_array = [-1; VTTY_MAX_FD];
 
@@ -830,7 +833,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
             vtty_telnet_will_echo(fd);
             vtty_telnet_will_suppress_go_ahead(fd);
             vtty_telnet_dont_linemode(fd);
-            vtty.c.input_state = VTTY_INPUT_TEXT;
+            vtty.input_state = VttyInput::Text;
         }
 
         if TELNET_MESSAGE_OK == 1 {
@@ -906,10 +909,10 @@ fn vtty_read(vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) -> c_int {
 }
 
 /// Read a character (until one is available) and store it in buffer
-fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
+fn vtty_read_and_store(vtty: &mut Vtty, fd_slot: NonNull<c_int>) {
     unsafe {
         // wait until we get a character input
-        let c = vtty_read(vtty, fd_slot);
+        let c = vtty_read(vtty.into(), fd_slot);
 
         // if read error, do nothing
         if c < 0 {
@@ -918,30 +921,30 @@ fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
         let c = c as u8;
 
         // If something was read, make sure the handler is informed
-        vtty.as_mut().input_pending = 1;
+        vtty.c.input_pending = 1;
 
-        if vtty.as_ref().terminal_support == 0 {
-            vtty_store(vtty, c);
+        if vtty.c.terminal_support == 0 {
+            vtty_store(vtty.into(), c);
             return;
         }
 
-        match vtty.as_ref().input_state {
-            VTTY_INPUT_TEXT => {
+        match vtty.input_state {
+            VttyInput::Text => {
                 match c {
                     0x1b => {
-                        vtty.as_mut().input_state = VTTY_INPUT_VT1;
+                        vtty.input_state = VttyInput::Vt1;
                     }
 
                     /* Ctrl + ']' (0x1d, 29), or Alt-Gr + '*' (0xb3, 179) */
                     0x1d | 0xb3 => {
                         if CTRL_CODE_OK == 1 {
-                            vtty.as_mut().input_state = VTTY_INPUT_REMOTE;
+                            vtty.input_state = VttyInput::Remote;
                         } else {
-                            vtty_store(vtty, c);
+                            vtty_store(vtty.into(), c);
                         }
                     }
                     IAC => {
-                        vtty.as_mut().input_state = VTTY_INPUT_TELNET;
+                        vtty.input_state = VttyInput::Telnet;
                     }
                     // NULL - Must be ignored - generated by Linux telnet
                     0 => {}
@@ -949,123 +952,119 @@ fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
                     10 => {}
                     // Store a standard character
                     _ => {
-                        vtty_store(vtty, c);
+                        vtty_store(vtty.into(), c);
                     }
                 }
             }
 
-            VTTY_INPUT_VT1 => {
+            VttyInput::Vt1 => {
                 match c {
                     0x5b => {
-                        vtty.as_mut().input_state = VTTY_INPUT_VT2;
+                        vtty.input_state = VttyInput::Vt2;
                         return;
                     }
                     _ => {
-                        vtty_store(vtty, 0x1b);
-                        vtty_store(vtty, c);
+                        vtty_store(vtty.into(), 0x1b);
+                        vtty_store(vtty.into(), c);
                     }
                 }
-                vtty.as_mut().input_state = VTTY_INPUT_TEXT;
+                vtty.input_state = VttyInput::Text;
             }
 
-            VTTY_INPUT_VT2 => {
+            VttyInput::Vt2 => {
                 match c {
                     // Up Arrow
                     0x41 => {
-                        vtty_store(vtty, 16);
+                        vtty_store(vtty.into(), 16);
                     }
                     // Down Arrow
                     0x42 => {
-                        vtty_store(vtty, 14);
+                        vtty_store(vtty.into(), 14);
                     }
                     // Right Arrow
                     0x43 => {
-                        vtty_store(vtty, 6);
+                        vtty_store(vtty.into(), 6);
                     }
                     // Left Arrow
                     0x44 => {
-                        vtty_store(vtty, 2);
+                        vtty_store(vtty.into(), 2);
                     }
                     _ => {
-                        vtty_store(vtty, 0x5b);
-                        vtty_store(vtty, 0x1b);
-                        vtty_store(vtty, c);
+                        vtty_store(vtty.into(), 0x1b);
+                        vtty_store(vtty.into(), 0x5b);
+                        vtty_store(vtty.into(), c);
                     }
                 }
-                vtty.as_mut().input_state = VTTY_INPUT_TEXT;
+                vtty.input_state = VttyInput::Text;
             }
 
-            VTTY_INPUT_REMOTE => {
-                remote_control(vtty, c);
-                vtty.as_mut().input_state = VTTY_INPUT_TEXT;
+            VttyInput::Remote => {
+                remote_control(vtty.into(), c);
+                vtty.input_state = VttyInput::Text;
             }
 
-            VTTY_INPUT_TELNET => {
-                vtty.as_mut().telnet_cmd = c.into();
+            VttyInput::Telnet => {
                 match c {
                     WILL | WONT | DO | DONT => {
-                        vtty.as_mut().input_state = VTTY_INPUT_TELNET_IYOU;
+                        vtty.input_state = VttyInput::TelnetIyou(c);
                         return;
                     }
                     SB => {
-                        vtty.as_mut().telnet_cmd = c.into();
-                        vtty.as_mut().input_state = VTTY_INPUT_TELNET_SB1;
+                        vtty.input_state = VttyInput::TelnetSb1(c);
                         return;
                     }
                     SE => {}
                     IAC => {
-                        vtty_store(vtty, IAC);
+                        vtty_store(vtty.into(), IAC);
                     }
                     _ => {}
                 }
-                vtty.as_mut().input_state = VTTY_INPUT_TEXT;
+                vtty.input_state = VttyInput::Text;
             }
 
-            VTTY_INPUT_TELNET_IYOU => {
-                vtty.as_mut().telnet_opt = c.into();
+            VttyInput::TelnetIyou(cmd) => {
+                let opt = c;
                 // if telnet client can support ttype, ask it to send ttype string
-                if vtty.as_ref().telnet_cmd == WILL.into() && vtty.as_ref().telnet_opt == TELOPT_TTYPE.into() {
-                    vtty_put_char(vtty, IAC as c_char);
-                    vtty_put_char(vtty, SB as c_char);
-                    vtty_put_char(vtty, TELOPT_TTYPE as c_char);
-                    vtty_put_char(vtty, TELQUAL_SEND as c_char);
-                    vtty_put_char(vtty, IAC as c_char);
-                    vtty_put_char(vtty, SE as c_char);
+                if cmd == WILL && opt == TELOPT_TTYPE {
+                    vtty_put_char(vtty.into(), IAC as c_char);
+                    vtty_put_char(vtty.into(), SB as c_char);
+                    vtty_put_char(vtty.into(), TELOPT_TTYPE as c_char);
+                    vtty_put_char(vtty.into(), TELQUAL_SEND as c_char);
+                    vtty_put_char(vtty.into(), IAC as c_char);
+                    vtty_put_char(vtty.into(), SE as c_char);
                 }
-                vtty.as_mut().input_state = VTTY_INPUT_TEXT;
+                vtty.input_state = VttyInput::Text;
             }
 
-            VTTY_INPUT_TELNET_SB1 => {
-                vtty.as_mut().telnet_opt = c.into();
-                vtty.as_mut().input_state = VTTY_INPUT_TELNET_SB2;
+            VttyInput::TelnetSb1(cmd) => {
+                let opt = c;
+                vtty.input_state = VttyInput::TelnetSb2(cmd, opt);
             }
 
-            VTTY_INPUT_TELNET_SB2 => {
-                vtty.as_mut().telnet_qual = c.into();
-                if vtty.as_ref().telnet_opt == TELOPT_TTYPE.into() && vtty.as_ref().telnet_qual == TELQUAL_IS.into() {
-                    vtty.as_mut().input_state = VTTY_INPUT_TELNET_SB_TTYPE;
+            VttyInput::TelnetSb2(cmd, opt) => {
+                let qual = c;
+                if opt == TELOPT_TTYPE && qual == TELQUAL_IS {
+                    vtty.input_state = VttyInput::TelnetSbTtype(cmd, opt, qual);
                 } else {
-                    vtty.as_mut().input_state = VTTY_INPUT_TELNET_NEXT;
+                    vtty.input_state = VttyInput::TelnetNext;
                 }
             }
 
-            VTTY_INPUT_TELNET_SB_TTYPE => {
+            VttyInput::TelnetSbTtype(_cmd, _opt, _qual) => {
                 // parse ttype string: first char is sufficient
                 // if client is xterm or vt, set the title bar
                 if c == b'x' || c == b'X' || c == b'v' || c == b'V' {
-                    fd_puts(*fd_slot.as_ref(), 0, &format!("\033]0;{}\07", vm_get_name(vtty.as_ref().vm).as_str()));
+                    fd_puts(*fd_slot.as_ref(), 0, &format!("\033]0;{}\07", vm_get_name(vtty.c.vm).as_str()));
                 }
-                vtty.as_mut().input_state = VTTY_INPUT_TELNET_NEXT;
+                vtty.input_state = VttyInput::TelnetNext;
             }
 
-            VTTY_INPUT_TELNET_NEXT => {
+            VttyInput::TelnetNext => {
                 // ignore all chars until next IAC
                 if c == IAC {
-                    vtty.as_mut().input_state = VTTY_INPUT_TELNET;
+                    vtty.input_state = VttyInput::Telnet;
                 }
             }
-
-            _ => {}
         }
     }
 }
@@ -1074,7 +1073,7 @@ fn vtty_read_and_store(mut vtty: NonNull<vtty_t>, fd_slot: NonNull<c_int>) {
 extern "C" fn vtty_tcp_input(fd_slot: *mut c_int, opt: *mut c_void) {
     let vtty = NonNull::new(opt.cast::<vtty_t>()).unwrap();
     let fd_slot = NonNull::new(fd_slot).unwrap();
-    vtty_read_and_store(vtty, fd_slot);
+    vtty_read_and_store(vtty.into(), fd_slot);
 }
 
 // VTTY thread
@@ -1155,7 +1154,7 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                     // Term, Serial
                     _ => {
                         if vtty.as_ref().fd_array[0] != -1 && libc::FD_ISSET(vtty.as_ref().fd_array[0], addr_of!(rfds)) {
-                            vtty_read_and_store(vtty, NonNull::new_unchecked(addr_of_mut!(vtty.as_mut().fd_array[0])));
+                            vtty_read_and_store(vtty.into(), NonNull::new_unchecked(addr_of_mut!(vtty.as_mut().fd_array[0])));
                             vtty.as_mut().input_pending = 1;
                         }
                     }
