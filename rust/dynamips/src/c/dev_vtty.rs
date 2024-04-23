@@ -17,7 +17,7 @@ static mut TIOS_ORIG: libc::termios = unsafe { zeroed::<libc::termios>() };
 
 /// Allow vtty pointers to be sent between threads. (unsafe)
 #[repr(transparent)]
-struct VttyPtr(pub *mut vtty_t);
+struct VttyPtr(pub *mut Vtty);
 unsafe impl Send for VttyPtr {}
 
 /// VTTY list
@@ -512,46 +512,45 @@ fn vtty_tcp_conn_wait(vtty: &mut vtty_t) -> c_int {
 pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, type_: c_int, tcp_port: c_int, option: *const vtty_serial_option_t) -> *mut vtty_t {
     unsafe {
         let option = NonNull::new(option.cast_mut()).unwrap();
-        let mut box_vtty = Box::new(Vtty::new());
-        let vtty = &mut box_vtty.c;
-        vtty.name = name.as_ptr();
-        vtty.type_ = type_;
-        vtty.vm = vm;
-        vtty.fd_count = 0;
-        vtty.terminal_support = 1;
-        box_vtty.input_state = VttyInput::Text;
-        fd_pool_init(&mut vtty.fd_pool);
-        vtty.fd_array = [-1; VTTY_MAX_FD];
+        let mut vtty = Box::new(Vtty::new());
+        vtty.c.name = name.as_ptr();
+        vtty.c.type_ = type_;
+        vtty.c.vm = vm;
+        vtty.c.fd_count = 0;
+        vtty.c.terminal_support = 1;
+        vtty.input_state = VttyInput::Text;
+        fd_pool_init(&mut vtty.c.fd_pool);
+        vtty.c.fd_array = [-1; VTTY_MAX_FD];
 
-        match vtty.type_ {
+        match vtty.c.type_ {
             VTTY_TYPE_NONE => {}
 
             VTTY_TYPE_TERM => {
                 vtty_term_init();
-                vtty.fd_array[0] = libc::STDIN_FILENO;
+                vtty.c.fd_array[0] = libc::STDIN_FILENO;
             }
 
             VTTY_TYPE_TCP => {
-                vtty.tcp_port = tcp_port;
-                vtty.fd_count = vtty_tcp_conn_wait(vtty);
+                vtty.c.tcp_port = tcp_port;
+                vtty.c.fd_count = vtty_tcp_conn_wait(&mut vtty.c);
             }
 
             VTTY_TYPE_SERIAL => {
-                vtty.fd_array[0] = libc::open(option.as_ref().device, libc::O_RDWR);
-                if vtty.fd_array[0] < 0 {
+                vtty.c.fd_array[0] = libc::open(option.as_ref().device, libc::O_RDWR);
+                if vtty.c.fd_array[0] < 0 {
                     eprintln!("VTTY: open failed");
                     return null_mut();
                 }
-                if vtty_serial_setup(vtty, option.as_ref()) != 0 {
+                if vtty_serial_setup(&mut vtty.c, option.as_ref()) != 0 {
                     eprintln!("VTTY: setup failed");
-                    libc::close(vtty.fd_array[0]);
+                    libc::close(vtty.c.fd_array[0]);
                     return null_mut();
                 }
-                vtty.terminal_support = 0;
+                vtty.c.terminal_support = 0;
             }
 
             _ => {
-                eprintln!("tty_create: bad vtty type {}", vtty.type_);
+                eprintln!("tty_create: bad vtty type {}", vtty.c.type_);
                 return null_mut();
             }
         }
@@ -560,7 +559,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         let mut list = vtty_list().lock().unwrap();
         list.push(VttyPtr(addr_of_mut!(*vtty)));
         drop(list);
-        Vtty::to_c(Box::into_raw(box_vtty)) // memory managed by C
+        Vtty::to_c(Box::into_raw(vtty)) // memory managed by C
     }
 }
 
@@ -569,30 +568,29 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
 pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
     unsafe {
         if !vtty.is_null() {
-            let mut box_vtty = Box::from_raw(Vtty::from_c(vtty)); // memory managed by rust
-            let vtty = &mut box_vtty.c;
+            let mut vtty = Box::from_raw(Vtty::from_c(vtty)); // memory managed by rust
             let mut list = vtty_list().lock().unwrap();
             list.retain(|x| x.0 != addr_of_mut!(*vtty));
             drop(list);
 
-            match vtty.type_ {
+            match vtty.c.type_ {
                 VTTY_TYPE_TCP => {
-                    for i in 0..vtty.fd_count as usize {
-                        if vtty.fd_array[i] != -1 {
-                            vm_log(vtty.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[i]));
-                            libc::close(vtty.fd_array[i]);
+                    for i in 0..vtty.c.fd_count as usize {
+                        if vtty.c.fd_array[i] != -1 {
+                            vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.c.name.as_str(), vtty.c.fd_array[i]));
+                            libc::close(vtty.c.fd_array[i]);
                         }
                     }
 
-                    fd_pool_free(&mut vtty.fd_pool);
-                    vtty.fd_count = 0;
+                    fd_pool_free(&mut vtty.c.fd_pool);
+                    vtty.c.fd_count = 0;
                 }
 
                 _ => {
                     // We don't close FD 0 since it is stdin
-                    if vtty.fd_array[0] > 0 {
-                        vm_log(vtty.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[0]));
-                        libc::close(vtty.fd_array[0]);
+                    if vtty.c.fd_array[0] > 0 {
+                        vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.c.name.as_str(), vtty.c.fd_array[0]));
+                        libc::close(vtty.c.fd_array[0]);
                     }
                 }
             }
@@ -1088,27 +1086,27 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             libc::FD_ZERO(addr_of_mut!(rfds));
             fd_max = -1;
             for vtty in list.iter() {
-                let mut vtty = NonNull::new(vtty.0).unwrap();
+                let vtty = NonNull::new(vtty.0).unwrap().as_mut();
 
-                match vtty.as_ref().type_ {
+                match vtty.c.type_ {
                     VTTY_TYPE_TCP => {
-                        for i in 0..vtty.as_ref().fd_count as usize {
-                            if vtty.as_ref().fd_array[i] != -1 {
-                                libc::FD_SET(vtty.as_ref().fd_array[i], addr_of_mut!(rfds));
-                                if vtty.as_ref().fd_array[i] > fd_max {
-                                    fd_max = vtty.as_ref().fd_array[i];
+                        for i in 0..vtty.c.fd_count as usize {
+                            if vtty.c.fd_array[i] != -1 {
+                                libc::FD_SET(vtty.c.fd_array[i], addr_of_mut!(rfds));
+                                if vtty.c.fd_array[i] > fd_max {
+                                    fd_max = vtty.c.fd_array[i];
                                 }
                             }
                         }
 
-                        let fd_tcp = fd_pool_set_fds(addr_of_mut!(vtty.as_mut().fd_pool), addr_of_mut!(rfds));
+                        let fd_tcp = fd_pool_set_fds(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(rfds));
                         fd_max = max(fd_tcp, fd_max);
                     }
 
                     _ => {
-                        if vtty.as_ref().fd_array[0] != -1 {
-                            libc::FD_SET(vtty.as_ref().fd_array[0], addr_of_mut!(rfds));
-                            fd_max = max(vtty.as_ref().fd_array[0], fd_max);
+                        if vtty.c.fd_array[0] != -1 {
+                            libc::FD_SET(vtty.c.fd_array[0], addr_of_mut!(rfds));
+                            fd_max = max(vtty.c.fd_array[0], fd_max);
                         }
                     }
                 }
@@ -1130,47 +1128,48 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
             // Examine active FDs and call user handlers
             let list = vtty_list().lock().unwrap();
             for vtty in list.iter() {
-                let mut vtty = NonNull::new(vtty.0).unwrap();
+                let vtty = NonNull::new(vtty.0).unwrap().as_mut();
 
-                match vtty.as_ref().type_ {
+                match vtty.c.type_ {
                     VTTY_TYPE_TCP => {
                         // check incoming connection
-                        for i in 0..vtty.as_ref().fd_count as usize {
-                            if vtty.as_ref().fd_array[i] == -1 {
+                        for i in 0..vtty.c.fd_count as usize {
+                            if vtty.c.fd_array[i] == -1 {
                                 continue;
                             }
 
-                            if !libc::FD_ISSET(vtty.as_ref().fd_array[i], addr_of_mut!(rfds)) {
+                            if !libc::FD_ISSET(vtty.c.fd_array[i], addr_of_mut!(rfds)) {
                                 continue;
                             }
 
-                            vtty_tcp_conn_accept(vtty, i as c_int);
+                            vtty_tcp_conn_accept(vtty.into(), i as c_int);
                         }
 
                         // check established connection
-                        fd_pool_check_input(addr_of_mut!(vtty.as_mut().fd_pool), addr_of_mut!(rfds), Some(vtty_tcp_input), vtty.as_ptr().cast::<_>());
+                        fd_pool_check_input(addr_of_mut!(vtty.c.fd_pool), addr_of_mut!(rfds), Some(vtty_tcp_input), Vtty::to_c(addr_of_mut!(*vtty)).cast::<_>());
                     }
 
                     // Term, Serial
                     _ => {
-                        if vtty.as_ref().fd_array[0] != -1 && libc::FD_ISSET(vtty.as_ref().fd_array[0], addr_of!(rfds)) {
-                            vtty_read_and_store(vtty.into(), NonNull::new_unchecked(addr_of_mut!(vtty.as_mut().fd_array[0])));
-                            vtty.as_mut().input_pending = 1;
+                        if vtty.c.fd_array[0] != -1 && libc::FD_ISSET(vtty.c.fd_array[0], addr_of!(rfds)) {
+                            let fd_slot = NonNull::new_unchecked(addr_of_mut!(vtty.c.fd_array[0]));
+                            vtty_read_and_store(vtty, fd_slot);
+                            vtty.c.input_pending = 1;
                         }
                     }
                 }
 
-                if vtty.as_ref().input_pending != 0 {
-                    if let Some(read_notifier) = vtty.as_ref().read_notifier {
-                        read_notifier(vtty.as_ptr());
+                if vtty.c.input_pending != 0 {
+                    if let Some(read_notifier) = vtty.c.read_notifier {
+                        read_notifier(Vtty::to_c(addr_of_mut!(*vtty)));
                     }
 
-                    vtty.as_mut().input_pending = 0;
+                    vtty.c.input_pending = 0;
                 }
 
                 // Flush any pending output
-                if vtty.as_ref().managed_flush == 0 {
-                    vtty_flush(vtty);
+                if vtty.c.managed_flush == 0 {
+                    vtty_flush(vtty.into());
                 }
             }
             drop(list);
