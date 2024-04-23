@@ -119,6 +119,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    pub tcp_port: u16,
     pub terminal_support: bool,
     pub input_pending: bool,
     pub input_state: VttyInput,
@@ -168,7 +169,6 @@ pub struct virtual_tty {
     pub vm: *mut vm_instance_t,
     pub name: *mut c_char,
     pub type_: c_int,
-    pub tcp_port: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
     pub user_arg: c_ulong,
@@ -178,7 +178,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, tcp_port: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
+        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -376,7 +376,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
         hints.ai_socktype = libc::SOCK_STREAM;
         hints.ai_flags = libc::AI_PASSIVE;
 
-        let port_str = format!("{}\0", vtty.c.tcp_port);
+        let port_str = format!("{}\0", vtty.tcp_port);
 
         /* Try to use the console binding address first, then fallback to the global binding address */
         let addr: *const c_char = if !console_binding_addr.is_null() && *console_binding_addr != 0 {
@@ -427,7 +427,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
             }
 
             let proto = if res.ai_family == libc::PF_INET6 { "IPv6" } else { "IPv4" };
-            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.c.name.as_str(), vtty.c.tcp_port, proto, fd));
+            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.c.name.as_str(), vtty.tcp_port, proto, fd));
 
             vtty.fd_array.push(fd);
         }
@@ -469,7 +469,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
         let mut serv = zeroed::<libc::sockaddr_in>();
         serv.sin_family = libc::AF_INET as u16;
         serv.sin_addr.s_addr = libc::INADDR_ANY.to_be();
-        serv.sin_port = (vtty.c.tcp_port as u16).to_be();
+        serv.sin_port = vtty.tcp_port.to_be();
 
         if libc::bind(fd, addr_of!(serv).cast::<_>(), size_of::<libc::sockaddr_in>() as u32) < 0 {
             perror("vtty_tcp_conn_wait: bind");
@@ -483,7 +483,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
             return -1;
         }
 
-        vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.c.name.as_str(), vtty.c.tcp_port, fd));
+        vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.c.name.as_str(), vtty.tcp_port, fd));
 
         vtty.fd_array.push(fd);
         vtty.fd_array.len() as c_int
@@ -513,8 +513,13 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
             }
 
             VTTY_TYPE_TCP => {
-                vtty.c.tcp_port = tcp_port;
-                vtty_tcp_conn_wait(&mut vtty);
+                if let Ok(tcp_port) = u16::try_from(tcp_port) {
+                    vtty.tcp_port = tcp_port;
+                    vtty_tcp_conn_wait(&mut vtty);
+                } else {
+                    eprintln!("VTTY: invalid tcp_port {}", tcp_port);
+                    return null_mut();
+                }
             }
 
             VTTY_TYPE_SERIAL => {
@@ -810,7 +815,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
 
         let fd = libc::accept(vtty.fd_array[nsock], null_mut(), null_mut());
         if fd < 0 {
-            vm_error(vtty.c.vm, &format!("vtty_tcp_conn_accept: accept on port {} failed {}\n", vtty.c.tcp_port, strerror(errno())));
+            vm_error(vtty.c.vm, &format!("vtty_tcp_conn_accept: accept on port {} failed {}\n", vtty.tcp_port, strerror(errno())));
             return -1;
         }
 
