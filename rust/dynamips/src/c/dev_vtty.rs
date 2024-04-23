@@ -7,6 +7,7 @@ use crate::c::vm::*;
 use circular_buffer::CircularBuffer;
 use std::cmp::max;
 use std::sync::Mutex;
+use std::sync::Once;
 use std::sync::OnceLock;
 
 static mut CTRL_CODE_OK: c_int = 1;
@@ -195,32 +196,51 @@ impl Default for virtual_tty {
     }
 }
 
-/* Restore TTY original settings */
-extern "C" fn vtty_term_reset() {
-    unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, addr_of!(TIOS_ORIG)) };
-}
+/// Terminal code.
+pub struct VttyTerm;
+impl VttyTerm {
+    /// Restore TTY original settings
+    extern "C" fn reset() {
+        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, addr_of!(TIOS_ORIG)) };
+    }
+    /// Initialize real TTY
+    pub fn init() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| unsafe {
+            libc::tcgetattr(libc::STDIN_FILENO, addr_of_mut!(TIOS));
 
-/* Initialize real TTY */
-fn vtty_term_init() {
-    unsafe {
-        libc::tcgetattr(libc::STDIN_FILENO, addr_of_mut!(TIOS));
+            libc::memcpy(addr_of_mut!(TIOS_ORIG).cast::<_>(), addr_of_mut!(TIOS).cast::<_>(), size_of::<libc::termios>());
+            libc::atexit(VttyTerm::reset);
 
-        libc::memcpy(addr_of_mut!(TIOS_ORIG).cast::<_>(), addr_of_mut!(TIOS).cast::<_>(), size_of::<libc::termios>());
-        libc::atexit(vtty_term_reset);
+            TIOS.c_cc[libc::VTIME] = 0;
+            TIOS.c_cc[libc::VMIN] = 1;
 
-        TIOS.c_cc[libc::VTIME] = 0;
-        TIOS.c_cc[libc::VMIN] = 1;
+            /* Disable Ctrl-C, Ctrl-S, Ctrl-Q and Ctrl-Z */
+            TIOS.c_cc[libc::VINTR] = 0;
+            TIOS.c_cc[libc::VSTART] = 0;
+            TIOS.c_cc[libc::VSTOP] = 0;
+            TIOS.c_cc[libc::VSUSP] = 0;
 
-        /* Disable Ctrl-C, Ctrl-S, Ctrl-Q and Ctrl-Z */
-        TIOS.c_cc[libc::VINTR] = 0;
-        TIOS.c_cc[libc::VSTART] = 0;
-        TIOS.c_cc[libc::VSTOP] = 0;
-        TIOS.c_cc[libc::VSUSP] = 0;
+            TIOS.c_lflag &= !(libc::ICANON | libc::ECHO);
+            TIOS.c_iflag &= !libc::ICRNL;
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, addr_of!(TIOS));
+            libc::tcflush(libc::STDIN_FILENO, libc::TCIFLUSH);
+        });
+    }
+    /// Read a character from the terminal
+    pub fn read(vtty: &mut Vtty) -> c_int {
+        unsafe {
+            let mut c: u8 = 0;
 
-        TIOS.c_lflag &= !(libc::ICANON | libc::ECHO);
-        TIOS.c_iflag &= !libc::ICRNL;
-        libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, addr_of!(TIOS));
-        libc::tcflush(libc::STDIN_FILENO, libc::TCIFLUSH);
+            for &fd in vtty.fd_array.iter() {
+                if fd != -1 && libc::read(fd, addr_of_mut!(c).cast::<_>(), 1) == 1 {
+                    return c.into();
+                }
+            }
+
+            perror("read from vtty failed");
+            -1
+        }
     }
 }
 
@@ -518,7 +538,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
 
             VTTY_TYPE_TERM => {
                 vtty.type_ = VttyType::Term;
-                vtty_term_init();
+                VttyTerm::init();
                 vtty.fd_array.push(libc::STDIN_FILENO);
             }
 
@@ -862,22 +882,6 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
     }
 }
 
-/// Read a character from the terminal
-fn vtty_term_read(vtty: &mut Vtty) -> c_int {
-    unsafe {
-        let mut c: u8 = 0;
-
-        for &fd in vtty.fd_array.iter() {
-            if fd != -1 && libc::read(fd, addr_of_mut!(c).cast::<_>(), 1) == 1 {
-                return c.into();
-            }
-        }
-
-        perror("read from vtty failed");
-        -1
-    }
-}
-
 /// Read a character from the TCP connection.
 fn vtty_tcp_read(_vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
     unsafe {
@@ -903,7 +907,7 @@ fn vtty_tcp_read(_vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
 /// If the VTTY is a TCP connection, restart it in case of error.
 fn vtty_read(vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
     match vtty.type_ {
-        VttyType::Term | VttyType::Serial => vtty_term_read(vtty),
+        VttyType::Term | VttyType::Serial => VttyTerm::read(vtty),
         VttyType::Tcp => vtty_tcp_read(vtty, fd_slot),
         _ => {
             eprintln!("vtty_read: bad vtty type {:?}\n", vtty.type_);
