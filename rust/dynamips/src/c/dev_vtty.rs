@@ -119,6 +119,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    pub name: String,
     pub tcp_port: u16,
     pub terminal_support: bool,
     pub input_pending: bool,
@@ -167,7 +168,6 @@ fn test_vtty_as_c_from_c_roundtrip() {
 #[repr(C)]
 pub struct virtual_tty {
     pub vm: *mut vm_instance_t,
-    pub name: *mut c_char,
     pub type_: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
@@ -178,7 +178,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
+        Self { vm: null_mut(), type_: VTTY_TYPE_NONE, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -427,7 +427,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
             }
 
             let proto = if res.ai_family == libc::PF_INET6 { "IPv6" } else { "IPv4" };
-            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.c.name.as_str(), vtty.tcp_port, proto, fd));
+            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, proto, fd));
 
             vtty.fd_array.push(fd);
         }
@@ -483,7 +483,7 @@ fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
             return -1;
         }
 
-        vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.c.name.as_str(), vtty.tcp_port, fd));
+        vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, fd));
 
         vtty.fd_array.push(fd);
         vtty.fd_array.len() as c_int
@@ -496,7 +496,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
     unsafe {
         let option = NonNull::new(option.cast_mut()).unwrap();
         let mut vtty = Box::new(Vtty::new());
-        vtty.c.name = name.as_ptr();
+        vtty.name = name.as_ptr().as_str().into();
         vtty.c.type_ = type_;
         vtty.c.vm = vm;
         vtty.terminal_support = true;
@@ -564,7 +564,7 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
                 VTTY_TYPE_TCP => {
                     for i in 0..vtty.fd_array.len() {
                         if vtty.fd_array[i] != -1 {
-                            vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.c.name.as_str(), vtty.fd_array[i]));
+                            vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), vtty.fd_array[i]));
                             libc::close(vtty.fd_array[i]);
                         }
                     }
@@ -582,7 +582,7 @@ pub extern "C" fn vtty_delete(vtty: *mut vtty_t) {
                     // We don't close FD 0 since it is stdin
                     for fd in vtty.fd_array {
                         if fd > 0 {
-                            vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.c.name.as_str(), fd));
+                            vm_log(vtty.c.vm, "VTTY", &format!("{}: closing FD {}\n", vtty.name.as_str(), fd));
                             libc::close(fd);
                         }
                     }
@@ -652,7 +652,7 @@ pub extern "C" fn vtty_put_char(vtty: NonNull<vtty_t>, ch: c_char) {
             VTTY_TYPE_TERM | VTTY_TYPE_SERIAL => {
                 for &fd in vtty.fd_array.iter() {
                     if fd != -1 && libc::write(fd, addr_of!(ch).cast::<_>(), 1) != 1 {
-                        vm_log(vtty.c.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.c.name.as_str(), ch, strerror(errno())));
+                        vm_log(vtty.c.vm, "VTTY", &format!("{}: put char 0x{:02x} failed ({})\n", vtty.name.as_str(), ch, strerror(errno())));
                     }
                 }
             }
@@ -822,7 +822,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
         // Register the new FD
         vtty.fd_pool.lock().unwrap().push(fd);
 
-        vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.c.name.as_str(), vtty.fd_array[nsock], fd));
+        vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.name.as_str(), vtty.fd_array[nsock], fd));
 
         // Adapt Telnet settings
         if vtty.terminal_support {
@@ -834,7 +834,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
         }
 
         if TELNET_MESSAGE_OK == 1 {
-            fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.c.vm).as_str(), vm_get_instance_id(vtty.c.vm), vm_get_type(vtty.c.vm).as_str(), vtty.c.name.as_str()));
+            fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.c.vm).as_str(), vm_get_instance_id(vtty.c.vm), vm_get_type(vtty.c.vm).as_str(), vtty.name.as_str()));
             // replay old text
             let mut bytes = vtty.replay_buffer.make_contiguous();
             while !bytes.is_empty() {
