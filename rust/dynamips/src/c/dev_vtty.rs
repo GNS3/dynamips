@@ -129,6 +129,7 @@ pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_optio
 #[derive(Default)]
 pub struct Vtty {
     pub c: virtual_tty,
+    pub terminal_support: bool,
     pub input_state: VttyInput,
     /// FD Pool (for TCP connections)
     pub fd_pool: Mutex<Vec<c_int>>,
@@ -178,7 +179,6 @@ pub struct virtual_tty {
     pub fd_array: [c_int; VTTY_MAX_FD],
     pub fd_count: c_int,
     pub tcp_port: c_int,
-    pub terminal_support: c_int,
     pub input_pending: c_int,
     pub managed_flush: c_int,
     pub priv_data: *mut c_void,
@@ -189,7 +189,7 @@ pub struct virtual_tty {
 pub type vtty_t = virtual_tty;
 impl virtual_tty {
     pub fn new() -> Self {
-        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, fd_array: [-1; VTTY_MAX_FD], fd_count: 0, tcp_port: 0, terminal_support: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
+        Self { vm: null_mut(), name: null_mut(), type_: VTTY_TYPE_NONE, fd_array: [-1; VTTY_MAX_FD], fd_count: 0, tcp_port: 0, input_pending: 0, managed_flush: 0, priv_data: null_mut(), user_arg: 0, read_notifier: None }
     }
 }
 impl Default for virtual_tty {
@@ -517,7 +517,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         vtty.c.type_ = type_;
         vtty.c.vm = vm;
         vtty.c.fd_count = 0;
-        vtty.c.terminal_support = 1;
+        vtty.terminal_support = true;
         vtty.input_state = VttyInput::Text;
         vtty.fd_pool.lock().unwrap().clear();
         vtty.c.fd_array = [-1; VTTY_MAX_FD];
@@ -546,7 +546,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
                     libc::close(vtty.c.fd_array[0]);
                     return null_mut();
                 }
-                vtty.c.terminal_support = 0;
+                vtty.terminal_support = false;
             }
 
             _ => {
@@ -835,7 +835,7 @@ fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
         vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.c.name.as_str(), vtty.c.fd_array[nsock], fd));
 
         // Adapt Telnet settings
-        if vtty.c.terminal_support != 0 {
+        if vtty.terminal_support {
             vtty_telnet_do_ttype(fd);
             vtty_telnet_will_echo(fd);
             vtty_telnet_will_suppress_go_ahead(fd);
@@ -930,7 +930,7 @@ fn vtty_read_and_store(vtty: &mut Vtty, fd_slot: NonNull<c_int>) {
         // If something was read, make sure the handler is informed
         vtty.c.input_pending = 1;
 
-        if vtty.c.terminal_support == 0 {
+        if !vtty.terminal_support {
             vtty_store(vtty.into(), c);
             return;
         }
