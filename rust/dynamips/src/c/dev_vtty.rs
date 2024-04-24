@@ -63,64 +63,15 @@ pub enum VttyInput {
     TelnetNext,
 }
 
-/// Commmand line support utility
-#[repr(C)]
-#[derive(Debug)]
-pub struct vtty_serial_option {
-    /// must free this pointer if C deallocates
-    pub device: *mut c_char,
-    pub baudrate: c_int,
-    pub databits: c_int,
-    pub parity: c_int,
-    pub stopbits: c_int,
-    pub hwflow: c_int,
-}
-pub type vtty_serial_option_t = vtty_serial_option;
-impl vtty_serial_option {
-    /// Parse serial interface descriptor string, return true if success
-    /// string takes the form "device:baudrate:databits:parity:stopbits:hwflow"
-    /// device is mandatory, other options are optional (default=9600,8,N,1,0).
-    fn parse_serial_option(&mut self, optarg: &str) -> Result<(), &'static str> {
-        let mut args = optarg.split(':');
-        if let Some(device) = args.next() {
-            assert!(self.device.is_null());
-            self.device = strdup(device);
-            if self.device.is_null() {
-                return Err("unable to copy string");
-            }
-        } else {
-            return Err("invalid string");
-        }
-        self.baudrate = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(9600);
-        self.databits = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(8);
-        self.parity = args.next().and_then(|s| s.chars().nth(0)).map_or(0, |c| match c {
-            'o' | 'O' => 1, // odd
-            'e' | 'E' => 2, // even
-            _ => 0,         // none
-        });
-        self.stopbits = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(1);
-        self.hwflow = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(0);
-        Ok(())
-    }
-}
-impl Drop for vtty_serial_option {
-    fn drop(&mut self) {
-        if !self.device.is_null() {
-            unsafe { libc::free(self.device.cast::<_>()) };
-            self.device = null_mut();
-        }
-    }
-}
-
 #[no_mangle]
 pub extern "C" fn vtty_parse_serial_option(mut option: NonNull<vtty_serial_option_t>, optarg: NonNull<c_char>) -> c_int {
-    let option = unsafe { option.as_mut() };
-    let optarg = unsafe { CStr::from_ptr(optarg.as_ptr()).to_str().unwrap() };
-    if let Err(err) = option.parse_serial_option(optarg) {
-        eprintln!("vtty_parse_serial_option: {}", err);
-        -1
-    } else {
-        0
+    unsafe {
+        if let Err(err) = option.as_mut().parse(optarg.as_ptr().as_str()) {
+            eprintln!("vtty_parse_serial_option: {}", err);
+            -1
+        } else {
+            0
+        }
     }
 }
 
@@ -443,150 +394,198 @@ impl VttyTcp {
     }
 }
 
-fn cfmakeraw(tios: &mut libc::termios) {
-    #[cfg(has_libc_cfmakeraw)]
-    unsafe {
-        libc::cfmakeraw(addr_of_mut!(*tios));
+/// Commmand line support utility
+#[repr(C)]
+#[derive(Debug)]
+pub struct VttySerialOption {
+    /// must free this pointer if C deallocates
+    pub device: *mut c_char,
+    pub baudrate: c_int,
+    pub databits: c_int,
+    pub parity: c_int,
+    pub stopbits: c_int,
+    pub hwflow: c_int,
+}
+pub type vtty_serial_option_t = VttySerialOption;
+impl VttySerialOption {
+    /// Parse serial interface descriptor string, return true if success
+    /// string takes the form "device:baudrate:databits:parity:stopbits:hwflow"
+    /// device is mandatory, other options are optional (default=9600,8,N,1,0).
+    fn parse(&mut self, optarg: &str) -> Result<(), &'static str> {
+        let mut args = optarg.split(':');
+        if let Some(device) = args.next() {
+            assert!(self.device.is_null());
+            self.device = strdup(device);
+            if self.device.is_null() {
+                return Err("unable to copy string");
+            }
+        } else {
+            return Err("invalid string");
+        }
+        self.baudrate = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(9600);
+        self.databits = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(8);
+        self.parity = args.next().and_then(|s| s.chars().nth(0)).map_or(0, |c| match c {
+            'o' | 'O' => 1, // odd
+            'e' | 'E' => 2, // even
+            _ => 0,         // none
+        });
+        self.stopbits = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(1);
+        self.hwflow = args.next().and_then(|s| s.parse::<c_int>().ok()).unwrap_or(0);
+        Ok(())
     }
-    #[cfg(not(has_libc_cfmakeraw))]
-    unsafe {
-        //#if defined(__CYGWIN__) || defined(SUNOS)
+}
+impl Drop for VttySerialOption {
+    fn drop(&mut self) {
+        if !self.device.is_null() {
+            unsafe { libc::free(self.device.cast::<_>()) };
+            self.device = null_mut();
+        }
+    }
+}
+
+/// Serial code.
+pub struct VttySerial;
+impl VttySerial {
+    /// #if defined(__CYGWIN__) || defined(SUNOS)
+    fn cfmakeraw(tios: &mut libc::termios) {
         tios.c_iflag &= !(libc::IGNBRK | libc::BRKINT | libc::PARMRK | libc::ISTRIP | libc::INLCR | libc::IGNCR | libc::ICRNL | libc::IXON);
         tios.c_oflag &= !libc::OPOST;
         tios.c_lflag &= !(libc::ECHO | libc::ECHONL | libc::ICANON | libc::ISIG | libc::IEXTEN);
         tios.c_cflag &= !(libc::CSIZE | libc::PARENB);
         tios.c_cflag |= libc::CS8;
     }
-}
+    /// Setup serial port, return 0 if success.
+    fn setup(vtty: &mut Vtty, option: &VttySerialOption) -> c_int {
+        unsafe {
+            let mut tio = zeroed::<libc::termios>();
 
-/// Setup serial port, return 0 if success.
-fn vtty_serial_setup(vtty: &mut Vtty, option: &vtty_serial_option_t) -> c_int {
-    unsafe {
-        let mut tio = zeroed::<libc::termios>();
-
-        if libc::tcgetattr(vtty.fd_array[0], &mut tio) != 0 {
-            eprintln!("vtty_serial_setup: tcgetattr failed");
-            return -1;
-        }
-
-        cfmakeraw(&mut tio);
-
-        tio.c_cflag = libc::CLOCAL; // ignore modem control lines
-
-        tio.c_cflag &= !libc::CREAD;
-        tio.c_cflag |= libc::CREAD;
-
-        let tio_baudrate = match option.baudrate {
-            50 => libc::B50,
-            75 => libc::B75,
-            110 => libc::B110,
-            134 => libc::B134,
-            150 => libc::B150,
-            200 => libc::B200,
-            300 => libc::B300,
-            600 => libc::B600,
-            1200 => libc::B1200,
-            1800 => libc::B1800,
-            2400 => libc::B2400,
-            4800 => libc::B4800,
-            9600 => libc::B9600,
-            19200 => libc::B19200,
-            38400 => libc::B38400,
-            57600 => libc::B57600,
-            #[cfg(has_libc_B76800)]
-            76800 => libc::B76800,
-            115200 => libc::B115200,
-            #[cfg(has_libc_B230400)]
-            230400 => libc::B230400,
-            baudrate => {
-                eprintln!("vtty_serial_setup: unsupported baudrate {}", baudrate);
+            if libc::tcgetattr(vtty.fd_array[0], &mut tio) != 0 {
+                eprintln!("vtty_serial_setup: tcgetattr failed");
                 return -1;
             }
-        };
 
-        libc::cfsetospeed(&mut tio, tio_baudrate);
-        libc::cfsetispeed(&mut tio, tio_baudrate);
+            #[cfg(has_libc_cfmakeraw)]
+            libc::cfmakeraw(addr_of_mut!(tio));
+            #[cfg(not(has_libc_cfmakeraw))]
+            VttySerial::cfmakeraw(&mut tio);
 
-        tio.c_cflag &= !libc::CSIZE; // clear size flag
-        match option.databits {
-            5 => tio.c_cflag |= libc::CS5,
-            6 => tio.c_cflag |= libc::CS6,
-            7 => tio.c_cflag |= libc::CS7,
-            8 => tio.c_cflag |= libc::CS8,
-            databits => {
-                eprintln!("vtty_serial_setup: unsupported databits {}", databits);
+            tio.c_cflag = libc::CLOCAL; // ignore modem control lines
+
+            tio.c_cflag &= !libc::CREAD;
+            tio.c_cflag |= libc::CREAD;
+
+            let tio_baudrate = match option.baudrate {
+                50 => libc::B50,
+                75 => libc::B75,
+                110 => libc::B110,
+                134 => libc::B134,
+                150 => libc::B150,
+                200 => libc::B200,
+                300 => libc::B300,
+                600 => libc::B600,
+                1200 => libc::B1200,
+                1800 => libc::B1800,
+                2400 => libc::B2400,
+                4800 => libc::B4800,
+                9600 => libc::B9600,
+                19200 => libc::B19200,
+                38400 => libc::B38400,
+                57600 => libc::B57600,
+                #[cfg(has_libc_B76800)]
+                76800 => libc::B76800,
+                115200 => libc::B115200,
+                #[cfg(has_libc_B230400)]
+                230400 => libc::B230400,
+                baudrate => {
+                    eprintln!("vtty_serial_setup: unsupported baudrate {}", baudrate);
+                    return -1;
+                }
+            };
+
+            libc::cfsetospeed(&mut tio, tio_baudrate);
+            libc::cfsetispeed(&mut tio, tio_baudrate);
+
+            tio.c_cflag &= !libc::CSIZE; // clear size flag
+            match option.databits {
+                5 => tio.c_cflag |= libc::CS5,
+                6 => tio.c_cflag |= libc::CS6,
+                7 => tio.c_cflag |= libc::CS7,
+                8 => tio.c_cflag |= libc::CS8,
+                databits => {
+                    eprintln!("vtty_serial_setup: unsupported databits {}", databits);
+                    return -1;
+                }
+            }
+
+            tio.c_iflag &= !libc::INPCK; // clear parity flag
+            tio.c_cflag &= !(libc::PARENB | libc::PARODD);
+            match option.parity {
+                0 => {}
+                2 => {
+                    // even
+                    tio.c_iflag |= libc::INPCK;
+                    tio.c_cflag |= libc::PARENB;
+                }
+                1 => {
+                    // odd
+                    tio.c_iflag |= libc::INPCK;
+                    tio.c_cflag |= libc::PARENB | libc::PARODD;
+                }
+                parity => {
+                    eprintln!("vtty_serial_setup: unsupported parity {}", parity);
+                    return -1;
+                }
+            }
+
+            tio.c_cflag &= !libc::CSTOPB; // clear stop flag
+            match option.stopbits {
+                1 => {}
+                2 => tio.c_cflag |= libc::CSTOPB,
+                stopbits => {
+                    eprintln!("vtty_serial_setup: unsupported stopbits {}", stopbits);
+                    return -1;
+                }
+            }
+
+            #[cfg(has_libc_CRTSCTS)]
+            {
+                tio.c_cflag &= !libc::CRTSCTS;
+                if option.hwflow != 0 {
+                    tio.c_cflag |= libc::CRTSCTS;
+                }
+            }
+            #[cfg(has_libc_CNEW_RTSCTS)]
+            {
+                tio.c_cflag &= !libc::CNEW_RTSCTS;
+                if option.hwflow != 0 {
+                    tio.c_cflag |= libc::CNEW_RTSCTS;
+                }
+            }
+
+            tio.c_cc[libc::VTIME] = 0;
+            tio.c_cc[libc::VMIN] = 1; // block read() until one character is available
+
+            if false {
+                // not neccessary unless O_NONBLOCK used
+                if libc::fcntl(vtty.fd_array[0], libc::F_SETFL, 0) != 0 {
+                    // enable blocking mode
+                    eprintln!("vtty_serial_setup: fnctl(F_SETFL) failed");
+                    return -1;
+                }
+            }
+
+            if libc::tcflush(vtty.fd_array[0], libc::TCIOFLUSH) != 0 {
+                eprintln!("vtty_serial_setup: tcflush(TCIOFLUSH) failed");
                 return -1;
             }
-        }
 
-        tio.c_iflag &= !libc::INPCK; // clear parity flag
-        tio.c_cflag &= !(libc::PARENB | libc::PARODD);
-        match option.parity {
-            0 => {}
-            2 => {
-                // even
-                tio.c_iflag |= libc::INPCK;
-                tio.c_cflag |= libc::PARENB;
-            }
-            1 => {
-                // odd
-                tio.c_iflag |= libc::INPCK;
-                tio.c_cflag |= libc::PARENB | libc::PARODD;
-            }
-            parity => {
-                eprintln!("vtty_serial_setup: unsupported parity {}", parity);
+            if libc::tcsetattr(vtty.fd_array[0], libc::TCSANOW, &tio) != 0 {
+                eprintln!("vtty_serial_setup: tcsetattr(TCSANOW) failed");
                 return -1;
             }
-        }
 
-        tio.c_cflag &= !libc::CSTOPB; // clear stop flag
-        match option.stopbits {
-            1 => {}
-            2 => tio.c_cflag |= libc::CSTOPB,
-            stopbits => {
-                eprintln!("vtty_serial_setup: unsupported stopbits {}", stopbits);
-                return -1;
-            }
+            0
         }
-
-        #[cfg(has_libc_CRTSCTS)]
-        {
-            tio.c_cflag &= !libc::CRTSCTS;
-            if option.hwflow != 0 {
-                tio.c_cflag |= libc::CRTSCTS;
-            }
-        }
-        #[cfg(has_libc_CNEW_RTSCTS)]
-        {
-            tio.c_cflag &= !libc::CNEW_RTSCTS;
-            if option.hwflow != 0 {
-                tio.c_cflag |= libc::CNEW_RTSCTS;
-            }
-        }
-
-        tio.c_cc[libc::VTIME] = 0;
-        tio.c_cc[libc::VMIN] = 1; // block read() until one character is available
-
-        if false {
-            // not neccessary unless O_NONBLOCK used
-            if libc::fcntl(vtty.fd_array[0], libc::F_SETFL, 0) != 0 {
-                // enable blocking mode
-                eprintln!("vtty_serial_setup: fnctl(F_SETFL) failed");
-                return -1;
-            }
-        }
-
-        if libc::tcflush(vtty.fd_array[0], libc::TCIOFLUSH) != 0 {
-            eprintln!("vtty_serial_setup: tcflush(TCIOFLUSH) failed");
-            return -1;
-        }
-
-        if libc::tcsetattr(vtty.fd_array[0], libc::TCSANOW, &tio) != 0 {
-            eprintln!("vtty_serial_setup: tcsetattr(TCSANOW) failed");
-            return -1;
-        }
-
-        0
     }
 }
 
@@ -635,7 +634,7 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
                     eprintln!("VTTY: open failed");
                     return null_mut();
                 }
-                if vtty_serial_setup(&mut vtty, option.as_ref()) != 0 {
+                if VttySerial::setup(&mut vtty, option.as_ref()) != 0 {
                     eprintln!("VTTY: setup failed");
                     libc::close(vtty.fd_array[0]);
                     return null_mut();
