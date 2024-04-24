@@ -9,10 +9,11 @@ use std::cmp::max;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::sync::OnceLock;
+use std::thread;
 
 static mut CTRL_CODE_OK: c_int = 1;
 static mut TELNET_MESSAGE_OK: c_int = 1;
-static mut VTTY_THREAD: libc::pthread_t = 0;
+static mut VTTY_THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
 static mut TIOS: libc::termios = unsafe { zeroed::<libc::termios>() };
 static mut TIOS_ORIG: libc::termios = unsafe { zeroed::<libc::termios>() };
 
@@ -1084,7 +1085,7 @@ fn vtty_read_and_store(vtty: &mut Vtty, fd_slot: &mut c_int) {
 }
 
 // VTTY thread
-extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
+fn vtty_thread_main() {
     unsafe {
         let mut rfds = zeroed::<libc::fd_set>();
         let mut fd_max;
@@ -1209,11 +1210,17 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
 #[no_mangle]
 pub extern "C" fn vtty_init() -> c_int {
     unsafe {
-        if libc::pthread_create(addr_of_mut!(VTTY_THREAD), null_mut(), vtty_thread_main, null_mut()) != 0 {
-            perror("vtty: pthread_create");
-            return -1;
+        let mut vtty_thread = VTTY_THREAD.lock().unwrap();
+        assert!(vtty_thread.is_none());
+        match thread::Builder::new().name("vtty_thread_main".into()).spawn(vtty_thread_main) {
+            Ok(x) => {
+                *vtty_thread = Some(x);
+                0
+            }
+            Err(err) => {
+                eprintln!("vtty_init: spawn: {}", err);
+                -1
+            }
         }
-
-        0
     }
 }
