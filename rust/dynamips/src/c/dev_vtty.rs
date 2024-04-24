@@ -244,6 +244,205 @@ impl VttyTerm {
     }
 }
 
+/// Tcp code.
+pub struct VttyTcp;
+impl VttyTcp {
+    /// Wait for a TCP connection (IPv4+IPv6)
+    #[cfg(has_ipv6)]
+    fn conn_wait_ipv4_ipv6(vtty: &mut Vtty) -> c_int {
+        unsafe {
+            let one: c_int = 1;
+
+            vtty.fd_array.clear();
+
+            let mut hints = zeroed::<libc::addrinfo>();
+            hints.ai_family = libc::PF_UNSPEC;
+            hints.ai_socktype = libc::SOCK_STREAM;
+            hints.ai_flags = libc::AI_PASSIVE;
+
+            let port_str = format!("{}\0", vtty.tcp_port);
+
+            /* Try to use the console binding address first, then fallback to the global binding address */
+            let addr: *const c_char = if !console_binding_addr.is_null() && *console_binding_addr != 0 {
+                console_binding_addr
+            } else if !binding_addr.is_null() && *binding_addr != 0 {
+                binding_addr
+            } else {
+                "127.0.0.1\0".as_ptr().cast::<_>()
+            };
+
+            let mut res0: *mut libc::addrinfo = null_mut();
+            if libc::getaddrinfo(addr, port_str.as_str().as_ptr().cast::<_>(), &hints, addr_of_mut!(res0)) != 0 {
+                perror("VttyTcp::conn_wait_ipv4_ipv6: getaddrinfo");
+                return -1;
+            }
+
+            let mut next_res = res0;
+            while !next_res.is_null() {
+                let res = &mut *next_res;
+                next_res = res.ai_next;
+
+                if res.ai_family != libc::PF_INET && res.ai_family != libc::PF_INET6 {
+                    continue;
+                }
+
+                let fd = libc::socket(res.ai_family, res.ai_socktype, res.ai_protocol);
+
+                if fd < 0 {
+                    continue;
+                }
+
+                if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                    perror("VttyTcp::conn_wait_ipv4_ipv6: setsockopt(SO_REUSEADDR)");
+                }
+
+                if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_KEEPALIVE, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                    perror("VttyTcp::conn_wait_ipv4_ipv6: setsockopt(SO_KEEPALIVE)");
+                }
+
+                // Send telnet packets asap. Dont wait to fill packets up
+                if libc::setsockopt(fd, libc::SOL_TCP, libc::TCP_NODELAY, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                    perror("VttyTcp::conn_wait_ipv4_ipv6: setsockopt(TCP_NODELAY)");
+                }
+
+                if libc::bind(fd, res.ai_addr, res.ai_addrlen) < 0 || libc::listen(fd, 1) < 0 {
+                    libc::close(fd);
+                    continue;
+                }
+
+                let proto = if res.ai_family == libc::PF_INET6 { "IPv6" } else { "IPv4" };
+                vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, proto, fd));
+
+                vtty.fd_array.push(fd);
+            }
+
+            libc::freeaddrinfo(res0);
+            vtty.fd_array.len() as c_int
+        }
+    }
+    /// Wait for a TCP connection (IPv4)
+    fn conn_wait_ipv4(vtty: &mut Vtty) -> c_int {
+        unsafe {
+            let one: c_int = 1;
+
+            vtty.fd_array.clear();
+
+            let fd = libc::socket(libc::PF_INET, libc::SOCK_STREAM, 0);
+            if fd < 0 {
+                perror("VttyTcp::conn_wait_ipv4: socket");
+                return -1;
+            }
+
+            if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                perror("VttyTcp::conn_wait_ipv4: setsockopt(SO_REUSEADDR)");
+                libc::close(fd);
+                return -1;
+            }
+
+            if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_KEEPALIVE, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                perror("VttyTcp::conn_wait_ipv4: setsockopt(SO_KEEPALIVE)");
+                libc::close(fd);
+                return -1;
+            }
+
+            // Send telnet packets asap. Dont wait to fill packets up
+            if libc::setsockopt(fd, libc::SOL_TCP, libc::TCP_NODELAY, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
+                perror("VttyTcp::conn_wait_ipv4: setsockopt(TCP_NODELAY)");
+                libc::close(fd);
+                return -1;
+            }
+
+            let mut serv = zeroed::<libc::sockaddr_in>();
+            serv.sin_family = libc::AF_INET as u16;
+            serv.sin_addr.s_addr = libc::INADDR_ANY.to_be();
+            serv.sin_port = vtty.tcp_port.to_be();
+
+            if libc::bind(fd, addr_of!(serv).cast::<_>(), size_of::<libc::sockaddr_in>() as u32) < 0 {
+                perror("VttyTcp::conn_wait_ipv4: bind");
+                libc::close(fd);
+                return -1;
+            }
+
+            if libc::listen(fd, 1) < 0 {
+                perror("VttyTcp::conn_wait_ipv4: listen");
+                libc::close(fd);
+                return -1;
+            }
+
+            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, fd));
+
+            vtty.fd_array.push(fd);
+            vtty.fd_array.len() as c_int
+        }
+    }
+    /// Accept a TCP connection
+    fn conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
+        unsafe {
+            let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
+            let nsock = nsock as usize;
+
+            let fd = libc::accept(vtty.fd_array[nsock], null_mut(), null_mut());
+            if fd < 0 {
+                vm_error(vtty.c.vm, &format!("VttyTcp::conn_accept: accept on port {} failed {}\n", vtty.tcp_port, strerror(errno())));
+                return -1;
+            }
+
+            // Register the new FD
+            vtty.fd_pool.lock().unwrap().push(fd);
+
+            vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.name.as_str(), vtty.fd_array[nsock], fd));
+
+            // Adapt Telnet settings
+            if vtty.terminal_support {
+                vtty_telnet_do_ttype(fd);
+                vtty_telnet_will_echo(fd);
+                vtty_telnet_will_suppress_go_ahead(fd);
+                vtty_telnet_dont_linemode(fd);
+                vtty.input_state = VttyInput::Text;
+            }
+
+            if TELNET_MESSAGE_OK == 1 {
+                fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.c.vm).as_str(), vm_get_instance_id(vtty.c.vm), vm_get_type(vtty.c.vm).as_str(), vtty.name.as_str()));
+                // replay old text
+                let mut bytes = vtty.replay_buffer.make_contiguous();
+                while !bytes.is_empty() {
+                    let n = libc::send(fd, bytes.as_ptr().cast::<_>(), bytes.len(), 0);
+                    if n < 0 {
+                        perror("VttyTcp::conn_accept: send");
+                        break;
+                    }
+                    bytes = &mut bytes[n as usize..];
+                }
+                // warn if not running
+                if vm_get_status(vtty.c.vm) != VM_STATUS_RUNNING {
+                    fd_puts(fd, 0, &format!("\r\n!!! WARNING - VM is not running, will be unresponsive (status={}) !!!\r\n", vm_get_status(vtty.c.vm)));
+                }
+                vtty_flush((&mut vtty.c).into());
+            }
+            0
+        }
+    }
+    /// Read a character from the TCP connection.
+    fn read(_vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
+        unsafe {
+            let fd = *fd_slot;
+            let mut c: u8 = 0;
+
+            if libc::read(fd, addr_of_mut!(c).cast::<_>(), 1) == 1 {
+                return c.into();
+            }
+
+            // problem with the connection
+            libc::shutdown(fd, 2);
+            libc::close(fd);
+            *fd_slot = -1;
+
+            // Shouldn't happen...
+            -1
+        }
+    }
+}
+
 fn cfmakeraw(tios: &mut libc::termios) {
     #[cfg(has_libc_cfmakeraw)]
     unsafe {
@@ -391,133 +590,6 @@ fn vtty_serial_setup(vtty: &mut Vtty, option: &vtty_serial_option_t) -> c_int {
     }
 }
 
-/// Wait for a TCP connection
-fn vtty_tcp_conn_wait(vtty: &mut Vtty) -> c_int {
-    #[cfg(feature = "ENABLE_IPV6")]
-    unsafe {
-        let one: c_int = 1;
-
-        vtty.fd_array.clear();
-
-        let mut hints = zeroed::<libc::addrinfo>();
-        hints.ai_family = libc::PF_UNSPEC;
-        hints.ai_socktype = libc::SOCK_STREAM;
-        hints.ai_flags = libc::AI_PASSIVE;
-
-        let port_str = format!("{}\0", vtty.tcp_port);
-
-        /* Try to use the console binding address first, then fallback to the global binding address */
-        let addr: *const c_char = if !console_binding_addr.is_null() && *console_binding_addr != 0 {
-            console_binding_addr
-        } else if !binding_addr.is_null() && *binding_addr != 0 {
-            binding_addr
-        } else {
-            "127.0.0.1\0".as_ptr().cast::<_>()
-        };
-
-        let mut res0: *mut libc::addrinfo = null_mut();
-        if libc::getaddrinfo(addr, port_str.as_str().as_ptr().cast::<_>(), &hints, addr_of_mut!(res0)) != 0 {
-            perror("vtty_tcp_conn_wait: getaddrinfo");
-            return -1;
-        }
-
-        let mut next_res = res0;
-        while !next_res.is_null() {
-            let res = &mut *next_res;
-            next_res = res.ai_next;
-
-            if res.ai_family != libc::PF_INET && res.ai_family != libc::PF_INET6 {
-                continue;
-            }
-
-            let fd = libc::socket(res.ai_family, res.ai_socktype, res.ai_protocol);
-
-            if fd < 0 {
-                continue;
-            }
-
-            if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-                perror("vtty_tcp_conn_wait: setsockopt(SO_REUSEADDR)");
-            }
-
-            if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_KEEPALIVE, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-                perror("vtty_tcp_conn_wait: setsockopt(SO_KEEPALIVE)");
-            }
-
-            // Send telnet packets asap. Dont wait to fill packets up
-            if libc::setsockopt(fd, libc::SOL_TCP, libc::TCP_NODELAY, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-                perror("vtty_tcp_conn_wait: setsockopt(TCP_NODELAY)");
-            }
-
-            if libc::bind(fd, res.ai_addr, res.ai_addrlen) < 0 || libc::listen(fd, 1) < 0 {
-                libc::close(fd);
-                continue;
-            }
-
-            let proto = if res.ai_family == libc::PF_INET6 { "IPv6" } else { "IPv4" };
-            vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} for protocol {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, proto, fd));
-
-            vtty.fd_array.push(fd);
-        }
-
-        libc::freeaddrinfo(res0);
-        vtty.fd_array.len() as c_int
-    }
-    #[cfg(not(feature = "ENABLE_IPV6"))]
-    unsafe {
-        let one: c_int = 1;
-
-        vtty.fd_array.clear();
-
-        let fd = libc::socket(libc::PF_INET, libc::SOCK_STREAM, 0);
-        if fd < 0 {
-            perror("vtty_tcp_conn_wait: socket");
-            return -1;
-        }
-
-        if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-            perror("vtty_tcp_conn_wait: setsockopt(SO_REUSEADDR)");
-            libc::close(fd);
-            return -1;
-        }
-
-        if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_KEEPALIVE, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-            perror("vtty_tcp_conn_wait: setsockopt(SO_KEEPALIVE)");
-            libc::close(fd);
-            return -1;
-        }
-
-        // Send telnet packets asap. Dont wait to fill packets up
-        if libc::setsockopt(fd, libc::SOL_TCP, libc::TCP_NODELAY, addr_of!(one).cast::<_>(), size_of::<c_int>() as u32) < 0 {
-            perror("vtty_tcp_conn_wait: setsockopt(TCP_NODELAY)");
-            libc::close(fd);
-            return -1;
-        }
-
-        let mut serv = zeroed::<libc::sockaddr_in>();
-        serv.sin_family = libc::AF_INET as u16;
-        serv.sin_addr.s_addr = libc::INADDR_ANY.to_be();
-        serv.sin_port = vtty.tcp_port.to_be();
-
-        if libc::bind(fd, addr_of!(serv).cast::<_>(), size_of::<libc::sockaddr_in>() as u32) < 0 {
-            perror("vtty_tcp_conn_wait: bind");
-            libc::close(fd);
-            return -1;
-        }
-
-        if libc::listen(fd, 1) < 0 {
-            perror("vtty_tcp_conn_wait: listen");
-            libc::close(fd);
-            return -1;
-        }
-
-        vm_log(vtty.c.vm, "VTTY", &format!("{}: waiting connection on tcp port {} (FD {})\n", vtty.name.as_str(), vtty.tcp_port, fd));
-
-        vtty.fd_array.push(fd);
-        vtty.fd_array.len() as c_int
-    }
-}
-
 /// Create a virtual tty
 #[no_mangle]
 pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, type_: c_int, tcp_port: c_int, option: *const vtty_serial_option_t) -> *mut vtty_t {
@@ -546,7 +618,10 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
                 vtty.type_ = VttyType::Tcp;
                 if let Ok(tcp_port) = u16::try_from(tcp_port) {
                     vtty.tcp_port = tcp_port;
-                    vtty_tcp_conn_wait(&mut vtty);
+                    #[cfg(feature = "ENABLE_IPV6")]
+                    VttyTcp::conn_wait_ipv4_ipv6(&mut vtty);
+                    #[cfg(not(feature = "ENABLE_IPV6"))]
+                    VttyTcp::conn_wait_ipv4(&mut vtty);
                 } else {
                     eprintln!("VTTY: invalid tcp_port {}", tcp_port);
                     return null_mut();
@@ -834,81 +909,13 @@ fn vtty_telnet_do_ttype(fd: c_int) {
     }
 }
 
-/// Accept a TCP connection
-fn vtty_tcp_conn_accept(vtty: NonNull<vtty_t>, nsock: c_int) -> c_int {
-    unsafe {
-        let vtty = Vtty::from_c(vtty.as_ptr()).as_mut().unwrap();
-        let nsock = nsock as usize;
-
-        let fd = libc::accept(vtty.fd_array[nsock], null_mut(), null_mut());
-        if fd < 0 {
-            vm_error(vtty.c.vm, &format!("vtty_tcp_conn_accept: accept on port {} failed {}\n", vtty.tcp_port, strerror(errno())));
-            return -1;
-        }
-
-        // Register the new FD
-        vtty.fd_pool.lock().unwrap().push(fd);
-
-        vm_log(vtty.c.vm, "VTTY", &format!("{} is now connected (accept_fd={},conn_fd={})\n", vtty.name.as_str(), vtty.fd_array[nsock], fd));
-
-        // Adapt Telnet settings
-        if vtty.terminal_support {
-            vtty_telnet_do_ttype(fd);
-            vtty_telnet_will_echo(fd);
-            vtty_telnet_will_suppress_go_ahead(fd);
-            vtty_telnet_dont_linemode(fd);
-            vtty.input_state = VttyInput::Text;
-        }
-
-        if TELNET_MESSAGE_OK == 1 {
-            fd_puts(fd, 0, &format!("Connected to Dynamips VM \"{}\" (ID {}, type {}) - {}\r\nPress ENTER to get the prompt.\r\n", vm_get_name(vtty.c.vm).as_str(), vm_get_instance_id(vtty.c.vm), vm_get_type(vtty.c.vm).as_str(), vtty.name.as_str()));
-            // replay old text
-            let mut bytes = vtty.replay_buffer.make_contiguous();
-            while !bytes.is_empty() {
-                let n = libc::send(fd, bytes.as_ptr().cast::<_>(), bytes.len(), 0);
-                if n < 0 {
-                    perror("vtty_tcp_conn_accept: send");
-                    break;
-                }
-                bytes = &mut bytes[n as usize..];
-            }
-            // warn if not running
-            if vm_get_status(vtty.c.vm) != VM_STATUS_RUNNING {
-                fd_puts(fd, 0, &format!("\r\n!!! WARNING - VM is not running, will be unresponsive (status={}) !!!\r\n", vm_get_status(vtty.c.vm)));
-            }
-            vtty_flush((&mut vtty.c).into());
-        }
-        0
-    }
-}
-
-/// Read a character from the TCP connection.
-fn vtty_tcp_read(_vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
-    unsafe {
-        let fd = *fd_slot;
-        let mut c: u8 = 0;
-
-        if libc::read(fd, addr_of_mut!(c).cast::<_>(), 1) == 1 {
-            return c.into();
-        }
-
-        // problem with the connection
-        libc::shutdown(fd, 2);
-        libc::close(fd);
-        *fd_slot = -1;
-
-        // Shouldn't happen...
-        -1
-    }
-}
-
 /// Read a character from the virtual TTY.
 ///
 /// If the VTTY is a TCP connection, restart it in case of error.
 fn vtty_read(vtty: &mut Vtty, fd_slot: &mut c_int) -> c_int {
     match vtty.type_ {
         VttyType::Term | VttyType::Serial => VttyTerm::read(vtty),
-        VttyType::Tcp => vtty_tcp_read(vtty, fd_slot),
+        VttyType::Tcp => VttyTcp::read(vtty, fd_slot),
         _ => {
             eprintln!("vtty_read: bad vtty type {:?}\n", vtty.type_);
             -1
@@ -1150,7 +1157,7 @@ extern "C" fn vtty_thread_main(_arg: *mut c_void) -> *mut c_void {
                                 continue;
                             }
 
-                            vtty_tcp_conn_accept(vtty.into(), i as c_int);
+                            VttyTcp::conn_accept(vtty.into(), i as c_int);
                         }
 
                         // check established connection

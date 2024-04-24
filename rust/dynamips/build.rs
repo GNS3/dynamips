@@ -27,11 +27,18 @@ fn main() {
     emit_dep_path_cfg("libc", "libc::CRTSCTS", "has_libc_CRTSCTS");
     emit_dep_path_cfg("libc", "libc::CNEW_RTSCTS", "has_libc_CNEW_RTSCTS");
     emit_dep_path_cfg("libc", "libc::cfmakeraw", "has_libc_cfmakeraw");
+    #[rustfmt::skip]
+    let has_ipv6 = [
+        probe_dep_path("libc", "libc::getaddrinfo").status.success(),
+        probe_dep_path("libc", "libc::freeaddrinfo").status.success(),
+        probe_dep_path("libc", "libc::gai_strerror").status.success(),
+    ].into_iter().reduce(|x, y| x && y).unwrap_or(false);
+    if has_ipv6 {
+        autocfg::emit("has_ipv6");
+    }
     #[cfg(feature = "ENABLE_IPV6")]
     {
         println!("ENABLE_IPV6");
-        assert!(probe_dep_path("libc", "libc::getaddrinfo").status.success());
-        assert!(probe_dep_path("libc", "libc::freeaddrinfo").status.success());
-        assert!(probe_dep_path("libc", "libc::gai_strerror").status.success());
+        assert!(has_ipv6);
     }
 }
