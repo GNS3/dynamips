@@ -31,9 +31,6 @@ fn vtty_list() -> &'static Mutex<Vec<VttyPtr>> {
 /// 4 Kb should be enough for a keyboard buffer
 pub const VTTY_BUFFER_SIZE: usize = 4096;
 
-/// Maximum listening socket number
-pub const VTTY_MAX_FD: usize = 10;
-
 /// VTTY connection types
 #[derive(Default, Debug)]
 pub enum VttyType {
@@ -116,7 +113,7 @@ impl From<NonNull<virtual_tty>> for &mut Vtty {
 }
 #[cfg(test)]
 #[test]
-fn test_vtty_as_c_from_c_roundtrip() {
+fn test_vtty_to_c_from_c_roundtrip() {
     let mut x = Box::new(Vtty::new());
     let ptr = addr_of_mut!(*x);
     let to_ptr = Vtty::to_c(ptr);
@@ -600,8 +597,6 @@ pub extern "C" fn vtty_create(vm: *mut vm_instance_t, name: NonNull<c_char>, typ
         vtty.c.vm = vm;
         vtty.terminal_support = true;
         vtty.input_state = VttyInput::Text;
-        vtty.fd_array.clear();
-        vtty.fd_pool.lock().unwrap().clear();
 
         match type_ {
             VTTY_TYPE_NONE => {
