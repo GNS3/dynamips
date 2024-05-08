@@ -71,6 +71,8 @@
 #define ARCH_BYTE_ORDER ARCH_BIG_ENDIAN
 #elif defined(__riscv) || defined(__riscv__)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
+#elif defined(__loongarch64)
+#define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #endif
 
 #ifndef ARCH_BYTE_ORDER
