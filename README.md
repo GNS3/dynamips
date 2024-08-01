@@ -28,7 +28,7 @@ You should probably use stable unless you have a very good reason.
 
 For more information on the how to use Dynamips see the README file
 
-License: GNU GPLv2
+License: GNU GPLv2 only
 
 ### How to compile Dynamips
 
