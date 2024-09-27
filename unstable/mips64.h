@@ -386,7 +386,7 @@ struct cpu_mips {
    u_int bd_slot;
    
    /* Virtual address to physical page translation */
-   fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+   int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                              m_uint32_t *phys_page);
 
    /* Memory access functions */

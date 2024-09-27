@@ -13,7 +13,7 @@ static forced_inline void *MTS_PROTO(access)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                              u_int op_code,u_int op_size,
                                              u_int op_type,m_uint64_t *data);
 
-static fastcall int MTS_PROTO(translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+static int MTS_PROTO(translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                          m_uint32_t *phys_page);
 
 /* Initialize the MTS subsystem for the specified CPU */

@@ -308,7 +308,7 @@ struct cpu_ppc {
    ppc32_jit_tcb_t **tcb_virt_hash,**tcb_phys_hash;
 
    /* Virtual address to physical page translation */
-   fastcall int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
+   int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                              m_uint32_t *phys_page);
 
    /* Memory access functions */

@@ -357,7 +357,7 @@ struct cpu_mips {
    mips64_jit_tcb_t **exec_blk_map;
 
    /* Virtual address to physical page translation */
-   fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+   int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                              m_uint32_t *phys_page);
 
    /* Memory access functions */

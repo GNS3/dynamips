@@ -328,7 +328,7 @@ void *mips64_mts64_access(cpu_mips_t *cpu,m_uint64_t vaddr,
 }
 
 /* MTS64 virtual address to physical page translation */
-static fastcall int mips64_mts64_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
+static int mips64_mts64_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
                                            m_uint32_t *phys_page)
 {   
    mts64_entry_t *entry,alt_entry;
@@ -492,7 +492,7 @@ void *mips64_mts32_access(cpu_mips_t *cpu,m_uint64_t vaddr,
 }
 
 /* MTS32 virtual address to physical page translation */
-static fastcall int mips64_mts32_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
+static int mips64_mts32_translate(cpu_mips_t *cpu,m_uint64_t vaddr,
                                            m_uint32_t *phys_page)
 {     
    mts32_entry_t *entry,alt_entry;

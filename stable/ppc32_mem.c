@@ -456,7 +456,7 @@ static inline void *ppc32_mem_access(cpu_ppc_t *cpu,m_uint32_t vaddr,
                     (op_type),(data))
 
 /* Virtual address to physical page translation */
-static fastcall int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
+static int ppc32_translate(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                                     m_uint32_t *phys_page)
 {   
    mts32_entry_t *entry,alt_entry;
