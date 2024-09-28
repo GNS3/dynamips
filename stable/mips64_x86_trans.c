@@ -300,14 +300,14 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 
    x86_patch(p_exit,b->jit_ptr);
 }
@@ -388,14 +388,14 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 
    x86_patch(p_exit,b->jit_ptr);
 }
@@ -447,14 +447,14 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(op));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 }
 
 /* Coprocessor Register transfert operation */

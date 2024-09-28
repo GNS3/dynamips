@@ -308,7 +308,7 @@ enum {
 typedef struct cpu_mips cpu_mips_t;
 
 /* Memory operation function prototype */
-typedef fastcall void (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
+typedef void (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                        u_int reg);
 
 /* TLB entry definition */

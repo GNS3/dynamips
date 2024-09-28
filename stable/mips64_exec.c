@@ -298,7 +298,7 @@ _Unused static forced_inline void mips64_exec_memop(cpu_mips_t *cpu,int memop,
                                             m_uint64_t vaddr,u_int dst_reg,
                                             int keep_ll_bit)
 {     
-   fastcall mips_memop_fn fn;
+   mips_memop_fn fn;
 
    if (!keep_ll_bit) cpu->ll_bit = 0;
    fn = cpu->mem_op_fn[memop];
@@ -311,7 +311,7 @@ static forced_inline void mips64_exec_memop2(cpu_mips_t *cpu,int memop,
                                              u_int dst_reg,int keep_ll_bit)
 {
    m_uint64_t vaddr = cpu->gpr[base] + sign_extend(offset,16);
-   fastcall mips_memop_fn fn;
+   mips_memop_fn fn;
       
    if (!keep_ll_bit) cpu->ll_bit = 0;
    fn = cpu->mem_op_fn[memop];

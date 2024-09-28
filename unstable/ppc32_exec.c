@@ -93,7 +93,7 @@ void ppc32_dump_stats(cpu_ppc_t *cpu)
 static forced_inline void ppc32_exec_memop(cpu_ppc_t *cpu,int memop,
                                            m_uint32_t vaddr,u_int dst_reg)
 {     
-   fastcall ppc_memop_fn fn;
+   ppc_memop_fn fn;
     
    fn = cpu->mem_op_fn[memop];
    fn(cpu,vaddr,dst_reg);

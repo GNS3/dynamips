@@ -250,7 +250,7 @@ enum {
 typedef struct cpu_ppc cpu_ppc_t;
 
 /* Memory operation function prototype */
-typedef fastcall void (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
+typedef void (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                       u_int reg);
 
 /* BAT type indexes */
