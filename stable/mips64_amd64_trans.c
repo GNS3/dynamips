@@ -443,7 +443,7 @@ void mips64_emit_breakpoint(mips64_jit_tcb_t *b)
 }
 
 /* Unknown opcode handler */
-static fastcall void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
+static void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
 {
    printf("CPU = %p\n",cpu);
 

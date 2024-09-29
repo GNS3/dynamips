@@ -513,7 +513,7 @@ void mips64_emit_breakpoint(cpu_tc_t *b)
 }
 
 /* Unknown opcode handler */
-static asmlinkage void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
+static void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
 {
    printf("MIPS64: unhandled opcode 0x%8.8x at 0x%llx (ra=0x%llx)\n",
           opcode,cpu->pc,cpu->gpr[MIPS_GPR_RA]);
