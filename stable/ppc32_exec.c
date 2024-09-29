@@ -150,7 +150,7 @@ ppc32_exec_single_instruction(cpu_ppc_t *cpu,ppc_insn_t instruction)
 }
 
 /* Execute a single instruction (external) */
-fastcall int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn)
+int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn)
 {
    int res;
 
