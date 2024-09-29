@@ -518,7 +518,7 @@ void ppc32_trigger_timer_irq(cpu_ppc_t *cpu);
 fastcall void ppc32_trigger_irq(cpu_ppc_t *cpu);
 
 /* Virtual breakpoint */
-fastcall void ppc32_run_breakpoint(cpu_ppc_t *cpu);
+void ppc32_run_breakpoint(cpu_ppc_t *cpu);
 
 /* Add a virtual breakpoint */
 int ppc32_add_breakpoint(cpu_gen_t *cpu,m_uint64_t ia);

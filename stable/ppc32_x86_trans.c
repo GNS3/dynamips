@@ -687,8 +687,9 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 
    iop = ppc32_op_emit_insn_output(cpu,2,"breakpoint");
 
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-4);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    ppc32_emit_c_call(b,iop,ppc32_run_breakpoint);
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
 

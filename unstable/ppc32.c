@@ -348,7 +348,7 @@ void ppc32_trigger_timer_irq(cpu_ppc_t *cpu)
 }
 
 /* Virtual breakpoint */
-fastcall void ppc32_run_breakpoint(cpu_ppc_t *cpu)
+void ppc32_run_breakpoint(cpu_ppc_t *cpu)
 {
    cpu_log(cpu->gen,"BREAKPOINT",
            "Virtual breakpoint reached at IA=0x%8.8x\n",cpu->ia);
