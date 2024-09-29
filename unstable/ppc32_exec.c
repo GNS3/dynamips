@@ -160,7 +160,7 @@ int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn)
 }
 
 /* Execute a page */
-fastcall int ppc32_exec_page(cpu_ppc_t *cpu)
+int ppc32_exec_page(cpu_ppc_t *cpu)
 {
    m_uint32_t exec_page,offset;
    ppc_insn_t insn;
