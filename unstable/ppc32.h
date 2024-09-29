@@ -509,7 +509,7 @@ void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector);
 void ppc32_trigger_timer_irq(cpu_ppc_t *cpu);
 
 /* Trigger IRQs */
-fastcall void ppc32_trigger_irq(cpu_ppc_t *cpu);
+void ppc32_trigger_irq(cpu_ppc_t *cpu);
 
 /* Virtual breakpoint */
 void ppc32_run_breakpoint(cpu_ppc_t *cpu);

@@ -320,7 +320,7 @@ void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector)
 }
 
 /* Trigger IRQs */
-fastcall void ppc32_trigger_irq(cpu_ppc_t *cpu)
+void ppc32_trigger_irq(cpu_ppc_t *cpu)
 {
    if (unlikely(cpu->irq_disable)) {
       cpu->irq_pending = FALSE;
