@@ -506,7 +506,7 @@ static int mips64_emit_unknown(cpu_mips_t *cpu,cpu_tc_t *b,
 }
 
 /* Invalid delay slot handler */
-static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
+static void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 {
    printf("MIPS64: invalid instruction in delay slot at 0x%llx (ra=0x%llx)\n",
           cpu->pc,cpu->gpr[MIPS_GPR_RA]);
