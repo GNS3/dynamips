@@ -36,7 +36,7 @@ void mips64_dump_insn_block(cpu_mips_t *cpu,m_uint64_t pc,u_int count,
 void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
 
 /* Execute a page */
-fastcall int mips64_exec_page(cpu_mips_t *cpu);
+int mips64_exec_page(cpu_mips_t *cpu);
 
 /* Run MIPS code in step-by-step mode */
 void *mips64_exec_run_cpu(cpu_gen_t *cpu);
