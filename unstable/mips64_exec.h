@@ -11,7 +11,7 @@
 /* MIPS instruction recognition */
 struct mips64_insn_exec_tag {
    char *name;
-   fastcall int (*exec)(cpu_mips_t *,mips_insn_t);
+   int (*exec)(cpu_mips_t *,mips_insn_t);
    m_uint32_t mask,value;
    int delay_slot;
    int instr_type;
