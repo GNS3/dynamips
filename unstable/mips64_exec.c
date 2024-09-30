@@ -381,7 +381,7 @@ mips64_exec_single_instruction(cpu_mips_t *cpu,mips_insn_t instruction)
 }
 
 /* Single-step execution */
-fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
+void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction)
 {
    int res;
 

@@ -195,7 +195,11 @@ void mips64_emit_single_step(mips64_jit_tcb_t *b,mips_insn_t insn)
 {
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    x86_mov_reg_imm(b->jit_ptr,X86_EDX,insn);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,4);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_single_step);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Fast memory operation prototype */

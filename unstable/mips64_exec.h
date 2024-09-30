@@ -33,7 +33,7 @@ void mips64_dump_insn_block(cpu_mips_t *cpu,m_uint64_t pc,u_int count,
                             size_t insn_name_size);
 
 /* Single-step execution */
-fastcall void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
+void mips64_exec_single_step(cpu_mips_t *cpu,mips_insn_t instruction);
 
 /* Execute a page */
 fastcall int mips64_exec_page(cpu_mips_t *cpu);
