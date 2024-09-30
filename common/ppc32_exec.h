@@ -11,7 +11,7 @@
 /* PowerPC instruction recognition */
 struct ppc32_insn_exec_tag {
    char *name;
-   fastcall int (*exec)(cpu_ppc_t *,ppc_insn_t);
+   int (*exec)(cpu_ppc_t *,ppc_insn_t);
    m_uint32_t mask,value;
    int instr_type;
    m_uint64_t count;
