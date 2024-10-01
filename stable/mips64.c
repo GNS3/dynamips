@@ -482,7 +482,7 @@ void mips64_exec_syscall(cpu_mips_t *cpu)
 }
 
 /* Execute BREAK instruction */
-fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code)
+void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 {
    printf("MIPS64: BREAK instruction (code=%u)\n",code);
    mips64_dump_regs(cpu->gen);
