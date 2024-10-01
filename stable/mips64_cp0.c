@@ -600,7 +600,7 @@ static inline void mips64_cp0_exec_tlbw(cpu_mips_t *cpu,u_int index)
 }
 
 /* TLBWI: Write Indexed TLB entry */
-fastcall void mips64_cp0_exec_tlbwi(cpu_mips_t *cpu)
+void mips64_cp0_exec_tlbwi(cpu_mips_t *cpu)
 {
    mips64_cp0_exec_tlbw(cpu,cpu->cp0.reg[MIPS_CP0_INDEX]);
 }
