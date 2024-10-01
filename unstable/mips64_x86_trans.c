@@ -594,7 +594,10 @@ void mips64_check_pending_irq(cpu_tc_t *b)
 
    /* Trigger the IRQ */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_trigger_irq);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    mips64_jit_tcb_push_epilog(b);
 
    x86_patch(test1,b->jit_ptr);

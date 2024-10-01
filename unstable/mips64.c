@@ -585,7 +585,7 @@ void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 }
 
 /* Trigger IRQs */
-fastcall void mips64_trigger_irq(cpu_mips_t *cpu)
+void mips64_trigger_irq(cpu_mips_t *cpu)
 {
    if (unlikely(cpu->irq_disable)) {
       cpu->irq_pending = 0;
