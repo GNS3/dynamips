@@ -419,7 +419,7 @@ void mips64_trigger_exception(cpu_mips_t *cpu,u_int exc_code,int bd_slot)
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-fastcall void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
+void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
 {
    cpu->cp0_virt_cnt_reg++;
 
