@@ -58,7 +58,6 @@
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__i386) || defined(__i386__) || defined(i386)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
-#define ARCH_REGPARM_SUPPORTED  1
 #elif defined(__x86_64__)
 #define ARCH_BYTE_ORDER ARCH_LITTLE_ENDIAN
 #elif defined(__ia64__)
@@ -77,15 +76,6 @@
 
 #ifndef ARCH_BYTE_ORDER
 #error Please define your architecture!
-#endif
-
-/* Useful attributes for functions */
-#ifdef ARCH_REGPARM_SUPPORTED
-#define asmlinkage __attribute__((regparm(0)))
-#define fastcall   __attribute__((regparm(3)))
-#else
-#define asmlinkage
-#define fastcall
 #endif
 
 #ifndef _Unused
