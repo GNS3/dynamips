@@ -453,7 +453,7 @@ static void mips64_emit_memop(cpu_tc_t *b,int op,int base,int offset,
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void (*f)(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg))
 {
    /* update pc */
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));

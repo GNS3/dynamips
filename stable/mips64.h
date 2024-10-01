@@ -530,16 +530,16 @@ void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq);
 void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq);
 
 /* DMFC1 */
-fastcall void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* DMTC1 */
-fastcall void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* MFC1 */
-fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* MTC1 */
-fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* Virtual breakpoint */
 fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);

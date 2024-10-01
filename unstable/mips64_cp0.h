@@ -71,24 +71,24 @@ u_int mips64_cp0_get_mode(cpu_mips_t *cpu);
 m_uint64_t mips64_cp0_get_reg(cpu_mips_t *cpu,u_int cp0_reg);
 
 /* DMFC0 */
-fastcall void mips64_cp0_exec_dmfc0(cpu_mips_t *cpu,u_int gp_reg,
+void mips64_cp0_exec_dmfc0(cpu_mips_t *cpu,u_int gp_reg,
                                     u_int cp0_reg);
 
 /* DMTC0 */
-fastcall void mips64_cp0_exec_dmtc0(cpu_mips_t *cpu,u_int gp_reg,
+void mips64_cp0_exec_dmtc0(cpu_mips_t *cpu,u_int gp_reg,
                                     u_int cp0_reg);
 
 /* MFC0 */
-fastcall void mips64_cp0_exec_mfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
+void mips64_cp0_exec_mfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
 
 /* MTC0 */
-fastcall void mips64_cp0_exec_mtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
+void mips64_cp0_exec_mtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
 
 /* CFC0 */
-fastcall void mips64_cp0_exec_cfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
+void mips64_cp0_exec_cfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
 
 /* CTC0 */
-fastcall void mips64_cp0_exec_ctc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
+void mips64_cp0_exec_ctc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg);
 
 /* TLB lookup */
 int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op_type,

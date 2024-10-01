@@ -277,37 +277,37 @@ static inline void mips64_cp0_s1_set_reg(cpu_mips_t *cpu,u_int cp0_s1_reg,
 }
 
 /* DMFC0 */
-fastcall void mips64_cp0_exec_dmfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_dmfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    cpu->gpr[gp_reg] = mips64_cp0_get_reg_fast(cpu,cp0_reg);
 }
 
 /* DMTC0 */
-fastcall void mips64_cp0_exec_dmtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_dmtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    mips64_cp0_set_reg(cpu,cp0_reg,cpu->gpr[gp_reg]);
 }
 
 /* MFC0 */
-fastcall void mips64_cp0_exec_mfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_mfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    cpu->gpr[gp_reg] = sign_extend(mips64_cp0_get_reg_fast(cpu,cp0_reg),32);
 }
 
 /* MTC0 */
-fastcall void mips64_cp0_exec_mtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_mtc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    mips64_cp0_set_reg(cpu,cp0_reg,cpu->gpr[gp_reg] & 0xffffffff);
 }
 
 /* CFC0 */
-fastcall void mips64_cp0_exec_cfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_cfc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    cpu->gpr[gp_reg] = sign_extend(mips64_cp0_s1_get_reg(cpu,cp0_reg),32);
 }
 
 /* CTC0 */
-fastcall void mips64_cp0_exec_ctc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
+void mips64_cp0_exec_ctc0(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg)
 {
    mips64_cp0_s1_set_reg(cpu,cp0_reg,cpu->gpr[gp_reg] & 0xffffffff);
 }

@@ -515,19 +515,19 @@ fastcall void mips64_trigger_irq(cpu_mips_t *cpu)
 }
 
 /* DMFC1 */
-fastcall void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->gpr[gp_reg] = cpu->fpu.reg[cp1_reg];
 }
 
 /* DMTC1 */
-fastcall void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->fpu.reg[cp1_reg] = cpu->gpr[gp_reg];
 }
 
 /* MFC1 */
-fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    m_int64_t val;
 
@@ -536,7 +536,7 @@ fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 }
 
 /* MTC1 */
-fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->fpu.reg[cp1_reg] = cpu->gpr[gp_reg] & 0xffffffff;
 }

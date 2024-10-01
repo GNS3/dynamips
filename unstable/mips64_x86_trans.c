@@ -490,7 +490,7 @@ static void mips64_emit_memop(cpu_tc_t *b,int op,int base,int offset,
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void (*f)(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg))
 {
    /* update pc */
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
@@ -504,7 +504,12 @@ static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
    /* cpu instance */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,0);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,f);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Virtual Breakpoint */
