@@ -526,7 +526,7 @@ void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
 }
 
 /* Trigger the Timer IRQ */
-fastcall void mips64_trigger_timer_irq(cpu_mips_t *cpu)
+void mips64_trigger_timer_irq(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
 

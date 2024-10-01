@@ -544,7 +544,7 @@ void mips64_prepare_tlb_exception(cpu_mips_t *cpu,m_uint64_t vaddr);
 void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu);
 
 /* Trigger the Timer IRQ */
-fastcall void mips64_trigger_timer_irq(cpu_mips_t *cpu);
+void mips64_trigger_timer_irq(cpu_mips_t *cpu);
 
 /* Execute ERET instruction */
 fastcall void mips64_exec_eret(cpu_mips_t *cpu);
