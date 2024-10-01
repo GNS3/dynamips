@@ -680,7 +680,7 @@ void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc)
 }
 
 /* Debugging for register-jump to address 0 */
-fastcall void mips64_debug_jr0(cpu_mips_t *cpu)
+void mips64_debug_jr0(cpu_mips_t *cpu)
 {
    printf("MIPS64: cpu %p jumping to address 0...\n",cpu);
    mips64_dump_regs(cpu->gen);

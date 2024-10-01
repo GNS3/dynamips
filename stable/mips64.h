@@ -551,7 +551,7 @@ int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 
 /* Debugging for register-jump to address 0 */
-fastcall void mips64_debug_jr0(cpu_mips_t *cpu);
+void mips64_debug_jr0(cpu_mips_t *cpu);
 
 /* Set a register */
 void mips64_reg_set(cpu_gen_t *cpu,u_int reg,m_uint64_t val);
