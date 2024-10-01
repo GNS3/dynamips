@@ -491,7 +491,7 @@ void mips64_cp0_map_all_tlb_to_mts(cpu_mips_t *cpu)
 }
 
 /* TLBP: Probe a TLB entry */
-fastcall void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
+void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t hi_reg,asid;

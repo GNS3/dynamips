@@ -436,7 +436,7 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,
 }
 
 /* TLBP: Probe a TLB entry */
-fastcall void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
+void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    m_uint64_t hi_reg,asid;
