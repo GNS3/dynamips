@@ -555,7 +555,7 @@ void mips64_cp0_exec_tlbwi(cpu_mips_t *cpu)
 }
 
 /* TLBWR: Write Random TLB entry */
-fastcall void mips64_cp0_exec_tlbwr(cpu_mips_t *cpu)
+void mips64_cp0_exec_tlbwr(cpu_mips_t *cpu)
 {
    mips64_cp0_exec_tlbw(cpu,mips64_cp0_get_random_reg(cpu));
 }

@@ -2892,7 +2892,10 @@ DECLARE_INSN(TLBWR)
 {   
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwr);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    return(0);
 }
 
