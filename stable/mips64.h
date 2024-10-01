@@ -542,7 +542,7 @@ void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* Virtual breakpoint */
-fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);
+void mips64_run_breakpoint(cpu_mips_t *cpu);
 
 /* Add a virtual breakpoint */
 int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);

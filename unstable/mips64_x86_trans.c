@@ -515,8 +515,9 @@ static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void (*f)(cpu_mips_t
 /* Virtual Breakpoint */
 void mips64_emit_breakpoint(cpu_tc_t *b)
 {
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_run_breakpoint);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
