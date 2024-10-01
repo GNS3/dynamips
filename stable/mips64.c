@@ -447,7 +447,7 @@ void mips64_trigger_timer_irq(cpu_mips_t *cpu)
 }
 
 /* Execute ERET instruction */
-fastcall void mips64_exec_eret(cpu_mips_t *cpu)
+void mips64_exec_eret(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
 

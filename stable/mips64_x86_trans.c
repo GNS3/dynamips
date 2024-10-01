@@ -1769,7 +1769,10 @@ DECLARE_INSN(ERET)
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
 
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_eret);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
