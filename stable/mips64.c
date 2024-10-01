@@ -467,7 +467,7 @@ void mips64_exec_eret(cpu_mips_t *cpu)
 }
 
 /* Execute SYSCALL instruction */
-fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
+void mips64_exec_syscall(cpu_mips_t *cpu)
 {
 #if DEBUG_SYSCALL
    printf("MIPS64: SYSCALL at PC=0x%llx (RA=0x%llx)\n"

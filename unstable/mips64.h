@@ -550,7 +550,7 @@ void mips64_trigger_timer_irq(cpu_mips_t *cpu);
 void mips64_exec_eret(cpu_mips_t *cpu);
 
 /* Execute SYSCALL instruction */
-fastcall void mips64_exec_syscall(cpu_mips_t *cpu);
+void mips64_exec_syscall(cpu_mips_t *cpu);
 
 /* Execute BREAK instruction */
 fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code);
