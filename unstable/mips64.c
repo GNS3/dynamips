@@ -578,7 +578,7 @@ void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 }
 
 /* Trigger a Trap Exception */
-fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu)
+void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 {  
    cpu_log(cpu->gen,"MIPS64","TRAP exception\n");
    mips64_general_exception(cpu,MIPS_CP0_CAUSE_TRAP);

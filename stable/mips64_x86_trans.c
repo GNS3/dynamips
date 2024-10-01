@@ -2809,8 +2809,9 @@ DECLARE_INSN(TEQ)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    
@@ -2846,8 +2847,9 @@ DECLARE_INSN(TEQI)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 

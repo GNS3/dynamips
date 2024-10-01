@@ -492,7 +492,7 @@ void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 }
 
 /* Trigger a Trap Exception */
-fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu)
+void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 {  
    /* XXX TODO: Branch Delay slot */
    printf("MIPS64: TRAP exception, CPU=%p\n",cpu);
