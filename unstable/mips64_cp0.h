@@ -98,7 +98,7 @@ int mips64_cp0_tlb_lookup(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op_type,
 void mips64_cp0_exec_tlbp(cpu_mips_t *cpu);
 
 /* TLBR: Read Indexed TLB entry */
-fastcall void mips64_cp0_exec_tlbr(cpu_mips_t *cpu);
+void mips64_cp0_exec_tlbr(cpu_mips_t *cpu);
 
 /* TLBWI: Write Indexed TLB entry */
 fastcall void mips64_cp0_exec_tlbwi(cpu_mips_t *cpu);

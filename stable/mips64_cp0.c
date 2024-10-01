@@ -523,7 +523,7 @@ void mips64_cp0_exec_tlbp(cpu_mips_t *cpu)
 }
 
 /* TLBR: Read Indexed TLB entry */
-fastcall void mips64_cp0_exec_tlbr(cpu_mips_t *cpu)
+void mips64_cp0_exec_tlbr(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
    tlb_entry_t *entry;
