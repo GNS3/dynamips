@@ -513,7 +513,7 @@ static const struct cisco_eeprom eeprom_c6k_array[] = {
    { "C6K-POWER-1000W", 
      eeprom_c6k_power_1000w_data, sizeof(eeprom_c6k_power_1000w_data)/2 } ,
    { "C6K-VTT", 
-     eeprom_c6k_vtt_data, sizeof(eeprom_c6k_vtt_data) },
+     eeprom_c6k_vtt_data, sizeof(eeprom_c6k_vtt_data)/2 },
    { "C6K-LC-WS-X6248", 
      eeprom_c6k_lc_wsx6248_data, sizeof(eeprom_c6k_lc_wsx6248_data)/2 } ,
    { NULL, NULL, 0 },
