@@ -346,12 +346,12 @@ int vtty_parse_serial_option(vtty_serial_option_t *option, char *optarg)
       switch(*array[3]) {
          case 'o':
          case 'O': 
-            option->parity = 1;  /* odd */
+            option->parity = 1; break; /* odd */
          case 'e':
          case 'E': 
-            option->parity = 2;  /* even */
+            option->parity = 2; break; /* even */
          default:
-            option->parity = 0;  /* none */
+            option->parity = 0; break; /* none */
       }
    } else {
       option->parity = 0;
