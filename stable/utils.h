@@ -12,6 +12,9 @@
 #include <netinet/in.h>
 #include <signal.h>
 
+/* Global log file */
+extern FILE *log_file;
+
 /* Host CPU Types */
 #define CPU_x86    0
 #define CPU_amd64  1

@@ -47,9 +47,6 @@ struct symbol {
 /* ROM identification tag */
 #define ROM_ID  0x1e94b3df
 
-/* Global log file */
-extern FILE *log_file;
-
 /* Operating system name */
 extern const char *os_name;
 
