@@ -20,6 +20,7 @@ static inline m_uint32_t sbox_compute(m_uint8_t *data,int len)
       hash ^= sbox_array[*data];
       hash *= 3;
       data++;
+      len--;
    }
 
    return(hash);
