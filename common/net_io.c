@@ -721,7 +721,7 @@ static void netio_tcp_free(netio_inet_desc_t *nid)
  */
 static ssize_t netio_tcp_send(netio_inet_desc_t *nid,void *pkt,size_t pkt_len)
 {
-   u_long l = htonl(pkt_len);
+   m_uint32_t l = htonl(pkt_len);
 
    if (write(nid->fd,&l,sizeof(l)) == -1)
       return(-1);
@@ -731,7 +731,7 @@ static ssize_t netio_tcp_send(netio_inet_desc_t *nid,void *pkt,size_t pkt_len)
 
 static ssize_t netio_tcp_recv(netio_inet_desc_t *nid,void *pkt,size_t max_len)
 {
-   u_long l;
+   m_uint32_t l;
 
    if (read(nid->fd,&l,sizeof(l)) != sizeof(l))
       return(-1);
