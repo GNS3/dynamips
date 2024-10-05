@@ -82,7 +82,6 @@ char *hypervisor_ip_address = NULL;
 
 /* Log file */
 char *log_file_name = NULL;
-FILE *log_file = NULL;
 
 /* VM flags */
 volatile int vm_save_state = 0;
