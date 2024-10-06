@@ -294,16 +294,17 @@ void physmem_dma_transfer(vm_instance_t *vm,m_uint64_t src,m_uint64_t dst,
    }
 }
 
-/* strlen in VM physical memory */
-size_t physmem_strlen(vm_instance_t *vm,m_uint64_t paddr)
+/* strnlen in VM physical memory */
+size_t physmem_strnlen(vm_instance_t *vm,m_uint64_t paddr,size_t maxlen)
 {
    struct vdevice *vm_ram;
    size_t len = 0;
    char *ptr;
    
-   if ((vm_ram = dev_lookup(vm,paddr,TRUE)) != NULL) {
+   if ((vm_ram = dev_lookup(vm,paddr,TRUE)) != NULL && vm_ram->host_addr) {
       ptr = (char *)vm_ram->host_addr + (paddr - vm_ram->phys_addr);
-      len = strlen(ptr);
+      maxlen = m_min(maxlen, vm_ram->phys_len - (paddr - vm_ram->phys_addr));
+      len = strnlen(ptr,maxlen);
    }
 
    return(len);
