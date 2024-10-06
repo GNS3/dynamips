@@ -112,8 +112,8 @@ void physmem_copy_u8_to_vm(vm_instance_t *vm,m_uint64_t paddr,m_uint8_t val);
 void physmem_dma_transfer(vm_instance_t *vm,m_uint64_t src,m_uint64_t dst,
                           size_t len);
 
-/* strlen in VM physical memory */
-size_t physmem_strlen(vm_instance_t *vm,m_uint64_t paddr);
+/* strnlen in VM physical memory */
+size_t physmem_strnlen(vm_instance_t *vm,m_uint64_t paddr,size_t maxlen);
 
 /* find sequence of bytes in VM cacheable physical memory interval [first,last] */
 int physmem_cfind(vm_instance_t *vm,m_uint8_t *bytes,size_t len,

@@ -165,11 +165,10 @@ void *dev_remote_control_access(cpu_gen_t *cpu,struct vdevice *dev,
       /* Debugging/Log message: /!\ physical address */
       case 0x038:
          if (op_type == MTS_WRITE) {
-            len = physmem_strlen(vm,*data);
-            if (len < sizeof(d->con_buffer)) {
-               physmem_copy_from_vm(vm,d->con_buffer,*data,len+1);
-               vm_log(vm,"ROM",d->con_buffer);
-            }
+            len = physmem_strnlen(vm,*data,sizeof(d->con_buffer));
+            physmem_copy_from_vm(vm,d->con_buffer,*data,len);
+            d->con_buffer[m_min(len,sizeof(d->con_buffer)-1)] = 0;
+            vm_log(vm,"ROM","%s",d->con_buffer);
          }
          break;
 
