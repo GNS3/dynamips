@@ -419,7 +419,7 @@ void mips64_trigger_exception(cpu_mips_t *cpu,u_int exc_code,int bd_slot)
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-fastcall void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
+void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
 {
    cpu->cp0_virt_cnt_reg++;
 
@@ -435,7 +435,7 @@ fastcall void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu)
 }
 
 /* Trigger the Timer IRQ */
-fastcall void mips64_trigger_timer_irq(cpu_mips_t *cpu)
+void mips64_trigger_timer_irq(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
 
@@ -447,7 +447,7 @@ fastcall void mips64_trigger_timer_irq(cpu_mips_t *cpu)
 }
 
 /* Execute ERET instruction */
-fastcall void mips64_exec_eret(cpu_mips_t *cpu)
+void mips64_exec_eret(cpu_mips_t *cpu)
 {
    mips_cp0_t *cp0 = &cpu->cp0;
 
@@ -467,7 +467,7 @@ fastcall void mips64_exec_eret(cpu_mips_t *cpu)
 }
 
 /* Execute SYSCALL instruction */
-fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
+void mips64_exec_syscall(cpu_mips_t *cpu)
 {
 #if DEBUG_SYSCALL
    printf("MIPS64: SYSCALL at PC=0x%llx (RA=0x%llx)\n"
@@ -482,7 +482,7 @@ fastcall void mips64_exec_syscall(cpu_mips_t *cpu)
 }
 
 /* Execute BREAK instruction */
-fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code)
+void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 {
    printf("MIPS64: BREAK instruction (code=%u)\n",code);
    mips64_dump_regs(cpu->gen);
@@ -492,7 +492,7 @@ fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code)
 }
 
 /* Trigger a Trap Exception */
-fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu)
+void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 {  
    /* XXX TODO: Branch Delay slot */
    printf("MIPS64: TRAP exception, CPU=%p\n",cpu);
@@ -500,7 +500,7 @@ fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu)
 }
 
 /* Trigger IRQs */
-fastcall void mips64_trigger_irq(cpu_mips_t *cpu)
+void mips64_trigger_irq(cpu_mips_t *cpu)
 {
    if (unlikely(cpu->irq_disable)) {
       cpu->irq_pending = 0;
@@ -515,19 +515,19 @@ fastcall void mips64_trigger_irq(cpu_mips_t *cpu)
 }
 
 /* DMFC1 */
-fastcall void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->gpr[gp_reg] = cpu->fpu.reg[cp1_reg];
 }
 
 /* DMTC1 */
-fastcall void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->fpu.reg[cp1_reg] = cpu->gpr[gp_reg];
 }
 
 /* MFC1 */
-fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    m_int64_t val;
 
@@ -536,13 +536,13 @@ fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 }
 
 /* MTC1 */
-fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
+void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg)
 {
    cpu->fpu.reg[cp1_reg] = cpu->gpr[gp_reg] & 0xffffffff;
 }
 
 /* Virtual breakpoint */
-fastcall void mips64_run_breakpoint(cpu_mips_t *cpu)
+void mips64_run_breakpoint(cpu_mips_t *cpu)
 {
    cpu_log(cpu->gen,"BREAKPOINT",
            "Virtual breakpoint reached at PC=0x%llx\n",cpu->pc);
@@ -595,7 +595,7 @@ void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc)
 }
 
 /* Debugging for register-jump to address 0 */
-fastcall void mips64_debug_jr0(cpu_mips_t *cpu)
+void mips64_debug_jr0(cpu_mips_t *cpu)
 {
    printf("MIPS64: cpu %p jumping to address 0...\n",cpu);
    mips64_dump_regs(cpu->gen);

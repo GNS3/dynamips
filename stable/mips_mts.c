@@ -13,7 +13,7 @@ static forced_inline void *MTS_PROTO(access)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                              u_int op_code,u_int op_size,
                                              u_int op_type,m_uint64_t *data);
 
-static fastcall int MTS_PROTO(translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+static int MTS_PROTO(translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                          m_uint32_t *phys_page);
 
 /* Initialize the MTS subsystem for the specified CPU */
@@ -142,8 +142,7 @@ static void *MTS_PROTO(lookup)(cpu_mips_t *cpu,m_uint64_t vaddr)
 /* === MIPS Memory Operations ============================================= */
 
 /* LB: Load Byte */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -154,8 +153,7 @@ fastcall void MTS_PROTO(lb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LBU: Load Byte Unsigned */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lbu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lbu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -166,8 +164,7 @@ fastcall void MTS_PROTO(lbu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LH: Load Half-Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -178,8 +175,7 @@ fastcall void MTS_PROTO(lh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LHU: Load Half-Word Unsigned */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lhu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lhu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -190,8 +186,7 @@ fastcall void MTS_PROTO(lhu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LW: Load Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -202,8 +197,7 @@ fastcall void MTS_PROTO(lw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LWU: Load Word Unsigned */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lwu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lwu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -214,8 +208,7 @@ fastcall void MTS_PROTO(lwu)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LD: Load Double-Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(ld)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(ld)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -226,8 +219,7 @@ fastcall void MTS_PROTO(ld)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SB: Store Byte */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -238,8 +230,7 @@ fastcall void MTS_PROTO(sb)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SH: Store Half-Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -250,8 +241,7 @@ fastcall void MTS_PROTO(sh)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SW: Store Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -262,8 +252,7 @@ fastcall void MTS_PROTO(sw)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SD: Store Double-Word */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sd)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sd)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -274,8 +263,7 @@ fastcall void MTS_PROTO(sd)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LDC1: Load Double-Word To Coprocessor 1 */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(ldc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(ldc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -286,8 +274,7 @@ fastcall void MTS_PROTO(ldc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LWL: Load Word Left */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lwl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lwl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
@@ -310,8 +297,7 @@ fastcall void MTS_PROTO(lwl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LWR: Load Word Right */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(lwr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(lwr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
@@ -335,8 +321,7 @@ fastcall void MTS_PROTO(lwr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LDL: Load Double-Word Left */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(ldl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(ldl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
@@ -358,8 +343,7 @@ fastcall void MTS_PROTO(ldl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LDR: Load Double-Word Right */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(ldr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(ldr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t r_mask,naddr;
    m_uint64_t data;
@@ -381,8 +365,7 @@ fastcall void MTS_PROTO(ldr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SWL: Store Word Left */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
@@ -406,8 +389,7 @@ fastcall void MTS_PROTO(swl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SWR: Store Word Right */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
@@ -431,8 +413,7 @@ fastcall void MTS_PROTO(swr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SDL: Store Double-Word Left */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
@@ -456,8 +437,7 @@ fastcall void MTS_PROTO(sdl)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SDR: Store Double-Word Right */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t d_mask,naddr;
    m_uint64_t data;
@@ -481,8 +461,7 @@ fastcall void MTS_PROTO(sdr)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* LL: Load Linked */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(ll)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(ll)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -495,8 +474,7 @@ fastcall void MTS_PROTO(ll)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SC: Store Conditional */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sc)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sc)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -511,8 +489,7 @@ fastcall void MTS_PROTO(sc)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* SDC1: Store Double-Word from Coprocessor 1 */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
+void MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 {
    m_uint64_t data;
    void *haddr;
@@ -523,8 +500,7 @@ fastcall void MTS_PROTO(sdc1)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int reg)
 }
 
 /* CACHE: Cache operation */
-__attribute__((force_align_arg_pointer))
-fastcall void MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
+void MTS_PROTO(cache)(cpu_mips_t *cpu,m_uint64_t vaddr,u_int op)
 {
    mips64_jit_tcb_t *block;
    m_uint32_t pc_hash;

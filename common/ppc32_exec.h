@@ -11,7 +11,7 @@
 /* PowerPC instruction recognition */
 struct ppc32_insn_exec_tag {
    char *name;
-   fastcall int (*exec)(cpu_ppc_t *,ppc_insn_t);
+   int (*exec)(cpu_ppc_t *,ppc_insn_t);
    m_uint32_t mask,value;
    int instr_type;
    m_uint64_t count;
@@ -37,9 +37,9 @@ void ppc32_exec_create_ilt(void);
 void ppc32_dump_stats(cpu_ppc_t *cpu);
 
 /* Execute a page */
-fastcall int ppc32_exec_page(cpu_ppc_t *cpu);
+int ppc32_exec_page(cpu_ppc_t *cpu);
 
 /* Execute a single instruction (external) */
-fastcall int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn);
+int ppc32_exec_single_insn_ext(cpu_ppc_t *cpu,ppc_insn_t insn);
 
 #endif

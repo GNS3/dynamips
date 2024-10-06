@@ -323,7 +323,7 @@ void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector)
 }
 
 /* Trigger IRQs */
-fastcall void ppc32_trigger_irq(cpu_ppc_t *cpu)
+void ppc32_trigger_irq(cpu_ppc_t *cpu)
 {
    if (unlikely(cpu->irq_disable)) {
       cpu->irq_pending = FALSE;
@@ -351,7 +351,7 @@ void ppc32_trigger_timer_irq(cpu_ppc_t *cpu)
 }
 
 /* Virtual breakpoint */
-fastcall void ppc32_run_breakpoint(cpu_ppc_t *cpu)
+void ppc32_run_breakpoint(cpu_ppc_t *cpu)
 {
    cpu_log(cpu->gen,"BREAKPOINT",
            "Virtual breakpoint reached at IA=0x%8.8x\n",cpu->ia);

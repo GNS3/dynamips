@@ -338,7 +338,7 @@ enum {
 typedef struct cpu_mips cpu_mips_t;
 
 /* Memory operation function prototype */
-typedef fastcall void (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
+typedef void (*mips_memop_fn)(cpu_mips_t *cpu,m_uint64_t vaddr,
                                        u_int reg);
 
 /* TLB entry definition */
@@ -386,7 +386,7 @@ struct cpu_mips {
    u_int bd_slot;
    
    /* Virtual address to physical page translation */
-   fastcall int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
+   int (*translate)(cpu_mips_t *cpu,m_uint64_t vaddr,
                              m_uint32_t *phys_page);
 
    /* Memory access functions */
@@ -541,25 +541,25 @@ void mips64_prepare_tlb_exception(cpu_mips_t *cpu,m_uint64_t vaddr);
  * Increment count register and trigger the timer IRQ if value in compare 
  * register is the same.
  */
-fastcall void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu);
+void mips64_exec_inc_cp0_cnt(cpu_mips_t *cpu);
 
 /* Trigger the Timer IRQ */
-fastcall void mips64_trigger_timer_irq(cpu_mips_t *cpu);
+void mips64_trigger_timer_irq(cpu_mips_t *cpu);
 
 /* Execute ERET instruction */
-fastcall void mips64_exec_eret(cpu_mips_t *cpu);
+void mips64_exec_eret(cpu_mips_t *cpu);
 
 /* Execute SYSCALL instruction */
-fastcall void mips64_exec_syscall(cpu_mips_t *cpu);
+void mips64_exec_syscall(cpu_mips_t *cpu);
 
 /* Execute BREAK instruction */
-fastcall void mips64_exec_break(cpu_mips_t *cpu,u_int code);
+void mips64_exec_break(cpu_mips_t *cpu,u_int code);
 
 /* Trigger a Trap Exception */
-fastcall void mips64_trigger_trap_exception(cpu_mips_t *cpu);
+void mips64_trigger_trap_exception(cpu_mips_t *cpu);
 
 /* Trigger IRQs */
-fastcall void mips64_trigger_irq(cpu_mips_t *cpu);
+void mips64_trigger_irq(cpu_mips_t *cpu);
 
 /* Set an IRQ */
 void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq);
@@ -568,19 +568,19 @@ void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq);
 void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq);
 
 /* DMFC1 */
-fastcall void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_dmfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* DMTC1 */
-fastcall void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_dmtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* MFC1 */
-fastcall void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_mfc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* MTC1 */
-fastcall void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
+void mips64_exec_mtc1(cpu_mips_t *cpu,u_int gp_reg,u_int cp1_reg);
 
 /* Virtual breakpoint */
-fastcall void mips64_run_breakpoint(cpu_mips_t *cpu);
+void mips64_run_breakpoint(cpu_mips_t *cpu);
 
 /* Add a virtual breakpoint */
 int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
@@ -589,7 +589,7 @@ int mips64_add_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 void mips64_remove_breakpoint(cpu_gen_t *cpu,m_uint64_t pc);
 
 /* Debugging for register-jump to address 0 */
-fastcall void mips64_debug_jr0(cpu_mips_t *cpu);
+void mips64_debug_jr0(cpu_mips_t *cpu);
 
 /* Set a register */
 void mips64_reg_set(cpu_gen_t *cpu,u_int reg,m_uint64_t val);

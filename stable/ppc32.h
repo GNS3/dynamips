@@ -250,7 +250,7 @@ enum {
 typedef struct cpu_ppc cpu_ppc_t;
 
 /* Memory operation function prototype */
-typedef fastcall void (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
+typedef void (*ppc_memop_fn)(cpu_ppc_t *cpu,m_uint32_t vaddr,
                                       u_int reg);
 
 /* BAT type indexes */
@@ -315,7 +315,7 @@ struct cpu_ppc {
    ppc32_jit_tcb_t **exec_blk_map,**exec_phys_map;
 
    /* Virtual address to physical page translation */
-   fastcall int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
+   int (*translate)(cpu_ppc_t *cpu,m_uint32_t vaddr,u_int cid,
                              m_uint32_t *phys_page);
 
    /* Memory access functions */
@@ -515,10 +515,10 @@ void ppc32_trigger_exception(cpu_ppc_t *cpu,u_int exc_vector);
 void ppc32_trigger_timer_irq(cpu_ppc_t *cpu);
 
 /* Trigger IRQs */
-fastcall void ppc32_trigger_irq(cpu_ppc_t *cpu);
+void ppc32_trigger_irq(cpu_ppc_t *cpu);
 
 /* Virtual breakpoint */
-fastcall void ppc32_run_breakpoint(cpu_ppc_t *cpu);
+void ppc32_run_breakpoint(cpu_ppc_t *cpu);
 
 /* Add a virtual breakpoint */
 int ppc32_add_breakpoint(cpu_gen_t *cpu,m_uint64_t ia);

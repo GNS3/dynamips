@@ -418,7 +418,7 @@ static void mips64_emit_memop(mips64_jit_tcb_t *b,int op,int base,int offset,
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(mips64_jit_tcb_t *b,int rt,int rd,void (*f)(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg))
 {
    /* update pc */
    mips64_set_pc(b,b->start_pc+((b->mips_trans_pos-1)<<2));
@@ -443,7 +443,7 @@ void mips64_emit_breakpoint(mips64_jit_tcb_t *b)
 }
 
 /* Unknown opcode handler */
-static fastcall void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
+static void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
 {
    printf("CPU = %p\n",cpu);
 
@@ -465,7 +465,7 @@ static int mips64_emit_unknown(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
 }
 
 /* Invalid delay slot handler */
-static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
+static void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 {
    printf("MIPS64: invalid instruction in delay slot at 0x%llx (ra=0x%llx)\n",
           cpu->pc,cpu->gpr[MIPS_GPR_RA]);

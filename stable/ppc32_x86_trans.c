@@ -411,7 +411,10 @@ static void ppc32_emit_memop(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-12);
+   x86_push_reg(iop->ob_ptr,X86_ECX);
+   x86_push_reg(iop->ob_ptr,X86_EDX);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(op));
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
    
@@ -454,7 +457,10 @@ static void ppc32_emit_memop_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-12);
+   x86_push_reg(iop->ob_ptr,X86_ECX);
+   x86_push_reg(iop->ob_ptr,X86_EDX);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(op));
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
    
@@ -627,7 +633,10 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
 
    /* Call memory function */
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-12);
+   x86_push_reg(iop->ob_ptr,X86_ECX);
+   x86_push_reg(iop->ob_ptr,X86_EDX);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    x86_call_membase(iop->ob_ptr,X86_EDI,MEMOP_OFFSET(opcode));
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
    
@@ -652,10 +661,12 @@ static int ppc32_emit_unknown(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    ppc32_set_ia(&iop->ob_ptr,b->start_ia+(b->ppc_trans_pos << 2));
 
    /* Fallback to non-JIT mode */
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
    x86_mov_reg_imm(iop->ob_ptr,X86_EDX,opcode);
 
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-8);
+   x86_push_reg(iop->ob_ptr,X86_EDX);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    ppc32_emit_basic_c_call(&iop->ob_ptr,ppc32_exec_single_insn_ext);
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
    
@@ -678,8 +689,9 @@ void ppc32_emit_breakpoint(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b)
 
    iop = ppc32_op_emit_insn_output(cpu,2,"breakpoint");
 
-   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST);
    x86_mov_reg_reg(iop->ob_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(iop->ob_ptr,X86_SUB,X86_ESP,STACK_ADJUST-4);
+   x86_push_reg(iop->ob_ptr,X86_EAX);
    ppc32_emit_c_call(b,iop,ppc32_run_breakpoint);
    x86_alu_reg_imm(iop->ob_ptr,X86_ADD,X86_ESP,STACK_ADJUST);
 

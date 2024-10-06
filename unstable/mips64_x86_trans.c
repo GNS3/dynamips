@@ -212,7 +212,11 @@ void mips64_emit_single_step(cpu_tc_t *b,mips_insn_t insn)
 {
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
    x86_mov_reg_imm(b->jit_ptr,X86_EDX,insn);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,4);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_single_step);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Fast memory operation prototype */
@@ -322,14 +326,14 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 
    x86_patch(p_exit,b->jit_ptr);
 }
@@ -416,14 +420,14 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(opcode));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 
    x86_patch(p_exit,b->jit_ptr);
 }
@@ -475,18 +479,18 @@ static void mips64_emit_memop(cpu_tc_t *b,int op,int base,int offset,
    /* EAX = CPU instance pointer */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
-   /* 
-    * Push parameters on stack and call memory function.
-    * Keep the stack aligned on a 16-byte boundary for Darwin/x86.
-    */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   /* Call memory function */
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_push_reg(b->jit_ptr,X86_EBX);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    x86_call_membase(b->jit_ptr,X86_EDI,MEMOP_OFFSET(op));
-   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12+16);
 }
 
 /* Coprocessor Register transfert operation */
-static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
+static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void (*f)(cpu_mips_t *cpu,u_int gp_reg,u_int cp0_reg))
 {
    /* update pc */
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
@@ -500,20 +504,26 @@ static void mips64_emit_cp_xfr_op(cpu_tc_t *b,int rt,int rd,void *f)
    /* cpu instance */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
 
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,0);
+   x86_push_reg(b->jit_ptr,X86_ECX);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,f);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Virtual Breakpoint */
 void mips64_emit_breakpoint(cpu_tc_t *b)
 {
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_run_breakpoint);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 }
 
 /* Unknown opcode handler */
-static asmlinkage void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
+static void mips64_unknown_opcode(cpu_mips_t *cpu,m_uint32_t opcode)
 {
    printf("MIPS64: unhandled opcode 0x%8.8x at 0x%llx (ra=0x%llx)\n",
           opcode,cpu->pc,cpu->gpr[MIPS_GPR_RA]);
@@ -535,7 +545,7 @@ static int mips64_emit_unknown(cpu_mips_t *cpu,cpu_tc_t *b,
 }
 
 /* Invalid delay slot handler */
-static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
+static void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 {
    printf("MIPS64: invalid instruction in delay slot at 0x%llx (ra=0x%llx)\n",
           cpu->pc,cpu->gpr[MIPS_GPR_RA]);
@@ -549,8 +559,9 @@ static fastcall void mips64_invalid_delay_slot(cpu_mips_t *cpu)
 /* Emit unhandled instruction code */
 int mips64_emit_invalid_delay_slot(cpu_tc_t *b)
 {   
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_invalid_delay_slot);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    
@@ -584,7 +595,10 @@ void mips64_check_pending_irq(cpu_tc_t *b)
 
    /* Trigger the IRQ */
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_trigger_irq);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    mips64_jit_tcb_push_epilog(b);
 
    x86_patch(test1,b->jit_ptr);
@@ -1414,9 +1428,11 @@ DECLARE_INSN(BREAK)
 {	
    u_int code = bits(insn,6,25);
 
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_imm(b->jit_ptr,X86_EDX,code);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,4);
+   x86_push_reg(b->jit_ptr,X86_EDX);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_break);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 
@@ -1787,7 +1803,10 @@ DECLARE_INSN(ERET)
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_eret);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    mips64_jit_tcb_push_epilog(b);
    return(0);
 }
@@ -2825,7 +2844,10 @@ DECLARE_INSN(SYSCALL)
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
 
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_exec_syscall);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 
    mips64_jit_tcb_push_epilog(b);
    return(0);
@@ -2851,8 +2873,9 @@ DECLARE_INSN(TEQ)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    
@@ -2888,8 +2911,9 @@ DECLARE_INSN(TEQI)
    x86_branch8(b->jit_ptr, X86_CC_NE, 0, 1);
 
    /* Generate trap exception */
-   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,12);
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_c_call(b,mips64_trigger_trap_exception);
    x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
 
@@ -2906,7 +2930,10 @@ DECLARE_INSN(TLBP)
 {
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbp);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    return(0);
 }
 
@@ -2915,7 +2942,10 @@ DECLARE_INSN(TLBR)
 {  
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbr);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    return(0);
 }
 
@@ -2924,7 +2954,10 @@ DECLARE_INSN(TLBWI)
 {   
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwi);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    return(0);
 }
 
@@ -2933,7 +2966,10 @@ DECLARE_INSN(TLBWR)
 {   
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
    x86_mov_reg_reg(b->jit_ptr,X86_EAX,X86_EDI,4);
+   x86_alu_reg_imm(b->jit_ptr,X86_SUB,X86_ESP,8);
+   x86_push_reg(b->jit_ptr,X86_EAX);
    mips64_emit_basic_c_call(b,mips64_cp0_exec_tlbwr);
+   x86_alu_reg_imm(b->jit_ptr,X86_ADD,X86_ESP,12);
    return(0);
 }
 
