@@ -22,6 +22,7 @@
 #include "memory.h"
 #include "insn_lookup.h"
 #include "dynamips.h"
+#include "crc.h"
 
 /* Forward declaration of instruction array */
 static struct mips64_insn_exec_tag mips64_exec_tags[];
@@ -55,11 +56,15 @@ static void destroy_ilt(void)
 void mips64_exec_create_ilt(void)
 {
    int i,count;
+   m_uint32_t crc32 = 0;
 
-   for(i=0,count=0;mips64_exec_tags[i].exec;i++)
+   for(i=0,count=0;mips64_exec_tags[i].exec;i++) {
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&mips64_exec_tags[i].mask,sizeof(mips64_exec_tags[i].mask));
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&mips64_exec_tags[i].value,sizeof(mips64_exec_tags[i].value));
       count++;
+   }
 
-   ilt = ilt_create("mips64e",count,
+   ilt = ilt_create("mips64e",crc32,count,
                     (ilt_get_insn_cbk_t)mips64_exec_get_insn,
                     (ilt_check_cbk_t)mips64_exec_chk_lo,
                     (ilt_check_cbk_t)mips64_exec_chk_hi);

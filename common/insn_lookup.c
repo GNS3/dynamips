@@ -395,6 +395,11 @@ static void ilt_store_table(FILE *fd,insn_lookup_t *ilt)
 {
    int i;
 
+   /* Store compile info */
+   fwrite(&ilt->crc32_insn,sizeof(ilt->crc32_insn),1,fd);
+   fwrite(&ilt->nr_insn,sizeof(ilt->nr_insn),1,fd);
+   fwrite(&ilt->cbm_size,sizeof(ilt->cbm_size),1,fd);
+
    for(i=0;i<RFC_ARRAY_NUMBER;i++)
       if (ilt->rfct[i] != NULL)
          ilt_store_rfct(fd,i,ilt->rfct[i]);
@@ -461,6 +466,14 @@ static insn_lookup_t *ilt_load_table(FILE *fd)
    memset(ilt,0,sizeof(*ilt));
    fseek(fd,0,SEEK_SET);
 
+   /* Read compile info */
+   if ((fread(&ilt->crc32_insn,sizeof(ilt->crc32_insn),1,fd) != 1) ||
+       (fread(&ilt->nr_insn,sizeof(ilt->nr_insn),1,fd) != 1) ||
+       (fread(&ilt->cbm_size,sizeof(ilt->cbm_size),1,fd) != 1)) {
+      ilt_destroy(ilt);
+      return NULL;
+   }
+
    for(i=0;i<RFC_ARRAY_NUMBER;i++) {
       if (ilt_load_rfct(fd,ilt) == -1) {
          ilt_destroy(ilt);
@@ -524,7 +537,7 @@ static int ilt_cache_store(char *table_name,insn_lookup_t *ilt)
 }
 
 /* Create an instruction lookup table */
-insn_lookup_t *ilt_create(char *table_name,
+insn_lookup_t *ilt_create(char *table_name,m_uint32_t crc32_insn,
                           int nr_insn,ilt_get_insn_cbk_t get_insn,
                           ilt_check_cbk_t chk_lo,ilt_check_cbk_t chk_hi)
 {
@@ -532,8 +545,15 @@ insn_lookup_t *ilt_create(char *table_name,
    
    /* Try to load a cached table from disk */
    if ((ilt = ilt_cache_load(table_name))) {
-      printf("ILT: loaded table \"%s\" from cache.\n",table_name);
-      return ilt;
+      if (ilt->crc32_insn == crc32_insn && ilt->nr_insn == nr_insn && ilt->cbm_size == normalize_size(nr_insn,CBM_SIZE,CBM_SHIFT)) {
+         ilt->get_insn = get_insn;
+         ilt->chk_lo   = chk_lo;
+         ilt->chk_hi   = chk_hi;
+         printf("ILT: loaded table \"%s\" from cache.\n",table_name);
+         return ilt;
+      }
+      /* cached table is no longer valid */
+      ilt_destroy(ilt);
    }
 
    /* We have to build the full table... */
@@ -541,6 +561,7 @@ insn_lookup_t *ilt_create(char *table_name,
    assert(ilt);
    memset(ilt,0,sizeof(*ilt));
 
+   ilt->crc32_insn = crc32_insn;
    ilt->cbm_size = normalize_size(nr_insn,CBM_SIZE,CBM_SHIFT);
    ilt->nr_insn  = nr_insn;
    ilt->get_insn = get_insn;

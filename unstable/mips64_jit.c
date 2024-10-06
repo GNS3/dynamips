@@ -26,6 +26,7 @@
 #include "insn_lookup.h"
 #include "memory.h"
 #include "ptask.h"
+#include "crc.h"
 
 #include MIPS64_ARCH_INC_FILE
 
@@ -89,11 +90,15 @@ static void destroy_ilt(void)
 void mips64_jit_create_ilt(void)
 {
    int i,count;
+   m_uint32_t crc32 = 0;
 
-   for(i=0,count=0;mips64_insn_tags[i].emit;i++)
+   for(i=0,count=0;mips64_insn_tags[i].emit;i++) {
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&mips64_insn_tags[i].mask,sizeof(mips64_insn_tags[i].mask));
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&mips64_insn_tags[i].value,sizeof(mips64_insn_tags[i].value));
       count++;
+   }
 
-   ilt = ilt_create("mips64j",count,
+   ilt = ilt_create("mips64j",crc32,count,
                     (ilt_get_insn_cbk_t)mips64_jit_get_insn,
                     (ilt_check_cbk_t)mips64_jit_chk_lo,
                     (ilt_check_cbk_t)mips64_jit_chk_hi);
