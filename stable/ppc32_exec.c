@@ -21,6 +21,7 @@
 #include "memory.h"
 #include "insn_lookup.h"
 #include "dynamips.h"
+#include "crc.h"
 
 /* Forward declaration of instruction array */
 static struct ppc32_insn_exec_tag ppc32_exec_tags[];
@@ -54,11 +55,15 @@ static void destroy_ilt(void)
 void ppc32_exec_create_ilt(void)
 {
    int i,count;
+   m_uint32_t crc32 = 0;
 
-   for(i=0,count=0;ppc32_exec_tags[i].exec;i++)
+   for(i=0,count=0;ppc32_exec_tags[i].exec;i++) {
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&ppc32_exec_tags[i].mask,sizeof(ppc32_exec_tags[i].mask));
+      crc32 = crc32_compute(~crc32,(m_uint8_t*)&ppc32_exec_tags[i].value,sizeof(ppc32_exec_tags[i].value));
       count++;
+   }
 
-   ilt = ilt_create("ppc32e",count,
+   ilt = ilt_create("ppc32e",crc32,count,
                     (ilt_get_insn_cbk_t)ppc32_exec_get_insn,
                     (ilt_check_cbk_t)ppc32_exec_chk_lo,
                     (ilt_check_cbk_t)ppc32_exec_chk_hi);

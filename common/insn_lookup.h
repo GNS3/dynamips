@@ -64,6 +64,7 @@ struct rfc_eqclass {
 
 /* Instruction lookup table */
 struct insn_lookup {
+   m_uint32_t crc32_insn; /* crc32 of the mask and value of all the instructions */
    int nr_insn;    /* Number of instructions */
    int cbm_size;   /* Size of Class Bitmaps */
 
@@ -96,7 +97,7 @@ static forced_inline int ilt_lookup(insn_lookup_t *ilt,mips_insn_t insn)
 }
 
 /* Create an instruction lookup table */
-insn_lookup_t *ilt_create(char *table_name,
+insn_lookup_t *ilt_create(char *table_name,m_uint32_t crc32,
                           int nr_insn,ilt_get_insn_cbk_t get_insn,
                           ilt_check_cbk_t chk_lo,ilt_check_cbk_t chk_hi);
 
