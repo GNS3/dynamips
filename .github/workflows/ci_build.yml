@@ -1,0 +1,63 @@
+name: CI build
+
+on:
+  workflow_dispatch: # run manually https://docs.github.com/en/actions/using-workflows/manually-running-a-workflow
+  push:
+    branches: [ "master" ] # run for these branches
+  pull_request:
+    branches: [ "master" ] # run for pull requests that target these branches
+
+env:
+  BUILD_TYPE: RelWithDebInfo # CMake build type (Release, Debug, RelWithDebInfo, etc.)
+
+jobs:
+  # ----------------------------------------------------------------------------------------------
+  linux-amd64:
+    name: Linux (amd64/x86_64)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies with APT (libelf, libpcap)
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: libelf-dev libpcap0.8-dev
+        version: linux-amd64
+
+    - name: Configure with CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DDYNAMIPS_CODE=both -DBUILD_UDP_RECV=ON -DBUILD_UDP_SEND=ON -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/install -DCPACK_PACKAGE_FILE_NAME=dynamips-package -DCPACK_GENERATOR=ZIP
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      run: |
+        set -x
+        cd ${{github.workspace}}/build
+        ctest --verbose --build-config ${{env.BUILD_TYPE}}
+        ./stable/dynamips -e
+        ./unstable/dynamips_amd64_unstable -e
+
+    - name: Install
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Package
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target package
+
+    - name: Upload success
+      if: ${{ success() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-amd64-success
+        path: |
+          ${{github.workspace}}/build/install/
+          ${{github.workspace}}/build/dynamips-package.zip
+        compression-level: 9 # maximum compression
+
+    - name: Upload failure
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-amd64-failure
+        path: ${{github.workspace}}/build/
+        compression-level: 9 # maximum compression

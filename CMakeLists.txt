@@ -6,10 +6,7 @@
 #  - ANY_COMPILER    : skip compiler check (assumes gcc)
 #  - CMAKE_INSTALL_PREFIX : where to install
 
-set ( CMAKE_LEGACY_CYGWIN_WIN32 0 ) # Remove when CMake >= 2.8.4 is required
-cmake_minimum_required ( VERSION 2.8 )
-cmake_policy ( VERSION 2.8 )
-cmake_policy ( SET CMP0017 NEW ) # Prefer files from the CMake module directory when including from there.
+cmake_minimum_required ( VERSION 3.5 )
 foreach ( _dir
    "/usr/sfw" # search in "Sun FreeWare" (SunOS)
    "/opt/csw" # search in "OpenCSW" (SunOS)
@@ -24,8 +21,11 @@ endif ( CMAKE_PREFIX_PATH )
 list ( APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" )
 message ( STATUS "CMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}" )
 
-project ( dynamips C )
-set ( DYNAMIPS_VERSION_TRAIN 0.2.23 )
+project ( dynamips 
+   VERSION 0.2.23
+   LANGUAGES C
+)
+set ( DYNAMIPS_VERSION_TRAIN "${PROJECT_VERSION}" )
 set ( DYNAMIPS_VERSION_SUB )
 
 include ( utils )
@@ -36,6 +36,9 @@ if( APPLE OR (CMAKE_SYSTEM_NAME MATCHES "FreeBSD") )
     include_directories(include /usr/local/include/)
     include_directories(include /opt/local/include/)
 endif()
+
+# Enable testing
+include(CTest)
 
 add_subdirectory ( man )
 add_subdirectory ( common )
@@ -63,3 +66,6 @@ add_custom_target (
    )
 
 print_summary ()
+
+# Enable packaging
+include(CPack)
