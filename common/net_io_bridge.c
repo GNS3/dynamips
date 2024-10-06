@@ -158,7 +158,8 @@ void netio_bridge_save_config(netio_bridge_t *t,FILE *fd)
    fprintf(fd,"nio_bridge create %s\n",t->name);
 
    for(i=0;i<NETIO_BRIDGE_MAX_NIO;i++)
-      fprintf(fd,"nio_bridge add_nio %s %s\n",t->name,t->nio[i]->name);
+      if(t->nio[i])
+         fprintf(fd,"nio_bridge add_nio %s %s\n",t->name,t->nio[i]->name);
 
    fprintf(fd,"\n");
 }
