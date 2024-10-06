@@ -14,7 +14,7 @@
 
 message ( STATUS "dependencies - BEGIN" )
 
-if ( "${CMAKE_C_COMPILER}" MATCHES "clang$" OR "${CMAKE_C_COMPILER_ID}" STREQUAL "Clang" )
+if ( "${CMAKE_C_COMPILER}" MATCHES "clang$" OR "${CMAKE_C_COMPILER_ID}" MATCHES "Clang$" )
   set ( CMAKE_COMPILER_IS_CLANG 1 )
 endif()
 

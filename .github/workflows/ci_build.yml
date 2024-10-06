@@ -122,3 +122,53 @@ jobs:
         name: linux-x86-failure
         path: ${{github.workspace}}/build/
         compression-level: 9 # maximum compression
+
+  # ----------------------------------------------------------------------------------------------
+  macos-amd64:
+    name: MacOS (amd64/x86_64)
+    runs-on: macos-13 # macos-13 is the last runner with an AMD64 cpu, macos-14 has an ARM cpu (Apple M1)
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies with brew
+      uses: ConorMacBride/install-package@v1
+      with:
+        brew: libelf # libpcap is included in the SDK
+
+    - name: Configure with CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DDYNAMIPS_CODE=both -DBUILD_UDP_RECV=ON -DBUILD_UDP_SEND=ON -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/install -DCPACK_PACKAGE_FILE_NAME=dynamips-package -DCPACK_GENERATOR=ZIP
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      run: |
+        set -x
+        cd ${{github.workspace}}/build
+        ctest --verbose --build-config ${{env.BUILD_TYPE}}
+        ./stable/dynamips -e
+        ./unstable/dynamips_amd64_unstable -e
+
+    - name: Install
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Package
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target package
+
+    - name: Upload success
+      if: ${{ success() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-amd64-success
+        path: |
+          ${{github.workspace}}/build/install/
+          ${{github.workspace}}/build/dynamips-package.zip
+        compression-level: 9 # maximum compression
+
+    - name: Upload failure
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-amd64-failure
+        path: ${{github.workspace}}/build/
+        compression-level: 9 # maximum compression
