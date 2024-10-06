@@ -1369,7 +1369,7 @@ static fastcall int ppc32_exec_DIVW(cpu_ppc_t *cpu,ppc_insn_t insn)
    int rd = bits(insn,21,25);
    int ra = bits(insn,16,20);
    int rb = bits(insn,11,15);
-   register m_uint32_t a,b;
+   register m_int32_t a,b;
 
    a = (m_int32_t)cpu->gpr[ra];
    b = (m_int32_t)cpu->gpr[rb];
