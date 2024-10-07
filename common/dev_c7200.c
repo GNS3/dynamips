@@ -1303,7 +1303,7 @@ int c7200_init_npeg2(c7200_t *router)
    int i;
 
    /* Set the processor type: PowerPC G4 */
-   ppc32_set_pvr(CPU_PPC32(vm->boot_cpu),0x80040201);
+   ppc32_set_pvr(CPU_PPC32(vm->boot_cpu),PPC32_PVR_7448_v21);
 
    /* Initialize the PA PCI busses */
    if (c7200_pa_create_pci_busses(router) == -1)
