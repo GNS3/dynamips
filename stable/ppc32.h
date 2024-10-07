@@ -12,7 +12,10 @@
 #include "rbtree.h"
 
 /* CPU identifiers */
-#define PPC32_PVR_405     0x40110000
+#define PPC32_PVR_405     0x40110000 /* PowerPC 405GPa */
+#define PPC32_PVR_MPC8xx  0x00500000 /* PowerPC MPC 8xx cores (aka PowerQUICC) */
+#define PPC32_PVR_MPC860  (PPC32_PVR_MPC8xx | 0x0202) /* assumed, because dev_mpc860 is being used */
+#define PPC32_PVR_7448_v21 0x80040201 /* PowerPC 74xx cores (aka G4) */
 
 /* Number of GPR (general purpose registers) */
 #define PPC32_GPR_NR      32

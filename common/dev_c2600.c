@@ -560,7 +560,7 @@ static int c2600_init_platform(c2600_t *router)
    vm->boot_cpu = gen;
 
    /* Set processor ID */
-   ppc32_set_pvr(cpu,0x00500202);
+   ppc32_set_pvr(cpu,PPC32_PVR_MPC860);
    
    /* Mark the Network IO interrupt as high priority */
    vm->irq_idle_preempt[C2600_NETIO_IRQ] = TRUE;
