@@ -1,27 +1,115 @@
 name: dynamips
-version: git
+base: core24
+
 summary: Dynamips
 description: |
   Dynamips is an emulator designed to run Cisco IOS images.
-base: core18
-confinement: strict
 
-parts:
+apps: # TODO test and review needed plugs
   dynamips:
-    plugin: cmake
-    source: .
-    build-packages:
-      - gcc
-      - cmake
-      - libelf-dev
-      - libpcap-dev
-    stage-packages:
-      - libelf1
-      - libpcap0.8
-
-apps:
-  dynamips:
-    command: dynamips
+    command: bin/dynamips_amd64_stable
     plugs:
       - network
       - network-bind
+  x86: # dynamips.x86
+    command: bin/dynamips_x86_stable
+    plugs:
+      - network
+      - network-bind
+  unstable: # dynamips.unstable
+    command: bin/dynamips_amd64_unstable
+    plugs:
+      - network
+      - network-bind
+  x86-unstable: # dynamips.x86-unstable
+    command: bin/dynamips_x86_unstable
+    plugs:
+      - network
+      - network-bind
+  udp-send: # dynamips.udp-send
+    command: bin/udp_send
+    plugs:
+      - network
+      - network-bind
+  udp-recv: # dynamips.udp-recv
+    command: bin/udp_send
+    plugs:
+      - network
+      - network-bind
+  nvram-export: # dynamips.nvram-export
+    command: bin/nvram_export
+
+adopt-info: dynamips # grade and version are set in override-pull
+confinement: strict
+platforms:
+  amd64: # builds the amd64 version and x86 version
+
+parts:
+  dynamips:
+    plugin: nil
+    source: .
+    override-pull: |
+      craftctl default
+
+      # set grade and version
+      if [ -d "./.git" ]; then # can use git as reference
+        apt-get install -y git
+        _version=$(git describe --all --tags)
+        if [[ $_version == "tags/v"* ]]; then # is a release
+          craftctl set grade=stable
+        else # is not a release
+          _version=$(git describe --all --tags --long --abbrev=10) # add hash
+          craftctl set grade=devel
+        fi
+        _version="${_version/heads\//}" # remove "heads/"
+        _version="${_version/tags\//}" # remove "tags/"
+        # TODO how should version be normalized?
+        craftctl set version=$_version
+      else # has unknown version
+        craftctl set grade=devel
+        craftctl set version=unknown
+      fi
+    build-packages:
+      - cmake
+      - gcc-i686-linux-gnu
+      - g++-i686-linux-gnu
+      - gcc-x86-64-linux-gnu
+      - g++-x86-64-linux-gnu
+    override-build: |
+      # TODO how to make build-packages install i386 packages reliably? adding the architecture in a previous part can fail rebuilds
+      dpkg --add-architecture i386
+      apt-get update
+
+      apt-get install -y libelf-dev libelf-dev:i386
+      # XXX libpcap0.8-dev and libpcap0.8-dev:i386 cannot coexist
+
+      # build with x86 jit code
+      mkdir -p "${CRAFT_PART_BUILD_WORK}/build_x86"
+      cd "${CRAFT_PART_BUILD_WORK}/build_x86"
+      apt-get remove -y libpcap0.8-dev
+      apt-get install -y libpcap0.8-dev:i386
+      export CC=i686-linux-gnu-gcc
+      export CXX=i686-linux-gnu-g++
+      cmake "${CRAFT_PART_SRC_WORK}" -G "Unix Makefiles" "-DCMAKE_INSTALL_PREFIX=${CRAFT_PART_INSTALL}" -DDYNAMIPS_RENAME= -DDYNAMIPS_CODE=both -DBUILD_NVRAM_EXPORT=ON -DBUILD_UDP_SEND=ON -DBUILD_UDP_RECV=ON
+      cmake --build . -- "-j${CRAFT_PARALLEL_BUILD_COUNT}"
+      cmake --build . --target install
+
+      # build with amd64 jit code
+      mkdir -p "${CRAFT_PART_BUILD_WORK}/build_amd64"
+      cd "${CRAFT_PART_BUILD_WORK}/build_amd64"
+      apt-get remove -y libpcap0.8-dev:i386
+      apt-get install -y libpcap0.8-dev
+      export CC=x86_64-linux-gnu-gcc
+      export CXX=x86_64-linux-gnu-g++
+      cmake "${CRAFT_PART_SRC_WORK}" -G "Unix Makefiles" "-DCMAKE_INSTALL_PREFIX=${CRAFT_PART_INSTALL}" -DDYNAMIPS_RENAME= -DDYNAMIPS_CODE=both -DBUILD_NVRAM_EXPORT=ON -DBUILD_UDP_SEND=ON -DBUILD_UDP_RECV=ON
+      cmake --build . -- "-j${CRAFT_PARALLEL_BUILD_COUNT}"
+      cmake --build . --target install
+    override-stage: |
+      # TODO how to make stage-packages install i386 packages reliably? adding the architecture in a previous part can fail rebuilds
+      dpkg --add-architecture i386
+      apt-get update
+
+      apt-get install -y libelf1 libelf1:i386
+      apt-get install -y libpcap0.8 libpcap0.8:i386
+
+      craftctl default
