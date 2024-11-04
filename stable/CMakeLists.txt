@@ -269,6 +269,20 @@ maybe_rename_to_dynamips ( dynamips_x86_stable )
 install_executable ( dynamips_x86_stable )
 endif ()
 
+# dynamips_ppc32_stable
+if ( "ppc32" STREQUAL "${DYNAMIPS_ARCH}" )
+add_compile_options( -Wa,-mregnames ) # allow powerpc register names
+add_executable ( dynamips_ppc32_stable
+   ${_files}
+   "${LOCAL}/mips64_ppc32_trans.c"
+   "${COMMON}/ppc32_ppc32_trans.c"
+   )
+add_dependencies ( dynamips_ppc32_stable ${_dependencies} )
+target_link_libraries ( dynamips_ppc32_stable ${DYNAMIPS_LIBRARIES} )
+maybe_rename_to_dynamips ( dynamips_ppc32_stable )
+install_executable ( dynamips_ppc32_stable )
+endif ()
+
 # dynamips_nojit_stable
 if ( "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_nojit_stable
