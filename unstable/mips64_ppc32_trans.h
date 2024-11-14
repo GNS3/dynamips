@@ -72,8 +72,16 @@ static forced_inline void atomic_and(m_uint32_t *v,m_uint32_t m)
 
 /* Here's a hack, see comments in mips64_set_jump for more info */
 //#define mips64_jit_tcb_set_patch ppc_patch
-#define mips64_jit_tcb_set_patch(a,b) ppc_emit_jump_code(a,b,0)
-#define mips64_jit_tcb_set_jump(a,b)  ppc_emit_jump_code(a,b,0)
+//#define mips64_jit_tcb_set_patch(a,b) ppc_emit_jump_code(a,b,0)
+static inline void mips64_jit_tcb_set_patch(u_char *instp,u_char *target)
+{
+   ppc_emit_jump_code(instp,target,0);
+}
+//#define mips64_jit_tcb_set_jump(a,b)  ppc_emit_jump_code(a,b,0)
+static inline void mips64_jit_tcb_set_jump(u_char **instp,u_char *target)
+{
+   ppc_emit_jump_code(*instp,target,0);
+}
 
 /* MIPS instruction array */
 extern struct mips64_insn_tag mips64_insn_tags[];
@@ -81,26 +89,27 @@ extern struct mips64_insn_tag mips64_insn_tags[];
 #define PPC_STACK_DECREMENTER 114
 
 /* Push epilog for a ppc instruction block */
-static forced_inline void mips64_jit_tcb_push_epilog(mips64_jit_tcb_t *b)
+static forced_inline void mips64_jit_tcb_push_epilog(cpu_tc_t *tc)
 {
    /* Restore link register */
-   ppc_lwz(b->jit_ptr,ppc_r0,PPC_STACK_DECREMENTER+PPC_RET_ADDR_OFFSET,ppc_r1);
-   ppc_mtlr(b->jit_ptr,ppc_r0);
-   ppc_blr(b->jit_ptr);
+   ppc_lwz(tc->jit_ptr,ppc_r0,PPC_STACK_DECREMENTER+PPC_RET_ADDR_OFFSET,ppc_r1);
+   ppc_mtlr(tc->jit_ptr,ppc_r0);
+   ppc_blr(tc->jit_ptr);
 }
 
 /* Execute JIT code */
 static forced_inline
-void mips64_jit_tcb_exec(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
+void mips64_jit_tcb_exec(cpu_mips_t *cpu,cpu_tb_t *tb)
 {
    register insn_tblock_fptr jit_code __asm__("r12");
-   m_uint32_t offset;
+   m_uint32_t offset,*iarray;
 
    offset = (cpu->pc & MIPS_MIN_PAGE_IMASK) >> 2;
-   jit_code = (insn_tblock_fptr)block->jit_insn_ptr[offset];
+   jit_code = (insn_tblock_fptr)tb->tc->jit_insn_ptr[offset];
 
    if (unlikely(!jit_code)) {
-      mips64_exec_single_step(cpu,vmtoh32(block->mips_code[offset]));
+      iarray = (m_uint32_t *)tb->target_code;
+      mips64_exec_single_step(cpu,vmtoh32(iarray[offset]));
       return;
    }
 
@@ -113,8 +122,8 @@ void mips64_jit_tcb_exec(cpu_mips_t *cpu,mips64_jit_tcb_t *block)
    __asm__ __volatile__(
                         "mtlr   r12                   \n"
                         "mr      r3,   %1             \n"
-                        "lis     r0, hi16(jit_ret)    \n"
-                        "ori     r0, r0, lo16(jit_ret)\n"
+                        "lis     r0, jit_ret@h        \n"
+                        "ori     r0, r0, jit_ret@l    \n"
                         "stw     r3,   %2(r1)         \n"
                         "stw     r0,   %3(r1)         \n"
                         "stwu    r1,   %4(r1)         \n"
