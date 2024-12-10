@@ -268,3 +268,135 @@ jobs:
         name: cygwin-amd64-failure
         path: ${{github.workspace}}/build/
         compression-level: 9 # maximum compression
+
+  # ----------------------------------------------------------------------------------------------
+  linux-ppc32:
+    name: Linux (ppc32)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Restore ArchPOWER powerpc iso
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          archpower-current-powerpc.iso
+          archpower-current-powerpc.iso.sig
+        key: archpower-current-powerpc-iso
+
+    - name: Get updated ArchPOWER powerpc iso
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+
+        ## Get updated iso
+        if [ -f archpower-current-powerpc.iso ]; then
+          stat archpower-current-powerpc.iso* >cached.stat 2>/dev/null
+        fi
+        wget --progress=dot:giga --directory-prefix . --timestamping https://archlinuxpower.org/iso/archpower-current-powerpc.iso
+        wget --progress=dot:giga --directory-prefix . --timestamping https://archlinuxpower.org/iso/archpower-current-powerpc.iso.sig
+        gpg --keyserver hkps://keyserver.ubuntu.com --keyserver-options auto-key-retrieve --verify archpower-current-powerpc.iso.sig
+
+        ## Invalidate cache if files changed
+        if [ -f cached.stat ]; then
+          stat archpower-current-powerpc.iso* >updated.stat 2>/dev/null
+          cmp -s cached.stat updated.stat || gh cache delete archpower-current-powerpc-iso
+          rm cached.stat updated.stat
+        fi
+
+    - name: Cache ArchPOWER powerpc iso
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          archpower-current-powerpc.iso
+          archpower-current-powerpc.iso.sig
+        key: archpower-current-powerpc-iso
+
+    - name: Create chroot
+      run: |
+        set -x
+
+        ## Make sure the system can run ppc32 executables (persistent) and that sudo works (credential)
+        sudo docker run --rm --privileged multiarch/qemu-user-static --reset --persistent yes --credential yes
+
+        ## Create overlay
+        mkdir -p overlay/iso overlay/sfs overlay/rw overlay/root overlay/work overlay/script
+        sudo mount --read-only archpower-current-powerpc.iso overlay/iso/
+        sudo mount --read-only overlay/iso/arch/ppc/airootfs.sfs overlay/sfs/
+        sudo mount -t overlay -o lowerdir=overlay/sfs,upperdir=overlay/rw,workdir=overlay/work none overlay/root/
+        sudo chown root:root overlay/root
+        sudo mkdir overlay/root/home/$USER
+        sudo mount --rbind /home/$USER overlay/root/home/$USER/
+        # based on https://wiki.archlinux.org/title/Chroot#Using_chroot
+        sudo mount -t proc /proc overlay/root/proc/
+        sudo mount -t sysfs /sys overlay/root/sys/
+        sudo mount --rbind /dev overlay/root/dev/
+        sudo rm overlay/root/etc/resolv.conf
+        sudo cp /etc/resolv.conf overlay/root/etc/resolv.conf
+        cat overlay/root/version
+
+        ## Create chroot scripts
+        echo "#!$SHELL" > overlay/script/chroot-as-root.sh
+        echo "exec sudo chroot $PWD/overlay/root \"\$@\"" >> overlay/script/chroot-as-root.sh
+        cat ./overlay/script/chroot-as-root.sh
+        echo "#!$SHELL" > overlay/script/chroot-as-user.sh
+        echo "exec sudo chroot --userspec $USER $PWD/overlay/root \"\$@\"" >> overlay/script/chroot-as-user.sh
+        cat ./overlay/script/chroot-as-user.sh
+        chmod +x overlay/script/*
+        echo "$PWD/overlay/script" >> "$GITHUB_PATH"
+
+        ## Add current user to the chroot
+        ./overlay/script/chroot-as-root.sh useradd -u $(id -u $USER) -G wheel $USER
+        ./overlay/script/chroot-as-root.sh bash -c "echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers"
+
+    - name: Install dependencies
+      shell: chroot-as-root.sh bash {0}
+      run: |
+        set -x
+        pacman-key --init
+        pacman-key --populate
+        pacman -Sy --noconfirm --needed base-devel sudo git cmake zip libelf libpcap
+
+    - name: Configure with CMake
+      shell: chroot-as-user.sh bash {0}
+      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DDYNAMIPS_CODE=both -DBUILD_UDP_RECV=ON -DBUILD_UDP_SEND=ON -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/install -DCPACK_PACKAGE_FILE_NAME=dynamips-package -DCPACK_GENERATOR=ZIP
+
+    - name: Build
+      shell: chroot-as-user.sh bash {0}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      shell: chroot-as-user.sh bash {0}
+      run: |
+        set -x
+        cd ${{github.workspace}}/build
+        ctest --verbose --build-config ${{env.BUILD_TYPE}}
+        ./stable/dynamips -e
+        ./unstable/dynamips_ppc32_unstable -e
+
+    - name: Install
+      shell: chroot-as-user.sh bash {0}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Package
+      shell: chroot-as-user.sh bash {0}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target package
+
+    - name: Upload success
+      if: ${{ success() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-ppc32-success
+        path: |
+          ${{github.workspace}}/build/install/
+          ${{github.workspace}}/build/dynamips-package.zip
+        compression-level: 9 # maximum compression
+
+    - name: Upload failure
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-ppc32-failure
+        path: ${{github.workspace}}/build/
+        compression-level: 9 # maximum compression
