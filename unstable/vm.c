@@ -369,6 +369,7 @@ static vm_instance_t *vm_create(char *name,int instance_id,
    vm->timer_irq_check_itv  = VM_TIMER_IRQ_CHECK_ITV;
    vm->log_file_enabled     = TRUE;
    vm->rommon_vars.filename = vm_build_filename(vm,"rommon_vars");
+   vm->tsg                  = -1;
 
    if (!vm->rommon_vars.filename)
       goto err_rommon;
