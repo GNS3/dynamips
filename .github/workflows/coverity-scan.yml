@@ -16,6 +16,9 @@ env:
 
 jobs:
   coverity_scan:
+    # only run in the GNS repository
+    # based on https://stackoverflow.com/a/63822135
+    if: github.repository_owner == 'GNS3'
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
