@@ -70,7 +70,7 @@ Either download and extract a source tarball from the releases page or clone the
 Git repository using:
 
 ```
-git clone git://github.com/GNS3/dynamips.git
+git clone https://github.com/GNS3/dynamips.git
 cd dynamips
 mkdir build
 cd build
