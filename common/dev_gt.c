@@ -2663,6 +2663,7 @@ int dev_gt64010_init(vm_instance_t *vm,char *name,
 
       if (!d->pci_dev) {
          fprintf(stderr,"gt64010: unable to create PCI device.\n");
+         free(d);
          return(-1);
       }
    }
