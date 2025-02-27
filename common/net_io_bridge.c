@@ -369,6 +369,7 @@ int netio_bridge_start(char *filename)
 
    if (netio_bridge_read_cfg_file(t,filename) == -1) {
       fprintf(stderr,"NETIO_BRIDGE: unable to parse configuration file.\n");
+      netio_bridge_release("default");
       return(-1);
    }
    
