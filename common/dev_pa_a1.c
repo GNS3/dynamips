@@ -1577,6 +1577,7 @@ int dev_c7200_pa_a1_init(vm_instance_t *vm,struct cisco_card *card)
    if (!pci_dev_ti) {
       vm_error(vm,"%s: unable to create PCI device TI1570.\n",
                card->dev_name);
+      free(d);
       return(-1);
    }
 
@@ -1590,6 +1591,8 @@ int dev_c7200_pa_a1_init(vm_instance_t *vm,struct cisco_card *card)
    if (!pci_dev_plx) {
       vm_error(vm,"%s: unable to create PCI device PLX 9060ES.\n",
                card->dev_name);
+      pci_dev_remove(pci_dev_ti);
+      free(d);
       return(-1);
    }
 
@@ -1602,6 +1605,9 @@ int dev_c7200_pa_a1_init(vm_instance_t *vm,struct cisco_card *card)
    /* Allocate the control memory */
    if (!(d->ctrl_mem_ptr = malloc(TI1570_CTRL_MEM_SIZE))) {
       vm_error(vm,"%s: unable to create control memory.\n",card->dev_name);
+      pci_dev_remove(pci_dev_ti);
+      pci_dev_remove(pci_dev_plx);
+      free(d);
       return(-1);
    }
 
