@@ -625,6 +625,7 @@ int frsw_start(char *filename)
 
    if (frsw_read_cfg_file(t,filename) == -1) {
       fprintf(stderr,"FRSW: unable to parse configuration file.\n");
+      frsw_release("default");
       return(-1);
    }
    
