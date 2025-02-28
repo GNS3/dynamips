@@ -151,6 +151,7 @@ static rfc_eqclass_t *cbm_get_eqclass(rfc_array_t *rfct,cbm_array_t *cbm)
 
       /* Insert it in hash table */
       if (hash_table_insert(rfct->cbm_hash,bmp,eqcl) == -1)
+         free(eqcl);
          return NULL;
    }
 

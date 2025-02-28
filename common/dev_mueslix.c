@@ -988,12 +988,15 @@ dev_mueslix_init(vm_instance_t *vm,char *name,int chip_mode,
 
    if (!pci_dev) {
       fprintf(stderr,"%s (Mueslix): unable to create PCI device.\n",name);
+      free(d);
       return NULL;
    }
 
    /* Create the device itself */
    if (!(dev = dev_create(name))) {
       fprintf(stderr,"%s (Mueslix): unable to create device.\n",name);
+      pci_dev_remove(pci_dev);
+      free(d);
       return NULL;
    }
 
