@@ -945,6 +945,7 @@ int ethsw_start(char *filename)
 
    if (ethsw_read_cfg_file(t,filename) == -1) {
       fprintf(stderr,"ETHSW: unable to parse configuration file.\n");
+      ethsw_release("default");
       return(-1);
    }
 

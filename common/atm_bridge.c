@@ -365,6 +365,7 @@ int atm_bridge_start(char *filename)
 
    if (atm_bridge_read_cfg_file(t,filename) == -1) {
       fprintf(stderr,"ATM Bridge: unable to parse configuration file.\n");
+      atm_bridge_release("default");
       return(-1);
    }
 

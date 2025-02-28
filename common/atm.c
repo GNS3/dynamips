@@ -697,6 +697,7 @@ int atmsw_start(char *filename)
 
    if (atmsw_read_cfg_file(t,filename) == -1) {
       fprintf(stderr,"ATMSW: unable to parse configuration file.\n");
+      atmsw_release("default");
       return(-1);
    }
 
