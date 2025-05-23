@@ -578,6 +578,7 @@ static int c3600_init_platform(c3600_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 

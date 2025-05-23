@@ -534,6 +534,7 @@ static int c6sup1_init_platform(c6sup1_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU0!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 

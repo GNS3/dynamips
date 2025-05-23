@@ -457,6 +457,7 @@ static int c3745_init_platform(c3745_t *router)
    if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
       free(vm->cpu_group);
+      free(vm->cpu_group);
       return(-1);
    }
 
