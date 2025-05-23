@@ -94,6 +94,7 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
    /* Initialize the virtual PowerPC processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU0!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 

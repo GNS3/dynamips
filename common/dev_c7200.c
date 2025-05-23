@@ -1475,6 +1475,7 @@ static int c7200m_init_platform(c7200_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU0!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 
@@ -1597,6 +1598,7 @@ static int c7200p_init_platform(c7200_t *router)
    /* Initialize the virtual PowerPC processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU0!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 

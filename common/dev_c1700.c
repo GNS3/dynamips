@@ -487,6 +487,7 @@ static int c1700_init_platform(c1700_t *router)
    /* Initialize the virtual PowerPC processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU!\n");
+      free(vm->cpu_group);
       return(-1);
    }
 
