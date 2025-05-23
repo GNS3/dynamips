@@ -2727,6 +2727,7 @@ int dev_gt64120_init(vm_instance_t *vm,char *name,
                                0,0,irq,d,NULL,pci_gt64120_read,NULL);
       if (!d->pci_dev) {
          fprintf(stderr,"gt64120: unable to create PCI device.\n");
+         free(d);
          return(-1);
       }
    }
@@ -2806,6 +2807,7 @@ int dev_gt96100_init(vm_instance_t *vm,char *name,
                                0,0,-1,d,NULL,pci_gt96100_read,NULL);
       if (!d->pci_dev) {
          fprintf(stderr,"gt96100: unable to create PCI device.\n");
+         free(d);
          return(-1);
       }
    }
