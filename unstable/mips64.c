@@ -306,6 +306,16 @@ int mips64_get_idling_pc(cpu_gen_t *cpu)
 
    /* Re-enable IRQ */
    mcpu->irq_disable = FALSE;
+   
+   /* Free all hash nodes */
+   for (i = 0; i < IDLE_HASH_SIZE; i++) {
+      struct ppc32_idle_pc_hash *cur = pc_hash[i];
+      while (cur) {
+         struct ppc32_idle_pc_hash *next = cur->next;
+         free(cur);
+         cur = next;
+      }
+   }
    free(pc_hash);
    return(0);
 }
