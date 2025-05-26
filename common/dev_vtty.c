@@ -336,7 +336,7 @@ int vtty_parse_serial_option(vtty_serial_option_t *option, char *optarg)
 
    if (!(option->device = strdup(array[0]))) {
       fprintf(stderr,"vtty_parse_serial_option: unable to copy string\n");
-      return(-1);
+      goto cleanup;
    }
    
    option->baudrate = (count>1) ? atoi(array[1]) : 9600;
@@ -357,9 +357,11 @@ int vtty_parse_serial_option(vtty_serial_option_t *option, char *optarg)
       option->parity = 0;
    }
 
-   option->stopbits = (count>4) ? atoi(array[4]) : 1;
-   option->hwflow   = (count>5) ? atoi(array[5]) : 0;
-   return(0);
+cleanup:
+   for (int i = 0; i < count; i++)
+      free(array[i]);
+
+   return option->device ? 0 : -1;
 }
 
 #if defined(__CYGWIN__) || defined(SUNOS)
