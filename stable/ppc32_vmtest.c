@@ -94,8 +94,7 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
    /* Initialize the virtual PowerPC processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU0!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu0 = CPU_PPC32(gen0);
@@ -116,7 +115,7 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
       vm_obj_t *obj;
    /* Initialize ROM (as a Flash) */
    if (!(obj = dev_flash_init(vm,"rom",0xFF000000,16*1048576)))
-      return(-1);
+      goto err;
 
    dev_flash_copy_data(obj,0x0F00000,ppc32_microcode,ppc32_microcode_len);
    }
@@ -154,6 +153,10 @@ static int ppc32_vmtest_init_platform(vm_instance_t *vm)
    /* Display the device list */
    dev_show_list(vm);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Boot the RAW image */

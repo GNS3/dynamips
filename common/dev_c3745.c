@@ -456,9 +456,7 @@ static int c3745_init_platform(c3745_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
-      free(vm->cpu_group);
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu = CPU_MIPS64(gen);
@@ -490,29 +488,29 @@ static int c3745_init_platform(c3745_t *router)
 
    /* IO FPGA */
    if (dev_c3745_iofpga_init(router,C3745_IOFPGA_ADDR,0x200000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"io_fpga")))
-      return(-1);
+      goto err;
 
    router->iofpga_data = obj->data;
 
 #if 0
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C3745_PCI_IO_ADDR)))
-      return(-1);
+      goto err;
 #endif
 
    /* Initialize the chassis */
    if (c3745_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
 
    /* Initialize ROM (as a Flash) */
    if (!(obj = dev_flash_init(vm,"rom",C3745_ROM_ADDR,vm->rom_size*1048576)))
-      return(-1);
+      goto err;
 
    dev_flash_copy_data(obj,0,mips64_microcode,mips64_microcode_len);
    c3745_nvram_check_empty_config(vm);
@@ -534,11 +532,15 @@ static int c3745_init_platform(c3745_t *router)
 
    /* Initialize Network Modules */
    if (vm_slot_init_all(vm) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c3745_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Boot the IOS image */

@@ -1451,7 +1451,7 @@ static int c7200_init_platform_pa(c7200_t *router)
 static int c7200m_init_platform(c7200_t *router)
 {
    struct vm_instance *vm = router->vm;
-   cpu_mips_t *cpu0; 
+   cpu_mips_t *cpu0;
    cpu_gen_t *gen0;
 
    /* Copy config register setup into "active" config register */
@@ -1475,8 +1475,7 @@ static int c7200m_init_platform(c7200_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU0!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu0 = CPU_MIPS64(gen0);
@@ -1521,7 +1520,7 @@ static int c7200m_init_platform(c7200_t *router)
 
    /* Initialize the NPE board */
    if (router->npe_driver->npe_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
@@ -1542,7 +1541,7 @@ static int c7200m_init_platform(c7200_t *router)
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C7200_PCI_IO_ADDR)))
-      return(-1);
+      goto err;
 
    /* Cirrus Logic PD6729 (PCI-to-PCMCIA host adapter) */
    dev_clpd6729_init(vm,router->pcmcia_bus,
@@ -1551,22 +1550,26 @@ static int c7200m_init_platform(c7200_t *router)
 
    /* Initialize the Port Adapters */
    if (c7200_init_platform_pa(router) == -1)
-      return(-1);
+      goto err;
 
    /* Verify the check list */
    if (c7200_checklist(router) == -1)
-      return(-1);
+      goto err;
 
    /* Midplane FPGA */
    dev_c7200_mpfpga_init(router,C7200_MPFPGA_ADDR,0x1000);
 
    /* IO FPGA */
    if (dev_c7200_iofpga_init(router,C7200_IOFPGA_ADDR,0x1000) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c7200_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Initialize the C7200 Platform (PowerPC) */
@@ -1598,8 +1601,7 @@ static int c7200p_init_platform(c7200_t *router)
    /* Initialize the virtual PowerPC processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU0!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu0 = CPU_PPC32(gen0);
@@ -1619,10 +1621,10 @@ static int c7200p_init_platform(c7200_t *router)
 
    /* Initialize the Marvell MV-64460 system controller */
    if (c7200_init_mv64460(router) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"mv64460")))
-      return(-1);
+      goto err;
 
    router->mv64460_sysctr = obj->data;
 
@@ -1640,7 +1642,7 @@ static int c7200p_init_platform(c7200_t *router)
 
    /* Initialize the NPE board */
    if (router->npe_driver->npe_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
@@ -1664,7 +1666,7 @@ static int c7200p_init_platform(c7200_t *router)
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C7200_G2_PCI_IO_ADDR)))
-      return(-1);
+      goto err;
 
    /* Cirrus Logic PD6729 (PCI-to-PCMCIA host adapter) */
    dev_clpd6729_init(vm,router->pcmcia_bus,
@@ -1673,15 +1675,15 @@ static int c7200p_init_platform(c7200_t *router)
 
    /* Initialize the Port Adapters */
    if (c7200_init_platform_pa(router) == -1)
-      return(-1);
+      goto err;
    
    /* IO FPGA */
    if (dev_c7200_iofpga_init(router,C7200_G2_IOFPGA_ADDR,0x1000) == -1)
-      return(-1);
+      goto err;
 
    /* MP FPGA */
    if (dev_c7200_mpfpga_init(router,C7200_G2_MPFPGA_ADDR,0x10000) == -1)
-      return(-1);
+      goto err;
 
    /* 
     * If we have no i/o card in slot 0, the console is handled by 
@@ -1696,6 +1698,10 @@ static int c7200p_init_platform(c7200_t *router)
    /* Show device list */
    c7200_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Boot the IOS image (MIPS) */
