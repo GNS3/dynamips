@@ -468,8 +468,7 @@ static int c6msfc1_init_platform(c6msfc1_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen0 = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU0!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu0 = CPU_MIPS64(gen0);
@@ -514,8 +513,8 @@ static int c6msfc1_init_platform(c6msfc1_t *router)
 
    /* Initialize the NPE board */
    if (c6msfc1_init_hw(router) == -1)
-      return(-1);
-
+      goto err;
+      
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
 
@@ -535,32 +534,36 @@ static int c6msfc1_init_platform(c6msfc1_t *router)
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C6MSFC1_PCI_IO_ADDR)))
-      return(-1);
+      goto err;
 
    /* Initialize the Port Adapters */
    if (c6msfc1_init_platform_pa(router) == -1)
-      return(-1);
+      goto err;
 
    /* Verify the check list */
    if (c6msfc1_checklist(router) == -1)
-      return(-1);
+      goto err;
 
    /* Midplane FPGA */
    if (dev_c6msfc1_mpfpga_init(router,C6MSFC1_MPFPGA_ADDR,0x1000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"mp_fpga")))
-      return(-1);
-   
+      goto err;
+
    router->mpfpga_data = obj->data;
    
    /* IO FPGA */
    if (dev_c6msfc1_iofpga_init(router,C6MSFC1_IOFPGA_ADDR,0x1000) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c6msfc1_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Boot the IOS image */

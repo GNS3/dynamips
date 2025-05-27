@@ -578,8 +578,7 @@ static int c3600_init_platform(c3600_t *router)
    /* Initialize the virtual MIPS processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_MIPS64,0))) {
       vm_error(vm,"unable to create CPU!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu = CPU_MIPS64(gen);
@@ -606,7 +605,7 @@ static int c3600_init_platform(c3600_t *router)
    /* Get chassis specific driver */
    if (!router->chassis_driver) {
       vm_error(vm,"no chassis defined.\n");
-      return(-1);
+      goto err;
    }
 
    /* Remote emulator control */
@@ -625,20 +624,20 @@ static int c3600_init_platform(c3600_t *router)
 
    /* IO FPGA */
    if (dev_c3600_iofpga_init(router,C3600_IOFPGA_ADDR,0x40000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"io_fpga")))
-      return(-1);
+      goto err;
 
    router->iofpga_data = obj->data;
 
    /* PCI IO space */
    if (!(vm->pci_io_space = pci_io_data_init(vm,C3600_PCI_IO_ADDR)))
-      return(-1);
+      goto err;
 
    /* Initialize the chassis */
    if (router->chassis_driver->chassis_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
@@ -663,11 +662,15 @@ static int c3600_init_platform(c3600_t *router)
 
    /* Initialize Network Modules */
    if (vm_slot_init_all(vm) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c3600_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 /* Boot the IOS image */

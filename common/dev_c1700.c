@@ -487,8 +487,7 @@ static int c1700_init_platform(c1700_t *router)
    /* Initialize the virtual PowerPC processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu = CPU_PPC32(gen);
@@ -517,25 +516,25 @@ static int c1700_init_platform(c1700_t *router)
    cpu->mpc860_immr = C1700_MPC860_ADDR;
 
    if (dev_mpc860_init(vm,"MPC860",C1700_MPC860_ADDR,0x10000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"MPC860")))
-      return(-1);
+      goto err;
 
    router->mpc_data = obj->data;
 
    /* IO FPGA */
    if (dev_c1700_iofpga_init(router,C1700_IOFPGA_ADDR,0x10000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"io_fpga")))
-      return(-1);
+      goto err;
 
    router->iofpga_data = obj->data;
 
    /* Initialize the chassis */
    if (c1700_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
@@ -557,7 +556,6 @@ static int c1700_init_platform(c1700_t *router)
    dev_nvram_init(vm,"nvram",
                   C1700_NVRAM_ADDR,vm->nvram_size*1024,&vm->conf_reg);
 
-
    /* Bootflash (4 Mb) */
    dev_bootflash_init(vm,"bootflash","c1700-bootflash-4mb",C1700_FLASH_ADDR);
 
@@ -567,11 +565,15 @@ static int c1700_init_platform(c1700_t *router)
 
    /* Initialize Network Modules */
    if (vm_slot_init_all(vm) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c1700_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 static struct ppc32_bat_prog bat_array[] = {

@@ -550,8 +550,7 @@ static int c2600_init_platform(c2600_t *router)
    /* Initialize the virtual PowerPC processor */
    if (!(gen = cpu_create(vm,CPU_TYPE_PPC32,0))) {
       vm_error(vm,"unable to create CPU!\n");
-      free(vm->cpu_group);
-      return(-1);
+      goto err;
    }
 
    cpu = CPU_PPC32(gen);
@@ -580,25 +579,25 @@ static int c2600_init_platform(c2600_t *router)
    cpu->mpc860_immr = C2600_MPC860_ADDR;
 
    if (dev_mpc860_init(vm,"MPC860",C2600_MPC860_ADDR,0x10000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"MPC860")))
-      return(-1);
+      goto err;
 
    router->mpc_data = obj->data;
 
    /* IO FPGA */
    if (dev_c2600_iofpga_init(router,C2600_IOFPGA_ADDR,0x10000) == -1)
-      return(-1);
+      goto err;
 
    if (!(obj = vm_object_find(router->vm,"io_fpga")))
-      return(-1);
+      goto err;
 
    router->iofpga_data = obj->data;
 
    /* Initialize the chassis */
    if (c2600_init(router) == -1)
-      return(-1);
+      goto err;
 
    /* Initialize RAM */
    vm_ram_init(vm,0x00000000ULL);
@@ -633,11 +632,15 @@ static int c2600_init_platform(c2600_t *router)
 
    /* Initialize Network Modules */
    if (vm_slot_init_all(vm) == -1)
-      return(-1);
+      goto err;
 
    /* Show device list */
    c2600_show_hardware(router);
    return(0);
+
+err:
+   free(vm->cpu_group);
+   return(-1);
 }
 
 static struct ppc32_bat_prog bat_array[] = {
