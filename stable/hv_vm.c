@@ -1028,7 +1028,7 @@ static int cmd_slot_add_binding(hypervisor_conn_t *conn,int argc,char *argv[])
    if (!(vm = hypervisor_find_object(conn,argv[0],OBJ_TYPE_VM)))
       return(-1);
 
-   slot = atoi(argv[1]);
+   slot = atoi(argv[1]) < 0 ? 0 : atoi(argv[1]);
    port = atoi(argv[2]);
 
    if (vm_slot_add_binding(vm,argv[3],slot,port) == -1) {
