@@ -235,6 +235,10 @@ cpu_gen_t *cpu_create(vm_instance_t *vm,u_int type,u_int id)
    /* create the CPU thread execution */
    if (pthread_create(&cpu->cpu_thread,NULL,cpu_run_fn,cpu) != 0) {
       fprintf(stderr,"cpu_create: unable to create thread for CPU%u\n",id);
+      if (cpu->exec_page_array){
+         free(cpu->exec_page_array);
+         cpu->exec_page_array = NULL;
+      }
       free(cpu);
       return NULL;
    }

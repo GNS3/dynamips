@@ -533,8 +533,12 @@ static int c6msfc1_init_platform(c6msfc1_t *router)
    dev_bswap_init(vm,"mem_bswap",C6MSFC1_BSWAP_ADDR,1024*1048576,0x00000000ULL);
 
    /* PCI IO space */
-   if (!(vm->pci_io_space = pci_io_data_init(vm,C6MSFC1_PCI_IO_ADDR)))
-      goto err;
+   
+   if (!vm->pci_io_space) {
+      vm->pci_io_space = pci_io_data_init(vm, C6MSFC1_PCI_IO_ADDR);
+      if (!vm->pci_io_space)
+         goto err;
+   }
 
    /* Initialize the Port Adapters */
    if (c6msfc1_init_platform_pa(router) == -1)
