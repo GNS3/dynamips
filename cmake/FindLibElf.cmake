@@ -20,10 +20,14 @@ if (LIBELF_LIBRARIES AND LIBELF_INCLUDE_DIRS)
   set (LibElf_FIND_QUIETLY TRUE)
 endif (LIBELF_LIBRARIES AND LIBELF_INCLUDE_DIRS)
 
+find_package(PkgConfig)
+pkg_check_modules(PkgConfig_LibElf QUIET libelf)
+
 find_path (LIBELF_INCLUDE_DIRS
     NAMES
       libelf.h
     PATHS
+      ${PkgConfig_LibElf_INCLUDE_DIRS}
       /usr/include
       /usr/include/libelf
       /usr/local/include
@@ -42,6 +46,7 @@ find_library (LIBELF_LIBRARIES
       /usr/local/lib
       /opt/local/lib
       /sw/lib
+      ${PkgConfig_LibElf_LIBRARY_DIRS}
       ENV LIBRARY_PATH
       ENV LD_LIBRARY_PATH)
 

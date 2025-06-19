@@ -35,6 +35,7 @@ include ( configure )
 if( APPLE OR (CMAKE_SYSTEM_NAME MATCHES "FreeBSD") )
     include_directories(include /usr/local/include/)
     include_directories(include /opt/local/include/)
+    include_directories(include /opt/homebrew/include/)
 endif()
 
 # Enable testing
