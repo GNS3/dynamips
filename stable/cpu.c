@@ -235,9 +235,20 @@ cpu_gen_t *cpu_create(vm_instance_t *vm,u_int type,u_int id)
    /* create the CPU thread execution */
    if (pthread_create(&cpu->cpu_thread,NULL,cpu_run_fn,cpu) != 0) {
       fprintf(stderr,"cpu_create: unable to create thread for CPU%u\n",id);
-      if (cpu->exec_page_array){
-         free(cpu->exec_page_array);
-         cpu->exec_page_array = NULL;
+      switch(cpu->type) {
+         case CPU_TYPE_MIPS64:
+            if (CPU_MIPS64(cpu)->exec_page_array) {
+               free(CPU_MIPS64(cpu)->exec_page_array);
+               CPU_MIPS64(cpu)->exec_page_array = NULL;
+            }
+            break;
+
+         case CPU_TYPE_PPC32:
+            if (CPU_PPC32(cpu)->exec_page_array) {
+               free(CPU_PPC32(cpu)->exec_page_array);
+               CPU_PPC32(cpu)->exec_page_array = NULL;
+            }
+            break;
       }
       free(cpu);
       return NULL;
