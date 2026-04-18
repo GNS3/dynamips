@@ -3036,3 +3036,10 @@ Fixed packet capture on Mac OS X (echoed packets)
 
 * Command line option to configure console binding for TCP/AUX console.
   - Fallbacks to the hypervisor binding address if not set.
+
+
++--------------------+
+| Release:  v0.2.24  |
++--------------------+
+
+* Fix memory leaks

@@ -1,19 +1,19 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.23
+Version:  v0.2.24
 
-Release date:  Monday, Jan 2nd, 2023 (2023-01-02)
+Release date:  Saturday, Apr 18th, 2026 (2026-04-18)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.23
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.24
 
 License: GNU GPLv2
 
 
-What's New since v0.2.23
+What's New since v0.2.24
 ========================
 
-* Command line option to configure console binding for TCP/AUX console. Fixes #62
+* Fix memory leaks
 
 
 Known Issues
