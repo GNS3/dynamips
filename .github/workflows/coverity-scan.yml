@@ -19,9 +19,9 @@ jobs:
     # only run in the GNS repository
     # based on https://stackoverflow.com/a/63822135
     if: github.repository_owner == 'GNS3'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up environment
         run: |
@@ -65,7 +65,7 @@ jobs:
               https://scan.coverity.com/builds?project=${COVERITY_PROJECT}
 
       - name: Upload scan logs as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scan-logs
           path: |

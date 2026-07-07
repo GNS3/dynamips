@@ -16,7 +16,7 @@ jobs:
     name: Linux (amd64/x86_64)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install dependencies with APT (libelf, libpcap)
       uses: awalsh128/cache-apt-pkgs-action@latest
@@ -46,7 +46,7 @@ jobs:
 
     - name: Upload success
       if: ${{ success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-amd64-success
         path: |
@@ -56,7 +56,7 @@ jobs:
 
     - name: Upload failure
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-amd64-failure
         path: ${{github.workspace}}/build/
@@ -67,7 +67,7 @@ jobs:
     name: Linux (x86)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup x86 chroot with Alpine Linux and install dependencies
       uses: jirutka/setup-alpine@v1
@@ -107,7 +107,7 @@ jobs:
 
     - name: Upload success
       if: ${{ success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-x86-success
         path: |
@@ -117,7 +117,7 @@ jobs:
 
     - name: Upload failure
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-x86-failure
         path: ${{github.workspace}}/build/
@@ -128,7 +128,7 @@ jobs:
     name: MacOS (amd64/x86_64)
     runs-on: macos-13 # macos-13 is the last runner with an AMD64 cpu, macos-14 has an ARM cpu (Apple M1)
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install dependencies with brew
       uses: ConorMacBride/install-package@v1
@@ -157,7 +157,7 @@ jobs:
 
     - name: Upload success
       if: ${{ success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: macos-amd64-success
         path: |
@@ -167,7 +167,7 @@ jobs:
 
     - name: Upload failure
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: macos-amd64-failure
         path: ${{github.workspace}}/build/
@@ -187,7 +187,7 @@ jobs:
       shell: cmd
       run: git config --global core.autocrlf input
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install dependencies with Cygwin
       uses: cygwin/cygwin-install-action@master
@@ -253,7 +253,7 @@ jobs:
 
     - name: Upload success
       if: ${{ success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cygwin-amd64-success
         path: |
@@ -263,7 +263,7 @@ jobs:
 
     - name: Upload failure
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cygwin-amd64-failure
         path: ${{github.workspace}}/build/
@@ -274,10 +274,10 @@ jobs:
     name: Linux (ppc32)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Restore ArchPOWER powerpc iso
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: |
           archpower-current-powerpc.iso
@@ -306,7 +306,7 @@ jobs:
         fi
 
     - name: Cache ArchPOWER powerpc iso
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: |
           archpower-current-powerpc.iso
@@ -385,7 +385,7 @@ jobs:
 
     - name: Upload success
       if: ${{ success() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-ppc32-success
         path: |
@@ -395,7 +395,7 @@ jobs:
 
     - name: Upload failure
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: linux-ppc32-failure
         path: ${{github.workspace}}/build/
