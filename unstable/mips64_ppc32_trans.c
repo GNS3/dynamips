@@ -320,19 +320,19 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
 
    test3 = NULL;
 
-   /* r4:r5 = GPR[base] + sign-extended offset */
-   ppc_lwz(b->jit_ptr,ppc_r4,REG_OFFSET(base),ppc_r3);
-   ppc_lwz(b->jit_ptr,ppc_r5,REG_OFFSET(base)+4,ppc_r3);
-   ppc_addic(b->jit_ptr,ppc_r5,ppc_r5,offset);
+   /* r5:r6 = GPR[base] + sign-extended offset */
+   ppc_lwz(b->jit_ptr,ppc_r5,REG_OFFSET(base),ppc_r3);
+   ppc_lwz(b->jit_ptr,ppc_r6,REG_OFFSET(base)+4,ppc_r3);
+   ppc_addic(b->jit_ptr,ppc_r6,ppc_r6,offset);
    if (offset & 0x8000 /* < 0 */)
-      ppc_addme(b->jit_ptr,ppc_r4,ppc_r4);
+      ppc_addme(b->jit_ptr,ppc_r5,ppc_r5);
    else
-      ppc_addze(b->jit_ptr,ppc_r4,ppc_r4);
+      ppc_addze(b->jit_ptr,ppc_r5,ppc_r5);
 
    /* r7 = offset in mts cache */
-   ppc_srwi(b->jit_ptr,ppc_r7,ppc_r5,MTS64_HASH_SHIFT1);
-   ppc_srwi(b->jit_ptr,ppc_r6,ppc_r5,MTS64_HASH_SHIFT2);
-   ppc_xor(b->jit_ptr,ppc_r8,ppc_r7,ppc_r6);
+   ppc_srwi(b->jit_ptr,ppc_r7,ppc_r6,MTS64_HASH_SHIFT1);
+   ppc_srwi(b->jit_ptr,ppc_r4,ppc_r6,MTS64_HASH_SHIFT2);
+   ppc_xor(b->jit_ptr,ppc_r8,ppc_r7,ppc_r4);
    ppc_rlwinm(b->jit_ptr,ppc_r7,ppc_r8,
               MTS64_HASH_BITS+5,
               32-(MTS64_HASH_BITS+5),
@@ -340,28 +340,28 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
                  
    /* r8 = mts64_cache */
    ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(cpu_mips_t,mts_u.mts64_cache),ppc_r3);
-   /* r6 = mts64_entry */
-   ppc_add(b->jit_ptr,ppc_r6,ppc_r8,ppc_r7);
+   /* r4 = mts64_entry */
+   ppc_add(b->jit_ptr,ppc_r4,ppc_r8,ppc_r7);
    /* r7, r8 are temporary */
 
    /* Compare virtual page address */
-   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts64_entry_t,gvpa),ppc_r6);
-   ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(mts64_entry_t,gvpa)+4,ppc_r6);
+   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts64_entry_t,gvpa),ppc_r4);
+   ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(mts64_entry_t,gvpa)+4,ppc_r4);
  
    /* Compare the high part of the vaddr */
-   ppc_cmpw(b->jit_ptr,ppc_cr7,ppc_r4,ppc_r7);
+   ppc_cmpw(b->jit_ptr,ppc_cr7,ppc_r5,ppc_r7);
    test1 = b->jit_ptr;
    ppc_bc(b->jit_ptr,PPC_BR_FALSE_UNLIKELY,ppc_crbf(ppc_cr7,PPC_BR_EQ),0);
  
    /* Compare the low part of the vaddr & MIPS_MIN_PAGE_MASK (vpage) */
-   ppc_rlwinm(b->jit_ptr,ppc_r0,ppc_r5,0,0,19);
+   ppc_rlwinm(b->jit_ptr,ppc_r0,ppc_r6,0,0,19);
    ppc_cmpw(b->jit_ptr,ppc_cr7,ppc_r0,ppc_r8);
    test2 = b->jit_ptr;
    ppc_bc(b->jit_ptr,PPC_BR_FALSE_UNLIKELY,ppc_crbf(ppc_cr7,PPC_BR_EQ),0);
 
    /* Test if we are writing to a COW page */
    if (write_op) {
-      ppc_lwz(b->jit_ptr,ppc_r0,OFFSET(mts64_entry_t,flags),ppc_r6);
+      ppc_lwz(b->jit_ptr,ppc_r0,OFFSET(mts64_entry_t,flags),ppc_r4);
       ppc_mtcrf(b->jit_ptr,0x01,ppc_r0);
 	  /* MTS_FLAG_COW is moved to EQ bit of cr7 */
       test3 = b->jit_ptr;
@@ -369,9 +369,9 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    }
 
    /* r7 = Host Page Address, r8 = offset in page */
-   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts64_entry_t,hpa),ppc_r6);
-   //ppc_rlwinm(b->jit_ptr,ppc_r8,ppc_r5,0,32-MIPS_MIN_PAGE_SHIFT,31);
-   ppc_andid(b->jit_ptr,ppc_r8,ppc_r5,MIPS_MIN_PAGE_IMASK);
+   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts64_entry_t,hpa),ppc_r4);
+   //ppc_rlwinm(b->jit_ptr,ppc_r8,ppc_r6,0,32-MIPS_MIN_PAGE_SHIFT,31);
+   ppc_andid(b->jit_ptr,ppc_r8,ppc_r6,MIPS_MIN_PAGE_IMASK);
 
    /* Memory access */
    op_handler(b,target);
@@ -391,8 +391,8 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    ppc_mtlr(b->jit_ptr,ppc_r12);
    /* Save PC for exception handling */
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
-   /* r6 = target register */
-   ppc_li(b->jit_ptr,ppc_r6,target);
+   /* r7 = target register */
+   ppc_li(b->jit_ptr,ppc_r7,target);
    /* Call memory function */
    ppc_blrl(b->jit_ptr);
    /* Restore the volatile r3 */
@@ -411,14 +411,14 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
 
    test3 = NULL;
 
-   /* r5 = GPR[base] + sign-extended offset */
-   ppc_lwz(b->jit_ptr,ppc_r5,REG_OFFSET(base)+4,ppc_r3);
-   ppc_addi(b->jit_ptr,ppc_r5,ppc_r5,offset);
+   /* r6 = GPR[base] + sign-extended offset */
+   ppc_lwz(b->jit_ptr,ppc_r6,REG_OFFSET(base)+4,ppc_r3);
+   ppc_addi(b->jit_ptr,ppc_r6,ppc_r6,offset);
 
    /* r7 = offset in mts cache */
-   ppc_srwi(b->jit_ptr,ppc_r7,ppc_r5,MTS32_HASH_SHIFT1);
-   ppc_srwi(b->jit_ptr,ppc_r6,ppc_r5,MTS32_HASH_SHIFT2);
-   ppc_xor(b->jit_ptr,ppc_r8,ppc_r7,ppc_r6);
+   ppc_srwi(b->jit_ptr,ppc_r7,ppc_r6,MTS32_HASH_SHIFT1);
+   ppc_srwi(b->jit_ptr,ppc_r4,ppc_r6,MTS32_HASH_SHIFT2);
+   ppc_xor(b->jit_ptr,ppc_r8,ppc_r7,ppc_r4);
    ppc_rlwinm(b->jit_ptr,ppc_r7,ppc_r8,
               MTS32_HASH_BITS+4,
               32-(MTS32_HASH_BITS+4),
@@ -426,21 +426,21 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
               
    /* r8 = mts32_cache */
    ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(cpu_mips_t,mts_u.mts32_cache),ppc_r3);
-   /* r6 = mts32_entry */
-   ppc_add(b->jit_ptr,ppc_r6,ppc_r8,ppc_r7);
+   /* r4 = mts32_entry */
+   ppc_add(b->jit_ptr,ppc_r4,ppc_r8,ppc_r7);
    /* r7, r8 are temporary */
 
    /* Compare virtual page address (vaddr & MIPS_MIN_PAGE_MASK) */
-   ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(mts32_entry_t,gvpa),ppc_r6);
+   ppc_lwz(b->jit_ptr,ppc_r8,OFFSET(mts32_entry_t,gvpa),ppc_r4);
 
-   ppc_rlwinm(b->jit_ptr,ppc_r0,ppc_r5,0,0,19);
+   ppc_rlwinm(b->jit_ptr,ppc_r0,ppc_r6,0,0,19);
    ppc_cmpw(b->jit_ptr,ppc_cr7,ppc_r0,ppc_r8);
    test2 = b->jit_ptr;
    ppc_bc(b->jit_ptr,PPC_BR_FALSE_UNLIKELY,ppc_crbf(ppc_cr7,PPC_BR_EQ),0);
 
    /* Test if we are writing to a COW page */
    if (write_op) {
-      ppc_lwz(b->jit_ptr,ppc_r0,OFFSET(mts32_entry_t,flags),ppc_r6);
+      ppc_lwz(b->jit_ptr,ppc_r0,OFFSET(mts32_entry_t,flags),ppc_r4);
       ppc_mtcrf(b->jit_ptr,0x01,ppc_r0);
 	  /* MTS_FLAG_COW is moved to EQ bit of cr7 */
       test3 = b->jit_ptr;
@@ -448,9 +448,9 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    }
 
    /* r7 = Host Page Address, r8 = offset in page */
-   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts32_entry_t,hpa),ppc_r6);
-   //ppc_rlwinm(b->jit_ptr,ppc_r8,ppc_r5,0,32-MIPS_MIN_PAGE_SHIFT,31);
-   ppc_andid(b->jit_ptr,ppc_r8,ppc_r5,MIPS_MIN_PAGE_IMASK);
+   ppc_lwz(b->jit_ptr,ppc_r7,OFFSET(mts32_entry_t,hpa),ppc_r4);
+   //ppc_rlwinm(b->jit_ptr,ppc_r8,ppc_r6,0,32-MIPS_MIN_PAGE_SHIFT,31);
+   ppc_andid(b->jit_ptr,ppc_r8,ppc_r6,MIPS_MIN_PAGE_IMASK);
 
    /* Memory access */
    op_handler(b,target);
@@ -469,10 +469,10 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    ppc_mtlr(b->jit_ptr,ppc_r12);
    /* Save PC for exception handling */
    mips64_set_pc(b,b->vaddr+((b->trans_pos-1)<<2));
-   /* r4 = sign extention of r5 */
-   ppc_srawi(b->jit_ptr,ppc_r4,ppc_r5,31);
-   /* r6 = target register */
-   ppc_li(b->jit_ptr,ppc_r6,target);
+   /* r5 = sign extension of r6 */
+   ppc_srawi(b->jit_ptr,ppc_r5,ppc_r6,31);
+   /* r7 = target register */
+   ppc_li(b->jit_ptr,ppc_r7,target);
    /* Call memory function */
    ppc_blrl(b->jit_ptr);
    /* Restore the volatile r3 */
@@ -516,18 +516,18 @@ static void mips64_emit_memop(cpu_tc_t *b,int opcode,int base,int offset,
    }
 
    /* r3 = CPU instance pointer */
-   /* r4:r5 = GPR[base] + sign-extended offset */
-   ppc_lwz(b->jit_ptr,ppc_r4,REG_OFFSET(base),ppc_r3);
-   ppc_lwz(b->jit_ptr,ppc_r5,REG_OFFSET(base)+4,ppc_r3);
-   ppc_addic(b->jit_ptr,ppc_r5,ppc_r5,offset);
+   /* r5:r6 = GPR[base] + sign-extended offset */
+   ppc_lwz(b->jit_ptr,ppc_r5,REG_OFFSET(base),ppc_r3);
+   ppc_lwz(b->jit_ptr,ppc_r6,REG_OFFSET(base)+4,ppc_r3);
+   ppc_addic(b->jit_ptr,ppc_r6,ppc_r6,offset);
 
    if (offset & 0x8000 /* < 0 */)
-      ppc_addme(b->jit_ptr,ppc_r4,ppc_r4);
+      ppc_addme(b->jit_ptr,ppc_r5,ppc_r5);
    else
-      ppc_addze(b->jit_ptr,ppc_r4,ppc_r4);
+      ppc_addze(b->jit_ptr,ppc_r5,ppc_r5);
       
-   /* r6 = target register */
-   ppc_li(b->jit_ptr,ppc_r6,target);
+   /* r7 = target register */
+   ppc_li(b->jit_ptr,ppc_r7,target);
 
    /* Call memory function */
    ppc_blrl(b->jit_ptr);
