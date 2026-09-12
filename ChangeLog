@@ -3043,3 +3043,12 @@ Fixed packet capture on Mac OS X (echoed packets)
 +--------------------+
 
 * Fix memory leaks
+
+
++--------------------+
+| Release:  v0.2.25  |
++--------------------+
+
+* Fix CMAKE_REQUIRED_FLAGS handling in configure checks
+* Fix TLB exception
+* Support for ppc32

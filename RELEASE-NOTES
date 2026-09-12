@@ -1,19 +1,21 @@
 Release Notes for Cisco router simulator (Dynamips)
 ===================================================
 
-Version:  v0.2.24
+Version:  v0.2.25
 
 Release date:  Saturday, Apr 18th, 2026 (2026-04-18)
 
-Source code:  https://github.com/GNS3/dynamips/tree/v0.2.24
+Source code:  https://github.com/GNS3/dynamips/tree/v0.2.25
 
 License: GNU GPLv2
 
 
-What's New since v0.2.24
+What's New since v0.2.25
 ========================
 
-* Fix memory leaks
+* Fix CMAKE_REQUIRED_FLAGS handling in configure checks
+* Fix TLB exception
+* Support for ppc32
 
 
 Known Issues
