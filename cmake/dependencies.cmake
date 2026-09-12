@@ -35,12 +35,12 @@ if ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT CMAKE_COMPILER_IS_CLANG AND NOT ANY_COM
       )
 endif ( NOT CMAKE_COMPILER_IS_GNUCC AND NOT CMAKE_COMPILER_IS_CLANG AND NOT ANY_COMPILER )
 
-set ( DYNAMIPS_FLAGS -Wall -O2 -fomit-frame-pointer )
+set ( DYNAMIPS_FLAGS "-Wall -O2 -fomit-frame-pointer" )
 set ( DYNAMIPS_DEFINITIONS )
 set ( DYNAMIPS_INCLUDES )
 set ( DYNAMIPS_LIBRARIES ${CMAKE_DL_LIBS} )
 if ( CYGWIN )
-   list ( APPEND DYNAMIPS_FLAGS -static -static-libgcc )
+   string ( APPEND DYNAMIPS_FLAGS "-static -static-libgcc" )
 endif ( CYGWIN )
 macro ( set_cmake_required )
    string ( REPLACE ";" " " _required_flags "${DYNAMIPS_FLAGS}" )
@@ -63,7 +63,7 @@ int main (void) { return 0; }
 #endif
 " )
 set_cmake_required ()
-list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m64 )
+string (APPEND CMAKE_REQUIRED_FLAGS "0 -m64" )
 check_c_source_compiles ( "${_code}" ARCH_AMD64 )
 set ( _code "
 #if defined(__i386) || defined(__i386__) || defined(_M_IX86)
@@ -73,7 +73,7 @@ int main (void) { return 0; }
 #endif
 " )
 set_cmake_required ()
-list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m32 )
+string (APPEND CMAKE_REQUIRED_FLAGS "0 -m32" )
 check_c_source_compiles ( "${_code}" ARCH_X86 )
 set ( _code "
 #if defined(__powerpc) || defined(__powerpc__) || defined(_M_PPC) || defined(_ARCH_PPC)
@@ -83,7 +83,7 @@ int main (void) { return 0; }
 #endif
 " )
 set_cmake_required ()
-list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m32 )
+string (APPEND CMAKE_REQUIRED_FLAGS "0 -m32" )
 check_c_source_compiles ( "${_code}" ARCH_PPC32 )
 if ( ARCH_AMD64 )
    set ( _default "amd64" )
