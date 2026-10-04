@@ -303,6 +303,12 @@ check_function_exists ( freeaddrinfo HAVE_FREEADDRINFO )
 check_function_exists ( gai_strerror HAVE_GAI_STRERROR )
 check_function_exists ( inet_pton HAVE_INET_PTON )
 check_function_exists ( inet_ntop HAVE_INET_NTOP )
+check_function_exists ( pthread_jit_write_protect_np HAVE_PTHREAD_JIT_WRITE_PROTECT_NP )
+if ( HAVE_PTHREAD_JIT_WRITE_PROTECT_NP )
+   list ( APPEND DYNAMIPS_DEFINITIONS "-DHAVE_PTHREAD_JIT_WRITE_PROTECT_NP=1" )
+else ()
+   list ( APPEND DYNAMIPS_DEFINITIONS "-DHAVE_PTHREAD_JIT_WRITE_PROTECT_NP=0" )
+endif ()
 # TODO AF_INET6, PF_INET6, AI_PASSIVE, IPPROTO_IPV6, IPV6_JOIN_GROUP, 
 #      IPV6_MULTICAST_HOPS, INET6_ADDRSTRLEN, struct sockaddr_storage, 
 #      struct sockaddr_in6, struct ipv6_mreq

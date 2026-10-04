@@ -364,10 +364,11 @@ mips64_jit_tcb_compile(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t exec_state)
 #endif
       return tb;
    }
-
+   pthread_jit_write_protect_np(0);
    /* The page is not shared, we have to compile it */
    tc = mips64_jit_tcb_translate(cpu,tb);
-   
+   pthread_jit_write_protect_np(1);
+
    if (tc != NULL) {
       tc->target_code = tb->target_code;
       tc->trans_pos   = 0;

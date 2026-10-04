@@ -429,4 +429,8 @@ int fd_pool_check_input(fd_pool_t *pool,fd_set *fds,
 /* Equivalent to fprintf, but for a posix fd */
 ssize_t fd_printf(int fd,int flags,char *fmt,...);
 
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP == 0
+#define pthread_jit_write_protect_np(...) do {} while(0)
+#endif
+
 #endif

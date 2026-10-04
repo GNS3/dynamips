@@ -433,7 +433,11 @@ static void *mmap_or_null(void *addr, size_t length, int prot, int flags, int fd
 /* Map a memory zone as an executable area */
 u_char *memzone_map_exec_area(size_t len)
 {
+#if defined(__APPLE__) && defined(__aarch64__)
+   return(mmap_or_null(NULL,len,PROT_EXEC|PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_JIT,-1,(off_t)0));
+#else
    return(mmap_or_null(NULL,len,PROT_EXEC|PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS,-1,(off_t)0));
+#endif
 }
 
 /* Map a memory zone from a file */
