@@ -19,12 +19,16 @@ extern FILE *log_file;
 #define CPU_x86    0
 #define CPU_amd64  1
 #define CPU_nojit  2
+#define CPU_arm64  3
 
 /* Number of host registers available for JIT */
 #if JIT_CPU == CPU_x86
 #define JIT_HOST_NREG  8
 #elif JIT_CPU == CPU_amd64
 #define JIT_HOST_NREG  16
+#elif JIT_CPU == CPU_arm64
+/* Excluding: SP, LR, FP, x18 */
+#define JIT_HOST_NREG  28
 #else
 #define JIT_HOST_NREG  0
 #endif

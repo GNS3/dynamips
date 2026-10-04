@@ -52,6 +52,7 @@ endmacro ( set_cmake_required )
 
 # Target architecture:
 #  - Use "amd64" to build for x86_64 (64-bit)
+#  - Use "arm64" to build for ARM64/Aarch64 (64-bit)
 #  - Use "x86" to build for x86 (32-bit)
 #  - Use "nojit" to build for other architectures (no recompilation)
 # Based on https://github.com/petroules/solar-cmake/blob/master/TargetArch.cmake
@@ -65,6 +66,15 @@ int main (void) { return 0; }
 set_cmake_required ()
 list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m64 )
 check_c_source_compiles ( "${_code}" ARCH_AMD64 )
+set ( _code "
+#if defined(__arm64) || defined(__aarch64) || defined(__arm64__) || defined(__aarch64__) || defined(_M_ARM64)
+int main (void) { return 0; }
+#else
+#error cmake_FAIL
+#endif
+" )
+set_cmake_required ()
+check_c_source_compiles ( "${_code}" ARCH_ARM64 )
 set ( _code "
 #if defined(__i386) || defined(__i386__) || defined(_M_IX86)
 int main (void) { return 0; }
@@ -87,6 +97,8 @@ list ( INSERT CMAKE_REQUIRED_FLAGS 0 -m32 )
 check_c_source_compiles ( "${_code}" ARCH_PPC32 )
 if ( ARCH_AMD64 )
    set ( _default "amd64" )
+elseif ( ARCH_ARM64 )
+   set ( _default "arm64" )
 elseif ( ARCH_X86 )
    set ( _default "x86" )
 elseif ( ARCH_PPC32 )
@@ -94,22 +106,24 @@ elseif ( ARCH_PPC32 )
 else ()
    set ( _default "nojit" )
 endif ()
-set ( DYNAMIPS_ARCH "${_default}" CACHE STRING "Target architecture (amd64;x86;ppc32;nojit)" )
-set_property ( CACHE DYNAMIPS_ARCH PROPERTY STRINGS "amd64" "x86" "ppc32" "nojit" )
+set ( DYNAMIPS_ARCH "${_default}" CACHE STRING "Target architecture (amd64;arm64;x86;ppc32;nojit)" )
+set_property ( CACHE DYNAMIPS_ARCH PROPERTY STRINGS "amd64" "arm64" "x86" "ppc32" "nojit" )
 if ( NOT DYNAMIPS_ARCH )
    set ( DYNAMIPS_ARCH "${_default}" )
 endif ()
 if ( "amd64" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_AMD64 )
+   list ( INSERT DYNAMIPS_FLAGS 0 -m64 )
+elseif ( "arm64" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_ARM64 )
    list ( INSERT DYNAMIPS_FLAGS 0 -m64 )
 elseif ( "x86" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_X86 )
    list ( INSERT DYNAMIPS_FLAGS 0 -m32 )
 elseif ( "ppc32" STREQUAL "${DYNAMIPS_ARCH}" AND ARCH_PPC32 )
    list ( INSERT DYNAMIPS_FLAGS 0 -m32 )
 elseif ( NOT "nojit" STREQUAL "${DYNAMIPS_ARCH}" )
-   print_variables ( ARCH_AMD64 ARCH_X86 ARCH_PPC32 DYNAMIPS_ARCH )
+   print_variables ( ARCH_AMD64 ARCH_ARM64 ARCH_X86 ARCH_PPC32 DYNAMIPS_ARCH )
    message ( FATAL_ERROR "cannot build target arch DYNAMIPS_ARCH=${DYNAMIPS_ARCH}" )
 endif ()
-print_variables ( ARCH_AMD64 ARCH_X86 ARCH_PPC32 DYNAMIPS_ARCH )
+print_variables ( ARCH_AMD64 ARCH_ARM64 ARCH_X86 ARCH_PPC32 DYNAMIPS_ARCH )
 
 # Compiler flags
 foreach ( _flag

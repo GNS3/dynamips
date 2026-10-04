@@ -295,3 +295,16 @@ target_link_libraries ( dynamips_nojit_stable ${DYNAMIPS_LIBRARIES} )
 maybe_rename_to_dynamips ( dynamips_nojit_stable )
 install_executable ( dynamips_nojit_stable )
 endif ()
+
+# no stable arm64 recompiler available
+if ( "arm64" STREQUAL "${DYNAMIPS_ARCH}" )
+add_executable ( dynamips_nojit_stable
+   ${_files}
+   "${LOCAL}/mips64_nojit_trans.c"
+   "${COMMON}/ppc32_nojit_trans.c"
+   )
+add_dependencies ( dynamips_nojit_stable ${_dependencies} )
+target_link_libraries ( dynamips_nojit_stable ${DYNAMIPS_LIBRARIES} )
+maybe_rename_to_dynamips ( dynamips_nojit_stable )
+install_executable ( dynamips_nojit_stable )
+endif ()
