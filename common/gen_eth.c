@@ -39,8 +39,13 @@
 /* Initialize a generic ethernet driver */
 pcap_t *gen_eth_init(char *device)
 {
-   char pcap_errbuf[PCAP_ERRBUF_SIZE];
-   pcap_t *p;
+   char pcap_errbuf[PCAP_ERRBUF_SIZE] = { 0 };
+   pcap_t *p = NULL;
+
+   if (!device) {
+      fprintf(stderr,"gen_eth_init: no device specified\n");
+      return NULL;
+   }
 
 #ifndef CYGWIN
    if (!(p = pcap_open_live(device,65535,TRUE,10,pcap_errbuf)))
@@ -73,6 +78,7 @@ pcap_t *gen_eth_init(char *device)
    return p;
 
  pcap_error:
+   pcap_errbuf[PCAP_ERRBUF_SIZE - 1] = '\0';
    fprintf(stderr,"gen_eth_init: unable to open device '%s' "
            "with PCAP (%s)\n",device,pcap_errbuf);
    return NULL;
@@ -109,7 +115,7 @@ ssize_t gen_eth_recv(pcap_t *p,char *buffer,size_t len)
 /* Display Ethernet interfaces of the system */
 int gen_eth_show_dev_list(void)
 {
-   char pcap_errbuf[PCAP_ERRBUF_SIZE];
+   char pcap_errbuf[PCAP_ERRBUF_SIZE] = { 0 };
    pcap_if_t *dev_list,*dev;
    int res;
 
