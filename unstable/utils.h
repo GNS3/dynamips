@@ -19,12 +19,16 @@ extern FILE *log_file;
 #define CPU_x86    0
 #define CPU_amd64  1
 #define CPU_nojit  2
+#define CPU_arm64  3
 
 /* Number of host registers available for JIT */
 #if JIT_CPU == CPU_x86
 #define JIT_HOST_NREG  8
 #elif JIT_CPU == CPU_amd64
 #define JIT_HOST_NREG  16
+#elif JIT_CPU == CPU_arm64
+/* Excluding: SP, LR, FP, x18 */
+#define JIT_HOST_NREG  28
 #else
 #define JIT_HOST_NREG  0
 #endif
@@ -428,5 +432,9 @@ int fd_pool_check_input(fd_pool_t *pool,fd_set *fds,
 
 /* Equivalent to fprintf, but for a posix fd */
 ssize_t fd_printf(int fd,int flags,char *fmt,...);
+
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP == 0
+#define pthread_jit_write_protect_np(...) do {} while(0)
+#endif
 
 #endif

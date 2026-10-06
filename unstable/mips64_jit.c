@@ -287,7 +287,8 @@ static cpu_tc_t *mips64_jit_tcb_translate(cpu_mips_t *cpu,cpu_tb_t *tb)
 {
    struct mips64_insn_tag *tag;
    cpu_tc_t *tc;
-   
+   int i;
+
    /* The page is not shared, we have to compile it */
    tc = tc_alloc(cpu->gen,tb->vaddr,tb->exec_state);
    
@@ -318,6 +319,9 @@ static cpu_tc_t *mips64_jit_tcb_translate(cpu_mips_t *cpu,cpu_tb_t *tb)
 
    mips64_jit_tcb_add_end(tc);
    mips64_jit_tcb_apply_patches(cpu,tc);
+   for(i = 0; i < tc->jit_chunk_pos; i++)
+      __builtin___clear_cache(tc->jit_chunks[i]->ptr, tc->jit_chunks[i]->ptr + 32768);
+   __builtin___clear_cache(tc->jit_buffer->ptr, tc->jit_ptr);
    tc_free_patches(tc);
    tc->target_code = NULL;
    return tc;
@@ -364,10 +368,11 @@ mips64_jit_tcb_compile(cpu_mips_t *cpu,m_uint64_t vaddr,m_uint32_t exec_state)
 #endif
       return tb;
    }
-
+   pthread_jit_write_protect_np(0);
    /* The page is not shared, we have to compile it */
    tc = mips64_jit_tcb_translate(cpu,tb);
-   
+   pthread_jit_write_protect_np(1);
+
    if (tc != NULL) {
       tc->target_code = tb->target_code;
       tc->trans_pos   = 0;
