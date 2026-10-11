@@ -66,8 +66,8 @@ static inline void arm64_patch(u_char *code,u_char *target)
    m_int64_t disp19_pcrel = ((m_int64_t)target - (m_int64_t)code) / 4 & 0xFFFFF;
    m_int64_t disp26_pcrel = ((m_int64_t)target - (m_int64_t)code) / 4 & 0x3FFFFFF;
    /* cbz */
-   if ((insn & 0xFE000000) == 0xB4000000)
-      *(m_uint32_t*)code = (insn & 0xFF00000F) | (disp19_pcrel << 5);
+   if ((insn & 0x7E000000) == 0x34000000)
+      *(m_uint32_t*)code = (insn & 0xFF00001F) | (disp19_pcrel << 5);
    /* b.cond */
    else if ((insn & 0xFF000000) == 0x54000000)
       *(m_uint32_t*)code = (insn & 0xFF00000F) | (disp19_pcrel << 5);

@@ -1334,8 +1334,10 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
             if (ppc32_jit_tcb_match(cpu,tcb))
                goto tcb_found;
 
+         pthread_jit_write_protect_np(0);
          /* the tcb doesn't exist, compile the page */
          tcb = ppc32_jit_tcb_compile(cpu,cpu->ia,cpu->exec_state);
+         pthread_jit_write_protect_np(1);
 
          if (unlikely(!tcb)) {
             fprintf(stderr,

@@ -256,7 +256,7 @@ if ( "arm64" STREQUAL "${DYNAMIPS_ARCH}" )
 add_executable ( dynamips_arm64_unstable
    ${_files}
    "${LOCAL}/mips64_arm64_trans.c"
-   "${COMMON}/ppc32_nojit_trans.c"
+   "${LOCAL}/ppc32_arm64_trans.c"
    )
 add_dependencies ( dynamips_arm64_unstable ${_dependencies} )
 target_link_libraries ( dynamips_arm64_unstable ${DYNAMIPS_LIBRARIES} )
