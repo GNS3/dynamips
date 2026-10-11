@@ -211,6 +211,8 @@ typedef enum {
 #define arm64_ldrsh64_reg(c, xt, xn, xm, extend, shift) arm64_emit32((c), 0x78A00800 | ((xm) << 16) | ((extend) << 13) | ((shift) / 2 << 12) | ((xn) << 5) | (xt))
 #define arm64_strh_reg(c, wt, xn, xm, extend, shift) arm64_emit32((c), 0x78200800 | ((xm) << 16) | ((extend) << 13) | ((shift) / 2 << 12) | ((xn) << 5) | (wt))
 #define arm64_strb_reg(c, wt, xn, xm, extend, shift) arm64_emit32((c), 0x38200800 | ((xm) << 16) | ((extend) << 13) | ((shift) / 2 << 12) | ((xn) << 5) | (wt))
+#define arm64_csinc64(c, xd, xn, xm, cond) arm64_emit32((c), 0x9A800400 | ((xm) << 16) | ((cond) << 12) | ((xn) << 5) | (xd))
+#define arm64_cset64(c, xd, cond) arm64_csinc64((c), (xd), ARM64_XZR, ARM64_XZR, (cond) ^ 1)
 
 static inline int _arm64_is_mask(m_uint64_t val, m_uint64_t lim)
 {
