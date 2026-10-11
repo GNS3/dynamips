@@ -486,13 +486,6 @@ struct ppc32_insn_tag *ppc32_jit_fetch_and_emit(cpu_ppc_t *cpu,
    return tag;
 }
 
-/* Add end of JIT block */
-_Unused static void ppc32_jit_tcb_add_end(ppc32_jit_tcb_t *tcb)
-{
-   ppc32_set_ia(&tcb->jit_ptr,tcb->start_ia+(tcb->ppc_trans_pos<<2));
-   ppc32_jit_tcb_push_epilog(&tcb->jit_ptr);
-}
-
 /* Record a patch to apply in a compiled block */
 int ppc32_jit_tcb_record_patch(ppc32_jit_tcb_t *tcb,jit_op_t *iop,
                                u_char *jit_ptr,m_uint32_t vaddr)
