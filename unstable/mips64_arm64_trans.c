@@ -19,6 +19,15 @@
 #include "mips64_cp0.h"
 #include "memory.h"
 
+/*
+ * Register assignments:
+ * X26 - preserved host lr
+ * X27 - new pc for JA(L)R
+ * X28 - pointer to cpu_mips_t
+ * All other preserved registers are not used
+ * All other registers - used per AAPCS
+ */
+
 /* Macros for CPU structure access */
 #define REG_OFFSET(reg)       (OFFSET(cpu_mips_t,gpr[(reg)]))
 #define CP0_REG_OFFSET(c0reg) (OFFSET(cpu_mips_t,cp0.reg[(c0reg)]))
