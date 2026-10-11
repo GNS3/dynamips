@@ -37,6 +37,26 @@
    static int mips64_emit_##name(cpu_mips_t *cpu,cpu_tc_t *b,\
                                  mips_insn_t insn)
 
+asm(
+#ifdef __APPLE__
+    ".global _mips64_invoke_jit_code\n"
+    "_mips64_invoke_jit_code:\n\t"
+#else
+    ".global mips64_invoke_jit_code\n"
+    "mips64_invoke_jit_code:\n\t"
+#endif
+    "stp x29, x30, [sp, -48]!\n\t"
+    "mov x29, sp\n\t"
+    "stp x27, x28, [sp, 32]\n\t"
+    "str x26, [sp, 16]\n\t"
+    "mov x28, x0\n\t"
+    "blr x1\n\t"
+    "ldr x26, [sp, 16]\n\t"
+    "ldp x27, x28, [sp, 32]\n\t"
+    "ldp x29, x30, [sp], 48\n\t"
+    "ret"
+);
+
 /* Set an IRQ */
 void mips64_set_irq(cpu_mips_t *cpu,m_uint8_t irq)
 {

@@ -39,6 +39,8 @@ static forced_inline void mips64_jit_tcb_push_epilog(cpu_tc_t *tc)
    arm64_ret(tc->jit_ptr);
 }
 
+void mips64_invoke_jit_code(cpu_mips_t *cpu, insn_tblock_fptr jit_code);
+
 /* Execute JIT code */
 static forced_inline void mips64_jit_tcb_exec(cpu_mips_t *cpu,cpu_tb_t *tb)
 {
@@ -54,12 +56,7 @@ static forced_inline void mips64_jit_tcb_exec(cpu_mips_t *cpu,cpu_tb_t *tb)
       return;
    }
    pthread_jit_write_protect_np(1);
-   asm volatile ("mov x28,%0\n\t"
-                 "blr %1"
-                 ::"r"(cpu), "r"(jit_code):
-                  "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
-                  "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x19", "x20",
-                  "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x30", "memory");
+   mips64_invoke_jit_code(cpu, jit_code);
    pthread_jit_write_protect_np(0);
 }
 
