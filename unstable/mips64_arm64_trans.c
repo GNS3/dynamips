@@ -2440,7 +2440,6 @@ DECLARE_INSN(SLT)
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
-   u_char *test1;
 
    /* x9 = gpr[rs] */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rs));
@@ -2449,15 +2448,10 @@ DECLARE_INSN(SLT)
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,REG_OFFSET(rt));
 
    /* we set rd to 1 when gpr[rs] < gpr[rt] */
-   mips64_load_imm(b,ARM64_X11,0);
-
    arm64_cmp64_reg(b->jit_ptr,ARM64_X9,ARM64_X10,ARM64_A_LSL,0);
-   test1 = b->jit_ptr;
-   arm64_bcond(b->jit_ptr,ARM64_CC_GE,0);
-   mips64_load_imm(b,ARM64_X11,1);
+   arm64_cset64(b->jit_ptr,ARM64_X11,ARM64_CC_LT);
 
    /* end */
-   arm64_patch(test1,b->jit_ptr);
    arm64_str64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(rd));
    return(0);
 }
@@ -2469,14 +2463,11 @@ DECLARE_INSN(SLTI)
    int rt = bits(insn,16,20);
    int imm = bits(insn,0,15);
    m_uint64_t val = sign_extend(imm,16);
-   u_char *test1;
 
    /* x9 = gpr[rs] */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rs));
 
    /* we set rt to 1 when gpr[rs] < val */
-   mips64_load_imm(b,ARM64_X11,0);
-
    if (val <= 4095) {
       arm64_cmp64_imm(b->jit_ptr,ARM64_X9,val,0);
    } else if (-val <= 4095) {
@@ -2486,12 +2477,9 @@ DECLARE_INSN(SLTI)
       mips64_load_imm(b,ARM64_X10,val);
       arm64_cmp64_reg(b->jit_ptr,ARM64_X9,ARM64_X10,ARM64_A_LSL,0);
    }
-   test1 = b->jit_ptr;
-   arm64_bcond(b->jit_ptr,ARM64_CC_GE,0);
-   mips64_load_imm(b,ARM64_X11,1);
+   arm64_cset64(b->jit_ptr,ARM64_X11,ARM64_CC_LT);
 
    /* end */
-   arm64_patch(test1,b->jit_ptr);
    arm64_str64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(rt));
    return(0);
 }
@@ -2502,7 +2490,6 @@ DECLARE_INSN(SLTU)
    int rs = bits(insn,21,25);
    int rt = bits(insn,16,20);
    int rd = bits(insn,11,15);
-   u_char *test1;
 
    /* x9 = gpr[rs] */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rs));
@@ -2511,15 +2498,10 @@ DECLARE_INSN(SLTU)
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,REG_OFFSET(rt));
 
    /* we set rd to 1 when gpr[rs] < gpr[rt] */
-   mips64_load_imm(b,ARM64_X11,0);
-
    arm64_cmp64_reg(b->jit_ptr,ARM64_X9,ARM64_X10,ARM64_A_LSL,0);
-   test1 = b->jit_ptr;
-   arm64_bcond(b->jit_ptr,ARM64_CC_CS,0);
-   mips64_load_imm(b,ARM64_X11,1);
+   arm64_cset64(b->jit_ptr,ARM64_X11,ARM64_CC_CC);
 
    /* end */
-   arm64_patch(test1,b->jit_ptr);
    arm64_str64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(rd));
 
    return(0);
@@ -2532,13 +2514,10 @@ DECLARE_INSN(SLTIU)
    int rt = bits(insn,16,20);
    int imm = bits(insn,0,15);
    m_uint64_t val = sign_extend(imm,16);
-   u_char *test1;
 
    /* x9 = gpr[rs] */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rs));
    /* we set rt to 1 when gpr[rs] < val */
-   mips64_load_imm(b,ARM64_X11,0);
-
    if (val <= 4095) {
       arm64_cmp64_imm(b->jit_ptr,ARM64_X9,val,0);
    } else if (-val <= 4095) {
@@ -2548,13 +2527,9 @@ DECLARE_INSN(SLTIU)
       mips64_load_imm(b,ARM64_X10,val);
       arm64_cmp64_reg(b->jit_ptr,ARM64_X9,ARM64_X10,ARM64_A_LSL,0);
    }
-
-   test1 = b->jit_ptr;
-   arm64_bcond(b->jit_ptr,ARM64_CC_CS,0);
-   mips64_load_imm(b,ARM64_X11,1);
+   arm64_cset64(b->jit_ptr,ARM64_X11,ARM64_CC_CC);
 
    /* end */
-   arm64_patch(test1,b->jit_ptr);
    arm64_str64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(rt));
    return(0);
 }
