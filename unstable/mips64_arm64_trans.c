@@ -143,9 +143,9 @@ static void mips64_try_direct_far_jump(cpu_mips_t *cpu,cpu_tc_t *b,
       arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X10,pc_hash*sizeof(void *));
    } else {
       // x11 = pc_hash
-      mips64_load_imm(b,ARM64_X11,pc_hash*sizeof(void *));
+      mips64_load_imm(b,ARM64_X11,pc_hash);
       // x10 = tb_virt_hash[pc_hash]
-      arm64_ldr64_reg(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X11,ARM64_M_LSL,0);
+      arm64_ldr64_reg(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X11,ARM64_M_LSL,3);
    }
 
    /* no JIT block found ? */
@@ -176,9 +176,9 @@ static void mips64_try_direct_far_jump(cpu_mips_t *cpu,cpu_tc_t *b,
       arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X11,pc_offset * sizeof(void *));
    } else {
       // x12 = pc_offset
-      mips64_load_imm(b,ARM64_X12,pc_offset * sizeof(void *));
+      mips64_load_imm(b,ARM64_X12,pc_offset);
       // x10 = jit_insn_ptr[pc_offset]
-      arm64_ldr64_reg(b->jit_ptr,ARM64_X10,ARM64_X11,ARM64_X12,ARM64_M_LSL,0);
+      arm64_ldr64_reg(b->jit_ptr,ARM64_X10,ARM64_X11,ARM64_X12,ARM64_M_LSL,3);
    }
 
    test4 = b->jit_ptr;
