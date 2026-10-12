@@ -284,8 +284,9 @@ static void mips64_memop_fast_lbu(cpu_tc_t *b,int target)
 /* Fast LH */
 static void mips64_memop_fast_lh(cpu_tc_t *b,int target)
 {
-   arm64_ldrsh64_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
+   arm64_ldrh_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
    arm64_rev16(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_sxth64(b->jit_ptr,ARM64_X9,ARM64_X9);
 
    /* Save value in register */
    arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(target));
