@@ -611,6 +611,7 @@ mips64_jit_tcb_t *mips64_jit_tcb_compile(cpu_mips_t *cpu,m_uint64_t vaddr)
    struct mips64_insn_tag *tag;
    m_uint64_t page_addr;
    size_t len;
+   int i;
 
    page_addr = vaddr & ~(m_uint64_t)MIPS_MIN_PAGE_IMASK;
 
@@ -647,6 +648,9 @@ mips64_jit_tcb_t *mips64_jit_tcb_compile(cpu_mips_t *cpu,m_uint64_t vaddr)
 
    mips64_jit_tcb_add_end(block);
    mips64_jit_tcb_apply_patches(cpu,block);
+   for(i = 0; i < block->jit_chunk_pos; i++)
+      __builtin___clear_cache(block->jit_chunks[i]->ptr, block->jit_chunks[i]->ptr + 32768);
+   __builtin___clear_cache(block->jit_buffer->ptr, block->jit_ptr);
    mips64_jit_tcb_free_patches(block);
 
    /* Add the block to the linked list */
@@ -773,7 +777,9 @@ void *mips64_jit_run_cpu(cpu_gen_t *gen)
             cpu->exec_blk_map[pc_hash] = NULL;
          }
 
+         pthread_jit_write_protect_np(0);
          block = mips64_jit_tcb_compile(cpu,cpu->pc);
+         pthread_jit_write_protect_np(1);
          if (unlikely(!block)) {
             fprintf(stderr,
                     "VM '%s': unable to compile block for CPU%u PC=0x%llx\n",

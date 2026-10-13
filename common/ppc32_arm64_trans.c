@@ -95,11 +95,17 @@ static void ppc32_try_direct_far_jump(cpu_ppc_t *cpu,jit_op_t *iop,
    u_char *test1,*test2,*test3,*test4;
 
    new_page = new_ia & PPC32_MIN_PAGE_MASK;
-   ia_offset = (new_ia & PPC32_MIN_PAGE_IMASK) >> 2;
-   ia_hash = ppc32_jit_get_virt_hash(new_ia);
 
+   ia_offset = (new_ia & PPC32_MIN_PAGE_IMASK) >> 2;
    /* Get JIT block info in x9 */
+#if DYNAMIPS_ARM64_STABLE == 1
+   ia_hash = ppc32_jit_get_ia_hash(new_ia);
+   arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,exec_blk_map));
+#else
+   ia_hash = ppc32_jit_get_virt_hash(new_ia);
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,tcb_virt_hash));
+#endif
+
    if (ia_hash * sizeof(void *) <= MAX_LD64_IMM_DISP) {
       arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X9,ia_hash*sizeof(void *));
    } else {
@@ -433,10 +439,12 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    test2 = NULL;
 
+#if DYNAMIPS_ARM64_STABLE == 0
    /* XXX */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
    arm64_add64_imm(iop->ob_ptr,ARM64_X9,ARM64_X9,1,0);
    arm64_str64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
+#endif
 
    /* X1 = GPR[base] + sign-extended offset */
    if (update || base) {
@@ -456,8 +464,12 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
       arm64_mov32(iop->ob_ptr,ARM64_W27,ARM64_W1);
 
    /* W9 = mts32_entry index */
+#if DYNAMIPS_ARM64_STABLE == 1
+   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+#else
    arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
    arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+#endif
    arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */
@@ -540,10 +552,12 @@ static void ppc32_emit_memop_fast_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    test2 = NULL;
 
+#if DYNAMIPS_ARM64_STABLE == 0
    /* XXX */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
    arm64_add64_imm(iop->ob_ptr,ARM64_X9,ARM64_X9,1,0);
    arm64_str64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
+#endif
 
    ppc32_load_gpr(&iop->ob_ptr,ARM64_W1,rb);
 
@@ -557,8 +571,12 @@ static void ppc32_emit_memop_fast_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
       arm64_mov32(iop->ob_ptr,ARM64_W27,ARM64_W1);
 
    /* W9 = mts32_entry index */
+#if DYNAMIPS_ARM64_STABLE == 1
+   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+#else
    arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
    arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+#endif
    arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */
@@ -687,10 +705,12 @@ static void ppc32_emit_memop_fast_mult(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    test2 = NULL;
 
+#if DYNAMIPS_ARM64_STABLE == 0
    /* XXX */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
    arm64_add64_imm(iop->ob_ptr,ARM64_X9,ARM64_X9,1,0);
    arm64_str64_imm(iop->ob_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_ppc_t,mts_lookups));
+#endif
 
    /* X1 = GPR[base] + sign-extended offset */
    if (base) {
@@ -714,8 +734,12 @@ static void ppc32_emit_memop_fast_mult(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
    arm64_bcond(iop->ob_ptr,ARM64_CC_HI,0);
 
    /* W9 = mts32_entry index */
+#if DYNAMIPS_ARM64_STABLE == 1
+   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+#else
    arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
    arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+#endif
    arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */

@@ -297,9 +297,6 @@ void ppc32_op_update_flags(ppc32_jit_tcb_t *b,jit_op_t *op);
 void ppc32_op_move_host_reg(ppc32_jit_tcb_t *b,jit_op_t *op);
 void ppc32_op_set_host_reg_imm32(ppc32_jit_tcb_t *b,jit_op_t *op);
 
-/* Set the Instruction Address (IA) register */
-void ppc32_set_ia(u_char **ptr,m_uint32_t new_ia);
-
 /* Jump to the next page */
 void ppc32_set_page_jump(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b);
 
