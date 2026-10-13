@@ -323,6 +323,52 @@ static void mips64_memop_fast_lwu(cpu_tc_t *b,int target)
    arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(target));
 }
 
+/* Fast LWL */
+static void mips64_memop_fast_lwl(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x03), 64));
+   arm64_ldr32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,2);
+   arm64_lslv64(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X1);
+   mips64_load_imm(b,ARM64_X10,1);
+   arm64_lslv64(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X1);
+   arm64_sub64_imm(b->jit_ptr,ARM64_X10,ARM64_X10,1,0);
+
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+   arm64_and64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X10,ARM64_A_LSL,0);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X9,ARM64_A_LSL,0);
+
+   arm64_sxtw(b->jit_ptr,ARM64_X12,ARM64_W12);
+   /* Save value in register */
+   arm64_str64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+}
+
+/* Fast LWR */
+static void mips64_memop_fast_lwr(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x03), 64));
+   arm64_ldr32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,2);
+   arm64_add64_imm(b->jit_ptr,ARM64_X1,ARM64_X1,8,0);
+   mips64_load_imm(b,ARM64_X10,1);
+   arm64_lslv64(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X1);
+   arm64_sub64_imm(b->jit_ptr,ARM64_X10,ARM64_X10,1,0);
+
+   mips64_load_imm(b,ARM64_X12,32);
+   arm64_sub64_reg(b->jit_ptr,ARM64_X1,ARM64_X12,ARM64_X1,ARM64_A_LSL,0);
+   arm64_lsrv64(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X1);
+
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+   arm64_bic32_reg(b->jit_ptr,ARM64_W12,ARM64_W12,ARM64_W10,ARM64_A_LSL,0);
+   arm64_orr32_reg(b->jit_ptr,ARM64_W12,ARM64_W12,ARM64_W9,ARM64_A_LSL,0);
+
+   arm64_sxtw(b->jit_ptr,ARM64_X12,ARM64_W12);
+
+   /* Save value in register */
+   arm64_str64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+}
 
 /* Fast LD */
 static void mips64_memop_fast_ld(cpu_tc_t *b,int target)
@@ -332,6 +378,60 @@ static void mips64_memop_fast_ld(cpu_tc_t *b,int target)
 
    /* Save value in register */
    arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(target));
+}
+
+/* Fast LDL */
+static void mips64_memop_fast_ldl(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x07), 64));
+   arm64_ldr64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,3);
+   arm64_lslv64(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X1);
+   mips64_load_imm(b,ARM64_X10,1);
+   arm64_lslv64(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X1);
+   arm64_sub64_imm(b->jit_ptr,ARM64_X10,ARM64_X10,1,0);
+
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+   arm64_and64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X10,ARM64_A_LSL,0);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X9,ARM64_A_LSL,0);
+
+   /* Save value in register */
+   arm64_str64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+}
+
+/* Fast LDR */
+static void mips64_memop_fast_ldr(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x07), 64));
+   arm64_ldr64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,3);
+   arm64_add64_imm(b->jit_ptr,ARM64_X1,ARM64_X1,8,0);
+   mips64_load_imm(b,ARM64_X10,1);
+   arm64_lslv64(b->jit_ptr,ARM64_X10,ARM64_X10,ARM64_X1);
+   arm64_sub64_imm(b->jit_ptr,ARM64_X10,ARM64_X10,1,0);
+
+   mips64_load_imm(b,ARM64_X12,64);
+   arm64_sub64_reg(b->jit_ptr,ARM64_X1,ARM64_X12,ARM64_X1,ARM64_A_LSL,0);
+   arm64_lsrv64(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X1);
+
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+   arm64_bic64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X10,ARM64_A_LSL,0);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X12,ARM64_X12,ARM64_X9,ARM64_A_LSL,0);
+
+   /* Save value in register */
+   arm64_str64_imm(b->jit_ptr,ARM64_X12,ARM64_X28,REG_OFFSET(target));
+}
+
+/* Fast LDC1 */
+static void mips64_memop_fast_ldc1(cpu_tc_t *b,int target)
+{
+   arm64_ldr64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+
+   /* Save value in register */
+   arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,fpu.reg[target]));
 }
 
 /* Fast SB */
@@ -360,11 +460,94 @@ static void mips64_memop_fast_sw(cpu_tc_t *b,int target)
    arm64_str32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
 }
 
+/* Fast SWL */
+static void mips64_memop_fast_swl(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x03), 64));
+   arm64_ldr32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,2);
+   mips64_load_imm(b,ARM64_X11,0xffffffff);
+   arm64_lsrv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_bic64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_ldr32_imm(b->jit_ptr,ARM64_W11,ARM64_X28,REG_OFFSET(target));
+   arm64_lsrv32(b->jit_ptr,ARM64_W11,ARM64_W11,ARM64_W1);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_str32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+}
+
+/* Fast SWR */
+static void mips64_memop_fast_swr(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x03), 64));
+   arm64_ldr32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,2);
+   arm64_add64_imm(b->jit_ptr,ARM64_X1,ARM64_X1,8,0);
+   mips64_load_imm(b,ARM64_X11,0xffffffff);
+   arm64_lsrv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_and64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_ldr32_imm(b->jit_ptr,ARM64_W11,ARM64_X28,REG_OFFSET(target));
+   mips64_load_imm(b,ARM64_X13,64);
+   arm64_sub64_reg(b->jit_ptr,ARM64_X1,ARM64_X13,ARM64_X1,ARM64_A_LSL,0);
+   arm64_lslv32(b->jit_ptr,ARM64_W11,ARM64_W11,ARM64_W1);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_rev32(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_str32_reg(b->jit_ptr,ARM64_W9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+}
+
 /* Fast SD */
 static void mips64_memop_fast_sd(cpu_tc_t *b,int target)
 {
    /* Load value from register */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(target));
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_str64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
+}
+
+/* Fast SDL */
+static void mips64_memop_fast_sdl(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x07), 64));
+   arm64_ldr64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,3);
+   mips64_load_imm(b,ARM64_X11,0xffffffffffffffffULL);
+   arm64_lsrv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_bic64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(target));
+   arm64_lsrv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_str64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+}
+
+/* Fast SDR */
+static void mips64_memop_fast_sdr(cpu_tc_t *b,int target)
+{
+   arm64_and64_imm(b->jit_ptr,ARM64_X10,ARM64_X1,arm64_encode_bitmasks(~(0x07), 64));
+   arm64_ldr64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_ubfiz64(b->jit_ptr,ARM64_X1,ARM64_X1,3,3);
+   arm64_add64_imm(b->jit_ptr,ARM64_X1,ARM64_X1,8,0);
+   mips64_load_imm(b,ARM64_X11,0xffffffffffffffffULL);
+   arm64_lsrv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_and64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X11,ARM64_X28,REG_OFFSET(target));
+   mips64_load_imm(b,ARM64_X13,64);
+   arm64_sub64_reg(b->jit_ptr,ARM64_X1,ARM64_X13,ARM64_X1,ARM64_A_LSL,0);
+   arm64_lslv64(b->jit_ptr,ARM64_X11,ARM64_X11,ARM64_X1);
+   arm64_orr64_reg(b->jit_ptr,ARM64_X9,ARM64_X9,ARM64_X11,ARM64_A_LSL,0);
+   arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
+   arm64_str64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W10,ARM64_M_UXTW,0);
+}
+
+/* Fast SDC1 */
+static void mips64_memop_fast_sdc1(cpu_tc_t *b,int target)
+{
+   /* Load value from register */
+   arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,fpu.reg[target]));
    arm64_rev64(b->jit_ptr,ARM64_X9,ARM64_X9);
    arm64_str64_reg(b->jit_ptr,ARM64_X9,ARM64_X12,ARM64_W1,ARM64_M_UXTW,0);
 }
@@ -384,6 +567,9 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,mts_lookups));
    arm64_add64_imm(b->jit_ptr,ARM64_X9,ARM64_X9,1,0);
    arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,mts_lookups));
+   if (!keep_ll_bit) {
+      arm64_str32_imm(b->jit_ptr,ARM64_WZR,ARM64_X28,OFFSET(cpu_mips_t,ll_bit));
+   }
 
    /* x1 = GPR[base] + sign-extended offset */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X1,ARM64_X28,REG_OFFSET(base));
@@ -474,6 +660,9 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    arm64_ldr64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,mts_lookups));
    arm64_add64_imm(b->jit_ptr,ARM64_X9,ARM64_X9,1,0);
    arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,OFFSET(cpu_mips_t,mts_lookups));
+   if (!keep_ll_bit) {
+      arm64_str32_imm(b->jit_ptr,ARM64_WZR,ARM64_X28,OFFSET(cpu_mips_t,ll_bit));
+   }
 
    /* w1 = GPR[base] + sign-extended offset */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X1,ARM64_X28,REG_OFFSET(base));
@@ -501,7 +690,7 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    arm64_and64_imm(b->jit_ptr,ARM64_X11,ARM64_X1,arm64_encode_bitmasks(MIPS_MIN_PAGE_MASK, 64));
 
    arm64_ldr32_imm(b->jit_ptr,ARM64_W12,ARM64_X10,OFFSET(mts32_entry_t,gvpa));
-   arm64_cmp64_reg(b->jit_ptr,ARM64_X12,ARM64_X11,ARM64_A_LSL,0);
+   arm64_cmp32_reg(b->jit_ptr,ARM64_W12,ARM64_W11,ARM64_A_LSL,0);
    test1 = b->jit_ptr;
    arm64_bcond(b->jit_ptr,ARM64_CC_NE,0);
 
@@ -1935,7 +2124,12 @@ DECLARE_INSN(LDC1)
    int ft     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LDC1,base,offset,ft,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LDC1,base,offset,ft,TRUE,
+                             mips64_memop_fast_ldc1);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LDC1,base,offset,ft,TRUE);
+   }
    return(0);
 }
 
@@ -1946,7 +2140,12 @@ DECLARE_INSN(LDL)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LDL,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LDL,base,offset,rt,TRUE,
+                             mips64_memop_fast_ldl);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LDL,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -1957,7 +2156,12 @@ DECLARE_INSN(LDR)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LDR,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LDR,base,offset,rt,TRUE,
+                             mips64_memop_fast_ldr);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LDR,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -2014,7 +2218,14 @@ DECLARE_INSN(LL)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LL,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LL,base,offset,rt,TRUE,
+                             mips64_memop_fast_lw);
+      mips64_load_imm(b,ARM64_X9,1);
+      arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,OFFSET(cpu_mips_t,ll_bit));
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LL,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -2054,7 +2265,12 @@ DECLARE_INSN(LWL)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LWL,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LWL,base,offset,rt,TRUE,
+                             mips64_memop_fast_lwl);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LWL,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -2065,7 +2281,12 @@ DECLARE_INSN(LWR)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_LWR,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,0,MIPS_MEMOP_LWR,base,offset,rt,TRUE,
+                             mips64_memop_fast_lwr);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_LWR,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -2362,8 +2583,20 @@ DECLARE_INSN(SC)
    int base   = bits(insn,21,25);
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
+   u_char *test1;
 
-   mips64_emit_memop(b,MIPS_MEMOP_SC,base,offset,rt,TRUE);
+   if (cpu->fast_memop) {
+      arm64_ldr32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,OFFSET(cpu_mips_t,ll_bit));
+      test1 = b->jit_ptr;
+      arm64_cbz64(b->jit_ptr,ARM64_X9,0);
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SC,base,offset,rt,TRUE,
+                             mips64_memop_fast_sw);
+      mips64_load_imm(b,ARM64_X9,1);
+      arm64_patch(test1,b->jit_ptr);
+      arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,REG_OFFSET(rt));
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SC,base,offset,rt,TRUE);
+   }
    return(0);
 }
 
@@ -2390,7 +2623,12 @@ DECLARE_INSN(SDL)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_SDL,base,offset,rt,FALSE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SDL,base,offset,rt,FALSE,
+                             mips64_memop_fast_sdl);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SDL,base,offset,rt,FALSE);
+   }
    return(0);
 }
 
@@ -2401,7 +2639,12 @@ DECLARE_INSN(SDR)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_SDR,base,offset,rt,FALSE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SDR,base,offset,rt,FALSE,
+                             mips64_memop_fast_sdr);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SDR,base,offset,rt,FALSE);
+   }
    return(0);
 }
 
@@ -2412,7 +2655,12 @@ DECLARE_INSN(SDC1)
    int ft     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_SDC1,base,offset,ft,FALSE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SDC1,base,offset,ft,FALSE,
+                             mips64_memop_fast_sdc1);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SDC1,base,offset,ft,FALSE);
+   }
    return(0);
 }
 
@@ -2675,7 +2923,13 @@ DECLARE_INSN(SWL)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_SWL,base,offset,rt,FALSE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SWL,base,offset,rt,FALSE,
+                             mips64_memop_fast_swl);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SWL,base,offset,rt,FALSE);
+   }
+
    return(0);
 }
 
@@ -2686,7 +2940,13 @@ DECLARE_INSN(SWR)
    int rt     = bits(insn,16,20);
    int offset = bits(insn,0,15);
 
-   mips64_emit_memop(b,MIPS_MEMOP_SWR,base,offset,rt,FALSE);
+   if (cpu->fast_memop) {
+      mips64_emit_memop_fast(cpu,b,1,MIPS_MEMOP_SWR,base,offset,rt,FALSE,
+                             mips64_memop_fast_swr);
+   } else {
+      mips64_emit_memop(b,MIPS_MEMOP_SWR,base,offset,rt,FALSE);
+   }
+
    return(0);
 }
 

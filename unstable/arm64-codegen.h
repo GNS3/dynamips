@@ -243,6 +243,7 @@ typedef enum {
 #define arm64_ubfx32(c, wd, wn, lsb, width) arm64_ubfm32((c), (wd), (wn), (lsb), (lsb)+(width)-1)
 #define arm64_bfm32(c, wd, wn, immr, imms) arm64_emit32((c), 0x33000000 | ((immr) << 16) | ((imms) << 10) | ((wn) << 5) | (wd))
 #define arm64_bfi32(c, wd, wn, lsb, width) arm64_bfm32((c), (wd), (wn), -(lsb) & 0x1F, (width)-1)
+#define arm64_bic64_reg(c, xd, xn, xm, shift, amount) arm64_emit32((c), 0x8A200000 | ((shift) << 22) | ((xm) << 16) | ((amount) << 10) | ((xn) << 5) | (xd))
 #define arm64_bic32_reg(c, wd, wn, wm, shift, amount) arm64_emit32((c), 0xA200000 | ((shift) << 22) | ((wm) << 16) | ((amount) << 10) | ((wn) << 5) | (wd))
 #define arm64_eon32_reg(c, wd, wn, wm, shift, amount) arm64_emit32((c), 0x4A200000 | ((shift) << 22) | ((wm) << 16) | ((amount) << 10) | ((wn) << 5) | (wd))
 #define arm64_sxtb32(c, wd, wn) arm64_sbfm32((c), (wd), (wn), 0, 7)
@@ -254,6 +255,7 @@ typedef enum {
 #define arm64_negs32_reg(c, wd, wm, shift, amount) arm64_subs32_reg((c), (wd), ARM64_WZR, (wm), (shift), (amount))
 #define arm64_rorv32(c, wd, wn, wm) arm64_emit32((c), 0x1AC02C00 | ((wm) << 16) | ((wn) << 5) | (wd))
 #define arm64_sbcs32_reg(c, wd, wn, wm) arm64_emit32((c), 0x7A000000 | ((wm) << 16) | ((wn) << 5) | (wd))
+#define arm64_ubfiz64(c, xd, xn, lsb, width) arm64_ubfm64((c), (xd), (xn), -(lsb) & 0x3F, (width)-1)
 
 static inline int _arm64_is_mask(m_uint64_t val, m_uint64_t lim)
 {
