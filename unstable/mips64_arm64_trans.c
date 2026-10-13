@@ -418,8 +418,7 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    /* Test if we are writing to a COW page */
    if (write_op) {
       arm64_ldr32_imm(b->jit_ptr,ARM64_W12,ARM64_X10,OFFSET(mts64_entry_t,flags));
-      mips64_load_imm(b,ARM64_X11,MTS_FLAG_WRCATCH);
-      arm64_tst64_reg(b->jit_ptr,ARM64_X12,ARM64_X11,ARM64_A_LSL,0);
+      arm64_tst64_imm(b->jit_ptr,ARM64_X12,arm64_encode_bitmasks(MTS_FLAG_WRCATCH|MTS_FLAG_EXEC, 64));
       test2 = b->jit_ptr;
       arm64_bcond(b->jit_ptr,ARM64_CC_NE,0);
    }
@@ -509,8 +508,7 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    /* Test if we are writing to a COW page */
    if (write_op) {
       arm64_ldr32_imm(b->jit_ptr,ARM64_W12,ARM64_X10,OFFSET(mts32_entry_t,flags));
-      mips64_load_imm(b,ARM64_X11,MTS_FLAG_WRCATCH);
-      arm64_tst64_reg(b->jit_ptr,ARM64_X12,ARM64_X11,ARM64_A_LSL,0);
+      arm64_tst64_imm(b->jit_ptr,ARM64_X12,arm64_encode_bitmasks(MTS_FLAG_WRCATCH|MTS_FLAG_EXEC, 64));
       test2 = b->jit_ptr;
       arm64_bcond(b->jit_ptr,ARM64_CC_NE,0);
    }
