@@ -2160,7 +2160,7 @@ static int c7200_cli_parse_options(vm_instance_t *vm,int option)
          break;
 
       /* Midplane type */
-      case 'M':
+      case 'D':
          c7200_midplane_set_type(router,optarg);
          break;
 
@@ -2188,7 +2188,7 @@ static int c7200_cli_parse_options(vm_instance_t *vm,int option)
 static void c7200_cli_show_options(vm_instance_t *vm)
 {
    printf("  -t <npe_type>      : Select NPE type (default: \"%s\")\n"
-          "  -M <midplane>      : Select Midplane (\"std\" or \"vxr\")\n"
+          "  -D <midplane>      : Select Midplane (\"std\" or \"vxr\")\n"
           "  -p <pa_desc>       : Define a Port Adapter\n"
           "  -s <pa_nio>        : Bind a Network IO interface to a "
           "Port Adapter\n" 
