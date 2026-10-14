@@ -487,13 +487,6 @@ struct ppc32_insn_tag *ppc32_jit_fetch_and_emit(cpu_ppc_t *cpu,
    return tag;
 }
 
-/* Add end of JIT block */
-_Unused static void ppc32_jit_tcb_add_end(ppc32_jit_tcb_t *b)
-{
-   ppc32_set_ia(&b->jit_ptr,b->start_ia+(b->ppc_trans_pos<<2));
-   ppc32_jit_tcb_push_epilog(&b->jit_ptr);
-}
-
 /* Record a patch to apply in a compiled block */
 int ppc32_jit_tcb_record_patch(ppc32_jit_tcb_t *block,jit_op_t *iop,
                                u_char *jit_ptr,m_uint32_t vaddr)
@@ -1315,7 +1308,9 @@ void *ppc32_jit_run_cpu(cpu_gen_t *gen)
             cpu->exec_blk_map[ia_hash] = NULL;
          }
 
+         pthread_jit_write_protect_np(0);
          block = ppc32_jit_tcb_compile(cpu,cpu->ia);
+         pthread_jit_write_protect_np(1);
 
          if (unlikely(!block)) {
             fprintf(stderr,
