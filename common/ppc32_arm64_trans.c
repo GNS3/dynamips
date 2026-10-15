@@ -254,14 +254,9 @@ void ppc32_update_cr_set_altered_hreg(cpu_ppc_t *cpu)
 /* Basic C call */
 static forced_inline void ppc32_emit_basic_c_call(u_char **ptr,void *f)
 {
-   m_uint64_t disp = (m_uint64_t)f - (m_uint64_t)*ptr;
    arm64_mov64(*ptr,ARM64_X26,ARM64_LR);
-   if (disp / 4 < 0x3FFFFFF) {
-      arm64_bl(*ptr,disp);
-   } else {
-      ppc32_load_imm64(ptr,ARM64_X9,(m_uint64_t)f);
-      arm64_blr(*ptr,ARM64_X9);
-   }
+   ppc32_load_imm64(ptr,ARM64_X9,(m_uint64_t)f);
+   arm64_blr(*ptr,ARM64_X9);
    arm64_mov64(*ptr,ARM64_LR,ARM64_X26);
 }
 
