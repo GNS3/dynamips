@@ -105,6 +105,42 @@ The specify a differant installation location run:
 cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 ```
 
+#### Building and testing ARM64 in Docker
+
+With Docker running, launch an Ubuntu 24.04 ARM64 container using:
+
+```sh
+./scripts/run-arm64.sh /absolute/path/to/ios-images
+```
+
+The IOS directory must already exist. The script installs build dependencies,
+compiles the current checkout with the ARM64 JIT (`DYNAMIPS_CODE=stable`), and
+installs `dynamips` inside the container before opening a Bash shell. The source
+checkout is mounted read-only at `/src`, and your IOS directory is bind-mounted
+read-only at `/ios`. No IOS images are included or downloaded.
+
+Run an image from the container shell, for example:
+
+```sh
+dynamips -P 7200 /ios/your-c7200-image.bin
+```
+
+You can also supply a command to run instead of opening a shell:
+
+```sh
+./scripts/run-arm64.sh /absolute/path/to/ios-images dynamips -e
+```
+
+Runtime files are written to `/work`, separate from the images. The container,
+build, and runtime files are removed on exit; files in your host IOS directory
+are preserved. Dependencies and Dynamips are rebuilt on each launch.
+
+On non-ARM64 hosts, Docker must support running `linux/arm64` containers through
+QEMU/binfmt emulation. Docker Desktop normally provides this; Docker Engine on
+Linux may require separate administrator configuration. The script does not
+install or change host emulation support. Emulated execution will be slower than
+native ARM64.
+
 #### Compiling (Windows)
 
 Open the Cygwin terminal.
