@@ -50,7 +50,7 @@ static inline void ppc32_load_imm(u_char **ptr,u_int reg,m_uint32_t value)
 static inline void ppc32_load_imm64(u_char **ptr,u_int reg,m_uint64_t value)
 {
    int shift;
-   if (value >= 0xFFFF0000 && value <= 0x100000000) {
+   if (value >= 0xFFFF0000 && value < 0x100000000) {
       arm64_movn32(*ptr,reg,~value,0);
       return;
    }

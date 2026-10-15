@@ -78,7 +78,7 @@ void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq)
 static inline void mips64_load_imm(mips64_jit_tcb_t *b,u_int reg,m_uint64_t value)
 {
    int shift;
-   if (value >= 0xFFFF0000 && value <= 0x100000000) {
+   if (value >= 0xFFFF0000 && value < 0x100000000) {
       arm64_movn32(b->jit_ptr,reg,~value,0);
       return;
    }
