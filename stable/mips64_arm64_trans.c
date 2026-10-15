@@ -220,9 +220,10 @@ static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
 /* Basic C call */
 static forced_inline void mips64_emit_basic_c_call(mips64_jit_tcb_t *b,void *f)
 {
-   m_uint64_t disp = (m_uint64_t)f - (m_uint64_t)b->jit_ptr;
+   m_int64_t disp;
    arm64_mov64(b->jit_ptr,ARM64_X26,ARM64_LR);
-   if (disp / 4 < 0x3FFFFFF) {
+   disp = (m_int64_t)f - (m_int64_t)b->jit_ptr;
+   if (labs(disp / 4) < 0x1FFFFFF) {
       arm64_bl(b->jit_ptr,disp);
    } else {
       mips64_load_imm(b,ARM64_X9,(m_uint64_t)f);
