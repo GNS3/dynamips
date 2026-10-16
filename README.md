@@ -107,7 +107,7 @@ cmake -DCMAKE_INSTALL_PREFIX=/target/path ..
 
 #### Building and testing ARM64 in Docker
 
-With Docker running, launch an Ubuntu 24.04 ARM64 container using:
+With Docker running, launch an Ubuntu ARM64 container using:
 
 ```sh
 ./scripts/run-arm64.sh /absolute/path/to/ios-images
