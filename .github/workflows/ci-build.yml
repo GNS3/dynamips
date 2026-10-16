@@ -86,7 +86,7 @@ jobs:
         set -x
         cd ${{github.workspace}}/build
         ctest --verbose --build-config ${{env.BUILD_TYPE}}
-        ./unstable/dynamips -e
+        ./stable/dynamips -e
 
     - name: Install
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target install
