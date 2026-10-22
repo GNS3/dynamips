@@ -584,11 +584,8 @@ static void mips64_emit_memop_fast64(cpu_tc_t *b,int write_op,
    }
 
    /* x9 = mts64_entry index */
-   arm64_lsr32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS64_HASH_SHIFT1);
-
-   arm64_eor32_reg(b->jit_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS64_HASH_SHIFT2);
-
-   arm64_and64_imm(b->jit_ptr,ARM64_X9,ARM64_X9,arm64_encode_bitmasks(MTS64_HASH_MASK, 64));
+   arm64_eor32_reg(b->jit_ptr,ARM64_W9,ARM64_W1,ARM64_W1,ARM64_A_LSR,MTS64_HASH_SHIFT2-MTS64_HASH_SHIFT1);
+   arm64_ubfx64(b->jit_ptr,ARM64_X9,ARM64_X9,MTS64_HASH_SHIFT1,MTS64_HASH_BITS);
 
    /* x10 = mts64 entry */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_mips_t,mts_u.mts64_cache));
@@ -677,11 +674,9 @@ static void mips64_emit_memop_fast32(cpu_tc_t *b,int write_op,
    }
 
    /* x9 = mts32_entry index */
-   arm64_lsr32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
+   arm64_eor32_reg(b->jit_ptr,ARM64_W9,ARM64_W1,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2-MTS32_HASH_SHIFT1);
 
-   arm64_eor32_reg(b->jit_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
-
-   arm64_and32_imm(b->jit_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
+   arm64_ubfx32(b->jit_ptr,ARM64_W9,ARM64_W9,MTS32_HASH_SHIFT1,MTS32_HASH_BITS);
 
    /* x0 = mts32 entry */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_mips_t,mts_u.mts32_cache));
