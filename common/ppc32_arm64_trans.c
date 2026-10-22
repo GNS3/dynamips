@@ -1864,8 +1864,8 @@ static int emit_cr_op(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
                       char *name, creg_op_impl impl)
 {
    int bd = bits(insn,21,25);
-   int bb = bits(insn,16,20);
-   int ba = bits(insn,11,15);
+   int ba = bits(insn,16,20);
+   int bb = bits(insn,11,15);
    int hreg_t0, hreg_t1;
    jit_op_t *iop;
 
