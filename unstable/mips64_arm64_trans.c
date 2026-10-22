@@ -2589,7 +2589,7 @@ DECLARE_INSN(SC)
                              mips64_memop_fast_sw);
       mips64_load_imm(b,ARM64_X9,1);
       arm64_patch(test1,b->jit_ptr);
-      arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,REG_OFFSET(rt));
+      arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rt));
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_SC,base,offset,rt,TRUE);
    }
