@@ -2850,10 +2850,6 @@ DECLARE_INSN(RLWIMI)
 
    iop = ppc32_op_emit_insn_output(cpu,2,"rlwimi");
 
-   /* Apply inverse mask to $ra */
-   if (mask != 0)
-      arm64_and32_imm(iop->ob_ptr,hreg_ra,hreg_ra,arm64_encode_bitmasks(~mask, 32));
-
    /* Rotate $rs of "sh" bits and apply the mask */
    if (sh) {
       arm64_ror32_imm(iop->ob_ptr,hreg_t0,hreg_rs,(32-sh));
@@ -2862,6 +2858,10 @@ DECLARE_INSN(RLWIMI)
       hreg_rot_res = hreg_rs;
       arm64_mov32(iop->ob_ptr,hreg_t0,hreg_rs);
    }
+
+   /* Apply inverse mask to $ra */
+   if (mask != 0)
+      arm64_and32_imm(iop->ob_ptr,hreg_ra,hreg_ra,arm64_encode_bitmasks(~mask, 32));
 
    if (mask != 0xFFFFFFFF) {
       arm64_and32_imm(iop->ob_ptr,hreg_t0,hreg_rot_res,arm64_encode_bitmasks(mask, 32));
