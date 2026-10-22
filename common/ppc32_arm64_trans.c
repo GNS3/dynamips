@@ -238,14 +238,6 @@ static void ppc32_update_cr(ppc32_jit_tcb_t *b,int field,int is_signed)
    arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,PPC32_CR_FIELD_OFFSET(field));
 }
 
-/*
- * Update CR0 from NZCV
- */
-static void ppc32_update_cr0(ppc32_jit_tcb_t *b)
-{
-   ppc32_update_cr(b,0,TRUE);
-}
-
 /* Indicate registers modified by ppc32_update_cr() functions */
 void ppc32_update_cr_set_altered_hreg(cpu_ppc_t *cpu)
 {
@@ -1029,8 +1021,10 @@ DECLARE_INSN(ADD)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -1068,6 +1062,7 @@ DECLARE_INSN(ADDC)
    arm64_str32_imm(iop->ob_ptr,hreg_t0,ARM64_X28,OFFSET(cpu_ppc_t,xer_ca));
 
    if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
    }
 
@@ -1105,8 +1100,10 @@ DECLARE_INSN(ADDE)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -1220,6 +1217,7 @@ DECLARE_INSN(ADDIC_dot)
    arm64_cset64(iop->ob_ptr,ARM64_X9,ARM64_CC_CS);
    arm64_str32_imm(iop->ob_ptr,ARM64_W9,ARM64_X28,OFFSET(cpu_ppc_t,xer_ca));
 
+   arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
    ppc32_op_emit_update_flags(cpu,0,TRUE);
 
    ppc32_jit_close_hreg_seq(cpu);
@@ -1285,8 +1283,10 @@ DECLARE_INSN(ADDZE)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -2632,8 +2632,10 @@ DECLARE_INSN(NEG)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -3276,8 +3278,10 @@ DECLARE_INSN(SUBF)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -3312,8 +3316,10 @@ DECLARE_INSN(SUBFC)
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
    /* update cr0 */
-   if (insn & 1)
-      ppc32_update_cr0(b);
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
+      ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -3351,8 +3357,10 @@ DECLARE_INSN(SUBFE)
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
    /* update cr0 */
-   if (insn & 1)
-      ppc32_update_cr0(b);
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
+      ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
