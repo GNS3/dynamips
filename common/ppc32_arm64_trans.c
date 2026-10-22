@@ -50,7 +50,7 @@ static inline void ppc32_load_imm(u_char **ptr,u_int reg,m_uint32_t value)
 static inline void ppc32_load_imm64(u_char **ptr,u_int reg,m_uint64_t value)
 {
    int shift;
-   if (value >= 0xFFFF0000 && value <= 0x100000000) {
+   if (value >= 0xFFFF0000 && value < 0x100000000) {
       arm64_movn32(*ptr,reg,~value,0);
       return;
    }
@@ -238,14 +238,6 @@ static void ppc32_update_cr(ppc32_jit_tcb_t *b,int field,int is_signed)
    arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,PPC32_CR_FIELD_OFFSET(field));
 }
 
-/*
- * Update CR0 from NZCV
- */
-static void ppc32_update_cr0(ppc32_jit_tcb_t *b)
-{
-   ppc32_update_cr(b,0,TRUE);
-}
-
 /* Indicate registers modified by ppc32_update_cr() functions */
 void ppc32_update_cr_set_altered_hreg(cpu_ppc_t *cpu)
 {
@@ -254,14 +246,9 @@ void ppc32_update_cr_set_altered_hreg(cpu_ppc_t *cpu)
 /* Basic C call */
 static forced_inline void ppc32_emit_basic_c_call(u_char **ptr,void *f)
 {
-   m_uint64_t disp = (m_uint64_t)f - (m_uint64_t)*ptr;
    arm64_mov64(*ptr,ARM64_X26,ARM64_LR);
-   if (disp / 4 < 0x3FFFFFF) {
-      arm64_bl(*ptr,disp);
-   } else {
-      ppc32_load_imm64(ptr,ARM64_X9,(m_uint64_t)f);
-      arm64_blr(*ptr,ARM64_X9);
-   }
+   ppc32_load_imm64(ptr,ARM64_X9,(m_uint64_t)f);
+   arm64_blr(*ptr,ARM64_X9);
    arm64_mov64(*ptr,ARM64_LR,ARM64_X26);
 }
 
@@ -465,12 +452,11 @@ static void ppc32_emit_memop_fast(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    /* W9 = mts32_entry index */
 #if DYNAMIPS_ARM64_STABLE == 1
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT,MTS32_HASH_BITS);
 #else
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
-   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W1,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2-MTS32_HASH_SHIFT1);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W9,MTS32_HASH_SHIFT1,MTS32_HASH_BITS);
 #endif
-   arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_ppc_t,mts_cache[PPC32_MTS_DCACHE]));
@@ -572,12 +558,11 @@ static void ppc32_emit_memop_fast_idx(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    /* W9 = mts32_entry index */
 #if DYNAMIPS_ARM64_STABLE == 1
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT,MTS32_HASH_BITS);
 #else
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
-   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W1,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2-MTS32_HASH_SHIFT1);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W9,MTS32_HASH_SHIFT1,MTS32_HASH_BITS);
 #endif
-   arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_ppc_t,mts_cache[PPC32_MTS_DCACHE]));
@@ -735,12 +720,11 @@ static void ppc32_emit_memop_fast_mult(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b,
 
    /* W9 = mts32_entry index */
 #if DYNAMIPS_ARM64_STABLE == 1
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT,MTS32_HASH_BITS);
 #else
-   arm64_lsr32(iop->ob_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT1);
-   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W9,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2);
+   arm64_eor32_reg(iop->ob_ptr,ARM64_W9,ARM64_W1,ARM64_W1,ARM64_A_LSR,MTS32_HASH_SHIFT2-MTS32_HASH_SHIFT1);
+   arm64_ubfx32(iop->ob_ptr,ARM64_W9,ARM64_W9,MTS32_HASH_SHIFT1,MTS32_HASH_BITS);
 #endif
-   arm64_and32_imm(iop->ob_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
 
    /* X0 = mts32 entry */
    arm64_ldr64_imm(iop->ob_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_ppc_t,mts_cache[PPC32_MTS_DCACHE]));
@@ -1003,9 +987,9 @@ DECLARE_INSN(MFTBL)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"mftbl");
 
-   arm64_ldr64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,perf_counter));
+   arm64_ldr64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,tb));
    arm64_add64_imm(iop->ob_ptr,hreg_rd,hreg_rd,PPC32_TB_INCREMENT,0);
-   arm64_str64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,perf_counter));
+   arm64_str64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,tb));
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
@@ -1037,8 +1021,10 @@ DECLARE_INSN(ADD)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -1076,6 +1062,7 @@ DECLARE_INSN(ADDC)
    arm64_str32_imm(iop->ob_ptr,hreg_t0,ARM64_X28,OFFSET(cpu_ppc_t,xer_ca));
 
    if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
    }
 
@@ -1113,8 +1100,10 @@ DECLARE_INSN(ADDE)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -1228,6 +1217,7 @@ DECLARE_INSN(ADDIC_dot)
    arm64_cset64(iop->ob_ptr,ARM64_X9,ARM64_CC_CS);
    arm64_str32_imm(iop->ob_ptr,ARM64_W9,ARM64_X28,OFFSET(cpu_ppc_t,xer_ca));
 
+   arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
    ppc32_op_emit_update_flags(cpu,0,TRUE);
 
    ppc32_jit_close_hreg_seq(cpu);
@@ -1293,8 +1283,10 @@ DECLARE_INSN(ADDZE)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -1723,7 +1715,7 @@ static int emit_bcond_to_reg(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
    }
 
    /* Set the return address */
-   arm64_ldr32_imm(iop->ob_ptr,hreg_t1,ARM64_X28,reg_offs);
+   arm64_ldr32_imm(iop->ob_ptr,ARM64_X27,ARM64_X28,reg_offs);
 
    if (insn & 1) {
       ppc32_set_lr(iop,b->start_ia + ((b->ppc_trans_pos+1) << 2));
@@ -1734,7 +1726,7 @@ static int emit_bcond_to_reg(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
    jump_ptr = iop->ob_ptr;
    arm64_cbz64(iop->ob_ptr,hreg_t0,0);
 
-   arm64_and32_imm(iop->ob_ptr,hreg_t1,hreg_t1,arm64_encode_bitmasks(0xFFFFFFFC, 32));
+   arm64_and32_imm(iop->ob_ptr,hreg_t1,ARM64_X27,arm64_encode_bitmasks(0xFFFFFFFC, 32));
    arm64_str32_imm(iop->ob_ptr,hreg_t1,ARM64_X28,OFFSET(cpu_ppc_t,ia));
    ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
 
@@ -1872,8 +1864,8 @@ static int emit_cr_op(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
                       char *name, creg_op_impl impl)
 {
    int bd = bits(insn,21,25);
-   int bb = bits(insn,16,20);
-   int ba = bits(insn,11,15);
+   int ba = bits(insn,16,20);
+   int bb = bits(insn,11,15);
    int hreg_t0, hreg_t1;
    jit_op_t *iop;
 
@@ -2640,8 +2632,10 @@ DECLARE_INSN(NEG)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -2858,10 +2852,6 @@ DECLARE_INSN(RLWIMI)
 
    iop = ppc32_op_emit_insn_output(cpu,2,"rlwimi");
 
-   /* Apply inverse mask to $ra */
-   if (mask != 0)
-      arm64_and32_imm(iop->ob_ptr,hreg_ra,hreg_ra,arm64_encode_bitmasks(~mask, 32));
-
    /* Rotate $rs of "sh" bits and apply the mask */
    if (sh) {
       arm64_ror32_imm(iop->ob_ptr,hreg_t0,hreg_rs,(32-sh));
@@ -2870,6 +2860,10 @@ DECLARE_INSN(RLWIMI)
       hreg_rot_res = hreg_rs;
       arm64_mov32(iop->ob_ptr,hreg_t0,hreg_rs);
    }
+
+   /* Apply inverse mask to $ra */
+   if (mask != 0)
+      arm64_and32_imm(iop->ob_ptr,hreg_ra,hreg_ra,arm64_encode_bitmasks(~mask, 32));
 
    if (mask != 0xFFFFFFFF) {
       arm64_and32_imm(iop->ob_ptr,hreg_t0,hreg_rot_res,arm64_encode_bitmasks(mask, 32));
@@ -3002,9 +2996,7 @@ DECLARE_INSN(SLW)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"slw");
 
-   arm64_cmp32_imm(iop->ob_ptr,hreg_rb,32,0);
-   arm64_lslv32(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
-   arm64_csel32(iop->ob_ptr,hreg_ra,hreg_ra,ARM64_WZR,ARM64_CC_CC);
+   arm64_lslv64(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
 
    /* store the result */
    if (insn & 1)
@@ -3090,9 +3082,7 @@ DECLARE_INSN(SRW)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"srw");
 
-   arm64_cmp32_imm(iop->ob_ptr,hreg_rb,32,0);
-   arm64_lsrv32(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
-   arm64_csel32(iop->ob_ptr,hreg_ra,hreg_ra,ARM64_WZR,ARM64_CC_CC);
+   arm64_lsrv64(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
 
    /* store the result */
    if (insn & 1)
@@ -3288,8 +3278,10 @@ DECLARE_INSN(SUBF)
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
-   if (insn & 1)
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
       ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -3324,8 +3316,10 @@ DECLARE_INSN(SUBFC)
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
    /* update cr0 */
-   if (insn & 1)
-      ppc32_update_cr0(b);
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
+      ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);
@@ -3363,8 +3357,10 @@ DECLARE_INSN(SUBFE)
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
    /* update cr0 */
-   if (insn & 1)
-      ppc32_update_cr0(b);
+   if (insn & 1) {
+      arm64_cmp32_imm(iop->ob_ptr,hreg_rd,0,0);
+      ppc32_op_emit_update_flags(cpu,0,TRUE);
+   }
 
    ppc32_jit_close_hreg_seq(cpu);
    return(0);

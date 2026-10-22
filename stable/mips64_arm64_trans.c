@@ -78,7 +78,7 @@ void mips64_clear_irq(cpu_mips_t *cpu,m_uint8_t irq)
 static inline void mips64_load_imm(mips64_jit_tcb_t *b,u_int reg,m_uint64_t value)
 {
    int shift;
-   if (value >= 0xFFFF0000 && value <= 0x100000000) {
+   if (value >= 0xFFFF0000 && value < 0x100000000) {
       arm64_movn32(b->jit_ptr,reg,~value,0);
       return;
    }
@@ -220,9 +220,10 @@ static void mips64_set_jump(cpu_mips_t *cpu,mips64_jit_tcb_t *b,
 /* Basic C call */
 static forced_inline void mips64_emit_basic_c_call(mips64_jit_tcb_t *b,void *f)
 {
-   m_uint64_t disp = (m_uint64_t)f - (m_uint64_t)b->jit_ptr;
+   m_int64_t disp;
    arm64_mov64(b->jit_ptr,ARM64_X26,ARM64_LR);
-   if (disp / 4 < 0x3FFFFFF) {
+   disp = (m_int64_t)f - (m_int64_t)b->jit_ptr;
+   if (labs(disp / 4) < 0x1FFFFFF) {
       arm64_bl(b->jit_ptr,disp);
    } else {
       mips64_load_imm(b,ARM64_X9,(m_uint64_t)f);
@@ -565,8 +566,7 @@ static void mips64_emit_memop_fast64(mips64_jit_tcb_t *b,int write_op,
    }
 
    /* x9 = mts64_entry index */
-   arm64_lsr32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS64_HASH_SHIFT);
-   arm64_and64_imm(b->jit_ptr,ARM64_X9,ARM64_X9,arm64_encode_bitmasks(MTS64_HASH_MASK, 64));
+   arm64_ubfx32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS64_HASH_SHIFT,MTS64_HASH_BITS);
 
    /* x10 = mts64 entry */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_mips_t,mts_u.mts64_cache));
@@ -651,8 +651,7 @@ static void mips64_emit_memop_fast32(mips64_jit_tcb_t *b,int write_op,
    }
 
    /* x9 = mts32_entry index */
-   arm64_lsr32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT);
-   arm64_and32_imm(b->jit_ptr,ARM64_W9,ARM64_W9,arm64_encode_bitmasks(MTS32_HASH_MASK, 32));
+   arm64_ubfx32(b->jit_ptr,ARM64_W9,ARM64_W1,MTS32_HASH_SHIFT,MTS32_HASH_BITS);
 
    /* x0 = mts32 entry */
    arm64_ldr64_imm(b->jit_ptr,ARM64_X10,ARM64_X28,OFFSET(cpu_mips_t,mts_u.mts32_cache));
@@ -2546,7 +2545,7 @@ DECLARE_INSN(SC)
                              mips64_memop_fast_sw);
       mips64_load_imm(b,ARM64_X9,1);
       arm64_patch(test1,b->jit_ptr);
-      arm64_str32_imm(b->jit_ptr,ARM64_W9,ARM64_X28,REG_OFFSET(rt));
+      arm64_str64_imm(b->jit_ptr,ARM64_X9,ARM64_X28,REG_OFFSET(rt));
    } else {
       mips64_emit_memop(b,MIPS_MEMOP_SC,base,offset,rt,TRUE);
    }
