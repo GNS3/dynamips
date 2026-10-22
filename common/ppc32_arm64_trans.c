@@ -995,9 +995,9 @@ DECLARE_INSN(MFTBL)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"mftbl");
 
-   arm64_ldr64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,perf_counter));
+   arm64_ldr64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,tb));
    arm64_add64_imm(iop->ob_ptr,hreg_rd,hreg_rd,PPC32_TB_INCREMENT,0);
-   arm64_str64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,perf_counter));
+   arm64_str64_imm(iop->ob_ptr,hreg_rd,ARM64_X28,OFFSET(cpu_ppc_t,tb));
 
    ppc32_op_emit_store_gpr(cpu,rd,hreg_rd);
 
