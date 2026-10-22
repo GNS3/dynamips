@@ -1715,7 +1715,7 @@ static int emit_bcond_to_reg(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
    }
 
    /* Set the return address */
-   arm64_ldr32_imm(iop->ob_ptr,hreg_t1,ARM64_X28,reg_offs);
+   arm64_ldr32_imm(iop->ob_ptr,ARM64_X27,ARM64_X28,reg_offs);
 
    if (insn & 1) {
       ppc32_set_lr(iop,b->start_ia + ((b->ppc_trans_pos+1) << 2));
@@ -1726,7 +1726,7 @@ static int emit_bcond_to_reg(cpu_ppc_t *cpu,ppc32_jit_tcb_t *b, ppc_insn_t insn,
    jump_ptr = iop->ob_ptr;
    arm64_cbz64(iop->ob_ptr,hreg_t0,0);
 
-   arm64_and32_imm(iop->ob_ptr,hreg_t1,hreg_t1,arm64_encode_bitmasks(0xFFFFFFFC, 32));
+   arm64_and32_imm(iop->ob_ptr,hreg_t1,ARM64_X27,arm64_encode_bitmasks(0xFFFFFFFC, 32));
    arm64_str32_imm(iop->ob_ptr,hreg_t1,ARM64_X28,OFFSET(cpu_ppc_t,ia));
    ppc32_jit_tcb_push_epilog(&iop->ob_ptr);
 
