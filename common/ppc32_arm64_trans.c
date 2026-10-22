@@ -2994,9 +2994,7 @@ DECLARE_INSN(SLW)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"slw");
 
-   arm64_cmp32_imm(iop->ob_ptr,hreg_rb,32,0);
-   arm64_lslv32(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
-   arm64_csel32(iop->ob_ptr,hreg_ra,hreg_ra,ARM64_WZR,ARM64_CC_CC);
+   arm64_lslv64(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
 
    /* store the result */
    if (insn & 1)
@@ -3082,9 +3080,7 @@ DECLARE_INSN(SRW)
 
    iop = ppc32_op_emit_insn_output(cpu,3,"srw");
 
-   arm64_cmp32_imm(iop->ob_ptr,hreg_rb,32,0);
-   arm64_lsrv32(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
-   arm64_csel32(iop->ob_ptr,hreg_ra,hreg_ra,ARM64_WZR,ARM64_CC_CC);
+   arm64_lsrv64(iop->ob_ptr,hreg_ra,hreg_rs,hreg_rb);
 
    /* store the result */
    if (insn & 1)
